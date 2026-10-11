@@ -171,18 +171,29 @@ def dmarc_policy(snap: TenantSnapshot, now: datetime):
     "DKIM signing is on for every mail domain",
     "Email",
     "Turn on DKIM for each domain in the Defender portal (Email authentication settings > DKIM), "
-    "publishing the two selector CNAME records it shows.",
+    "publishing the two selector CNAME records it shows. This applies to domains behind a mail gateway too "
+    "when Microsoft 365 still sends for them (their SPF includes spf.protection.outlook.com); a gateway "
+    "signs only the mail that goes out through it.",
 )
 def dkim_enabled(snap: TenantSnapshot, now: datetime):
     result = _domain_rule(snap, "DKIM")
     if result is None:
         return _unavailable(NOT_RUN)
     findings, rows, unknown = result
-    checked = [h for h in map(dnscheck.DomainHealth.from_dict, rows) if h.microsoft_365 and not h.unknown("DKIM")]
+    healths = list(map(dnscheck.DomainHealth.from_dict, rows))
+    checked = [h for h in healths if h.sends_from_microsoft_365 and not h.unknown("DKIM")]
     if not checked:
-        return _unavailable(DNS_FAILED if unknown else "No domain receives mail through Microsoft 365")
+        return _unavailable(DNS_FAILED if unknown else "No domain sends mail through Microsoft 365")
+    gateway = sum(h.behind_gateway for h in checked)
+    via = f" ({gateway} behind a mail gateway)" if gateway else ""
     return (
-        _result("fail", f"{plural(len(findings), 'mail domain')} without DKIM", findings, unknown, "DKIM")
+        _result("fail", f"{plural(len(findings), 'mail domain')} without DKIM{via}", findings, unknown, "DKIM")
         if findings
-        else _result("pass", f"DKIM is on for {every(len(checked), 'Microsoft 365 mail domain')}", [], unknown, "DKIM")
+        else _result(
+            "pass",
+            f"DKIM is on for {every(len(checked), 'domain')} Microsoft 365 sends for{via}",
+            [],
+            unknown,
+            "DKIM",
+        )
     )

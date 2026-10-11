@@ -29,7 +29,20 @@ None.
 
 No.
 
+### Added
+
+- Five checks in areas that were thin. **Accounts:** no account reports to a manager whose sign-in is
+  blocked. **Guests:** no guest from another organisation owns a team or group. **Storage:** no mailbox and
+  no OneDrive is at or over 90% of its quota (high once it's full). Each goes in the project an MSP would sell
+  it under (account clean-up, sharing and guests, storage), with an effort estimate.
+
 ### Fixed
+
+- DKIM is now judged for every domain Microsoft 365 sends for, not only domains whose MX records point at
+  Microsoft 365. A domain behind a mail gateway (Mimecast, Proofpoint and the like) whose SPF record still
+  includes `spf.protection.outlook.com` has its selector CNAMEs checked, and the finding says why; a domain
+  Microsoft 365 doesn't send for stays "n/a". Before, those domains were skipped and the check could read "No
+  domain receives mail through Microsoft 365" for a tenant that sends everything from Outlook.
 
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
   invisible to the admin checks and the Admins report. The group's members are now read each night and
