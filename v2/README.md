@@ -8,10 +8,15 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
 
 ## Reports
 
-- **Monthly Security & Licensing Review** (`/tenants/<id>/report`): KPIs with
-  4-week change, Secure Score trend, failing checks with affected accounts and
+- **Monthly Security & Licensing Review** (`/tenants/<id>/report`): two summary
+  pages that lead with the answer (what was checked and what changed, key figures
+  with their 4-week change, findings found and fixed each month, what was done
+  this month and what to do next), then an appendix with the detail: what
+  changed, the Secure Score trend, failing checks with affected accounts and
   recommendations, licence waste in money, passing checks, checks that the
-  client's licences can't support, and data freshness.
+  client's licences can't support, and data freshness. The *Summary PDF* (and the
+  "Monthly review: summary only" option in plans and schedules) is the two
+  summary pages on their own.
 - **Reports** (`/reports`): every report in one searchable page, by area and by
   job ("Offboarding check", "Insurance renewal", "Storage cleanup"...), opened
   for one client or across all of them. The search also finds clients and
@@ -308,13 +313,15 @@ trend, recommended next steps, failing checks, what changed, licences, a table f
 the insurance questionnaire answers, this month's commentary, headings, your own text, a contact card, a
 page break), set it up in its panel (which severities, how many rows, the heading), put two blocks side
 by side, and watch the preview on a real client update as you go. Start from an executive summary, a
-full security review, a licensing review or a blank page.
+full security review, a licensing review, a quarterly review (three months of Secure Score and findings,
+what was fixed, the projects on the table and where each stands, licence spend, and what's coming up in
+the next 90 days) or a blank page.
 
 A design belongs to the MSP and works for every client: a block with nothing to show for a client (no
 accepted risks, no commentary yet) is left out of that client's report. Each client's **Reports →
 Custom reports** lists every design as a page and a PDF, and a report plan or a client's email schedule
 can send a design (as a PDF) alongside or instead of the monthly review. Text blocks take `{client}`,
-`{month}`, `{msp}` and `{date}`. Admins and analysts make and edit designs; removing one is an admin's
+`{month}`, `{quarter}`, `{msp}` and `{date}`. Admins and analysts make and edit designs; removing one is an admin's
 call, and it comes out of any plan or schedule that sent it.
 
 ### Exchange data

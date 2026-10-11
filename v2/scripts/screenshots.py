@@ -284,6 +284,15 @@ EXAMPLES = {
         "/tenants/{t}/report.pdf",
         "The Monthly Security & Licensing Review for one client, as sent to them.",
     ),
+    "monthly-review-summary.pdf": (
+        "/tenants/{t}/report.pdf?appendix=0",
+        "The monthly review's two summary pages on their own, without the appendix.",
+    ),
+    "quarterly-review.pdf": (
+        "/tenants/{t}/designs/1.pdf",
+        "The Quarterly review design from the report designer: three months of score and findings, what was "
+        "fixed, projects, licence spend and what's coming up.",
+    ),
     "insurance-evidence-pack.pdf": (
         "/tenants/{t}/evidence.pdf",
         "The controls cyber-insurance questionnaires ask about, answered from the data.",

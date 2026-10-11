@@ -34,9 +34,10 @@ sys.path.insert(0, str(V2))
 
 from werkzeug.security import generate_password_hash  # noqa: E402
 
-from officesentry import store  # noqa: E402
+from officesentry import projects, store  # noqa: E402
 from officesentry.certs import generate_certificate  # noqa: E402
 from officesentry.db import utcnow  # noqa: E402
+from officesentry.reports import designs  # noqa: E402
 from tests import (  # noqa: E402  # noqa: E402
     adminactivitydata,
     devicedata,
@@ -1349,6 +1350,12 @@ def populate(
         settings["brand_logo"] = uri
     for key, value in settings.items():
         db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+    # A report design to show under Custom reports, and a quarter's worth of project decisions behind it.
+    quarterly = designs.STARTERS["quarterly"][2]
+    designs.create(db, "Quarterly review", "demo", quarterly, "Three months in one, for the quarterly call")
+    recommended = projects.assess(db, store.get_tenant(db, ids[0])).projects[:2]
+    for rec, status in zip(recommended, ("agreed", "proposed"), strict=False):
+        projects.set_status(db, ids[0], rec.project.key, status, "Discussed on the quarterly call", "demo")
     return ids
 
 
