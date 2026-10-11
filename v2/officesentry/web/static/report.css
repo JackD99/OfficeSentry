@@ -466,8 +466,23 @@ body.report:not(.pdf) .content p a:not([class]), body.report:not(.pdf) .content 
 
 /* -- Report designs (reports/designs.py): blocks in rows, two half-width blocks side by side. In the
    editor's preview, a block with nothing to show is named rather than left out. */
-.block-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); align-items: start; margin-bottom: var(--space-5); }
+.block-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); align-items: start; margin: 36px 0 var(--space-5); }
 .block-row > .block { margin-bottom: 0; min-width: 0; }
+/* Both headings of a row start on one line: the row carries the space above them. */
+.block-row > .block > h2:first-child { margin-top: 0; }
+/* A setup note written for the MSP ("sign in as a Global Admin..."): who sees it, under the note. */
+.setup-note .team-only { margin-top: var(--space-1-5); font-size: .86em; font-weight: 600; color: var(--text-2); }
+/* The editor's preview: point at a block to see it's clickable, and the one being edited is outlined. */
+body.preview.editable .block, body.preview.editable .block-note[id] { cursor: pointer; border-radius: var(--radius); outline: 2px solid transparent; outline-offset: 6px; transition: outline-color .12s; }
+body.preview.editable .block:hover, body.preview.editable .block-note[id]:hover { outline-color: var(--accent-soft); }
+body.preview.editable .is-selected, body.preview.editable .is-selected:hover { outline-color: var(--accent); }
+body.preview.editable .cover { cursor: pointer; }
+/* A compact cover on screen: the band PDFs put at the top of page one. */
+body.report:not(.pdf) .cover.compact .cover-band { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; gap: var(--space-4); padding: 22px 48px; }
+body.report:not(.pdf) .cover.compact .cover-logo { margin: 0; min-height: 0; flex: none; }
+body.report:not(.pdf) .cover.compact .cover-logo img { height: 28px; }
+body.report:not(.pdf) .cover.compact h1 { font-size: 1.5rem; margin-bottom: 0; }
+body.report:not(.pdf) .cover.compact .cover-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); padding-top: var(--space-3-5); padding-bottom: var(--space-3-5); }
 .block.half .kpis { grid-template-columns: 1fr 1fr; }
 .block-note { border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: var(--space-2-5) var(--space-3-5); margin: 0 0 var(--space-4); color: var(--muted); font-size: .9em; background: var(--surface-2); }
 .block-note strong { color: var(--text-2); }
@@ -477,6 +492,9 @@ body.report:not(.pdf) .content p a:not([class]), body.report:not(.pdf) .content 
 .commentary, .own-words { white-space: normal; }
 .contact-card .big { margin-bottom: var(--space-1); }
 body.pdf .block-note { display: none; }
+body.pdf .block-row { margin: 8mm 0 4mm; }
+body.pdf .doc-compact .block-row { margin-top: 5mm; }
+body.pdf .cover.compact .cover-status { padding: 0 0 3mm; }
 @media (max-width: 700px) { .block-row { grid-template-columns: 1fr; } }
 
 /* Consent pack (reports/consent_pack.html): numbered steps and the link, readable on paper. */

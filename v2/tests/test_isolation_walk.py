@@ -102,6 +102,7 @@ FORMS = {
     "reporting.add_note": lambda ids: {"rule_key": "admin_mfa", "body": "Spoke to the client", "visibility": "staff"},
     "reporting.approve": lambda ids: {"reason": ""},
     "reporting.assign": lambda ids: {"reviewer": "me"},
+    "reporting.leave_out": lambda ids: {"op": "out", "item": "part:licences"},
     "reporting.save_commentary": lambda ids: {"commentary": "A quiet month."},
     "reporting.set_state": lambda ids: {"state": "in_review"},
     "reporting.update_action": lambda ids: {"op": "save", "status": "in_progress", "target_month": ""},

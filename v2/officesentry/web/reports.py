@@ -22,7 +22,7 @@ from ..reports import (
     tables,
     views,
 )
-from ..reports.monthly_review import SUMMARY_STEM, build, setting
+from ..reports.monthly_review import SUMMARY_STEM, build, leave_out, setting
 from ..reports.registry import DECLARED
 from . import as_of
 from .access import can, is_staff, login_required, needs, require, tenant_or_404, visible_tenants
@@ -124,14 +124,19 @@ def overview():
 @needs("reports.security")
 def tenant_report(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    report = build(g.db, t)
+    extras = report_extras(t, page=True)
     return render_template(
         "reports/monthly_review.html",
-        report=report,
+        report=_client_copy(t, extras),
         pdf=False,
         css_href=url_for("static", filename="report.css"),
-        **report_extras(t, page=True),
+        **extras,
     )
+
+
+def _client_copy(tenant, extras: dict):
+    """The monthly review as the client gets it this month: less what the month-end reviewer left out."""
+    return leave_out(build(g.db, tenant), extras["month_end"]["hidden"])
 
 
 @bp.get("/tenants/<int:tenant_id>/report.pdf")
@@ -142,8 +147,9 @@ def tenant_report_pdf(tenant_id: int):
     appendix = request.args.get("appendix") != "0"
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "pdf" if appendix else "pdf summary")
     name = _filename(t, "pdf")[:-4] if appendix else _filename(t, "pdf")[:-4].replace("security-review", SUMMARY_STEM)
+    extras = report_extras(t, page=False)
     return pdf_response(
-        "reports/monthly_review.html", name, report=build(g.db, t), appendix=appendix, **report_extras(t, page=False)
+        "reports/monthly_review.html", name, report=_client_copy(t, extras), appendix=appendix, **extras
     )
 
 
@@ -153,7 +159,7 @@ def tenant_report_xlsx(tenant_id: int):
     t = tenant_or_404(tenant_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "xlsx")
     return Response(
-        export.to_xlsx(build(g.db, t), brand=branding.load(g.db)),
+        export.to_xlsx(_client_copy(t, report_extras(t, page=False)), brand=branding.load(g.db)),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={_filename(t, 'xlsx')}"},
     )

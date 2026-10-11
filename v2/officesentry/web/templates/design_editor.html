@@ -10,6 +10,10 @@
     <label class="designer-name"><span class="sr-only">Design name</span>
       <input type="text" id="design-name" value="{{ design.name }}" maxlength="100" aria-label="Design name"></label>
     <span class="designer-status" id="designer-status" role="status" aria-live="polite">Saved</span>
+    <span class="designer-history">
+      <button type="button" class="sm ghost icon-btn" id="undo" disabled title="Undo (Ctrl+Z)" aria-label="Undo">{{ icon('undo') }}</button>
+      <button type="button" class="sm ghost icon-btn" id="redo" disabled title="Redo (Ctrl+Shift+Z)" aria-label="Redo">{{ icon('redo') }}</button>
+    </span>
     <span class="spacer"></span>
     {% if tenants %}
     <label class="designer-tenant">Preview on
@@ -25,6 +29,8 @@
     <aside class="designer-palette" aria-label="Blocks to add">
       <div class="designer-pane-title">Blocks</div>
       <p class="hint">Drag a block into the layout, or press Add.</p>
+      <label class="palette-search"><span class="sr-only">Find a block</span>
+        {{ icon('search') }}<input type="search" id="palette-search" placeholder="Find a block" autocomplete="off"></label>
       {% for group in palette %}
       <div class="palette-group">
         <div class="palette-group-title">{{ group.group }}</div>
@@ -37,20 +43,30 @@
         {% endfor %}
       </div>
       {% endfor %}
+      <p class="hint palette-none" id="palette-none" hidden>No block matches.</p>
     </aside>
 
     <section class="designer-layout" aria-label="Layout">
       <div class="designer-pane-title">Layout <span class="muted small" id="block-count"></span></div>
       <div class="layout-card cover-card" id="cover-card">
-        <button type="button" class="layout-head" id="cover-toggle" aria-expanded="false">
-          <span class="layout-title">Cover</span><span class="layout-sub" id="cover-sub"></span>
+        <button type="button" class="layout-head" id="cover-toggle" aria-expanded="false" aria-controls="cover-settings">
+          <span class="layout-title">Cover and options</span><span class="layout-sub" id="cover-sub"></span>
         </button>
         <div class="layout-settings" id="cover-settings" hidden>
           <label>Title <input type="text" id="cover-title" maxlength="120" placeholder="{{ design.name }}"><span class="hint">Placeholders: {client}, {month}, {msp}, {date}.</span></label>
           <label>Subtitle <input type="text" id="cover-subtitle" maxlength="{{ text_max }}" placeholder="{month}"></label>
-          <label>Description <span class="faint">(for the designs list)</span> <input type="text" id="design-description" maxlength="{{ text_max }}" value="{{ design.description }}"></label>
+          <fieldset class="seg-field"><legend>Cover</legend>
+            <span class="seg sm">
+              <label><input type="radio" name="cover-style" value="full"><span>Page of its own</span></label>
+              <label><input type="radio" name="cover-style" value="compact"><span>Band on page one</span></label>
+            </span>
+            <span class="hint">A band suits short reports: the report starts on the first page.</span>
+          </fieldset>
           <label class="check"><input type="checkbox" id="cover-verdict"> Show the status verdict on the cover</label>
-          <label class="check"><input type="checkbox" id="cover-contents"> List the sections on the cover</label>
+          <label class="check" id="cover-contents-label"><input type="checkbox" id="cover-contents"> List the sections on the cover</label>
+          <label class="check"><input type="checkbox" id="cover-notes"> Include setup notes in the client's copy
+            <span class="hint">Notes written for your team, like "Microsoft is hiding people's names… sign in as a Global Admin". Off: they're shown here and in the portal only.</span></label>
+          <label>Description <span class="faint">(for the designs list)</span> <input type="text" id="design-description" maxlength="{{ text_max }}" value="{{ design.description }}"></label>
         </div>
       </div>
       <ol class="layout-list" id="layout-list" aria-label="Blocks in order"></ol>
@@ -58,12 +74,17 @@
     </section>
 
     <section class="designer-preview" aria-label="Preview">
-      <div class="designer-pane-title">Preview{% if tenant %} <span class="muted small">on {{ tenant.name }}, with the blocks that have nothing to show named</span>{% endif %}</div>
-      <iframe id="preview" title="Report preview" src="{{ preview_url }}"></iframe>
+      <div class="designer-pane-title">Preview
+        {% if tenant %}<span class="muted small">Click a block to change it</span>
+        <span class="spacer"></span>
+        <a class="small" id="open-page" href="{{ url_for('designs.tenant_design', tenant_id=tenant.id, design_id=design.id) }}" data-pattern="{{ url_for('designs.tenant_design', tenant_id=0, design_id=design.id) }}" target="_blank" rel="noopener">Open full size {{ icon('external') }}</a>{% endif %}
+      </div>
+      <div class="paper" data-paper><iframe id="preview" title="Report preview" src="{{ preview_url }}"></iframe></div>
     </section>
   </div>
 </div>
 
+<template id="designer-icons">{% for n in ('up', 'down', 'half', 'copy', 'close') %}<span data-icon="{{ n }}">{{ icon(n) }}</span>{% endfor %}</template>
 <script type="application/json" id="designer-data">{{ {"doc": doc, "palette": palette, "tenant": tenant.id if tenant else none}|tojson }}</script>
 {% endblock %}
 {% block scripts %}

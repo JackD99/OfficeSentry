@@ -44,12 +44,14 @@ def _preview_tenant(tenants):
     return next((t for t in tenants if t["id"] == wanted), tenants[0] if tenants else None)
 
 
-def _report_context(tenant, row, *, preview: bool = False) -> dict:
-    """What ``reports/design.html`` needs, with this month's client-safe commentary and notes."""
-    me = month_end.report_context(g.db, tenant["id"], month_end.current_period(_cfg().timezone), staff=False)[
-        "month_end"
-    ]
-    return designs.context(g.db, tenant, row, brand=branding.load(g.db), month_end=me, preview=preview)
+def _report_context(tenant, row, *, preview: bool = False, period: str | None = None, client_copy=False) -> dict:
+    """What ``reports/design.html`` needs, with the month's client-safe commentary and notes, less what the
+    month-end review left out of this client's copy."""
+    period = period or month_end.current_period(_cfg().timezone)
+    me = month_end.report_context(g.db, tenant["id"], period, staff=False)["month_end"]
+    return designs.context(
+        g.db, tenant, row, brand=branding.load(g.db), month_end=me, preview=preview, client_copy=client_copy
+    )
 
 
 def _cfg():
@@ -178,6 +180,7 @@ def preview(design_id: int):
     return render_template(
         "reports/design.html",
         pdf=False,
+        paper=True,  # light, as the PDF is
         css_href=url_for("static", filename="report.css"),
         **_report_context(tenant, row, preview=True),
     )

@@ -1118,6 +1118,32 @@ main:focus { outline: none; }
 .action-row form { display: inline-flex; gap: var(--space-1-5); align-items: center; flex-wrap: wrap; margin: 0; }
 .action-row select, .action-row input { width: auto; }
 textarea.commentary { width: 100%; min-height: 9em; }
+/* Leaving things out of one client's month (review.js): the item stays, greyed, with "Left out" and Put back. */
+.review-check-head { display: flex; gap: var(--space-2); align-items: baseline; flex-wrap: wrap; }
+.review-check-head .grow { flex: 1 1 240px; min-width: 0; }
+.leave-form { display: inline-flex; margin: 0; }
+.left-out-tag { display: none; }
+.left-out .left-out-tag { display: inline-flex; margin-left: var(--space-1-5); vertical-align: 1px; }
+.left-out .strong, .left-out .review-check-head .grow { color: var(--muted); }
+.contents-form { margin-top: var(--space-3-5); }
+.contents-list { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 2px var(--space-4); min-width: 0; }
+.contents-list legend { padding: 0; margin-bottom: var(--space-1-5); font-size: var(--fs-sm); font-weight: 600; }
+.contents-list label.check { margin: 0; align-items: flex-start; font-size: var(--fs-sm); }
+.contents-list label.check input { margin-top: 3px; }
+.contents-list label.check:has(input:not(:checked)) > span { color: var(--muted); }
+.contents-form .hint { margin-top: var(--space-1-5); }
+.contents-form [data-save] { margin-top: var(--space-2); }
+/* Wide screens: the editors and the preview of the client's copy side by side; the preview stays in view. */
+.review-grid { align-items: stretch; }
+@media (min-width: 1280px) { .grid-main.review-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.review-preview { position: sticky; top: var(--space-3); }
+.review-preview .card-head { align-items: center; margin-bottom: var(--space-2-5); }
+.review-preview .card-head select { width: auto; margin-left: auto; padding: 4px 8px; font-size: var(--fs-sm); }
+.review-preview .paper { height: calc(100vh - 190px); min-height: 420px; margin-bottom: var(--space-2); box-shadow: none; }
+@media (max-width: 960px) {
+  .review-preview { position: static; }
+  .review-preview .paper { display: none; }
+}
 .coverage-gaps td .btn { white-space: nowrap; }
 
 /* -- Recommended projects ----------------------------------------------------- */
@@ -1307,6 +1333,18 @@ dd.sg-row { margin-bottom: 0; }
 .designer-status.failed { color: var(--bad); }
 .designer-body { display: grid; grid-template-columns: 250px minmax(300px, 380px) minmax(0, 1fr); gap: var(--space-3); align-items: start; }
 .designer-pane-title { font-weight: 600; font-size: var(--fs-sm); color: var(--text-2); margin-bottom: var(--space-2); display: flex; gap: var(--space-2); align-items: baseline; flex-wrap: wrap; }
+.designer-pane-title .spacer { flex: 1; }
+.designer-pane-title a { font-weight: 500; display: inline-flex; align-items: center; gap: var(--space-1); }
+.designer-pane-title a .icon { width: 13px; height: 13px; }
+.designer-history { display: inline-flex; gap: 2px; }
+/* A button that is only an icon (Undo, move, width, duplicate, remove): its name is its title and aria-label. */
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 4px; min-width: 28px; min-height: 28px; line-height: 1; }
+.icon-btn .icon, .icon-btn svg { width: 16px; height: 16px; }
+.icon-btn[aria-pressed=true] { color: var(--accent); }
+.palette-search { position: relative; display: block; margin: 0 0 var(--space-1); }
+.palette-search .icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); pointer-events: none; }
+.palette-search input[type=search] { margin: 0; padding: 6px 9px 6px 30px; font-size: var(--fs-sm); }
+.palette-group[hidden], .palette-item[hidden] { display: none; }
 .designer-palette, .designer-layout { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3) var(--space-3-5); box-shadow: var(--shadow); }
 .designer-palette { position: sticky; top: var(--space-3); max-height: calc(100vh - var(--space-6)); overflow-y: auto; }
 .designer-palette > .hint { font-size: var(--fs-xs); color: var(--muted); margin: 0 0 var(--space-2); }
@@ -1335,8 +1373,10 @@ button.layout-head { padding: 8px 10px; }
 .layout-title { font-weight: 600; font-size: var(--fs-sm); }
 .layout-sub { font-size: var(--fs-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .layout-width { font-size: var(--fs-xs); color: var(--accent); }
-.layout-actions { display: flex; gap: 1px; flex: none; }
-.layout-actions button { padding: 2px 6px; min-width: 26px; font-size: var(--fs-sm); line-height: 1.4; }
+.layout-actions { display: flex; gap: 0; flex: none; }
+.layout-actions .icon-btn { min-width: 26px; min-height: 26px; padding: 3px; color: var(--muted); }
+.layout-actions .icon-btn:hover:not(:disabled) { color: var(--text); }
+.layout-actions .icon-btn[aria-pressed=true] { color: var(--accent); }
 .layout-settings { border-top: 1px solid var(--border); padding: var(--space-2-5) var(--space-3) var(--space-1); background: var(--surface-2); border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
 .layout-settings label, .layout-settings fieldset { font-size: var(--fs-sm); margin-bottom: var(--space-2-5); }
 .layout-settings fieldset.multi { border: 0; padding: 0; margin: 0 0 var(--space-2-5); }
@@ -1344,20 +1384,30 @@ button.layout-head { padding: 8px 10px; }
 .layout-settings fieldset.multi label.check { display: block; margin: 2px 0; font-weight: 400; }
 .layout-settings input:not([type=checkbox]), .layout-settings select, .layout-settings textarea { padding: 6px 9px; font-size: var(--fs-sm); }
 .layout-settings .hint { font-size: var(--fs-xs); }
+.layout-settings .seg-field { border: 0; padding: 0; margin: 0 0 var(--space-2-5); min-width: 0; }
+.layout-settings .seg-field legend { font-size: var(--fs-sm); font-weight: 500; padding: 0; margin-bottom: var(--space-1); }
+.layout-settings .seg { flex-wrap: wrap; }
+.layout-settings .seg-field .hint { display: block; margin-top: var(--space-1); }
+.layout-settings label.check { flex-wrap: wrap; row-gap: 2px; }
+.layout-settings label.check .hint { flex-basis: 100%; padding-left: 22px; font-weight: 400; }
 .layout-placeholder { height: 0; border-top: 3px solid var(--accent); border-radius: 2px; margin: 0 0 var(--space-2); list-style: none; }
 .layout-empty { font-size: var(--fs-sm); color: var(--muted); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: var(--space-4); text-align: center; }
 .cover-card { margin-bottom: var(--space-3); background: var(--surface-2); }
-.designer-preview { min-width: 0; }
-.designer-preview iframe { width: 100%; height: calc(100vh - 140px); min-height: 520px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; box-shadow: var(--shadow); }
+.designer-preview { min-width: 0; position: sticky; top: var(--space-3); }
+/* A report preview (app.js [data-paper]): the page at print width, shrunk to fit; white like the PDF. */
+.paper { position: relative; overflow: hidden; height: calc(100vh - 140px); min-height: 520px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; box-shadow: var(--shadow); }
+.paper iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.paper.fitted iframe { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+.paper iframe.loading { visibility: hidden; }
 @media (max-width: 1180px) {
   .designer-body { grid-template-columns: 230px minmax(0, 1fr); }
-  .designer-preview { grid-column: 1 / -1; }
+  .designer-preview { grid-column: 1 / -1; position: static; }
 }
 @media (max-width: 760px) {
   .designer-body { grid-template-columns: minmax(0, 1fr); }
   .designer-palette { position: static; max-height: none; }
   .palette-item { cursor: default; }
-  .designer-preview iframe { height: 70vh; }
+  .paper { height: 70vh; }
 }
 
 /* -- Onboarding many clients (web/onboarding.py): tracker, import, send page ---------------- */

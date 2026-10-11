@@ -9,6 +9,49 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
+## [2.3.0] - Unreleased
+
+### Database upgrade
+
+Yes, applied on start as usual: migration 41 adds a small table for what the month-end review leaves out of
+each client's month. As ever, a copy of the database is made first.
+
+### Added
+
+- **Leave things out of one client's month-end report.** On the review screen, a failing check, a key
+  figure, a recommendation, a part of the monthly review (Licences, What changed, Accepted risks and the
+  rest) or a block of a report design can be left out of that client's copy for that month, and put back.
+  The design, other clients and next month stay as they are. Left-out items stay on the review screen,
+  greyed out with **Put back**, and the top of the page counts them with **Put everything back**; the sent
+  PDFs, the spreadsheet, the email and the client's portal copy never have them.
+- **A preview of the client's copy on the review screen**, beside the commentary and findings, switchable
+  between the plan's reports, and drawn again as things are left out or put back.
+- **Send failed months again from the queue.** After a mail outage, tick the clients whose email failed and
+  press **Approve and send selected**: each gets the same frozen files again, without opening it.
+- In the report designer: the preview is drawn at the printed page's width, so it lays out as the PDF does
+  (four key figures to a row, half-width blocks side by side); clicking a block in the preview opens its
+  settings; **Undo** and **Redo** (and Ctrl+Z); proper icons for move, half width, duplicate and remove; a
+  search box over the blocks; and a **Band on page one** cover for short reports, which the Executive summary
+  starter now uses.
+
+### Changed
+
+- Setup notes written for your team, like "Microsoft is hiding people's names… sign in to
+  admin.microsoft.com as a Global Admin", are left out of the client's copy of a report design. The portal
+  and the previews still show them, marked "Only your team sees this". A design can include them again
+  (**Include setup notes in the client's copy**), and the review can leave them out for one client and month.
+
+### Fixed
+
+- The monthly review said a client's Microsoft 365 was "In good shape" when most checks couldn't run, for
+  example while only the tenant profile had been collected. It now says **Partly checked**, and how many of
+  the checks ran.
+- **Inactive accounts** said "Needs Entra ID P1" whatever the reason it had no figure. It now gives the
+  reason, such as "User data hasn't been collected yet".
+- In a report design, the headings of two half-width blocks side by side line up, on the page and in the PDF.
+- A report design previewed in dark mode drew its contact card dark on the light page; previews are light, as
+  the PDF is.
+
 ## [2.2.0] - 2026-10-11
 
 Who can open what, and evidence for more than Cyber Essentials. The headlines: Site access, Site

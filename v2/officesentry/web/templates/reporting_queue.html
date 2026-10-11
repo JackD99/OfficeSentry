@@ -36,7 +36,7 @@
 </div>
 {% elif p.failed %}
 <div class="callout warn" role="status">{{ icon('alert') }}<div class="grow"><strong>{{ p.failed }} of {{ p.total|plural('report') }} didn't go out.</strong>{% if p.succeeded %} The other {{ p.succeeded }} went out.{% endif %}
-  Open a client to see what went wrong and send it again.
+  Tick them below and press <strong>Approve and send selected</strong> to send the same files again, or open a client to see what went wrong.
   <ul class="failures small">{% for tenant_id, name, error in bulk.failures %}<li><a href="{{ url_for('reporting.review', period=period, tenant_id=tenant_id) }}">{{ name }}</a>: {{ error }}</li>{% endfor %}</ul></div></div>
 {% else %}
 <div class="callout" role="status">{{ icon('check') }}<div><strong>All {{ p.total|plural('report') }} went out.</strong> Each one was emailed, or published to the client's report history.</div></div>
@@ -57,7 +57,8 @@
     <tbody>
     {% for r in rows %}
     <tr>
-      {% if admin %}<td>{% if r.state in ('draft', 'in_review') and not r.paused and not r.approving %}<input type="checkbox" name="tenants" value="{{ r.tenant.id }}" form="bulk" aria-label="Select {{ r.tenant.name }}">{% endif %}</td>{% endif %}
+      {#- A month whose email failed can be ticked too: it's sent again, the same files. -#}
+      {% if admin %}<td>{% if (r.state in ('draft', 'in_review') or (r.state == 'approved' and r.error)) and not r.paused and not r.approving %}<input type="checkbox" name="tenants" value="{{ r.tenant.id }}" form="bulk" aria-label="Select {{ r.tenant.name }}">{% endif %}</td>{% endif %}
       <td data-label="Client"><a class="strong" href="{{ url_for('reporting.review', period=period, tenant_id=r.tenant.id) }}">{{ r.tenant.name }}</a>
         <span class="sub">{{ r.plan.name }}{% if r.paused %} · paused{% endif %}</span></td>
       <td data-label="State">{% if r.approving %}<span class="pill accent">{{ 'Approving…' if r.task.status == 'running' else 'Waiting to approve' }}</span>

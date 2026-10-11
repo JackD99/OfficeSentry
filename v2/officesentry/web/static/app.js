@@ -165,6 +165,31 @@
   });
 })();
 
+/* Report previews ([data-paper]: a box holding the iframe of a report page, in the report designer and the
+ * month-end review). The page is drawn as wide as the printed page's text, so it lays out as the PDF does (four
+ * figures to a row, half-width blocks side by side) rather than as a phone would, then shrunk to fit the box.
+ * The box's height stays put; the page scrolls inside it. */
+(function () {
+  var PAGE = 760;
+  var boxes = document.querySelectorAll('[data-paper]');
+  if (!boxes.length) return;
+  function fit(box) {
+    var frame = box.querySelector('iframe');
+    if (!frame || !box.clientWidth) return;
+    var scale = Math.min(1, box.clientWidth / PAGE);
+    frame.style.width = PAGE + 'px';
+    frame.style.height = Math.ceil(box.clientHeight / scale) + 'px';
+    frame.style.transform = 'scale(' + scale + ')';
+    box.classList.toggle('shrunk', scale < 1);
+  }
+  boxes.forEach(function (box) {
+    box.classList.add('fitted');
+    fit(box);
+    if (window.ResizeObserver) new ResizeObserver(function () { fit(box); }).observe(box);
+    else window.addEventListener('resize', function () { fit(box); });
+  });
+})();
+
 /* Account page parts (<details class="part">): open on laptops, folded to their heading and summary
  * on phones so the page reads as a list of what's there; a link to a part opens it. */
 (function () {

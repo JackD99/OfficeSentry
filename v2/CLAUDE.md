@@ -689,6 +689,21 @@ template as `month_end` from `month_end.report_context()`, passed by the route
 reach staff on the web page, never a client or any PDF. A client's live report shows none
 of it until the month is approved or sent (`report_context(..., approved_only=True)`).
 
+The reviewer can leave things out of one client's copy of one month
+(`report_hidden`, migration 0041; `month_end.hidden`, `leave_out`, `put_back`,
+items checked by `valid_item`): `check:<key>`, `kpi:<key>` (`designs.KPI_OPTIONS`),
+`action:<id>`, `part:<key>` (`month_end.PARTS`, the monthly review's sections),
+`block:<design id>:<block id>` and `notes:<design id>`. `report_context` carries
+them as `month_end.hidden`; `monthly_review.leave_out(report, hidden)` drops checks
+and figures from the built report (counts, summary, fixed and accepted follow), the
+template drops parts and `designs.render` blocks. Every client copy applies it: the
+report page, PDF and XLSX routes, `delivery._attachments` (so approvals and
+schedules) and `build_report_email`. The review screen (`reporting_review.html`,
+`static/review.js`) shows left-out items greyed with Put back, and previews the
+client's copy (`/reporting/<period>/<tenant>/preview?report=`) beside them. The
+queue's bulk approval also sends again, with `send_only`, months that were
+approved but whose email failed.
+
 Approving queues an `approve` task per client and month
 (`month_end.queue_approval`; bulk approval queues one per ticked client under
 one `batch`, and the queue page shows its progress). The task renders the
@@ -793,7 +808,18 @@ and `/tenants/<id>/designs/<id>` (`.pdf`) is a tenant's copy. A design is a
 report key `design:<id>` in `delivery.catalog(conn)` (PDF only), so plans and
 schedules send it through `_attachments`; `designs.remove` strips the key from
 them. Adding a widget: a `Widget` in `WIDGETS` and a `w_<kind>` macro in
-`DRAW`; the editor reads the palette from `designs.palette()`. `STARTERS` are
+`DRAW`; the editor reads the palette from `designs.palette()`. Previews (the
+editor's and the month-end review's) are iframes drawn at the printed page's
+width and scaled to fit (`app.js`, `[data-paper]`), light like the PDF
+(`paper=True` sets `data-theme="light"`), without the toolbar (`preview`), and
+run no script (`PREVIEW_CSP`); `designer.js` reaches into the frame to pick a
+block by its anchor (`b<block id>`). The cover is `full` (a page of its own) or
+`compact` (a band on page one, `COVERS`). A detail report's `notice` (a setup
+note for the MSP, like "sign in as a Global Admin") is drawn for the team on the
+page and in previews and reaches the client's copy (the PDF, or a page drawn with
+`client_copy`) only when the design's `notes` setting is on, unless the review
+left it out (`notes:<design id>`); `_widgets.for_client()` says which copy a
+template is drawing. `STARTERS` are
 the designs the editor offers to start from; the Quarterly review starter's
 blocks (`quarter_trend`, `quarter_fixed`, `projects`, `licence_spend`,
 `upcoming`) read `Context.quarter`, a `reports/quarterly.Quarter` built once
