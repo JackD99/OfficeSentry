@@ -33,6 +33,8 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   next one, evidence pages show every download format and their whole answers, and long sign-in
   addresses in What changed and the Activity history break onto the next line. Settings > Users fits a
   laptop, with Add a user beside the two-step sign-in policy under the list.
+- Evidence packs name the admin roles a Conditional Access policy leaves out of MFA ("Exchange Administrator
+  (role)") instead of showing their Microsoft IDs.
 
 ## [2.2.0] - 2026-10-11
 
