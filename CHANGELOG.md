@@ -9,6 +9,20 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
+## [2.3.0] - Unreleased
+
+### Fixed
+
+- **A large month-end no longer loses emails to Microsoft's sending limit.** Exchange Online takes 30
+  messages a minute from one mailbox; approving more clients than that at once had the rest refused ("429
+  ApplicationThrottled") and left Approved with "Send failed", to be sent again one by one. Approvals and
+  scheduled report emails now go out at that pace and wait out Microsoft's "too many messages" and "service
+  unavailable" answers, for up to ten minutes, before they count as failed. A test email or Send now from a
+  page still sends at once.
+- **The month-end queue flags a client a whole data source never came in for** ("Mailboxes not collected",
+  or "2 data sources not collected") instead of marking it Ready, so a client whose Exchange access was
+  never granted isn't approved and sent a report with that part missing.
+
 ## [2.2.0] - 2026-10-11
 
 Who can open what, and evidence for more than Cyber Essentials. The headlines: Site access, Site
@@ -718,6 +732,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
+[2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0
