@@ -77,7 +77,7 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         "clients.compare",
         "Across clients",
-        "All tenants, What changed across clients, Coming up, search and the Today and Clients home pages.",
+        "All clients, What changed across clients, Coming up, search and the Today and Accounts home pages.",
         "see",
     ),
     # Work on clients
