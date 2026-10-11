@@ -493,7 +493,7 @@ def recorded(tmp_path_factory):
     changed = [dict(USERS[0], accountEnabled=False, assignedLicenses=[]), moved, *USERS[2:], gd.INFO_USER]
     for tid in tenants:
         seed_tenant(conn, tid, users=changed)
-    runs = [r["id"] for r in conn.execute("SELECT id FROM runs WHERE status IN ('succeeded', 'partial')")]
+    runs = [r["id"] for r in conn.execute("SELECT id FROM runs WHERE status IN ('succeeded', 'partial') ORDER BY id")]
     assert [r[0] for r in conn.execute("SELECT run_id FROM state_runs ORDER BY run_id")] == runs
     yield conn, tenants
     conn.close()
