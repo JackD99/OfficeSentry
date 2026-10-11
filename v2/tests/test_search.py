@@ -95,9 +95,9 @@ def test_only_granted_tenants_are_searched(app, client, db, two_tenants):
     seed_tenant(db, bravo)
     make_user(db, "admin")
     make_user(db, "bravo-analyst", role="analyst", tenants=[bravo])
-    # Without an account in the snapshot, a mailbox opens the shared mailboxes report.
+    # Without an account in the snapshot, a mailbox opens its own page.
     info = [h for h in _hits(app, db, alpha, "info@x.com") if h.label == "Mailbox"]
-    assert [h.href for h in info] == [f"/tenants/{alpha}/data/shared-mailboxes"]
+    assert [h.href for h in info] == [f"/tenants/{alpha}/mailboxes/u7"]
 
     login(client, "admin")
     page = _page(client, "ann@x.com")
