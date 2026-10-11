@@ -8,7 +8,7 @@ from flask import Blueprint, Response, g, render_template, request
 
 from ..db import AUDIT_NOISE, AUDIT_NOISE_DAYS, audit
 from ..reports.tables import Table, to_csv
-from .access import roles_required, visible_tenants
+from .access import needs, visible_tenants
 
 bp = Blueprint("activity", __name__)
 
@@ -66,7 +66,7 @@ def tenant_label(tenant_id: int | None, names: dict[int, str]) -> str:
 
 
 @bp.get("/admin/activity")
-@roles_required("admin")
+@needs("activity_log.read")
 def index():
     f = _filters()
     page = max(1, request.args.get("page", 1, type=int))
@@ -97,7 +97,7 @@ def index():
 
 
 @bp.get("/admin/activity.csv")
-@roles_required("admin")
+@needs("activity_log.read")
 def export():
     f = _filters()
     where, params = _where(f)

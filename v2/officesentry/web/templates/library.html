@@ -18,7 +18,7 @@
 {% if not tenants %}
 <div class="card empty">
   <h3>No tenants yet</h3>
-  <p>{% if current_user.role == 'admin' %}<a href="{{ url_for('tenants.new_tenant') }}">Add a tenant</a> and its reports appear here once data has been collected.{% else %}You haven't been given access to any tenants yet. Ask an admin to grant access.{% endif %}</p>
+  <p>{% if can('clients.manage') %}<a href="{{ url_for('tenants.new_tenant') }}">Add a tenant</a> and its reports appear here once data has been collected.{% else %}You haven't been given access to any tenants yet. Ask an admin to grant access.{% endif %}</p>
 </div>
 {% else %}
 <div class="library-bar">

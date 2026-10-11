@@ -391,8 +391,16 @@ These areas have no real recording and are tested with simulated data only:
 - **Extra access is flagged.** A tenant that gave the app more than the
   read-only permissions, or any admin role besides Global Reader, shows as
   needing attention on its Manage page and on Client tenants.
-- **Deny-by-default access.** Users see only tenants granted to them (admins
-  and "all tenants" analysts excepted). Hidden tenants return 404.
+- **Deny-by-default access.** A person has a role (a set of capabilities:
+  which report areas open for them, downloads, refreshing data, accepting
+  risks, emailed reports, month-end review and approval, projects, custom
+  reports, managing clients, users or settings) and a scope (every client, or
+  the clients and groups granted to them). Seven built-in roles (Administrator,
+  Team leader, Second line, First line, Account manager, Auditor, Client
+  viewer); an admin can also give or take away single capabilities for one
+  person, everywhere or on one client, and taking away always wins. Every
+  page and download checks on the server; hidden tenants return 404 and a
+  capability taken away on one client answers 403 there.
 - **Every run is a snapshot** (`runs` → `objects` + `metrics`), so reports
   can show history and changes. Metrics and findings are kept forever; full
   snapshots for the last 30 days plus one per month for 12 months. The daily

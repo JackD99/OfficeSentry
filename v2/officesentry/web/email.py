@@ -14,12 +14,11 @@ from ..db import audit, transaction, utcnow
 from ..mailer import Email, MailError
 from ..reports.data_reports import grouped as report_groups
 from ..text import plural
-from .access import login_required, roles_required, tenant_or_404, visible_tenants
+from .access import can, is_staff, needs, tenant_or_404, visible_tenants
 from .filters import _strftime as datefmt
 
 bp = Blueprint("email", __name__)
 
-STAFF = ("admin", "analyst")
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 # The rendered email is shown in a sandboxed frame: inline styles only, nothing else.
 EMAIL_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'"
@@ -34,12 +33,7 @@ def _vault():
 
 
 def _is_staff() -> bool:
-    return g.user["role"] in STAFF
-
-
-def _require_staff() -> None:
-    if not _is_staff():
-        abort(403)
+    return is_staff()
 
 
 def _settings() -> dict:
@@ -54,7 +48,7 @@ def _schedule_or_404(schedule_id: int):
     if s is None:
         abort(404)
     if s["kind"] == "digest":
-        if g.user["role"] != "admin":
+        if not can("settings.manage"):
             abort(404)
     else:
         tenant_or_404(s["tenant_id"])
@@ -66,7 +60,7 @@ def _alert_or_404(alert_id: int):
     if a is None:
         abort(404)
     if a["tenant_id"] is None:
-        if g.user["role"] != "admin":
+        if not can("settings.manage"):
             abort(404)
     else:
         tenant_or_404(a["tenant_id"])
@@ -119,7 +113,7 @@ def _last_errors(schedule_ids: list[int]) -> dict[int, dict]:
 
 
 @bp.get("/tenants/<int:tenant_id>/schedules")
-@login_required
+@needs("emails.view")
 def tenant_emails(tenant_id: int):
     t = tenant_or_404(tenant_id)
     staff = _is_staff()
@@ -167,7 +161,7 @@ def _client_copy(d, contacts) -> dict | None:
 
 
 @bp.get("/tenants/<int:tenant_id>/report-history")
-@login_required
+@needs("emails.view")
 def report_history(tenant_id: int):
     """Every report file emailed for this tenant, as it was sent. Clients don't see who it went to."""
     t = tenant_or_404(tenant_id)
@@ -175,7 +169,7 @@ def report_history(tenant_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/report-history/<int:report_id>")
-@login_required
+@needs("emails.view")
 def issued_report(tenant_id: int, report_id: int):
     t = tenant_or_404(tenant_id)
     r = issued.get(g.db, t["id"], report_id)
@@ -254,7 +248,7 @@ def _chosen_contacts(tenant_id: int | None) -> tuple[list[int], list[str]]:
     if email:
         if not mailer.valid_email(email):
             errors.append(f"“{email}” isn't a valid email address.")
-        elif tenant_id is None and g.user["role"] != "admin":
+        elif tenant_id is None and not can("settings.manage"):
             abort(403)
         else:
             ids.append(delivery.add_contact(g.db, tenant_id, request.form.get("new_name", "").strip()[:100], email))
@@ -444,7 +438,7 @@ def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: 
 
 
 @bp.route("/tenants/<int:tenant_id>/schedules/new", methods=["GET", "POST"])
-@roles_required(*STAFF)
+@needs("emails.manage")
 def new_schedule(tenant_id: int):
     t = tenant_or_404(tenant_id)
     if request.method == "POST":
@@ -462,7 +456,7 @@ def new_schedule(tenant_id: int):
 
 
 @bp.route("/emails/digests/new", methods=["GET", "POST"])
-@roles_required("admin")
+@needs("settings.manage")
 def new_digest():
     if request.method == "POST":
         return _save_schedule(None)
@@ -472,7 +466,7 @@ def new_digest():
 
 
 @bp.route("/emails/coming-up/new", methods=["GET", "POST"])
-@roles_required("admin")
+@needs("settings.manage")
 def new_upcoming():
     """The weekly Coming up email to the team: what falls due in the next 90 days (``upcoming.py``)."""
     if request.method == "POST":
@@ -483,7 +477,7 @@ def new_upcoming():
 
 
 @bp.route("/emails/views/new", methods=["GET", "POST"])
-@roles_required("admin")
+@needs("settings.manage")
 def new_views():
     """Saved views across every tenant, or one group, for the team (``delivery.build_views_email``)."""
     if request.method == "POST":
@@ -498,7 +492,7 @@ def new_views():
 
 
 @bp.route("/schedules/<int:schedule_id>/edit", methods=["GET", "POST"])
-@roles_required(*STAFF)
+@needs("emails.manage")
 def edit_schedule(schedule_id: int):
     s = _schedule_or_404(schedule_id)
     tenant = tenant_or_404(s["tenant_id"]) if s["tenant_id"] else None
@@ -512,7 +506,7 @@ def edit_schedule(schedule_id: int):
 
 
 @bp.post("/schedules/<int:schedule_id>/delete")
-@roles_required(*STAFF)
+@needs("emails.manage")
 def delete_schedule(schedule_id: int):
     s = _schedule_or_404(schedule_id)
     g.db.execute("DELETE FROM email_schedules WHERE id = ?", (s["id"],))
@@ -522,7 +516,7 @@ def delete_schedule(schedule_id: int):
 
 
 @bp.post("/schedules/<int:schedule_id>/toggle")
-@roles_required(*STAFF)
+@needs("emails.manage")
 def toggle_schedule(schedule_id: int):
     s = _schedule_or_404(schedule_id)
     enabled = 0 if s["enabled"] else 1
@@ -551,7 +545,7 @@ def toggle_schedule(schedule_id: int):
 
 
 @bp.post("/schedules/<int:schedule_id>/send")
-@roles_required(*STAFF)
+@needs("emails.manage")
 def send_now(schedule_id: int):
     s = _schedule_or_404(schedule_id)
     if s["on_approval"]:
@@ -586,9 +580,8 @@ def _build_preview(s):
 
 
 @bp.get("/schedules/<int:schedule_id>/preview")
-@login_required
+@needs("emails.view", kind="staff")
 def preview_schedule(schedule_id: int):
-    _require_staff()
     s = _schedule_or_404(schedule_id)
     built = _build_preview(s)
     tenant = tenant_or_404(s["tenant_id"]) if s["tenant_id"] else None
@@ -609,9 +602,8 @@ def _email_body(html: str):
 
 
 @bp.get("/schedules/<int:schedule_id>/preview/body")
-@login_required
+@needs("emails.view", kind="staff")
 def preview_schedule_body(schedule_id: int):
-    _require_staff()
     return _email_body(_build_preview(_schedule_or_404(schedule_id)).email.html_for_browser())
 
 
@@ -656,9 +648,8 @@ def _alert_example(a):
 
 
 @bp.get("/alerts/<int:alert_id>/preview")
-@login_required
+@needs("emails.view", kind="staff")
 def preview_alert(alert_id: int):
-    _require_staff()
     a = _alert_or_404(alert_id)
     built = _alert_example(a)
     tenant = tenant_or_404(a["tenant_id"]) if a["tenant_id"] else None
@@ -675,9 +666,8 @@ def preview_alert(alert_id: int):
 
 
 @bp.get("/alerts/<int:alert_id>/preview/body")
-@login_required
+@needs("emails.view", kind="staff")
 def preview_alert_body(alert_id: int):
-    _require_staff()
     built = _alert_example(_alert_or_404(alert_id))
     if built is None:
         abort(404)
@@ -701,7 +691,7 @@ def _add_contact(tenant_id: int | None):
 
 
 @bp.post("/tenants/<int:tenant_id>/contacts")
-@roles_required(*STAFF)
+@needs("emails.manage")
 def add_tenant_contact(tenant_id: int):
     t = tenant_or_404(tenant_id)
     _add_contact(t["id"])
@@ -709,20 +699,20 @@ def add_tenant_contact(tenant_id: int):
 
 
 @bp.post("/emails/team")
-@roles_required("admin")
+@needs("settings.manage")
 def add_team_contact():
     _add_contact(None)
     return _back(None)
 
 
 @bp.post("/contacts/<int:contact_id>/delete")
-@roles_required(*STAFF)
+@needs("emails.manage")
 def delete_contact(contact_id: int):
     c = g.db.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,)).fetchone()
     if c is None:
         abort(404)
     if c["tenant_id"] is None:
-        if g.user["role"] != "admin":
+        if not can("settings.manage"):
             abort(403)
     else:
         tenant_or_404(c["tenant_id"])
@@ -767,19 +757,19 @@ def _save_alert(tenant_id: int | None):
 
 
 @bp.post("/tenants/<int:tenant_id>/alert")
-@roles_required(*STAFF)
+@needs("emails.manage")
 def save_tenant_alert(tenant_id: int):
     return _save_alert(tenant_or_404(tenant_id)["id"])
 
 
 @bp.post("/emails/alert")
-@roles_required("admin")
+@needs("settings.manage")
 def save_global_alert():
     return _save_alert(None)
 
 
 @bp.post("/alerts/<int:alert_id>/delete")
-@roles_required(*STAFF)
+@needs("emails.manage")
 def delete_alert(alert_id: int):
     a = _alert_or_404(alert_id)
     g.db.execute("DELETE FROM email_alerts WHERE id = ?", (a["id"],))
@@ -792,14 +782,14 @@ def delete_alert(alert_id: int):
 
 
 @bp.post("/deliveries/<int:delivery_id>/retry")
-@roles_required(*STAFF)
+@needs("emails.manage")
 def retry(delivery_id: int):
     d = g.db.execute("SELECT * FROM email_deliveries WHERE id = ?", (delivery_id,)).fetchone()
     if d is None:
         abort(404)
     if d["tenant_id"] is not None:
         tenant_or_404(d["tenant_id"])
-    elif g.user["role"] != "admin":
+    elif not can("settings.manage"):
         abort(404)
     error = delivery.retry_delivery(current_app, g.db, _vault(), d, g.user["username"])
     audit(g.db, g.user["username"], "email_retried", d["tenant_id"], d["subject"])
@@ -811,9 +801,9 @@ def retry(delivery_id: int):
 
 
 @bp.get("/emails")
-@roles_required(*STAFF)
+@needs("emails.view", kind="staff")
 def overview():
-    admin = g.user["role"] == "admin"
+    admin = can("settings.manage")
     tenants = {t["id"]: t for t in visible_tenants(g.db, g.user)}
     ids = list(tenants)
     marks = ",".join("?" * len(ids)) or "NULL"
@@ -886,7 +876,7 @@ def _store(values: dict) -> None:
 
 
 @bp.route("/admin/email", methods=["GET", "POST"])
-@roles_required("admin")
+@needs("settings.manage")
 def settings():
     vault = _vault()
     current = _settings()
@@ -1097,7 +1087,7 @@ def _make_mail_certificate(vault, current: dict):
 
 
 @bp.get("/admin/email/mail-certificate.cer")
-@roles_required("admin")
+@needs("settings.manage")
 def mail_certificate():
     """The mail app's public certificate. Its private key never leaves the database."""
     pem = _settings().get("graph_cert_pem")

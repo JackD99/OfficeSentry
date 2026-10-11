@@ -11,7 +11,7 @@
 {{ tenant_header(tenant, 'overview', counts={'findings': open_total}) }}
 
 {% if cloud_problem %}
-<div class="callout warn" role="status"><div><strong>Set up an app for {{ cloud_of(tenant).label }}.</strong> {{ cloud_problem }}{% if current_user.role == 'admin' %} <a href="{{ url_for('admin.connections') }}">App connection</a>{% endif %}</div></div>
+<div class="callout warn" role="status"><div><strong>Set up an app for {{ cloud_of(tenant).label }}.</strong> {{ cloud_problem }}{% if can('settings.manage') %} <a href="{{ url_for('admin.connections') }}">App connection</a>{% endif %}</div></div>
 {% endif %}
 
 {% if setup and not tenant.archived_at %}
@@ -30,7 +30,7 @@
                      'admins.privileged_principals': ('admins', '#t-privileged-role-holders'), 'users.licensed': ('licences', ''),
                      'stale': ('inactive', '#t-inactive-members'), 'waste': ('licences', '#t-waste-by-subscription')} %}
 <div class="tiles">
-  {% for k in report.kpis %}{% set target = KPI_REPORT.get(k.key) %}
+  {% for k in report.kpis %}{% set target = KPI_REPORT.get(k.key) %}{% if not target or can(report_capability(target[0]), tenant.id) %}
   <{{ 'a' if target else 'div' }} class="tile{{ ' link' if target }}"{% if target %} href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=target[0]) }}{{ target[1] }}"{% endif %}>
     <div class="label">{{ k.label }}{% if target %}{{ icon('arrow', 'go') }}{% endif %}</div>
     <div class="value">{{ kpi_value(k) }}</div>
@@ -42,10 +42,11 @@
       {% else %}&nbsp;{% endif %}
     </div>
   </{{ 'a' if target else 'div' }}>
-  {% endfor %}
+  {% endif %}{% endfor %}
 </div>
 
 <div class="grid-2">
+  {% if can('reports.security', tenant.id) %}
   <section class="card">
     <div class="card-head">
       <h2>Needs attention</h2>
@@ -71,7 +72,9 @@
     <div class="empty compact"><h3>No results yet</h3><p>Checks run once data has been collected.</p></div>
     {% endif %}
   </section>
+  {% endif %}
 
+  {% if can('reports.changes', tenant.id) %}
   <section class="card">
     <div class="card-head"><h2>Since {{ report.period_start|datefmt('%-d %B') }}</h2>
       <a class="small" href="{{ url_for('across.tenant_changes', tenant_id=tenant.id) }}">Everything that changed</a></div>
@@ -95,20 +98,27 @@
     <p class="muted small">No configuration changes spotted. Change tracking needs two collections at least 4 weeks apart.</p>
     {% endif %}
   </section>
+  {% endif %}
 </div>
 {% endif %}
 
 <section class="card">
   <div class="card-head"><h2>Reports</h2>
     <input class="search sm" type="search" data-report-search="report-directory" placeholder="Find a report…" aria-label="Find a report"></div>
+  {% if can('reports.security', tenant.id) or can('projects.view', tenant.id) %}
   <div class="report-links featured">
+    {% if can('reports.security', tenant.id) %}
     <a class="report-link primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">
       <span class="title">Monthly review {{ icon('arrow') }}</span><span class="desc">Security and licensing summary with recommendations. PDF and XLSX.</span></a>
     <a class="report-link" href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}">
       <span class="title">Questionnaires and evidence {{ icon('arrow') }}</span><span class="desc">Answers to paste into insurance, supplier and Cyber Essentials forms.</span></a>
+    {% endif %}
+    {% if can('projects.view', tenant.id) %}
     <a class="report-link" href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}">
       <span class="title">Recommended projects {{ icon('arrow') }}</span><span class="desc">Work the findings call for, to propose to the client.</span></a>
+    {% endif %}
   </div>
+  {% endif %}
   <p class="muted small m0 no-match" hidden>No report matches that. Try a word like mailbox, admin or licence.</p>
   <div class="report-directory" id="report-directory">
     {% for gr in report_groups %}

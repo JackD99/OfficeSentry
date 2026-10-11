@@ -80,6 +80,6 @@
   </section>
 </div>
 
-<p class="footnote">Kept: every sign-in for {{ describe('history_signin_days', page.policy.history_signin_days) }}, daily sign-in summaries for {{ describe('history_daily_months', page.policy.history_daily_months) }} and directory audit events for {{ describe('history_audit_years', page.policy.history_audit_years) }}.{% if current_user.role == 'admin' %} <a href="{{ url_for('retention.settings') }}#history">Change in Data retention</a>.{% endif %}</p>
+<p class="footnote">Kept: every sign-in for {{ describe('history_signin_days', page.policy.history_signin_days) }}, daily sign-in summaries for {{ describe('history_daily_months', page.policy.history_daily_months) }} and directory audit events for {{ describe('history_audit_years', page.policy.history_audit_years) }}.{% if can('settings.manage') %} <a href="{{ url_for('retention.settings') }}#history">Change in Data retention</a>.{% endif %}</p>
 {% endif %}
 {% endblock %}

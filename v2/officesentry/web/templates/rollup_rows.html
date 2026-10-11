@@ -20,7 +20,7 @@
     {% else %}
     <p class="muted small m0">None yet. Filter, sort or hide columns, then save the view here. It opens on this page and on each tenant's own report.</p>
     {% endfor %}
-    {% if current and current_user.role == 'admin' %}
+    {% if current and can('settings.manage') %}
     <a class="menu-link small" href="{{ url_for('email.new_views', view=current.id) }}">{{ icon('send') }} Email this view to your team</a>
     {% endif %}
     {% if view_query and not current %}

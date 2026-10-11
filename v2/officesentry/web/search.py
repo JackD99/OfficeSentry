@@ -28,7 +28,7 @@ from ..reports import sign_in_reports
 from ..reports.views import slug
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .access import roles_required, visible_tenants
+from .access import can, needs, visible_tenants
 
 bp = Blueprint("search", __name__)
 
@@ -104,6 +104,18 @@ class Tenant:
     @cached_property
     def checked_domains(self) -> set[str]:
         return {d["_id"].lower() for d in self.snap.objects("domain_health", "domain") or []}
+
+
+# What a search hit from each collector needs: nobody finds what they couldn't open.
+COLLECTOR_CAPABILITY = {
+    "users": "reports.people",
+    "mailboxes": "reports.email",
+    "inbox_rules": "reports.email",
+    "sign_ins": "reports.identity",
+    "app_consents": "reports.devices",
+    "devices": "reports.devices",
+    "tenant_profile": "reports.tenant",
+}
 
 
 @dataclass(frozen=True)
@@ -288,8 +300,9 @@ def _matches(value, q: str, ip: bool) -> bool:
     return text.lower().startswith(q) if ip else q in text.lower()
 
 
-def search_tenant(conn, tenant, q: str, limit: int = PER_TENANT) -> Group:
-    """Matches for ``q`` (lower case) in one tenant's latest snapshot, at most ``limit``."""
+def search_tenant(conn, tenant, q: str, limit: int = PER_TENANT, allowed=None) -> Group:
+    """Matches for ``q`` (lower case) in one tenant's latest snapshot, at most ``limit``, of the kinds
+    ``allowed(capability)`` lets this person see (everything when None)."""
     t = Tenant(conn, tenant)
     group = Group(tenant)
     if not t.snap.runs:
@@ -298,6 +311,8 @@ def search_tenant(conn, tenant, q: str, limit: int = PER_TENANT) -> Group:
     seen = set()
     for kind in KINDS:
         if (kind.ip and not ip_query) or not t.snap.has(kind.collector):
+            continue
+        if allowed is not None and not allowed(COLLECTOR_CAPABILITY[kind.collector]):
             continue
         for obj in t.snap.objects(kind.collector, kind.kind) or []:
             for value in kind.values(obj):
@@ -316,7 +331,7 @@ def search_tenant(conn, tenant, q: str, limit: int = PER_TENANT) -> Group:
 
 
 @bp.get("/search")
-@roles_required("admin", "analyst")
+@needs("clients.compare")
 def index():
     q = request.args.get("q", "").strip()[:MAX_LENGTH]
     tenants = visible_tenants(g.db, g.user)
@@ -329,7 +344,7 @@ def index():
     if q and not short:
         total = 0
         for tenant in tenants:
-            group = search_tenant(g.db, tenant, q.lower())
+            group = search_tenant(g.db, tenant, q.lower(), allowed=lambda cap, t=tenant: can(cap, t["id"]))
             if group.hits:
                 groups.append(group)
                 total += len(group.hits)

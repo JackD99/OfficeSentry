@@ -14,7 +14,7 @@
   </div>
   {% if not report.unavailable %}
   <div class="toolbar-actions">
-    {% if current_user.role != 'client' %}<a class="btn sm" href="{{ url_for('across.rollup', key=report.key) }}" title="Compare this report across every tenant">{{ icon('tenants') }} All tenants</a>{% endif %}
+    {% if can('clients.compare') %}<a class="btn sm" href="{{ url_for('across.rollup', key=report.key) }}" title="Compare this report across every tenant">{{ icon('tenants') }} All tenants</a>{% endif %}
     {{ saved_views(saved, view_query, report.key, tenant, base=base) }}
     {% set shown = [day_query, view_query]|select|join('&') %}{% set q = ('?' ~ shown) if shown else '' %}
     {{ downloads([('PDF', url_for('reports.data_report_pdf', tenant_id=tenant.id, key=report.key) ~ q, 'The rows and columns shown, as a PDF' if view_query else 'The whole report as a PDF'),

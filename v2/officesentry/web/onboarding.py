@@ -21,7 +21,7 @@ from ..db import audit, audit_counted
 from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS, admin_consent_url
 from ..reports import tables
 from . import public_demo
-from .access import roles_required, tenant_or_404, visible_tenants
+from .access import can, needs, tenant_or_404, visible_tenants
 from .branding import current_brand
 from .printing import pdf_response
 from .tenants import _cfg, cloud_mismatch
@@ -77,7 +77,7 @@ def client_returned(t):
     )
     if approved and not t["archived_at"] and not public_demo.active(g.db):
         onboarding.client_approved(g.db, t)
-    if g.get("user") is not None and g.user["role"] == "admin":
+    if g.get("user") is not None and can("clients.manage"):
         # An admin opened the client's link themselves: back to the tenant, as their own link would.
         flash(
             "Approved. Office Sentry is signing in to confirm; this page updates once it has."
@@ -101,7 +101,7 @@ def client_returned(t):
 
 
 @bp.get("")
-@roles_required("admin")
+@needs("clients.manage")
 def index():
     everything = onboarding.tracker(g.db, visible_tenants(g.db, g.user))
     counts = {key: sum(1 for e in everything if e.state.key == key) for key in onboarding.STATES}
@@ -128,7 +128,7 @@ def index():
 
 
 @bp.post("/bulk")
-@roles_required("admin")
+@needs("clients.manage")
 def bulk():
     action = request.form.get("action", "")
     picked = {int(x) for x in request.form.getlist("tenant") if x.isdigit()}
@@ -160,7 +160,7 @@ def bulk():
 
 
 @bp.get("/export.csv")
-@roles_required("admin")
+@needs("clients.manage")
 def export():
     """Every tenant that hasn't consented yet, with its contact and consent link, for a mail merge."""
     rows = []
@@ -195,7 +195,7 @@ def export():
 
 
 @bp.get("/template.csv")
-@roles_required("admin")
+@needs("clients.manage")
 def template():
     return Response(
         "﻿" + onboarding.TEMPLATE,
@@ -205,7 +205,7 @@ def template():
 
 
 @bp.route("/import", methods=["GET", "POST"])
-@roles_required("admin")
+@needs("clients.manage")
 def import_tenants():
     connections = store.list_connections(g.db)
     if request.method == "GET":
@@ -272,7 +272,7 @@ def _send_context(t):
 
 
 @bp.get("/<int:tenant_id>")
-@roles_required("admin")
+@needs("clients.manage")
 def send(tenant_id: int):
     t = tenant_or_404(tenant_id)
     ctx = _send_context(t)
@@ -284,7 +284,7 @@ def send(tenant_id: int):
 
 
 @bp.post("/<int:tenant_id>/contact")
-@roles_required("admin")
+@needs("clients.manage")
 def contact(tenant_id: int):
     from ..mailer import valid_email
 
@@ -301,7 +301,7 @@ def contact(tenant_id: int):
 
 
 @bp.post("/<int:tenant_id>/sent")
-@roles_required("admin")
+@needs("clients.manage")
 def mark_sent(tenant_id: int):
     t = tenant_or_404(tenant_id)
     sent = request.form.get("sent", "1") == "1"
@@ -314,7 +314,7 @@ def mark_sent(tenant_id: int):
 
 
 @bp.post("/<int:tenant_id>/check")
-@roles_required("admin")
+@needs("clients.manage")
 def check(tenant_id: int):
     t = tenant_or_404(tenant_id)
     if t["consented_at"]:
@@ -327,7 +327,7 @@ def check(tenant_id: int):
 
 
 @bp.get("/<int:tenant_id>/pack.pdf")
-@roles_required("admin")
+@needs("clients.manage")
 def pack(tenant_id: int):
     """The "send this to your client" pack: how to approve, and what Office Sentry reads and never reads."""
     t = tenant_or_404(tenant_id)

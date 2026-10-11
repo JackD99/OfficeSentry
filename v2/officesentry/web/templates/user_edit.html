@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_roles.html" import ROLE_HELP %}
 {% block title %}{{ user.username }} · Users{% endblock %}
 {% block content %}
 <div class="crumbs"><a href="{{ url_for('admin.users') }}">Users</a><span>/</span><span>{{ user.username }}</span></div>
@@ -7,24 +6,26 @@
   <div class="sub">{{ 'Last signed in ' ~ (user.last_login_at|ago) if user.last_login_at else 'Has never signed in' }}</div></div></div>
 <form method="post" class="card narrow-lg">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <fieldset class="choices">
+  {% if last_admin %}<p class="callout warn small">This is the only Administrator. Make someone else an Administrator before changing their role or disabling the account.</p>{% endif %}
+  <fieldset class="choices" data-roles>
     <legend>Role</legend>
     {% for r in roles %}
-    <label class="choice"><input type="radio" name="role" value="{{ r }}" {% if r == user.role %}checked{% endif %}>
-      <span><span class="strong">{{ r|capitalize }}</span><span class="hint">{{ ROLE_HELP.get(r, '') }}</span></span></label>
+    <label class="choice"><input type="radio" name="role" value="{{ r.id }}" data-kind="{{ r.kind }}" data-scope="{{ r.scope }}" {% if r.id == role.id %}checked{% endif %}{% if user.id == current_user.id and r.kind != 'admin' %} disabled{% endif %}>
+      <span><span class="strong">{{ r.name }}{% if r.kind == 'client' %} <span class="faint small">client role</span>{% endif %}</span><span class="hint">{{ r.description }}</span></span></label>
     {% endfor %}
+    <p class="footnote m0">{% if can('users.manage') %}Roles are built-in sets of capabilities. What each one opens is listed under <strong>What {{ user.username }} can do</strong> below.{% endif %}</p>
   </fieldset>
   <fieldset>
-    <legend>Tenant access</legend>
-    <label class="check"><input type="checkbox" name="all_tenants" value="1" {% if user.all_tenants %}checked{% endif %}> All tenants, including ones added later <span class="faint small">(analysts only)</span></label>
+    <legend>Clients</legend>
+    <label class="check" data-staff-only><input type="checkbox" name="all_tenants" value="1" {% if user.all_tenants %}checked{% endif %}> Every client, including ones added later <span class="faint small">(staff roles only; some roles already cover every client)</span></label>
     <div class="check-grid">
-    {% for t in tenants %}<label class="check"><input type="checkbox" name="tenants" value="{{ t.id }}" {% if t.id in granted %}checked{% endif %}> {{ t.name }}{% if t.archived_at %} <span class="faint small">(archived)</span>{% endif %}</label>{% else %}<p class="muted">No tenants yet.</p>{% endfor %}
+    {% for t in tenants %}<label class="check"><input type="checkbox" name="tenants" value="{{ t.id }}" {% if t.id in granted %}checked{% endif %}> {{ t.name }}{% if t.archived_at %} <span class="faint small">(archived)</span>{% endif %}</label>{% else %}<p class="muted">No clients yet.</p>{% endfor %}
     </div>
   </fieldset>
   {% if groups %}
-  <fieldset>
-    <legend>Tenant groups <span class="faint small">(analysts only)</span></legend>
-    <p class="muted small m0">Every tenant in a ticked group, including tenants added to it later. Client accounts are never given tenants through a group.</p>
+  <fieldset data-staff-only>
+    <legend>Client groups <span class="faint small">(staff roles only)</span></legend>
+    <p class="muted small m0">Every client in a ticked group, including clients added to it later. Client accounts are never given clients through a group.</p>
     <div class="check-grid">
     {% for gr in groups %}<label class="check"><input type="checkbox" name="groups" value="{{ gr.id }}" {% if gr.id in granted_groups %}checked{% endif %}> {{ gr.name }} <span class="faint small">{{ gr.tenants|plural('tenant') }}</span></label>{% endfor %}
     </div>
@@ -37,6 +38,21 @@
   <label class="check"><input type="checkbox" name="disabled" value="1" {% if user.disabled %}checked{% endif %}> Disable this account (they can't sign in)</label>
   <div class="form-actions"><button class="primary">Save changes</button><a class="btn ghost" href="{{ url_for('admin.users') }}">Cancel</a></div>
 </form>
+<section class="card narrow-lg">
+  <h2>What {{ user.username }} can do</h2>
+  <p class="muted small">As {{ role.name }}{% if access.sees_all %}, on every client{% else %}, on the clients granted above{% endif %}.{% if overrides %} {{ overrides|length|plural('capability', 'capabilities') }} added or taken away for this person{% if overrides|selectattr('tenant_id')|list %}, some on one client only{% endif %}.{% endif %}</p>
+  {% for key, title, help in groups_of_capabilities %}
+  {% set held = capabilities|selectattr('group', 'equalto', key)|selectattr('key', 'in', access.anywhere())|list %}
+  {% set missing = capabilities|selectattr('group', 'equalto', key)|rejectattr('key', 'in', access.anywhere())|list %}
+  {% if held or (missing and role.kind != 'client') %}
+  <h3>{{ title }}</h3>
+  <ul class="cap-list">
+    {% for c in held %}<li title="{{ c.help }}">{{ c.title }}{% set only = overrides|selectattr('capability', 'equalto', c.key)|list %}{% if only %} <span class="faint small">{{ 'everywhere' if only|map(attribute='tenant_id')|select('none')|list else 'on some clients' }}{% if not only|selectattr('allow')|list %}, taken away{% elif c.key not in role.capabilities %}, added{% endif %}</span>{% endif %}</li>{% endfor %}
+    {% for c in missing if role.kind != 'client' %}<li class="faint" title="{{ c.help }}"><s>{{ c.title }}</s></li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% endfor %}
+</section>
 <section class="card narrow-lg">
   <h2>Sign-in security</h2>
   <dl class="kv">
@@ -82,5 +98,16 @@
 document.querySelectorAll('[data-confirm]').forEach(function (b) {
   b.addEventListener('click', function (e) { if (!confirm(b.dataset.confirm)) e.preventDefault(); });
 });
+(function () {
+  var radios = document.querySelectorAll('[data-roles] input[type=radio]');
+  var staffOnly = document.querySelectorAll('[data-staff-only]');
+  function show() {
+    var picked = document.querySelector('[data-roles] input[type=radio]:checked');
+    var staff = picked && picked.dataset.kind === 'staff';
+    staffOnly.forEach(function (el) { el.hidden = !staff; });
+  }
+  radios.forEach(function (r) { r.addEventListener('change', show); });
+  show();
+})();
 </script>
 {% endblock %}

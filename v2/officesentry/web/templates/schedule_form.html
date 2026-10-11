@@ -136,7 +136,7 @@
     </details>
     <div class="label-sm">Your team <span class="muted">· {{ 'only your team gets this email' if coming_up or views_email else 'only your team gets digests' if digest else 'get a hidden copy, so clients never see them' }}</span></div>
     {{ contact_checks(team, chosen, 'No team members yet.' if not digest else 'No team members yet. Add one above.') }}
-    {% if not team and not digest and current_user.role == 'admin' %}<p class="footnote m0"><a href="{{ url_for('email.overview') }}#team">Add your team</a> to copy them in on client emails.</p>{% endif %}
+    {% if not team and not digest and can('settings.manage') %}<p class="footnote m0"><a href="{{ url_for('email.overview') }}#team">Add your team</a> to copy them in on client emails.</p>{% endif %}
   </section>
 
   <section class="card">

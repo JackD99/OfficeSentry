@@ -15,7 +15,7 @@ from .. import clouds, lifecycle, store, tenant_groups, tenant_health
 from ..db import audit
 from ..discovery import tenant_id_for_domain
 from ..text import plural
-from .access import roles_required, tenant_or_404, visible_tenants
+from .access import can, needs, tenant_or_404, visible_tenants
 from .groups import group_aware, scope
 from .tenants import DOMAIN_RE, GUID_RE, _cfg, _consent_link, cloud_mismatch, not_connected
 
@@ -44,10 +44,10 @@ def _back(tenant_id: int):
 
 
 @bp.get("/admin/tenants")
-@roles_required("admin", "analyst")
+@needs(kind="staff")
 @group_aware
 def clients():
-    admin = g.user["role"] == "admin"
+    admin = can("clients.manage")
     group = scope().group
     tenants = tenant_groups.only(g.db, visible_tenants(g.db, g.user, archived=admin), group.id if group else None)
     archived = [t for t in tenants if t["archived_at"]]
@@ -74,7 +74,7 @@ def clients():
 
 
 @bp.get("/tenants/<int:tenant_id>/manage")
-@roles_required("admin", "analyst")
+@needs(kind="staff")
 def manage(tenant_id: int):
     t = tenant_or_404(tenant_id)
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
@@ -107,7 +107,7 @@ def _check_problem(t) -> str | None:
 
 
 @bp.post("/tenants/<int:tenant_id>/groups")
-@roles_required("admin")
+@needs("clients.manage")
 def set_groups(tenant_id: int):
     t = tenant_or_404(tenant_id)
     chosen = {int(x) for x in request.form.getlist("groups") if x.isdigit()}
@@ -120,7 +120,7 @@ def set_groups(tenant_id: int):
 
 
 @bp.post("/tenants/<int:tenant_id>/check-connection")
-@roles_required("admin", "analyst")
+@needs("collect")
 def check_connection(tenant_id: int):
     t = tenant_or_404(tenant_id)
     if problem := _check_problem(t):
@@ -133,7 +133,7 @@ def check_connection(tenant_id: int):
 
 
 @bp.post("/tenants/<int:tenant_id>/edit")
-@roles_required("admin")
+@needs("clients.manage")
 def edit(tenant_id: int):
     t = tenant_or_404(tenant_id)
     name = request.form.get("name", "").strip()
@@ -227,7 +227,7 @@ def _other_app(old_id: int | None, new_id: int | None) -> bool:
 
 
 @bp.post("/tenants/<int:tenant_id>/pause")
-@roles_required("admin")
+@needs("clients.manage")
 def pause(tenant_id: int):
     t = tenant_or_404(tenant_id)
     if t["enabled"]:
@@ -241,7 +241,7 @@ def pause(tenant_id: int):
 
 
 @bp.post("/tenants/<int:tenant_id>/resume")
-@roles_required("admin")
+@needs("clients.manage")
 def resume(tenant_id: int):
     t = tenant_or_404(tenant_id)
     if t["archived_at"]:
@@ -256,7 +256,7 @@ def resume(tenant_id: int):
 
 
 @bp.post("/tenants/<int:tenant_id>/archive")
-@roles_required("admin")
+@needs("clients.manage")
 def archive(tenant_id: int):
     t = tenant_or_404(tenant_id)
     if not t["archived_at"]:
@@ -270,7 +270,7 @@ def archive(tenant_id: int):
 
 
 @bp.post("/tenants/<int:tenant_id>/restore")
-@roles_required("admin")
+@needs("clients.manage")
 def restore(tenant_id: int):
     t = tenant_or_404(tenant_id)
     if t["archived_at"]:
@@ -283,7 +283,7 @@ def restore(tenant_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/offboard")
-@roles_required("admin")
+@needs("clients.manage")
 def offboard(tenant_id: int):
     t = tenant_or_404(tenant_id)
     health = tenant_health.assess(g.db, t)
@@ -310,7 +310,7 @@ def offboard(tenant_id: int):
 
 
 @bp.post("/tenants/<int:tenant_id>/delete")
-@roles_required("admin")
+@needs("clients.manage")
 def delete(tenant_id: int):
     t = tenant_or_404(tenant_id)
     if request.form.get("confirm_name", "").strip() != t["name"].strip():
