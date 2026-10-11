@@ -43,7 +43,8 @@ td.num { white-space: nowrap; }
 .demo-bar { display: flex; gap: var(--space-3); align-items: center; padding: var(--space-2-5) var(--space-8); background: var(--accent-soft); color: var(--text-2); border-bottom: 1px solid var(--border); font-size: var(--fs-base); }
 .demo-bar strong { color: var(--text); }
 .demo-bar .btn { flex: none; }
-main { max-width: 1240px; margin: 0 auto; padding: 28px 32px 64px; }
+/* Wide enough for a report's table on a big screen; text and forms keep their own narrower widths. */
+main { max-width: 1600px; margin: 0 auto; padding: 28px 32px 64px; }
 
 /* -- Page header, breadcrumbs, tabs --------------------------------------- */
 .crumbs { font-size: var(--fs-sm); color: var(--muted); margin-bottom: var(--space-1-5); display: flex; gap: var(--space-1-5); flex-wrap: wrap; }
@@ -226,7 +227,7 @@ details.help > summary { font-size: var(--fs-base); }
 .center { text-align: center; }
 .auth-card .form-actions .btn.primary { width: auto; }
 .client-tenant .tiles { margin-bottom: var(--space-3-5); }
-.footnote { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--space-2); }
+.footnote { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--space-2); max-width: 120ch; }
 
 /* -- Settings: one sidebar entry, and this row on top of every settings page ------------------------ */
 .settings-nav { display: flex; gap: var(--space-1); margin: -8px 0 20px; padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
@@ -710,20 +711,27 @@ td.tenant-col { min-width: 190px; }
 .connection-form { margin: var(--space-4) 0 0; }
 .connection-form > label { flex: 1 1 200px; }
 
-/* -- Reports tab: one report picker (report_picker) beside the report ----------------
-   A searchable list on the left on wide screens, kept in view as the page scrolls; a select above the
-   report on narrower ones. */
-.report-layout { display: grid; grid-template-columns: 212px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+/* -- Reports tab: one report picker (report_picker) above the report ----------------
+   An "All reports" menu with the report's area beside it, so the report has the page's whole width: the
+   menu shows every report in columns with a search box. A select on phones. */
+.report-layout { display: block; }
 .report-main { min-width: 0; }
-.report-menu { position: sticky; top: calc(var(--pin-h, 0px) + var(--space-4)); display: flex; flex-direction: column; max-height: calc(100vh - var(--pin-h, 0px) - var(--space-8)); margin-top: var(--space-0-5); }
+.report-menu { display: flex; align-items: center; gap: var(--space-2-5); margin: 0 0 var(--space-3); }
+.report-switch > summary { display: inline-flex; align-items: center; gap: var(--space-1-5); }
+.report-switch > summary .chev { width: 14px; height: 14px; color: var(--muted); transition: transform .15s; }
+.report-switch[open] > summary .chev { transform: rotate(180deg); }
+.report-area { color: var(--muted); font-size: var(--fs-sm); }
+.menu-panel.report-panel { left: 0; right: auto; width: min(1040px, calc(100vw - 232px - var(--space-16))); max-height: none; overflow: visible; padding: var(--space-3) var(--space-4) var(--space-3); }
+.report-panel .picker-search { max-width: 320px; }
 .picker-search { position: relative; flex: none; }
 .picker-search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--decor); pointer-events: none; }
 .picker-search input[type=search] { margin: 0; padding: 6px 10px 6px 31px; font-size: var(--fs-sm); }
-.picker-list { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; margin: var(--space-2) calc(-1 * var(--space-1)) 0; padding: 0 var(--space-1) var(--space-2); }
+.picker-list { margin: var(--space-2) calc(-1 * var(--space-1)) 0; padding: 0 var(--space-1); }
+.report-panel .picker-list { columns: 4 200px; column-gap: var(--space-5); max-height: min(68vh, 620px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.report-panel .report-group { break-inside: avoid; padding-bottom: var(--space-2); }
 .picker-list ul { list-style: none; margin: 0; padding: 0; }
-.picker-label { margin: var(--space-3) var(--space-2) var(--space-1); font-size: var(--fs-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-.report-group:first-child .picker-label { margin-top: var(--space-1); }
-.picker-list .report-group li a { display: block; padding: 5px var(--space-2); border-radius: var(--radius-sm); color: var(--text-2); font-size: var(--fs-sm); font-weight: 400; line-height: 1.35; }
+.picker-label { margin: var(--space-2) var(--space-2) var(--space-1); font-size: var(--fs-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.picker-list .report-group li a { display: block; padding: 4px var(--space-2); border-radius: var(--radius-sm); color: var(--text-2); font-size: var(--fs-sm); font-weight: 400; line-height: 1.35; }
 .picker-list .report-group li a:hover { background: var(--sunken); color: var(--text); text-decoration: none; }
 .picker-list .report-group li a[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
 .report-menu .no-match { margin: var(--space-2) var(--space-2) 0; color: var(--muted); font-size: var(--fs-sm); }
@@ -738,20 +746,22 @@ td.tenant-col { min-width: 190px; }
 .toolbar.report-title { align-items: flex-end; }
 /* The title and its description share a row with the report's buttons, which keep to the right. */
 .report-main > .toolbar.report-title { flex-wrap: nowrap; align-items: flex-start; margin-bottom: var(--space-3-5); }
-.report-main > .toolbar.report-title > div:first-child { flex: 1 1 auto; min-width: 0; max-width: 620px; }
+.report-main > .toolbar.report-title > div:first-child { flex: 1 1 auto; min-width: 0; max-width: 760px; }
 .report-main > .toolbar.report-title .toolbar-actions { flex: none; justify-content: flex-end; padding-top: var(--space-0-5); }
 /* Headline figures sit in one row beside the picker, so the table starts higher. */
 .report-main .tiles { grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); gap: var(--space-2-5); margin-bottom: var(--space-4); }
 .report-main .tile { padding: var(--space-3) var(--space-3-5); }
 .report-main .tile .value { font-size: var(--fs-2xl); white-space: nowrap; }
 .report-main .tile .value.wordy { white-space: normal; }
-@media (max-width: 1279px) {
-  .report-layout { display: block; }
+@media (max-width: 1100px) {
   .report-main > .toolbar.report-title { flex-wrap: wrap; }
   .report-main > .toolbar.report-title .toolbar-actions { flex: 1 1 auto; justify-content: flex-start; }
+}
+@media (max-width: 960px) {
   .report-menu { display: none; }
   .report-menu-sm { display: flex; }
 }
+
 @media (max-width: 640px) {
   .report-main .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -1265,7 +1275,7 @@ dd.sg-row { margin-bottom: 0; }
   .sg-name { min-width: 0; }
   .sg-type li { flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 }
-.sg-frame .report-menu { position: static; max-height: 360px; }
+.sg-frame .report-menu { margin-bottom: var(--space-2); }
 /* -- Home pages by role (home_today.html, home_clients.html) --------------------------------------------- */
 .home-switch { margin: 0; }
 .make-home { align-self: center; }
@@ -1491,3 +1501,36 @@ details.part:not([open]) > summary.card-head { margin-bottom: 0; }
   .edit-pair { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 1fr); gap: 0 var(--space-5); align-items: start; }
   .edit-pair > .card { max-width: none; }
 }
+
+/* -- Page review 3: reports use the page's width --------------------------------
+   The All reports menu sits above the report with "Show as it was on" at the other end of its row. */
+.report-layout:has(> .date-pick) { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-4); align-items: center; }
+.report-layout > .report-main, .report-layout > .report-menu-sm { grid-column: 1 / -1; }
+.report-layout > .date-pick { grid-column: 2; grid-row: 1; margin: 0 0 var(--space-3); }
+@media (max-width: 960px) { .report-layout > .date-pick { grid-column: 1 / -1; grid-row: auto; } }
+/* A plain flag beside the row's first value, instead of a column that's empty on most rows. */
+.flag-pill { display: inline-block; margin-left: var(--space-1-5); padding: 0 var(--space-1-5); border-radius: var(--radius-pill); font-size: var(--fs-2xs); font-weight: 700; line-height: 1.6; text-transform: uppercase; letter-spacing: .04em; vertical-align: 1px; white-space: nowrap; }
+.flag-pill.critical { color: var(--sev-critical); background: var(--sev-critical-soft); }
+.flag-pill.high { color: var(--sev-high); background: var(--sev-high-soft); }
+.flag-pill.medium { color: var(--sev-medium); background: var(--sev-medium-soft); }
+.flag-pill.low, .flag-pill.info { color: var(--sev-low); background: var(--sev-low-soft); }
+/* What a row means or what to do about it: a line under the row (views.NOTE_COLUMNS), so the facts stay in
+   columns side by side. It stays at the left of the box while the table scrolls sideways. */
+tbody tr:has(+ tr.row-note) > td { border-bottom: 0; padding-bottom: var(--space-1); }
+tr.row-note > td { padding-top: 0; color: var(--muted); font-size: var(--fs-sm); }
+.table-scroll tr.row-note > td { position: static; }
+tr.row-note .note { position: sticky; left: var(--space-3); max-width: min(110ch, 100%); display: flex; flex-direction: column; gap: var(--space-0-5); }
+tr.row-note .note strong { color: var(--text-2); font-weight: 600; }
+tbody tr:hover + tr.row-note > td, tbody tr.row-note:hover > td { background: var(--surface-2); }
+@media (max-width: 640px) {
+  table.stack-sm tr:has(+ tr.row-note) { border-bottom: 0; padding-bottom: 0; }
+  table.stack-sm tr.row-note { padding-top: var(--space-1); }
+  table.stack-sm tr.row-note > td { display: block; padding: 0 var(--space-3) !important; font-weight: 400; }
+  table.stack-sm tr.row-note .note { position: static; }
+}
+/* A table's own introduction reads as a caption, and the links to a report's tables look like what they do. */
+.card.flush.table-card > .intro { font-size: var(--fs-sm); max-width: 120ch; }
+.report-main > .jump { gap: var(--space-2); }
+.report-main > .jump a { padding: var(--space-1) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface); font-size: var(--fs-sm); color: var(--text-2); }
+.report-main > .jump a:hover { border-color: var(--border-strong); color: var(--text); text-decoration: none; }
+.report-main > .jump a.active { border-color: var(--accent); color: var(--accent); }
