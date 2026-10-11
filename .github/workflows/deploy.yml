@@ -5,13 +5,13 @@ name: Deploy
 # runner's address only, and closes it again at the end, even if a step fails.
 # It is the project's own server's deploy, so the user docs leave it out: v2/deploy/cloud-init.yaml makes the
 # server, and the secrets and variables read below say where to deploy. The same server can also run the project's website
-# and public demo (v2/deploy/public/README.md). Those two follow main by themselves: every merge whose tests
-# pass updates them (a change to the docs alone, the website straight away), while the portal only updates
-# when someone runs "deploy", or on every merge too once AUTO_DEPLOY is "true".
+# and public demo (v2/deploy/public/README.md). All three change only when someone runs "deploy" (or
+# "website-and-demo" for those two), so merges cost no Actions minutes here; with AUTO_DEPLOY set to "true",
+# every merge whose tests pass deploys the lot.
 #
 # With the PRODUCTION_FROM_TAGS variable set to "true", the portal only takes release tags (v2.1.0), as the
-# published image pinned by its digest, and merges never deploy it, whatever AUTO_DEPLOY says. The website
-# and demo still follow main. Unset, a deploy builds the chosen ref on the server.
+# published image pinned by its digest, and merges never deploy it, whatever AUTO_DEPLOY says. Unset, a
+# deploy builds the chosen ref on the server.
 #
 # Run logs are public, so nothing here prints the first-admin link, the
 # portal's logs or a secret: the status action reports health and error counts
@@ -36,11 +36,6 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  # The website shows the docs, which the CI workflow doesn't test, so their changes update it straight away
-  # (the website-and-demo action without the demo, as the code hasn't changed).
-  push:
-    branches: [main]
-    paths: ['**.md', 'docs/**', 'examples/**', 'website/**']
 
 permissions:
   contents: read
@@ -79,10 +74,9 @@ jobs:
     needs: latest
     if: >-
       always() && (github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && vars.OFFICESENTRY_WEBSITE_DOMAIN != '') ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
        && needs.latest.outputs.ok == 'true'
-       && ((vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true') || vars.DEMO_ENABLED == 'true' || vars.OFFICESENTRY_WEBSITE_DOMAIN != '')))
+       && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -90,8 +84,7 @@ jobs:
       # Only to read the release image's digest and pull it (PRODUCTION_FROM_TAGS).
       packages: read
     env:
-      # A merge whose tests pass: the portal too with AUTO_DEPLOY on (and PRODUCTION_FROM_TAGS off), otherwise
-      # just the website and demo.
+      # A merge whose tests pass only gets here with AUTO_DEPLOY on (and PRODUCTION_FROM_TAGS off): a deploy.
       ACTION: ${{ inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true' && 'deploy') || 'website-and-demo' }}
       DEPLOYS: ${{ (inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true' && 'deploy') || 'website-and-demo') == 'deploy' }}
       REF: ${{ github.event.workflow_run.head_sha || inputs.ref || github.sha }}
@@ -99,9 +92,9 @@ jobs:
       IMAGE: ghcr.io/jackd99/officesentry
       HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
       # The public demo (v2/deploy/public/) runs while DEMO_ENABLED is "true". Deploys and website-and-demo
-      # runs rebuild it from their code (a docs-only change leaves it), and it starts afresh every night by itself.
+      # runs rebuild it from their code, and it starts afresh every night by itself.
       DEMO_DOMAIN: ${{ vars.DEMO_ENABLED == 'true' && vars.OFFICESENTRY_DEMO_DOMAIN || '' }}
-      DEMO: ${{ vars.DEMO_ENABLED == 'true' && github.event_name != 'push' && contains(fromJSON('["deploy", "website-and-demo"]'), inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true' && 'deploy') || 'website-and-demo') }}
+      DEMO: ${{ vars.DEMO_ENABLED == 'true' && contains(fromJSON('["deploy", "website-and-demo"]'), inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true' && 'deploy') || 'website-and-demo') }}
       # The website (website/) is built and copied over by the same runs while this is set.
       WEBSITE_DOMAIN: ${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
       SITE: ${{ vars.OFFICESENTRY_WEBSITE_DOMAIN != '' && contains(fromJSON('["deploy", "website-and-demo"]'), inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true' && 'deploy') || 'website-and-demo') }}
@@ -358,7 +351,7 @@ jobs:
           echo "Website: https://$WEBSITE_DOMAIN" >> "$GITHUB_STEP_SUMMARY"
 
       # The demo builds from a copy of its own (tests included, as it makes its data from their fixtures), so
-      # it can follow main while the portal stays on what was last deployed. Before the portal starts, so a
+      # it can run newer code than the portal (website-and-demo). Before the portal starts, so a
       # first deploy finds the demo's image.
       - name: Build the public demo
         if: env.DEMO == 'true'

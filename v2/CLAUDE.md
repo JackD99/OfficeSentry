@@ -816,7 +816,10 @@ else.
 Staff pages that list tenants are `@group_aware` (under `@needs`)
 and read `scoped_tenants()` instead of `visible_tenants()`: the dashboard,
 `/across/*` (and their downloads), `/changes*`, the month-end queue and
-Client settings. The choice is kept on the sign-in (`sessions.group_id`); a GET
+Client settings. The choice is kept on the sign-in (`sessions.group_id`), or,
+for a public demo visitor (who has no sessions row), in the signed cookie
+(`groups.COOKIE_KEY`); either way `scope()` ignores a group that isn't offered,
+so it only narrows. A GET
 with `?group=<id>` or `?group=all` picks and redirects to the plain URL. The
 picker (`_groups.html`, `group_picker()`) only offers groups holding a
 tenant the person sees, and downloads say which group they cover
