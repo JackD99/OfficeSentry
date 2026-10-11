@@ -2,21 +2,23 @@
 
 Reads the app's own service principal in the client tenant (all GET, with
 Application.Read.All and RoleManagement.Read.Directory, which the app already
-has): which of the permissions Office Sentry asks for (``entra.GRAPH_PERMISSIONS``
-and ``EXCHANGE_PERMISSIONS``) the tenant has actually granted, and which
+has): which of the permissions Office Sentry asks for (``entra.PERMISSIONS``: Graph's,
+Exchange's and SharePoint's) the tenant has actually granted, and which
 directory roles the app holds, Global Reader in particular. That a run gets
 this far also proves Office Sentry can sign in.
 
 Problems are warnings (the run is ``partial``); ``tenant_health`` turns the
 stored result into plain-English fixes for the Manage tab and the client list.
+Permissions from a batch the client hasn't approved yet (``permission_batch``)
+aren't a problem: they're logged, and the What's new page asks for them.
 Nothing here changes the tenant: missing consent or roles are fixed by the
 client's admin, from the instructions shown.
 """
 
 from __future__ import annotations
 
-from .. import store
-from ..entra import EXCHANGE_APP_ID, EXCHANGE_PERMISSIONS, GRAPH_APP_ID, GRAPH_PERMISSIONS
+from .. import permission_batch, store
+from ..entra import PERMISSIONS, label
 from ..graph import PermissionMissing
 from ..text import plural
 from .base import Collector, RunContext, register
@@ -28,7 +30,6 @@ TOO_POWERFUL = {
     "29232cdf-9323-42fd-ade2-1d097af3e4de": "Exchange Administrator",
 }
 KNOWN_ROLES = {GLOBAL_READER: "Global Reader", **TOO_POWERFUL}
-EXPECTED = {GRAPH_APP_ID: GRAPH_PERMISSIONS, EXCHANGE_APP_ID: EXCHANGE_PERMISSIONS}
 
 
 def _quote(value: str) -> str:
@@ -111,22 +112,30 @@ class ConnectionHealth(Collector):
             name = names.get(a.get("appRoleId"))
             if not name:
                 continue
-            if name in EXPECTED.get((resource.get("appId") or "").lower(), {}):
+            name = label(resource.get("appId") or "", name)
+            if name in PERMISSIONS:
                 granted.add(name)
             else:
                 other.add(name)
-        expected = [*GRAPH_PERMISSIONS, *EXCHANGE_PERMISSIONS]
         result.update(
             permissions_checked=True,
             granted=sorted(granted),
             other=sorted(other),
-            missing=[p for p in expected if p not in granted],
+            missing=[p for p in PERMISSIONS if p not in granted],
         )
-        if result["missing"]:
+        problem = permission_batch.missing_original(result)
+        if problem:
             ctx.warn(
-                f"{plural(len(result['missing']), 'permission')} not granted in this tenant: "
-                + ", ".join(result["missing"])
+                f"{plural(len(problem), 'permission')} not granted in this tenant: "
+                + ", ".join(problem)
                 + ". Re-grant admin consent"
+            )
+        new = permission_batch.waiting(result)
+        if new:
+            ctx.log(
+                f"Waiting for the client to approve {plural(len(new), 'new permission')}: "
+                + ", ".join(new)
+                + ". Send the approval link from the client's What's new page"
             )
 
     def _roles(self, ctx: RunContext, sp_id: str, result: dict) -> None:
@@ -162,11 +171,22 @@ class ConnectionHealth(Collector):
             ctx.warn("The app doesn't hold the Global Reader role, so mailbox data can't be collected")
 
 
-def granted(ctx: RunContext, permission: str) -> bool | None:
-    """Whether the tenant granted ``permission``, from the last connection check (None when not known)."""
+def _last_result(ctx: RunContext) -> dict:
     run = store.latest_run(ctx.conn, ctx.tenant["id"], "connection")
     rows = store.run_objects(ctx.conn, run["id"], "connection") if run else []
-    result = rows[0] if rows else {}
+    return rows[0] if rows else {}
+
+
+def granted(ctx: RunContext, permission: str) -> bool | None:
+    """Whether the tenant granted ``permission``, from the last connection check (None when not known)."""
+    result = _last_result(ctx)
     if not result.get("permissions_checked"):
         return None
     return permission in (result.get("granted") or [])
+
+
+def awaiting(ctx: RunContext, *permissions: str) -> list[str]:
+    """Which of ``permissions`` (new ones, from a batch) the client is still to approve, by the last connection
+    check. A collector skips the part that needs them and stores why (``permission_batch.waiting_text``)
+    rather than failing; empty when they're granted or it isn't known yet, so the collector tries."""
+    return permission_batch.awaiting(_last_result(ctx), *permissions)

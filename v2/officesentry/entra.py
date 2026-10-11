@@ -32,11 +32,13 @@ from .certs import key_credential
 
 GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000"
 EXCHANGE_APP_ID = "00000002-0000-0ff1-ce00-000000000000"  # Office 365 Exchange Online
+SHAREPOINT_APP_ID = "00000003-0000-0ff1-ce00-000000000000"  # Office 365 SharePoint Online
 GRAPH_CLI_CLIENT_ID = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
 
 # The complete set of application permissions Office Sentry requests.
 # Every one is read-only. Adding one later means every tenant must re-consent,
-# so this list covers the reporting roadmap, not only today's collectors.
+# so new ones are released together in a batch (``permission_batch.BATCHES``)
+# that covers the reporting roadmap, not only today's collectors.
 GRAPH_PERMISSIONS: dict[str, str] = {
     "Organization.Read.All": "Tenant details and subscriptions",
     "User.Read.All": "Users, licences, password age",
@@ -53,12 +55,55 @@ GRAPH_PERMISSIONS: dict[str, str] = {
     "SharePointTenantSettings.Read.All": "SharePoint sharing settings",
     "Sites.Read.All": "Which files are shared, and with whom (read-only)",
     "MailboxSettings.Read": "Inbox rules",
+    # Added in 2.2 (permission_batch.BATCHES)
+    "Channel.ReadBasic.All": "Teams channels: standard, private and shared",
+    "ChannelMember.Read.All": "Who is in each private and shared channel, guests included",
+    "TeamsAppInstallation.ReadForTeam.All": "Apps added to each team",
+    "ReportSettings.Read.All": "Whether usage reports hide people's names",
+    "PrivilegedEligibilitySchedule.Read.AzureADGroup": "Who can activate membership of a privileged group (PIM)",
+    "BitLockerKey.ReadBasic.All": "Whether a device's BitLocker recovery key is saved (never the key)",
+    "DeviceManagementConfiguration.Read.All": "Intune configuration and compliance policies",
+    "DeviceManagementApps.Read.All": "Intune app protection policies and managed apps",
 }
 
 # Exchange Online admin API (read-only cmdlets only; see exchange.py). Each
 # tenant must also give the app the Global Reader role for Exchange to answer.
 EXCHANGE_PERMISSIONS: dict[str, str] = {
     "Exchange.ManageAsApp": "Mailbox forwarding, permissions and mail settings (read-only cmdlets)",
+}
+
+# SharePoint's own API, for what Graph doesn't offer: SharePoint group members and who has access to each list.
+# Its Sites.Read.All is a different permission from Graph's of the same name.
+SHAREPOINT_PERMISSIONS: dict[str, str] = {
+    "Sites.Read.All": "Who has access to each SharePoint site and list (SharePoint's own permission lists)",
+}
+
+
+@dataclass(frozen=True)
+class Resource:
+    app_id: str
+    name: str  # as Microsoft shows it on the consent screen and under API permissions
+    short: str  # put before a permission's name when it isn't Microsoft Graph's
+    permissions: dict[str, str]
+
+
+RESOURCES = (
+    Resource(GRAPH_APP_ID, "Microsoft Graph", "", GRAPH_PERMISSIONS),
+    Resource(EXCHANGE_APP_ID, "Office 365 Exchange Online", "", EXCHANGE_PERMISSIONS),
+    Resource(SHAREPOINT_APP_ID, "Office 365 SharePoint Online", "SharePoint ", SHAREPOINT_PERMISSIONS),
+)
+
+
+def label(app_id: str, name: str) -> str:
+    """How Office Sentry names a permission: Graph's and Exchange's by their own name, SharePoint's as
+    "SharePoint Sites.Read.All" so it isn't mistaken for Graph's permission of the same name."""
+    resource = next((r for r in RESOURCES if r.app_id == (app_id or "").lower()), None)
+    return f"{resource.short}{name}" if resource else name
+
+
+# Every permission the app asks for, by label -> (resource, name, why), in the order pages list them.
+PERMISSIONS: dict[str, tuple[Resource, str, str]] = {
+    label(r.app_id, name): (r, name, why) for r in RESOURCES for name, why in r.permissions.items()
 }
 
 
@@ -76,12 +121,38 @@ def _resource(sp: dict, app_id: str, wanted: dict[str, str]) -> dict:
     return {"resourceAppId": app_id, "resourceAccess": [{"id": roles[name], "type": "Role"} for name in sorted(wanted)]}
 
 
-def required_resource_access(graph_sp: dict, exchange_sp: dict | None = None) -> list[dict]:
+def required_resource_access(
+    graph_sp: dict, exchange_sp: dict | None = None, sharepoint_sp: dict | None = None
+) -> list[dict]:
     """Build ``requiredResourceAccess`` from the resource service principals' app roles."""
     access = [_resource(graph_sp, GRAPH_APP_ID, GRAPH_PERMISSIONS)]
     if exchange_sp is not None:
         access.append(_resource(exchange_sp, EXCHANGE_APP_ID, EXCHANGE_PERMISSIONS))
+    if sharepoint_sp is not None:
+        access.append(_resource(sharepoint_sp, SHAREPOINT_APP_ID, SHAREPOINT_PERMISSIONS))
     return access
+
+
+def merged_resource_access(current: list[dict], wanted: list[dict]) -> tuple[list[dict], int]:
+    """An app's ``requiredResourceAccess`` with everything in ``wanted`` added, and how many permissions that
+    added. Whatever the app already asks for stays, so nothing someone added by hand is taken away; the client
+    settings page names permissions beyond Office Sentry's (``tenant_health.extra_permissions``)."""
+    merged = [
+        {"resourceAppId": r.get("resourceAppId"), "resourceAccess": list(r.get("resourceAccess") or [])}
+        for r in current or []
+    ]
+    added = 0
+    for want in wanted:
+        entry = next((m for m in merged if (m["resourceAppId"] or "").lower() == want["resourceAppId"]), None)
+        if entry is None:
+            entry = {"resourceAppId": want["resourceAppId"], "resourceAccess": []}
+            merged.append(entry)
+        have = {(a.get("id"), a.get("type")) for a in entry["resourceAccess"]}
+        for access in want["resourceAccess"]:
+            if (access["id"], access["type"]) not in have:
+                entry["resourceAccess"].append(access)
+                added += 1
+    return merged, added
 
 
 def setup_scope(cloud: str | None = None) -> str:
@@ -116,6 +187,21 @@ def create_app_registration(
     http = session or requests.Session()
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     base = f"{clouds.get(cloud).graph}/v1.0"
+    body = {
+        "displayName": display_name,
+        "signInAudience": "AzureADMultipleOrgs",
+        "web": {"redirectUris": [redirect_uri]},
+        "requiredResourceAccess": _wanted_access(http, headers, base),
+        "keyCredentials": [key_credential(cert_pem)],
+    }
+    resp = http.post(f"{base}/applications", headers=headers, json=body, timeout=60)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _wanted_access(http: requests.Session, headers: dict, base: str) -> list[dict]:
+    """``requiredResourceAccess`` for every permission Office Sentry asks for, from the resources' app roles in
+    the signed-in tenant (each permission's ID is the same everywhere, but reading them keeps this honest)."""
 
     def resource_sp(app_id: str) -> dict:
         resp = http.get(
@@ -127,19 +213,49 @@ def create_app_registration(
         resp.raise_for_status()
         return resp.json()["value"][0]
 
-    graph_sp = resource_sp(GRAPH_APP_ID)
-    exchange_sp = resource_sp(EXCHANGE_APP_ID)
+    return required_resource_access(
+        resource_sp(GRAPH_APP_ID), resource_sp(EXCHANGE_APP_ID), resource_sp(SHAREPOINT_APP_ID)
+    )
 
-    body = {
-        "displayName": display_name,
-        "signInAudience": "AzureADMultipleOrgs",
-        "web": {"redirectUris": [redirect_uri]},
-        "requiredResourceAccess": required_resource_access(graph_sp, exchange_sp),
-        "keyCredentials": [key_credential(cert_pem)],
-    }
-    resp = http.post(f"{base}/applications", headers=headers, json=body, timeout=60)
+
+@dataclass(frozen=True)
+class Updated:
+    object_id: str
+    display_name: str
+    added: int  # permissions the app didn't ask for before
+
+
+def update_app_permissions(
+    token: str, client_id: str, session: requests.Session | None = None, cloud: str | None = None
+) -> Updated:
+    """Add every permission Office Sentry asks for to its existing app registration in the MSP's own tenant,
+    keeping what the app already asks for. Only the MSP's app changes: each client then approves the new
+    permissions with its consent link."""
+    http = session or requests.Session()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    base = f"{clouds.get(cloud).graph}/v1.0"
+    resp = http.get(
+        f"{base}/applications",
+        headers=headers,
+        params={"$filter": f"appId eq '{client_id}'", "$select": "id,appId,displayName,requiredResourceAccess"},
+        timeout=60,
+    )
     resp.raise_for_status()
-    return resp.json()
+    apps = resp.json().get("value") or []
+    if not apps:
+        raise AppNotFound(client_id)
+    app = apps[0]
+    merged, added = merged_resource_access(app.get("requiredResourceAccess") or [], _wanted_access(http, headers, base))
+    if added:
+        resp = http.patch(
+            f"{base}/applications/{app['id']}", headers=headers, json={"requiredResourceAccess": merged}, timeout=60
+        )
+        resp.raise_for_status()
+    return Updated(app["id"], app.get("displayName") or "", added)
+
+
+class AppNotFound(Exception):
+    """The signed-in tenant has no app registration with this client ID."""
 
 
 # -- Device sign-in, one step per request (the portal's setup wizard) ------------------------------------
@@ -280,3 +396,19 @@ def create_problem(exc: requests.RequestException) -> str:
             "Administrator or Cloud Application Administrator of your own tenant and start again."
         )
     return f"Microsoft wouldn't create the app ({resp.status_code}): {message or 'no reason given'}."
+
+
+def update_problem(exc: requests.RequestException) -> str:
+    """Why updating the app registration's permissions failed, in words for people."""
+    resp = getattr(exc, "response", None)
+    if resp is None:
+        return "Office Sentry couldn't reach Microsoft Graph to update the app. Try again."
+    error = _json(resp).get("error")
+    message = str(error.get("message") or "") if isinstance(error, dict) else ""
+    if resp.status_code in (401, 403):
+        return (
+            "That account can't change this app registration. Sign in as a Global Administrator, Application "
+            "Administrator or Cloud Application Administrator of your own tenant, or as an owner of the app, and "
+            "start again."
+        )
+    return f"Microsoft wouldn't update the app ({resp.status_code}): {message or 'no reason given'}."
