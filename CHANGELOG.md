@@ -171,6 +171,14 @@ client's approval.
   blocked. **Guests:** no guest from another organisation owns a team or group. **Storage:** no mailbox and
   no OneDrive is at or over 90% of its quota (high once it's full). Each goes in the project an MSP would sell
   it under (account clean-up, sharing and guests, storage), with an effort estimate.
+- Evidence by certification: a client's Evidence page now starts with the scheme they are going for.
+  Cyber Essentials and Cyber Essentials Plus (IASME question set version 16, April 2026, on Requirements for
+  IT Infrastructure v3.3) are judged from the Microsoft 365 data as an assessor would, control by control:
+  Pass, Fail (any gap fails, auto-fail questions marked), Partly, or Your evidence where Microsoft 365 can't
+  show it, with the figures, the fix and a text to paste. The page leads with what to fix before applying,
+  compares with last month, three months or a year ago, lists what the CE Plus assessor tests, and carries
+  the answers for the IASME portal with one-tap copy. Downloads: PDF, Word, plain text, XLSX and CSV. The
+  insurance and supplier questionnaires and the insurer controls stay where they were.
 
 ### Changed
 

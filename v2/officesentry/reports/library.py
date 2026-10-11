@@ -185,12 +185,12 @@ SUMMARIES = (
     ),
     (
         "evidence",
-        "Questionnaires and evidence",
-        "Answers to paste into cyber insurance, supplier security and "
-        "Cyber Essentials questions, with the evidence behind each.",
+        "Evidence and certifications",
+        "Cyber Essentials and CE Plus judged from the data, with what to fix, and answers to paste "
+        "into cyber insurance and supplier security forms.",
         "evidence",
-        "cyber insurance questionnaire controls supplier vendor due diligence cyber essentials iasme "
-        "danzell proposal renewal form",
+        "cyber insurance questionnaire controls supplier vendor due diligence cyber essentials plus iasme "
+        "danzell proposal renewal form certification scheme compliance audit",
     ),
     (
         "changes",
