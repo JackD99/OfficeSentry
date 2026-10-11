@@ -15,8 +15,8 @@
       <div class="step-action">
         {{ downloads([('Monthly review PDF', url_for('reports.tenant_report_pdf', tenant_id=tenant.id), ''),
                       ('Monthly review XLSX', url_for('reports.tenant_report_xlsx', tenant_id=tenant.id), ''),
-                      ('Insurance evidence PDF', url_for('reports.evidence_pdf', tenant_id=tenant.id), ''),
-                      ('Insurance evidence XLSX', url_for('reports.evidence_xlsx', tenant_id=tenant.id), '')]) }}
+                      ('Cyber insurance evidence PDF', url_for('evidence.scheme_pdf', tenant_id=tenant.id, scheme='insurance'), ''),
+                      ('Cyber insurance evidence XLSX', url_for('evidence.scheme_xlsx', tenant_id=tenant.id, scheme='insurance'), '')]) }}
       </div>
       <p class="small muted m0">Detail reports download from their own pages under <a href="{{ url_for('reports.data_index', tenant_id=tenant.id) }}">Detail reports</a>.</p>
     </div>

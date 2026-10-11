@@ -44,7 +44,7 @@ from officesentry.certs import generate_certificate
 from officesentry.config import load_config
 from officesentry.crypto import Vault
 from officesentry.db import connect, migrate
-from officesentry.reports import data_reports, evidence, monthly_review
+from officesentry.reports import data_reports, evidence, monthly_review, scheme_export, schemes
 from officesentry.rules import RULES, SEVERITY_RANK, Finding, Rule, evaluate
 from officesentry.snapshot import TenantSnapshot
 from tests.conftest import login, make_user
@@ -654,10 +654,22 @@ def test_monthly_review_and_evidence_survive_a_wrecked_tenant(db, connection_id,
     assert all(isinstance(c, changes.Change) for c in review.changes)
     pack = evidence.build(db, tenant)
     assert len(pack.controls) == len(evidence.CONTROLS)
-    assert evidence.to_xlsx(pack)
+    for key in schemes.SCHEMES:
+        assert scheme_export.to_xlsx(schemes.assess(db, tenant, key))
 
     make_user(db, "admin", all_tenants=True)
     login(client, "admin")
-    pages = [f"/tenants/{tenant['id']}/{p}" for p in ("report", "report.xlsx", "evidence", "evidence.xlsx", "findings")]
+    pages = [
+        f"/tenants/{tenant['id']}/{p}"
+        for p in (
+            "report",
+            "report.xlsx",
+            "evidence",
+            "evidence/insurance",
+            "evidence/insurance.xlsx",
+            "evidence/cyber-essentials.txt",
+            "findings",
+        )
+    ]
     pages += [f"/tenants/{tenant['id']}/data/{key}{ext}" for key in data_reports.REPORTS for ext in ("", ".xlsx")]
     assert {p: client.get(p).status_code for p in pages} == {p: 200 for p in pages}

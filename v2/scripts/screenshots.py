@@ -307,8 +307,8 @@ EXAMPLES = {
         "fixed, projects, licence spend and what's coming up.",
     ),
     "insurance-evidence-pack.pdf": (
-        "/tenants/{t}/evidence.pdf",
-        "The controls cyber-insurance questionnaires ask about, answered from the data.",
+        "/tenants/{t}/evidence/insurance.pdf",
+        "The controls cyber insurers ask about, judged from the data, with the answers for the proposal form.",
     ),
     "sharepoint-storage.pdf": (
         "/tenants/{t}/data/sharepoint-storage.pdf",

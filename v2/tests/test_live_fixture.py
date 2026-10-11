@@ -23,7 +23,7 @@ from officesentry.config import load_config
 from officesentry.db import connect, migrate
 from officesentry.exchange import ExchangeClient
 from officesentry.graph import GraphClient
-from officesentry.reports import data_reports, evidence, export
+from officesentry.reports import data_reports, evidence, export, scheme_export, schemes
 from officesentry.reports.monthly_review import build
 from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
@@ -258,7 +258,9 @@ def test_sharepoint_storage_on_real_data(db, live):
 
 def test_monthly_review_and_evidence_export(db, live):
     assert export.to_xlsx(build(db, live))[:2] == b"PK"
-    assert evidence.to_xlsx(evidence.build(db, live))[:2] == b"PK"
+    assert evidence.build(db, live).controls
+    for key in schemes.SCHEMES:
+        assert scheme_export.to_xlsx(schemes.assess(db, live, key))[:2] == b"PK"
 
 
 def test_pages_and_downloads(client, db, live):
@@ -274,13 +276,16 @@ def test_pages_and_downloads(client, db, live):
         f"{t}/collection",
         f"{t}/schedules",
         f"{t}/report.xlsx",
-        f"{t}/evidence.xlsx",
+        f"{t}/evidence/cyber-essentials",
+        f"{t}/evidence/insurance.xlsx",
+        f"{t}/evidence/supplier.docx",
+        f"{t}/evidence/supplier.txt",
     ]
     pages += [f"{t}/data/{key}" for key in data_reports.REPORTS] + [
         f"{t}/data/{key}.xlsx" for key in data_reports.REPORTS
     ]
     if export.pdf_available():
-        pages += [f"{t}/report.pdf", f"{t}/evidence.pdf"]
+        pages += [f"{t}/report.pdf", f"{t}/evidence/insurance.pdf", f"{t}/evidence/cyber-essentials.pdf"]
     for url in pages:
         assert client.get(url).status_code == 200, url
     page = client.get(f"{t}/report").get_data(as_text=True)
