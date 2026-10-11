@@ -12,6 +12,7 @@ from . import (  # noqa: F401
     group_page,
     group_structure,
     identity_reports,
+    licence_changes,
     mail_compliance,
     mail_reports,
     mailbox_page,
