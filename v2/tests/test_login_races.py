@@ -59,7 +59,9 @@ def test_parallel_wrong_passwords_cannot_exceed_the_limit(live, db, monkeypatch)
 
     with ThreadPoolExecutor(max_workers=40) as pool:
         codes = list(pool.map(guess, range(40)))
-    assert all(code in (200, 429) for code in codes)
+    # 503 is the portal's "busy, try again" when a write waits too long for the database lock, which 40
+    # sign-ins at once can cause on a slow machine. It isn't a sign-in either.
+    assert all(code in (200, 429, 503) for code in codes)
     # Every password is counted before it is checked, so 40 at once still only get the limit's worth of tries.
     assert len(checked) <= throttle.PER_ADDRESS_AND_NAME
     # And the limit is in force: the right password from the same place is refused now.

@@ -33,10 +33,11 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
   comparison of every detail report.
 - **Downloads**: every page above has CSV and XLSX. Values from clients can
   never become spreadsheet formulas.
-- **Licence prices** (admin): enter monthly prices per SKU to cost waste and
+- **Licence prices** (*Settings*): enter monthly prices per SKU to cost waste and
   right-sizing savings.
 - **Findings** (`/tenants/<id>/findings`): every finding keeps first seen,
-  resolved and reopened dates. Analysts can accept a risk with a reason and an
+  resolved and reopened dates. Anyone who can accept risks (Second line, Team
+  leader and Administrator by default) can accept one with a reason and an
   optional expiry; accepted risks leave the totals and get their own section.
 - **Since last month**: new and fixed findings, admin role changes, new,
   disabled and deleted accounts, licences people were given or lost, and
@@ -80,6 +81,26 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
   over 85% full or most clients fail to collect; once when it starts, daily
   while it lasts and when it's fixed. `/health/ready` answers 503 for uptime
   monitors when the portal can't do its job (DEPLOY.md, "Is it working?").
+- **People, mailboxes, groups and sites** (a client's *Users* tab): a page per
+  account (`/tenants/<id>/users/<object id>`: sign-in, MFA and methods, admin
+  roles, administrative units, licences and their use, forwarding and
+  delegates, devices, sharing, its sign-ins by month and how the account
+  changed), and the same for things that aren't people. *Mailboxes* lists every
+  mailbox with its size, forwarding, who else can open it and its inbox rules;
+  each page (`/tenants/<id>/mailboxes/<id>`) has size and growth over the kept
+  months, forwarding and rules, who can open or send from it, protocols, its
+  automatic reply, the phones syncing it and email activity. *Groups and teams*
+  lists every team, Microsoft 365 group, security group and distribution list;
+  each page (`/tenants/<id>/groups/<id>`) has its owners, members and nested
+  groups, what membership gives (Conditional Access policies, admin roles,
+  licences), mail settings and traffic, the team's site and admin changes.
+  *Sites* lists every SharePoint site with its storage, files, sharing links and
+  last activity; each page (`/tenants/<id>/sites/<id>`) has storage over the
+  kept months with the libraries and largest files, sharing settings and shared
+  files, the team or group behind it, activity and a link to *Site access*.
+  Every page opens with what needs attention and its open findings, shows
+  what changed, and downloads as PDF and XLSX. Names and addresses in reports
+  and search results open these pages.
 - **Detail reports** (`/tenants/<id>/data/<report>`, each also as PDF, XLSX and CSV),
   grouped by area (identity, email, files, devices, tenant). Every table can be
   filtered by the values in it (or by age, for dates), sorted, and have columns
@@ -322,18 +343,18 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
   governance and data protection answers to complete, as are the **CIS
   Microsoft 365 benchmark**, **NIST CSF 2.0**, **SOC 2** and the
   **Essential Eight**.
-- **Recommended projects** (`/projects` and `/tenants/<id>/projects`, admins
-  and analysts): each client's failing checks and missing licences grouped
-  into the projects that fix them (Identity and Conditional Access, Device
-  management, Email security, Windows upgrade, Security licence upgrade and
-  more), worst first, with the findings behind each, the size of the job and
-  a rough estimate. Only work of half a day or more is a project; smaller jobs
-  (and urgent small ones, like one admin without MFA) are listed as quick
-  fixes on the client's page and offered separately in the month-end review.
-  Account managers mark each project Proposed, Agreed or Declined with a note
-  (XLSX and CSV of the list), and download a client-facing proposal PDF
+- **Recommended projects** (`/projects` and `/tenants/<id>/projects`, for roles
+  with *Recommended projects*): each client's failing checks and missing
+  licences grouped into the projects that fix them (Identity and Conditional
+  Access, Device management, Email security, Windows upgrade, Security licence
+  upgrade and more), worst first, with the findings behind each, the size of
+  the job and a rough estimate. Only work of half a day or more is a project;
+  smaller jobs (and urgent small ones, like one admin without MFA) are listed
+  as quick fixes on the client's page and offered separately in the month-end
+  review. Account managers mark each project Proposed, Agreed or Declined with
+  a note (XLSX and CSV of the list), and download a client-facing proposal PDF
   without the notes or estimates. Accepted risks don't count, and a project
-  drops off once the tenant is fixed.
+  drops off once its findings are fixed.
 - **Client view**: client users land on a page that leads with their latest
   monthly review (page and PDF), then open recommendations with their status,
   key numbers, the other reports and who to contact at the MSP; they don't see
@@ -352,22 +373,24 @@ Checks: MFA enforced (CA or Security Defaults, with exclusions), legacy auth
 blocked, admins without MFA, admins not covered by an MFA policy, Global Admin
 count, guest admins, apps with admin roles, users without MFA, admins without a
 phishing-resistant sign-in method, people whose only second factor is a text or
-call, inactive accounts, licences on disabled accounts, unassigned paid
-licences, external forwarding, inbox rules that hide mail, automatic forwarding
-policy, shared mailbox sign-in, mailbox auditing, SMTP AUTH, risky third-party
-app access, user consent, app credential expiry, users creating tenants, users
-registering apps, guest directory access, joining by email verification, admin
-consent requests, SharePoint anonymous links, sites without two owners, guest invitations, stale guest
-invitations, teams and groups without an owner, who can create teams and
-groups, group expiration, device compliance, disk encryption, Windows releases
-out of support, joined computers not in Intune, devices not checking in, stale
-device records, SharePoint storage nearly full, licence assignment errors,
-domain federation changes, risky sign-ins that succeeded (Entra ID P2), and
-subscriptions about to lapse (trials in use ending within 30 days,
-subscriptions in their grace period, suspended ones still assigned). For
-tenants synced from on-premises AD: directory sync running, password hash sync
-on, and admin accounts that are cloud-only. The [check catalogue](docs/checks.md)
-lists every check with the data it reads and what it needs.
+call, inactive accounts, accounts reporting to a blocked manager, licences on
+disabled accounts, unassigned paid licences, external forwarding, inbox rules
+that hide mail, automatic forwarding policy, shared mailbox sign-in, mailbox
+auditing, SMTP AUTH, risky third-party app access, user consent, app credential
+expiry, users creating tenants, users registering apps, guest directory access,
+joining by email verification, admin consent requests, SharePoint anonymous
+links, sites without two owners, guest invitations, stale guest invitations,
+teams and groups without an owner, who can create teams and groups, guests
+owning a team or group, group expiration, device compliance, disk encryption,
+Windows releases out of support, joined computers not in Intune, devices not
+checking in, stale device records, SharePoint storage nearly full, mailboxes
+and OneDrives nearly full, licence assignment errors, domain federation
+changes, risky sign-ins that succeeded (Entra ID P2), and subscriptions about
+to lapse (trials in use ending within 30 days, subscriptions in their grace
+period, suspended ones still assigned). For tenants synced from on-premises AD:
+directory sync running, password hash sync on, and admin accounts that are
+cloud-only. The [check catalogue](docs/checks.md) lists every check with the
+data it reads and what it needs.
 
 ### Report designs: your own client reports
 
@@ -385,8 +408,8 @@ A design belongs to the MSP and works for every client: a block with nothing to 
 accepted risks, no commentary yet) is left out of that client's report. Each client's **Reports →
 Custom reports** lists every design as a page and a PDF, and a report plan or a client's email schedule
 can send a design (as a PDF) alongside or instead of the monthly review. Text blocks take `{client}`,
-`{month}`, `{quarter}`, `{msp}` and `{date}`. Admins and analysts make and edit designs; removing one is an admin's
-call, and it comes out of any plan or schedule that sent it.
+`{month}`, `{quarter}`, `{msp}` and `{date}`. Anyone who can *Design custom reports* makes and edits designs; removing
+one also needs *Settings*, since it comes out of any plan or schedule that sent it.
 
 ### Exchange data
 
@@ -438,7 +461,14 @@ These areas have no real recording and are tested with simulated data only:
   data is kept and how to remove access.
 - [Onboarding a client](docs/onboarding-a-client.md): for technicians. Adding
   a client, consent, Global Reader, the first collection, connection health,
-  the errors on the Data collection page, pausing, archiving and offboarding.
+  the errors on the Data collection page, new permissions to approve, pausing,
+  archiving and offboarding.
+- [Staff sign-in with Microsoft](docs/staff-sign-in.md): setting up the
+  sign-in app, assigning roles in Entra, linking accounts, and turning
+  passwords off and back on.
+- [Deploy guides](docs/deploy/README.md): Portainer and other container
+  managers, Unraid, Synology and TrueNAS, Kubernetes, Azure, AWS, other clouds
+  and Cloudflare.
 - [Check catalogue](docs/checks.md): every check, data source, detail report
   and permission, generated from the code by `scripts/gen_check_catalogue.py`.
 - [Troubleshooting](docs/troubleshooting.md): the common setup errors
@@ -459,10 +489,11 @@ These areas have no real recording and are tested with simulated data only:
 - **One multi-tenant app.** You register it once; each client admin opens a
   consent link to add their tenant. No per-tenant app or device-code step.
 - **No credential files.** The certificate's private key is encrypted in the
-  database. Only the public `.cer` can be downloaded, by admins.
-- **Certificates don't expire by surprise.** Admins see a banner, and the
-  team gets an email and an alert, 60, 30 and 7 days before an app
-  certificate (or the mail app's) expires. *App connection → Replace
+  database. Only the public `.cer` can be downloaded, by people who manage
+  settings.
+- **Certificates don't expire by surprise.** People who manage settings see a
+  banner, and the team gets an email and an alert, 60, 30 and 7 days before an
+  app certificate (or the mail app's) expires. *App connection → Replace
   certificate* adds a new one next to the old, tests it and switches without
   stopping collection. `SECURITY.md` has the steps for a leaked key.
 - **Extra access is flagged.** A client whose tenant gave the app more than the
@@ -474,10 +505,17 @@ These areas have no real recording and are tested with simulated data only:
   reports, managing clients, users or settings) and a scope (every client, or
   the clients and groups granted to them). Seven built-in roles (Administrator,
   Team leader, Second line, First line, Account manager, Auditor, Client
-  viewer); an admin can also give or take away single capabilities for one
-  person, everywhere or on one client, and taking away always wins. Every
-  page and download checks on the server; hidden clients return 404 and a
-  capability taken away on one client answers 403 there.
+  viewer). *Settings → Users → Roles* changes what a built-in role holds
+  (not Administrator) or puts it back to its default, and adds custom roles,
+  from scratch or as a copy, with a preview of the menu and client tabs they
+  open; changing a role signs out everyone holding it. On a person's page,
+  **Customise** gives or takes away single capabilities for them, everywhere
+  or on one client, and taking away always wins. Users and roles can be
+  handed to someone who isn't an Administrator: they give out only what they
+  hold, only on clients they see, and can't change their own access or anyone
+  who holds more. Every page and download checks on the server; hidden
+  clients return 404 and a capability taken away on one client answers 403
+  there. There is always at least one Administrator.
 - **Every run is a snapshot** (`runs` → `objects` + `metrics`), so reports
   can show history and changes. Metrics and findings are kept forever; full
   snapshots for the last 30 days plus one per month for 12 months. The daily
@@ -511,7 +549,7 @@ These areas have no real recording and are tested with simulated data only:
   [docs/staff-sign-in.md](docs/staff-sign-in.md) has the steps.
 - **Two-step sign-in** (a 6-digit code from an authenticator app) is required
   for everyone on new installs, client accounts included. Installs set up
-  before October 2026 keep requiring it for admins and analysts only, so
+  before October 2026 keep requiring it for staff only, so
   nobody is surprised after an upgrade; *Settings → Users* shows the policy
   and recommends extending it to clients. Set it with
   `OFFICESENTRY_REQUIRE_MFA` (`all`, `staff` or `off`). Adding an
@@ -532,10 +570,10 @@ These areas have no real recording and are tested with simulated data only:
   sign out other browsers on their **Account** page. Sessions end after 2 hours
   without activity or 8 hours in total, and when a password, role, access or
   two-step setting changes.
-- **Activity log:** admins see sign-ins and every change, with the address,
-  under *Settings → Activity log* (filters, paging, CSV). Failed sign-ins are
-  kept for 90 days, the rest for good unless *Settings → Data retention* sets
-  a period (never under a year).
+- **Activity log:** Administrators and Team leaders see sign-ins and every
+  change, with the address, under *Settings → Activity log* (filters, paging,
+  CSV). Failed sign-ins are kept for 90 days, the rest for good unless
+  *Settings → Data retention* sets a period (never under a year).
 - **Cookies** are `Secure`, `HttpOnly`, `SameSite=Lax` and use the `__Host-`
   prefix. Behind a reverse proxy, set `OFFICESENTRY_TRUSTED_PROXIES=1` so the
   real client IP and scheme are used.
@@ -604,24 +642,32 @@ disappears after the first collection. Then:
   lists every client with its status (*Onboarding*, *Healthy*, *Needs
   attention*, *Paused*, *Archived*), consent, missing permissions, Global
   Reader, last good collection and failing data sources, worst first.
-- A client's **Manage** tab (admins and analysts) shows its connection health:
+- A client's **Manage** tab (staff, not client accounts) shows its connection health:
   consent, sign-in, which of the app's permissions the tenant actually granted,
   whether the app holds Global Reader (or more than it needs), licences, last
   collection and failing data sources, each with the fix. It's read by the
   `connection` collector with every collection (GET only, from permissions the
   app already has); *Check connection now* queues it straight away.
-- Admins can rename a client, change its tenant ID (until data has been
-  collected) or app connection, keep notes, **pause** it (no collection,
-  emailed reports or alert emails; data stays) and **archive** it (also hidden
-  from lists, dashboards, rollups, digests and its client users; restorable).
+- People who can manage clients can rename a client, change its tenant ID
+  (until data has been collected) or app connection, keep notes, **pause** it
+  (no collection, emailed reports or alert emails; data stays) and **archive**
+  it (also hidden from lists, dashboards, rollups, digests and its client
+  users; restorable).
 - **Client groups** (*Settings*, *Client groups*) sort clients by tier, region,
   service level or anything else; a client can be in several. Pick a group at
   the top of the Clients dashboard, All clients, What changed, Month-end or
   Client settings to see only those clients, with downloads to match, and give
   a digest one group instead of every client. Groups never show anyone more:
-  the only way a group grants access is an admin ticking it for an analyst on
-  their user page, which then covers every client in it, including ones added
-  later. Client accounts are never given clients through a group.
+  the only way a group grants access is someone who manages users ticking it
+  on a person's user page, which then covers every client in it, including
+  ones added later. Client accounts are never given clients through a group.
+- **What's new** (*Settings → Client settings → Onboarding*): when a release
+  adds permissions, the tracker lists the clients still to approve them, and
+  each client's *What's new* page has the email to send, the approval link and
+  a PDF saying what each new permission reads and adds. *Settings → App
+  connection → Update the app* (or `python -m officesentry update-app`) adds
+  them to your app registration first. Until a client approves, it stays
+  *Healthy* and the reports that need them say they're waiting.
 - **Offboard** walks through a final export, the client's side (remove Global
   Reader, delete the enterprise app) and what will be deleted, then deletes the
   client and everything stored for it after you type its name, optionally with
@@ -732,5 +778,13 @@ officesentry/
   system_health.py  Office Sentry's own health: /health/ready and System status
   system_alerts.py  emails and webhook posts when Office Sentry itself needs attention
   lifecycle.py   first collection, pause, archive and deleting a client
+  permissions.py capabilities and the built-in roles
+  roles.py       roles and per-person overrides, read and written
+  sso.py         staff sign-in with Microsoft (OpenID Connect)
+  permission_batch.py  new permissions released together, and each client's approval
+  first_run.py   the Get started checklist
+  search_index.py  the sidebar search's index, kept by the worker
+  logs.py        rolling logs in <data dir>/logs, with request, run and task context
+  support.py     the support package, with secrets and client names taken out
   web/           Flask app: access.py is the single authorization gate
 ```

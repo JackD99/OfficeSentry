@@ -945,6 +945,8 @@ and `python -m officesentry <command>`:
 | `create-admin <name>` | create an admin from the shell (no two-step sign-in set up) |
 | `setup-link` | print the one-time link for creating the first admin in the browser |
 | `create-app` | create the read-only multi-tenant Entra app (device sign-in); the App connection page's wizard does the same |
+| `update-app [--connection N]` | add a release's new read-only permissions to an existing app (device sign-in); the App connection page's *Update the app* does the same |
+| `staff-sign-in [--passwords on\|off] [--off]` | show how staff sign in, or switch from the server: passwords back on (break glass), or Microsoft sign-in off |
 | `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
 | `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
 | `backup [--dir] [--keep]` | a consistent, compressed copy of the database (keeps 7) |
@@ -992,8 +994,8 @@ files outside `tmp_path`.
   version, or a `v*` tag): the version must match `__version__` and have a
   `CHANGELOG.md` section (`scripts/release_notes.py`) and the commit needs a
   passing v2 run on `main` (reused, not repeated, to save Actions minutes);
-  then an amd64 image with SBOM and provenance (arm64 and signed attestations
-  switch on by themselves once the repository is public),
+  then amd64 and arm64 images with SBOM and provenance and signed attestations
+  (a private fork skips the arm64 build and the attestations by itself),
   a start-up check, a vulnerability scan, version tags, the GitHub release,
   and `scripts/prune_images.py` keeps the last three releases' images. Changes people running it must act on go in
   the changelog's next section under **Action required**, **New Microsoft

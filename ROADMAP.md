@@ -4,11 +4,12 @@ Office Sentry is a read-only Microsoft 365 reporting tool for MSPs. This page sa
 planned, roughly in order. It changes as we learn; ideas and questions are welcome in
 Discussions.
 
-## Now
-
-- Reliability for self-hosters: restore, health checks and alerts that tell the truth.
-- "Clients" wording, and a shorter monthly review with an appendix.
-- Proven sizing: measured page and collection times at 200 client tenants.
+What has shipped is in the [changelog](CHANGELOG.md). 2.2 brought a page for every mailbox,
+group and site; the Teams, Site access, Site permissions, File and folder permissions, Mail
+flow, Administrative units and Licence changes reports; Cyber Essentials, cyber insurance and
+supplier questionnaires judged from the data; evidence packs for IASME Cyber Assurance, ISO
+27001, UK GDPR, CIS Microsoft 365, NIST CSF 2.0, SOC 2 and the Essential Eight; and roles and
+staff sign-in with Microsoft.
 
 ## Next
 
@@ -17,8 +18,6 @@ Discussions.
 
 ## Later
 
-- CIS Microsoft 365 and Essential Eight evidence packs.
-- Pages for a mailbox, a group or team, and a SharePoint site.
 - Local date and currency formats in client reports.
 
 ## Not planned

@@ -24,11 +24,13 @@ errors and their fixes.
   connection as *Ready* once it has a certificate and the app's client ID.
   You set this up once for all clients: press *Sign in to Microsoft* there and
   Office Sentry creates the app, then offers to add your first client. On a
-  fresh install, the *Get started* checklist on the admin's home page walks
+  fresh install, the *Get started* checklist on your home page walks
   through this, the first client, its consent and its first collection.
-- **You are an Office Sentry admin.** Only admins can add clients, see consent
-  links and change or delete clients. Analysts can see connection health and
-  press *Check connection now*.
+- **You can manage clients.** Adding clients, seeing consent links and
+  changing or deleting clients need the *Manage clients* capability, which
+  Administrators and Team leaders have. Everyone else on your team can see
+  connection health for the clients they're given, and anyone who can
+  *Refresh data* (Second line, for example) can press *Check connection now*.
 - **The client has someone who can sign in as a Global Administrator** of
   their tenant, or you reach the client through Partner Center with a GDAP
   role that includes Privileged Role Administrator (see *Through Partner
@@ -211,7 +213,7 @@ can't provide. A large tenant can take a while. To collect again later, use
 
 ## Onboarding many clients
 
-*Settings → Client settings → Onboarding* (admins) is for adding clients in
+*Settings → Client settings → Onboarding* (needs *Manage clients*) is for adding clients in
 bulk and following each one through consent.
 
 1. **Import from CSV.** One row per client with column names on the first
@@ -222,8 +224,8 @@ bulk and following each one through consent.
    High, DoD, China). Excel's *Save as CSV* works, comma or semicolon. Up to
    1,000 rows at a time; **Download a template** has the layout. You see every
    row first, with what's wrong with any of them, which app connection each
-   cloud uses, any groups the import creates and which analysts will see the
-   new clients through a group. Nothing is added until you press **Import**.
+   cloud uses, any groups the import creates and who will see the new
+   clients through a group. Nothing is added until you press **Import**.
    Clients already in Office Sentry are skipped, never changed.
 2. **Send.** Each client's **Send…** page has its link, an email to paste and
    the consent pack PDF (see *Sending the link to the client* above). For a
@@ -241,13 +243,14 @@ bulk and following each one through consent.
 | Global Reader missing | Consented, but the app doesn't hold Global Reader, so mailbox reports can't be collected (step 3 below). |
 | Connected | Consent and Global Reader in place. |
 
-Imported clients are ordinary clients: admins see them; analysts and client
-users only once they're given access, one by one or through a group (an
-analyst given a group sees the imported clients in it).
+Imported clients are ordinary clients: people whose role covers every client
+(Administrators and Team leaders) see them; everyone else only once they're
+given access, one by one or through a group (someone given a group sees the
+imported clients in it).
 
 ## 5. Connection health: the Manage page
 
-Every client's **Manage** page (under **Settings**, admins and analysts) has a **Connection
+Every client's **Manage** page (under **Settings**, for your team, not client accounts) has a **Connection
 health** list, one line per thing that can go wrong, each with what to do:
 
 | Line | What it checks | Typical fix |
@@ -284,7 +287,7 @@ missing permissions, Global Reader, last good collection and failing data
 sources, the ones that need fixing first. Click a client to open its Manage
 page.
 
-Admins also edit the client under *Manage → Settings*: its name, notes for the
+People who can manage clients also edit it under *Manage → Settings*: its name, notes for the
 team, its app connection (moving to an app with a different client ID needs
 consent again), and its tenant ID or domain. The tenant ID can't change once
 data has been collected, except from a domain to the tenant ID it stands for
@@ -294,7 +297,7 @@ signs in from the portal straight away without checking permissions.
 
 ## 6. Read the Data collection page
 
-The **Data collection** page (under **Settings**, admins and analysts) has four parts:
+The **Data collection** page (under **Settings**, for anyone who can *Refresh data*) has four parts:
 
 - **Connection**: tenant ID, app, whether consent is recorded, the status
   and the top problems from the Manage page, with a link to it.
@@ -409,7 +412,7 @@ the Manage page.
 
 ## Pausing and archiving
 
-On the **Manage** page, admins can:
+On the **Manage** page, people who can manage clients can:
 
 - **Pause collection**, for example while a client's contract is on hold.
   Nothing is collected (scheduled or manual), no emailed reports or alert
@@ -419,13 +422,13 @@ On the **Manage** page, admins can:
 - **Archive** a client you've stopped working with but who may come back. An
   archived client is also paused, and is hidden from the Clients page, All
   clients, What changed, the Reports page, digests and its client users.
-  Admins find it under *Settings → Client settings → Archived*, where
+  It's under *Settings → Client settings → Archived*, where
   **Restore** brings it back (still paused, so resume it when ready). Grants
-  for analysts and client users are kept.
+  for your team and client users are kept.
 
 ## Offboarding a client
 
-On the client's **Manage** page, choose **Offboard…** (admins only). The page
+On the client's **Manage** page, choose **Offboard…** (needs *Manage clients*). The page
 walks through it:
 
 1. **Download a final copy**: the monthly review and insurance evidence pack

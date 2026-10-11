@@ -12,7 +12,8 @@ first answer can be the useful one.
 | You want to... | Go to |
 |---|---|
 | Fix a setup or collection error (`AADSTS50011`, Global Reader, the worker not running, a report that stays empty) | [Troubleshooting](v2/docs/troubleshooting.md) |
-| Install it, or move it to another server | [Quick start](README.md#quick-start) and [Running it on your own server](v2/DEPLOY.md) |
+| Install it, or move it to another server | [Quick start](README.md#quick-start), [Running it on your own server](v2/DEPLOY.md) and the [deploy guides](v2/docs/deploy/README.md) for Portainer, a NAS, Kubernetes or a cloud |
+| Let your team sign in with their Microsoft accounts | [Staff sign-in with Microsoft](v2/docs/staff-sign-in.md) |
 | Add a client and get consent | [Onboarding a client](v2/docs/onboarding-a-client.md) |
 | Know what a report or check does, or what it reads | [Reports and features](v2/README.md), the [check catalogue](v2/docs/checks.md) and [What Office Sentry reads](v2/docs/what-office-sentry-reads.md) |
 | Ask "how do I...?" or "is it possible to...?" | [Discussions, Q&A](https://github.com/JackD99/OfficeSentry/discussions/categories/q-a) |

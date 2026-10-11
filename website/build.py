@@ -424,6 +424,7 @@ _WORDS = {
     "sharepoint": "SharePoint",
     "what changed all clients": "What changed across all clients",
     "conditional access": "Conditional Access",
+    "cyber essentials": "Cyber Essentials",
     "sign in": "sign-in",
     "right sizing": "right-sizing",
 }
