@@ -221,17 +221,27 @@ GUIDES = "Guides"  # v2/docs/*.md not listed above
 
 # Copied into the site as they are, so the product page and docs can show and link them.
 COPIED = {"docs/screenshots": "screenshots", "examples": "examples"}
+# Also served from the site's root, where browsers, phones and crawlers look for them without being told.
+ROOT_ASSETS = ("favicon.ico", "apple-touch-icon.png")
 
 
 # -- Settings -------------------------------------------------------------------------------------------------
 
 
+def lower_host(url: str) -> str:
+    """The address with its host in lower case, as search results and link previews should show it."""
+    parts = urlsplit(url)
+    return parts._replace(netloc=parts.netloc.lower()).geturl()
+
+
 def settings() -> dict:
-    site = os.environ.get("SITE_URL", "").strip().rstrip("/") or "https://officesentry.co.uk"
+    site = lower_host(os.environ.get("SITE_URL", "").strip().rstrip("/") or "https://officesentry.co.uk")
     parts = urlsplit(site)
     if parts.scheme not in ("http", "https") or not parts.netloc:
         sys.exit(f"SITE_URL must be a web address such as https://officesentry.co.uk, not {site!r}")
-    demo = os.environ.get("SITE_DEMO_URL", "").strip().rstrip("/") or f"{parts.scheme}://demo.{parts.netloc}"
+    demo = lower_host(
+        os.environ.get("SITE_DEMO_URL", "").strip().rstrip("/") or f"{parts.scheme}://demo.{parts.netloc}"
+    )
     contact = os.environ.get("SITE_CONTACT", "").strip()
     if contact and not contact.startswith("https://"):
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", contact):
@@ -434,6 +444,55 @@ def version() -> str:
     return ""
 
 
+# -- Search engines -------------------------------------------------------------------------------------------
+
+
+def home_data(cfg: dict) -> dict:
+    """Schema.org data for the front page: the site's name, and what Office Sentry is and costs."""
+    site = cfg["site_url"]
+    app = {
+        "@type": "SoftwareApplication",
+        "@id": f"{site}/#software",
+        "name": "Office Sentry",
+        "alternateName": "OfficeSentry",
+        "description": "Free Microsoft 365 reporting tool for MSPs: security, licensing, MFA, mailbox and SharePoint "
+        "reports for every client, with the history kept. Read-only and self-hosted.",
+        "url": f"{site}/",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Linux (Docker)",
+        "isAccessibleForFree": True,
+        "offers": {"@type": "Offer", "price": "0", "priceCurrency": "GBP"},
+        "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+        "image": f"{site}/assets/social-card.png",
+        "screenshot": f"{site}/screenshots/tenant-overview.png",
+    }
+    if released := version():
+        app["softwareVersion"] = released
+    if cfg["source_public"]:
+        app["sameAs"] = [GITHUB]
+    site_info = {
+        "@type": "WebSite",
+        "@id": f"{site}/#website",
+        "name": "Office Sentry",
+        "alternateName": "OfficeSentry",
+        "url": f"{site}/",
+    }
+    return {"@context": "https://schema.org", "@graph": [site_info, app]}
+
+
+def breadcrumbs(cfg: dict, doc: Doc) -> dict:
+    """Schema.org data for a doc page, so search results show "Docs > page" rather than its address."""
+    trail = [("Docs", "/docs/"), (doc.title, doc.url)]
+    return {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {"@type": "ListItem", "position": i, "name": name, "item": cfg["site_url"] + url}
+            for i, (name, url) in enumerate(trail, 1)
+        ],
+    }
+
+
 # -- Build ----------------------------------------------------------------------------------------------------
 
 
@@ -458,6 +517,8 @@ def build() -> Path:
     if OUT.exists():
         shutil.rmtree(OUT)
     shutil.copytree(HERE / "assets", OUT / "assets")
+    for name in ROOT_ASSETS:
+        shutil.copy(HERE / "assets" / name, OUT / name)
     for source, published in COPIED.items():
         shutil.copytree(ROOT / source, OUT / published, ignore=shutil.ignore_patterns("*.md"))
     (OUT / "assets/code.css").write_text(code_css(), encoding="utf-8")
@@ -481,7 +542,7 @@ def build() -> Path:
             env.get_template(template).render(path="/" + path.removesuffix("index.html"), **ctx), encoding="utf-8"
         )
 
-    page("home.html", "index.html", examples=examples())
+    page("home.html", "index.html", examples=examples(), structured_data=home_data(cfg))
     page("docs_index.html", "docs/index.html", title="Documentation")
     for doc in docs:
         page(
@@ -490,6 +551,7 @@ def build() -> Path:
             doc=doc,
             title=doc.title,
             edit=f"{GITHUB}/edit/{BRANCH}/{doc.path}",
+            structured_data=breadcrumbs(cfg, doc),
         )
     page("404.html", "404.html", title="Page not found")
 

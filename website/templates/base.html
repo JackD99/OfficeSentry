@@ -9,17 +9,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% if title %}{{ title }} · Office Sentry{% else %}Office Sentry: Microsoft 365 reports for MSPs{% endif %}</title>
-  <meta name="description" content="{% block description %}Free{{ ", open-source" if source_public }} Microsoft 365 security and licensing reports for MSPs. Read-only, self-hosted, with history across every client.{% endblock %}">
+  {% set full_title = (title ~ ' · Office Sentry') if title else 'Office Sentry: free Microsoft 365 reporting tool for MSPs' %}
+  <title>{{ full_title }}</title>
+  <meta name="description" content="{% block description %}Free{{ ", open-source" if source_public }} Microsoft 365 reporting tool for MSPs: security, licence, MFA and SharePoint reports for every client, with history. Read-only, self-hosted.{% endblock %}">
   <link rel="canonical" href="{{ site_url }}{{ path }}">
-  <meta property="og:title" content="{{ title or 'Office Sentry' }}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Office Sentry">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:title" content="{{ full_title }}">
   <meta property="og:description" content="{{ self.description() }}">
   <meta property="og:url" content="{{ site_url }}{{ path }}">
-  <meta property="og:image" content="{{ site_url }}{{ shots['tenant-overview'].src }}">
+  <meta property="og:image" content="{{ site_url }}/assets/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Office Sentry: free Microsoft 365 reporting for MSPs, beside a client's overview page">
+  <meta name="twitter:card" content="summary_large_image">
   <meta name="theme-color" content="#0f172a">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="/assets/site.css">
   <link rel="stylesheet" href="/assets/code.css">
+  {% if structured_data %}
+  <script type="application/ld+json">{{ structured_data|tojson }}</script>
+  {% endif %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
 <a class="skip-link" href="#main">Skip to content</a>
