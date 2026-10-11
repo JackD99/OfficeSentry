@@ -159,7 +159,7 @@ def users():
 def create_user():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
-    problem = password_problem(password)
+    problem = password_problem(password, username=username)
     role = _role_from_form()
     if not _givable(role):
         problem = _NOT_GIVABLE
@@ -180,6 +180,13 @@ def create_user():
     return redirect(url_for("admin.edit_user", user_id=cur.lastrowid))
 
 
+# Someone who signs in with Microsoft gets Admin or Analyst from Entra at each sign-in (sso.account_for).
+_SET_IN_ENTRA = (
+    "{username} signs in with Microsoft, so the app role assigned in Entra decides whether they're an "
+    "Administrator or staff. Change it there."
+)
+
+
 @bp.route("/users/<int:user_id>", methods=["GET", "POST"])
 @needs("users.manage")
 def edit_user(user_id: int):
@@ -194,6 +201,9 @@ def edit_user(user_id: int):
         if request.form.get("password") and not _admin_password_ok():
             return redirect(url_for("admin.edit_user", user_id=user_id))
         role = _role_from_form(current_role)
+        if user["entra_oid"] and role.kind != current_role.kind:
+            flash(_SET_IN_ENTRA.format(username=user["username"]), "error")
+            return redirect(url_for("admin.edit_user", user_id=user_id))
         if role.id != current_role.id and not _givable(role):
             flash(_NOT_GIVABLE, "error")
             return redirect(url_for("admin.edit_user", user_id=user_id))
@@ -247,7 +257,7 @@ def edit_user(user_id: int):
                 + (f" groups={sorted(group_grants)}" if group_grants else ""),
             )
         if request.form.get("password"):
-            if problem := password_problem(request.form["password"]):
+            if problem := password_problem(request.form["password"], username=user["username"]):
                 flash(problem, "error")
             else:
                 g.db.execute(

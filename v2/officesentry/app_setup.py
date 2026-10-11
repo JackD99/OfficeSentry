@@ -28,7 +28,7 @@ from datetime import UTC, datetime, timedelta
 
 import requests
 
-from . import clouds, entra, store
+from . import clouds, entra, sso, store
 from .certs import generate_certificate
 from .db import audit
 
@@ -46,6 +46,8 @@ NO_ANSWER = "Microsoft didn't answer just now. Office Sentry will keep checking.
 
 # Statuses: waiting (for the admin to sign in), working (one check is talking to Microsoft), done, failed.
 ACTIVE = ("waiting", "working")
+# What a sign-in is for: the read-only app connection, or the staff sign-in app (sso.py).
+PURPOSES = ("connection", "sign_in")
 
 
 def _iso(dt: datetime) -> str:
@@ -116,9 +118,9 @@ def register_app(
 # -- The wizard's sign-in, one row per admin --------------------------------------------------------------
 
 
-def current(conn, user_id: int):
+def current(conn, user_id: int, purpose: str = "connection"):
     return conn.execute(
-        "SELECT * FROM setup_sign_ins WHERE user_id = ? ORDER BY id DESC LIMIT 1", (user_id,)
+        "SELECT * FROM setup_sign_ins WHERE user_id = ? AND purpose = ? ORDER BY id DESC LIMIT 1", (user_id, purpose)
     ).fetchone()
 
 
@@ -132,16 +134,20 @@ def start(
     name: str = DEFAULT_NAME,
     session: requests.Session | None = None,
     now: datetime | None = None,
+    purpose: str = "connection",
 ):
-    """Get a device code from Microsoft and remember it (encrypted) for this admin. Replaces any earlier one.
-    Raises ``entra.SignInError`` if Microsoft won't give one."""
+    """Get a device code from Microsoft and remember it (encrypted) for this admin. Replaces any earlier one
+    for the same purpose. Raises ``entra.SignInError`` if Microsoft won't give one."""
     now = now or datetime.now(UTC)
-    code = entra.start_device_sign_in(tenant, cloud, session=session)
-    conn.execute("DELETE FROM setup_sign_ins WHERE user_id = ?", (user_id,))
+    if purpose not in PURPOSES:
+        raise ValueError(purpose)
+    scope = sso.setup_scope(cloud) if purpose == "sign_in" else None
+    code = entra.start_device_sign_in(tenant, cloud, session=session, scope=scope)
+    conn.execute("DELETE FROM setup_sign_ins WHERE user_id = ? AND purpose = ?", (user_id, purpose))
     conn.execute(
         "INSERT INTO setup_sign_ins (user_id, cloud, tenant, name, device_code_enc, user_code, verification_uri,"
-        " poll_seconds, expires_at, next_poll_at, status, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?)",
+        " poll_seconds, expires_at, next_poll_at, status, created_at, updated_at, purpose)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?, ?)",
         (
             user_id,
             cloud,
@@ -155,15 +161,22 @@ def start(
             _iso(now),
             _iso(now),
             _iso(now),
+            purpose,
         ),
     )
-    audit(conn, actor, "app_setup_started", detail=cloud if tenant == ANY_TENANT else f"{cloud} {tenant}")
-    return current(conn, user_id)
+    audit(
+        conn,
+        actor,
+        "app_setup_started",
+        detail=(cloud if tenant == ANY_TENANT else f"{cloud} {tenant}")
+        + (" (sign-in app)" if purpose == "sign_in" else ""),
+    )
+    return current(conn, user_id, purpose)
 
 
-def cancel(conn, user_id: int) -> None:
+def cancel(conn, user_id: int, purpose: str = "connection") -> None:
     """Forget this admin's sign-in, and with it the device code."""
-    conn.execute("DELETE FROM setup_sign_ins WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM setup_sign_ins WHERE user_id = ? AND purpose = ?", (user_id, purpose))
 
 
 def _fail(conn, row, message: str, actor: str) -> None:
@@ -182,21 +195,22 @@ def check(
     redirect_uri: str,
     session: requests.Session | None = None,
     now: datetime | None = None,
+    purpose: str = "connection",
 ):
     """Take the wizard one step: ask Microsoft once whether the admin has signed in and, when they have,
     create the app. Safe to call as often as the page likes: Microsoft is asked at most once per its
     interval, and only one call at a time (across portal processes) gets to ask. Returns the row."""
     now = now or datetime.now(UTC)
-    row = current(conn, user_id)
+    row = current(conn, user_id, purpose)
     if row is None or row["status"] not in ACTIVE:
         return row
     if row["status"] == "working":
         if _parse(row["updated_at"]) + STUCK_AFTER <= now:
             _fail(conn, row, INTERRUPTED.format(name=row["name"]), actor)
-        return current(conn, user_id)
+        return current(conn, user_id, purpose)
     if _parse(row["expires_at"]) <= now:
         _fail(conn, row, entra.SIGN_IN_PROBLEMS["expired_token"], actor)
-        return current(conn, user_id)
+        return current(conn, user_id, purpose)
     if row["next_poll_at"] and _parse(row["next_poll_at"]) > now:
         return row
     claimed = conn.execute(
@@ -204,7 +218,7 @@ def check(
         (_iso(now), row["id"]),
     ).rowcount
     if not claimed:
-        return current(conn, user_id)  # another check got there first
+        return current(conn, user_id, purpose)  # another check got there first
 
     def wait(seconds: int, note: str | None = None) -> None:
         conn.execute(
@@ -219,15 +233,17 @@ def check(
         )
     except entra.SignInError as exc:
         _fail(conn, row, str(exc), actor)
-        return current(conn, user_id)
+        return current(conn, user_id, purpose)
     except requests.RequestException:
         wait(row["poll_seconds"], NO_ANSWER)
-        return current(conn, user_id)
+        return current(conn, user_id, purpose)
     if poll.token is None:
         wait(row["poll_seconds"] + (5 if poll.slower else 0))
-        return current(conn, user_id)
+        return current(conn, user_id, purpose)
 
     home = entra.token_tenant(poll.token)
+    if purpose == "sign_in":
+        return _finish_sign_in_app(conn, vault, row, poll.token, redirect_uri, actor, home, now, session)
     try:
         conn_id, app = register_app(conn, vault, poll.token, redirect_uri, row["name"], row["cloud"], session=session)
     except entra.SignInError as exc:
@@ -240,6 +256,28 @@ def check(
     )
     audit(conn, actor, "connection_created", detail=f"{row['name']} {app['appId']} {row['cloud']} (setup wizard)")
     return current(conn, user_id)
+
+
+def _finish_sign_in_app(conn, vault, row, token: str, redirect_uri: str, actor: str, home, now, session):
+    """The sign-in app (sso.py), created with the wizard's token and saved as the staff sign-in settings."""
+    if not home:
+        _fail(conn, row, "Microsoft didn't say which tenant you signed in to. Start again.", actor)
+        return current(conn, row["user_id"], "sign_in")
+    cert = generate_certificate("Office Sentry sign-in", years=2)
+    try:
+        created = sso.create_sign_in_app(token, cert.cert_pem, redirect_uri, row["name"], row["cloud"], session=session)
+    except sso.SignInError as exc:
+        _fail(conn, row, str(exc), actor)
+        return current(conn, row["user_id"], "sign_in")
+    created.tenant = created.tenant or home
+    sso.store_app(conn, vault, created, cert, row["name"], row["cloud"], actor)
+    conn.execute(
+        "UPDATE setup_sign_ins SET status = 'done', device_code_enc = NULL, error = NULL, client_id = ?,"
+        " home_tenant = ?, updated_at = ? WHERE id = ?",
+        (created.client_id, home, _iso(now), row["id"]),
+    )
+    audit(conn, actor, "sign_in_app_created", detail=f"{row['name']} {created.client_id} {row['cloud']} (setup wizard)")
+    return current(conn, row["user_id"], "sign_in")
 
 
 def seconds_left(row, now: datetime | None = None) -> int:

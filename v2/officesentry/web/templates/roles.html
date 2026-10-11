@@ -20,7 +20,7 @@
         <td data-label="Clients">{{ 'All' if r.scope == 'all' else 'Granted' }}</td>
         <td class="num" data-label="People">{{ members.get(r.id, 0) }}</td>
         <td data-label="Can" class="small muted">{% if r.kind == 'admin' %}Everything{% else %}
-          {% for key, title, help in groups %}{% set n = capabilities|selectattr('group', 'equalto', key)|selectattr('key', 'in', r.capabilities)|list|length %}{% if n %}{{ title }} {{ n }}{{ '' if loop.last else ' · ' }}{% endif %}{% endfor %}{% endif %}</td></tr>
+          {% set parts = [] %}{% for key, title, help in groups %}{% set n = capabilities|selectattr('group', 'equalto', key)|selectattr('key', 'in', r.capabilities)|list|length %}{% if n %}{% set _ = parts.append(title ~ ' ' ~ n) %}{% endif %}{% endfor %}{{ parts|join(' · ') if parts else 'Nothing yet' }}{% endif %}</td></tr>
       {% endfor %}
       </tbody>
     </table>

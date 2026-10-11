@@ -90,7 +90,7 @@ def activity_part(p: Person) -> Part:
         result.facts.append((f"Admin changes ({period.removeprefix('the ')})", "None by or to this account"))
     kept = events_store.coverage(p.snap.conn, p.snap.tenant["id"], "signins").detailed_from
     result.note = (
-        f"Office Sentry keeps this tenant's sign-in log from {datetime.fromtimestamp(kept, UTC):%-d %b %Y}: "
+        f"Office Sentry keeps this tenant's sign-in log from {_day(datetime.fromtimestamp(kept, UTC))}: "
         "each day is under Sign-in history, and the last week in detail under Recent sign-ins. Legacy "
         "sign-ins and the last sign-in dates show here."
         if kept is not None
@@ -269,16 +269,16 @@ def sign_in_history_part(p: Person) -> Part | None:
     )
     result = Part("signin_history", "Sign-in history")
     result.note = (
-        f"Every interactive sign-in since {kept:%-d %b %Y}, from the activity history's daily "
+        f"Every interactive sign-in since {_day(kept)}, from the activity history's daily "
         "summaries, kept as long as Data retention says (25 months by default)."
     )
     if not rows:
-        result.summary, result.empty = "None", f"No interactive sign-ins since {start:%-d %b %Y}."
+        result.summary, result.empty = "None", f"No interactive sign-ins since {_day(start)}."
         return result
     recent = f"{p.end - timedelta(days=30):%Y-%m-%d}"
     days_30 = {r.day for r in rows if r.day > recent}
     result.summary = f"Signed in on {_plural(len(days_30), 'day')} of the last 30"
-    result.facts.append(("History from", f"{kept:%-d %b %Y}"))
+    result.facts.append(("History from", f"{_day(kept)}"))
     result.facts.append(("Last sign-in", _when(max(r.last for r in rows), p.now)))
     countries = sorted({r.country for r in rows if r.country})
     if countries:

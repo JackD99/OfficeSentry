@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, csrf, ts %}
+{% from "_device_code.html" import device_code %}
 {% block title %}App connection · Office Sentry{% endblock %}
 {% block content %}
 {% set ready = connections|selectattr('client_id')|list %}
@@ -71,25 +72,8 @@
       <div class="step-body">
       {% if status == 'done' %}Signed in{% if sign_in.home_tenant %} to tenant <span class="mono small">{{ sign_in.home_tenant }}</span>{% endif %}.
       {% elif active %}
-        <div class="device-code" data-setup-wait="{{ sign_in.poll_seconds }}" data-check="{{ url_for('admin.check_setup') }}">
-          <p class="m0">Open Microsoft's sign-in page and enter this code:</p>
-          <div class="code-row">
-            <output class="user-code mono" id="user-code" aria-label="Sign-in code">{{ sign_in.user_code }}</output>
-            <button type="button" class="sm" data-copy="#user-code">Copy code</button>
-          </div>
-          <div class="step-action">
-            <a class="btn primary" href="{{ sign_in.verification_uri }}" target="_blank" rel="noopener noreferrer">Open Microsoft's sign-in page {{ icon('arrow') }}</a>
-            <span class="muted small">{{ sign_in.verification_uri.split('//', 1)[-1] }}</span>
-          </div>
-          <p class="small">Sign in as someone in your own (the MSP's) tenant who can create app registrations: a Global Administrator, Application Administrator or Cloud Application Administrator. Microsoft may ask you to let <em>Microsoft Graph Command Line Tools</em> (Microsoft's own app) create apps for you. Office Sentry uses this sign-in once, to create its app, and doesn't keep it.</p>
-          <p class="wait-line" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span>
-            <span data-setup-text>{% if status == 'working' %}Signed in. Creating the app…{% elif sign_in.error %}{{ sign_in.error }}{% else %}Waiting for you to sign in. This page moves on by itself.{% endif %}</span></p>
-          <p class="muted small m0">The code works for {% set m = (seconds_left / 60)|round(0, 'ceil')|int %}<span data-setup-left>{{ 'less than a minute' if m <= 1 else m ~ ' more minutes' }}</span>.</p>
-        </div>
-        <div class="step-action">
-          <form method="post" action="{{ url_for('admin.check_setup') }}" class="inline">{{ csrf() }}<button class="sm">I've signed in</button></form>
-          <form method="post" action="{{ url_for('admin.cancel_setup') }}" class="inline">{{ csrf() }}<button class="ghost sm">Cancel</button></form>
-        </div>
+        {{ device_code(sign_in, url_for('admin.check_setup'), url_for('admin.cancel_setup'), seconds_left,
+            "Sign in as someone in your own (the MSP's) tenant who can create app registrations: a Global Administrator, Application Administrator or Cloud Application Administrator. Microsoft may ask you to let Microsoft Graph Command Line Tools (Microsoft's own app) create apps for you. Office Sentry uses this sign-in once, to create its app, and doesn't keep it.") }}
       {% else %}
         {% if status == 'failed' %}
         <div class="callout bad" role="alert">{{ icon('alert') }}<div><strong>The app wasn't created.</strong> {{ sign_in.error }}</div></div>
@@ -224,51 +208,4 @@
   </table>
   <p class="footnote pad">Exchange access only ever runs <code>Get-</code> commands from a fixed list, so it can't change anything.</p>
 </details>
-{% endblock %}
-{% block scripts %}
-<script nonce="{{ csp_nonce }}">
-(function () {
-  // Copy the sign-in code, and fill in the first tenant's ID with the admin's own.
-  document.querySelectorAll('[data-copy]').forEach(function (button) {
-    button.addEventListener('click', function () {
-      var text = document.querySelector(button.dataset.copy).textContent.trim();
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(text).then(function () { button.textContent = 'Copied'; });
-      }
-    });
-  });
-  document.querySelectorAll('[data-fill]').forEach(function (button) {
-    button.addEventListener('click', function () {
-      var input = document.querySelector(button.dataset.fill);
-      input.value = button.dataset.value;
-      input.focus();
-    });
-  });
-  // While Office Sentry waits for the sign-in, check with it every few seconds (it asks Microsoft) and move
-  // on by itself once the app is created or something went wrong.
-  var box = document.querySelector('[data-setup-wait]');
-  if (!box) { return; }
-  var token = document.querySelector('input[name=csrf_token]');
-  var text = box.querySelector('[data-setup-text]'), left = box.querySelector('[data-setup-left]');
-  function minutes(seconds) {
-    var m = Math.ceil(seconds / 60);
-    return m <= 1 ? 'less than a minute' : m + ' more minutes';
-  }
-  function check() {
-    fetch(box.dataset.check, {method: 'POST', credentials: 'same-origin',
-                              headers: {'Accept': 'application/json', 'X-CSRFToken': token ? token.value : ''}})
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) {
-        if (!d) { setTimeout(check, 10000); return; }
-        if (d.status !== 'waiting' && d.status !== 'working') { location.reload(); return; }
-        text.textContent = d.status === 'working' ? 'Signed in. Creating the app…'
-          : (d.note || 'Waiting for you to sign in. This page moves on by itself.');
-        if (left) { left.textContent = minutes(d.seconds_left); }
-        setTimeout(check, Math.max(d.wait || 5, 2) * 1000);
-      })
-      .catch(function () { setTimeout(check, 10000); });
-  }
-  setTimeout(check, Math.max(parseInt(box.dataset.setupWait, 10) || 5, 2) * 1000);
-}());
-</script>
 {% endblock %}

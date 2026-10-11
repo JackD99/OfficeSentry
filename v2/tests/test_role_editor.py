@@ -21,6 +21,9 @@ def test_roles_page_lists_every_role_with_holders(client, db, two_tenants):
         assert t.name in page
     row = page.split("Team leader")[1].split("</tr>")[0]
     assert 'data-label="People">2<' in row
+    # The admin was made without a role id (as older code did): counted for the role users.role stands for.
+    row = page.split(">Administrator</a>")[1].split("</tr>")[0]
+    assert 'data-label="People">1<' in row
     assert "Custom" not in page and "Changed" not in page
 
 

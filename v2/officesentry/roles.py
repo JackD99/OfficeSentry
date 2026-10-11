@@ -103,8 +103,14 @@ def role_of(conn, user) -> Role:
 
 
 def members(conn) -> dict[int, int]:
-    """How many enabled accounts hold each role."""
-    return dict(conn.execute("SELECT role_id, COUNT(*) FROM users WHERE disabled = 0 GROUP BY role_id").fetchall())
+    """How many enabled accounts hold each role, as ``role_of`` reads it (an account older code made, with no
+    ``role_id``, counts for the built-in role its ``users.role`` stands for)."""
+    counts: dict[int, int] = {}
+    for user in conn.execute("SELECT * FROM users WHERE disabled = 0"):
+        role = role_of(conn, user)
+        if role.id:  # 0: a built-in role whose row is missing
+            counts[role.id] = counts.get(role.id, 0) + 1
+    return counts
 
 
 def assign(conn, user_id: int, role: Role) -> bool:
