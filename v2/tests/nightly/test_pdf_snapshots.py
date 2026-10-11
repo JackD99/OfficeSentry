@@ -78,14 +78,18 @@ def test_pdf_looks_as_before(name, pdfs, tmp_path, request, summary):
     assert name in pdfs, f"{name} wasn't made (is WeasyPrint installed, with Pango?)"
     stem = name.removesuffix(".pdf")
     pages = _pages(pdfs[name], tmp_path)
-    if request.config.getoption("--update"):
-        BASELINES.mkdir(exist_ok=True)
-        for old in BASELINES.glob(f"{stem}-p*.png"):
-            old.unlink()
-        for i, page in enumerate(pages, 1):
-            page.save(BASELINES / f"{stem}-p{i}.png", optimize=True)
-        return
     stored = sorted(BASELINES.glob(f"{stem}-p*.png"), key=lambda p: int(p.stem.rsplit("-p", 1)[1]))
+    if request.config.getoption("--update"):
+        # Only a page that no longer matches is rewritten (anti-aliasing drift within the tolerance would
+        # otherwise change every file on every refresh); pages the PDF no longer has are removed.
+        BASELINES.mkdir(exist_ok=True)
+        for i, page in enumerate(pages, 1):
+            baseline = BASELINES / f"{stem}-p{i}.png"
+            if not baseline.exists() or _compare(f"{stem}-p{i}", page, baseline):
+                page.save(baseline, optimize=True)
+        for old in stored[len(pages) :]:
+            old.unlink()
+        return
     problems = []
     if len(pages) != len(stored):
         problems.append(f"{len(pages)} pages, the baseline has {len(stored)}")

@@ -59,3 +59,6 @@
 - name: canary
   color: d93f0b
   description: Opened by the Live canary workflow when Microsoft changes what it sends
+- name: refresh-baselines
+  color: c5def5
+  description: Retakes a pull request's screenshot and PDF baselines and commits them (Refresh baselines workflow)
