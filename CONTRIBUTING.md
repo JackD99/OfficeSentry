@@ -209,7 +209,10 @@ does the work. To make a release:
    [CHANGELOG.md](CHANGELOG.md) its date (`## [2.1.0] - 2026-11-02`), with its
    compare link at the foot of the file. Fill in
    **Action required**, **New Microsoft permissions** and **Database upgrade**
-   even when the answer is "None" or "No". Merge it once CI is green.
+   even when the answer is "None" or "No". For a feature release, the
+   website's What's new band (`WHATS_NEW` in `website/build.py`, see
+   [website/README.md](website/README.md#whats-new)) should list its headlines
+   by now. Merge it once CI is green.
 2. On GitHub: **Actions** → **Release** → **Run workflow**, leave "Use
    workflow from" on `main`, type the version (`2.1.0`) and press **Run
    workflow**. (Pushing a tag, `git push origin v2.1.0`, does the same.)

@@ -283,6 +283,19 @@ SECTIONS = [
 ]
 GUIDES = "Guides"  # v2/docs/*.md not listed above
 
+# The front page's "What's new" band: one release's headline changes, in words for the people who'd use them,
+# each linking to where it's explained. It says "New in 2.3" once CHANGELOG.md gives the version a date and
+# "Coming in 2.3" until then, and it's left out while it has no items. Add an item only once its change is on
+# main. `icon` is one of the icons in templates/home.html.
+WHATS_NEW = {
+    "version": "2.3.0",
+    "title": "",  # the band's heading
+    "summary": "",  # a sentence under it
+    "chip": "",  # a few words for the link at the top of the page, after "New in 2.3:"
+    "items": [],  # {"icon", "title", "text", "href", "link"}: "link" names the page "href" opens
+    "also": [],  # smaller changes, a few words each
+}
+
 # Copied into the site as they are, so the product page and docs can show and link them.
 COPIED = {"docs/screenshots": "screenshots", "examples": "examples"}
 # Also served from the site's root, where browsers, phones and crawlers look for them without being told.
@@ -509,6 +522,30 @@ def version() -> str:
     return ""
 
 
+_MONTHS = "January February March April May June July August September October November December".split()
+
+
+def whats_new() -> dict | None:
+    """The "What's new" band: WHATS_NEW with what CHANGELOG.md says of its version, or None to leave it out."""
+    wanted = WHATS_NEW["version"]
+    if not WHATS_NEW["items"]:
+        return None
+    for found in re.finditer(r"^## \[?v?(\d+\.\d+\.\d+)\]? - (.+)$", (ROOT / "CHANGELOG.md").read_text("utf-8"), re.M):
+        if found[1] != wanted:
+            continue
+        when = found[2].strip()
+        dated = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", when)
+        return {
+            **WHATS_NEW,
+            "short": wanted.removesuffix(".0"),  # "2.3" reads better than "2.3.0" in a heading
+            "released": bool(dated),
+            "date": f"{int(dated[3])} {_MONTHS[int(dated[2]) - 1]} {dated[1]}" if dated else "",
+            # The version's heading on the changelog page, with GitHub's anchor as render() gives it
+            "href": f"/docs/changelog/#{github_slug(f'{wanted} - {when}')}",
+        }
+    sys.exit(f"WHATS_NEW is for {wanted}, which has no '## [{wanted}] - ...' heading in CHANGELOG.md")
+
+
 # -- Search engines -------------------------------------------------------------------------------------------
 
 
@@ -607,7 +644,7 @@ def build() -> Path:
             env.get_template(template).render(path="/" + path.removesuffix("index.html"), **ctx), encoding="utf-8"
         )
 
-    page("home.html", "index.html", examples=examples(), structured_data=home_data(cfg))
+    page("home.html", "index.html", examples=examples(), whats_new=whats_new(), structured_data=home_data(cfg))
     page("docs_index.html", "docs/index.html", title="Documentation")
     for doc in docs:
         page(

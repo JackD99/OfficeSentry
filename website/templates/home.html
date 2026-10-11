@@ -7,10 +7,23 @@
 <figure class="window"><div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>{{ shot(name, alt, eager=eager) }}</figure>
 {%- endmacro -%}
 {%- macro check() -%}<svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{%- endmacro -%}
+{#- The icons a "What's new" item can name (WHATS_NEW in build.py). -#}
+{%- set icons = {
+  'sign-in': '<path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4"/><path d="M10 16l4-4-4-4"/><path d="M14 12H4"/>',
+  'update': '<path d="M20 11a8 8 0 00-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0014.3 4.9L20 16"/><path d="M20 20v-4h-4"/>',
+  'review': '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 14l2 2 4-4"/>',
+  'device': '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/>',
+  'project': '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2"/><path d="M3 13h18"/>',
+  'table': '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/>',
+  'shield': '<path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/>',
+  'mail': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+} -%}
+{%- macro icon(name) -%}<svg viewBox="0 0 24 24" aria-hidden="true">{{ icons[name]|safe }}</svg>{%- endmacro -%}
 {% block main %}
 <section class="hero">
   <div class="wrap hero-inner">
     <div class="hero-copy">
+      {% if whats_new %}<a class="hero-chip" href="#whats-new"><span>{{ 'New in' if whats_new.released else 'Coming in' }} {{ whats_new.short }}</span><b>{{ whats_new.chip }}</b></a>{% endif %}
       <p class="eyebrow">{{ "Free and open source" if source_public else "Free software" }} · Built for MSPs</p>
       <h1>Microsoft 365 reports for every client, without the busywork</h1>
       <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, client reports you design yourself, evidence for Cyber Essentials and insurance forms, 47 detail reports, a page for every person, mailbox, group and site, a view across every client and what changed since last month.</p>
@@ -244,6 +257,32 @@
   </div>
 </section>
 
+{% if whats_new %}
+<section class="whats-new" id="whats-new">
+  <div class="wrap whats-new-inner">
+    <header class="section-head left">
+      <p class="eyebrow">{{ 'New in' if whats_new.released else 'Coming in' }} {{ whats_new.short }}{% if whats_new.date %} · {{ whats_new.date }}{% endif %}</p>
+      <h2>{{ whats_new.title }}</h2>
+      <p>{{ whats_new.summary }}</p>
+      <a class="more" href="{{ whats_new.href }}">Everything in {{ whats_new.version }}</a>
+    </header>
+    <div>
+      <ul class="new-grid">
+        {% for item in whats_new['items'] %}
+        <li>
+          {{ icon(item.icon) }}
+          <h3>{{ item.title }}</h3>
+          <p>{{ item.text }}</p>
+          {% if item.href %}<a class="more" href="{{ item.href }}">{{ item.link }}</a>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% if whats_new.also %}<p class="new-also"><strong>Also in {{ whats_new.short }}:</strong> {{ whats_new.also|join('; ') }}.</p>{% endif %}
+    </div>
+  </div>
+</section>
+
+{% endif %}
 <section class="demo-band" id="demo">
   <div class="wrap demo-inner">
     <div>
