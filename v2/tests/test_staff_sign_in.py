@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509 import load_pem_x509_certificate
 from responses import matchers
 
+from officesentry import roles as office_roles
 from officesentry import sso
 from officesentry.__main__ import main
 from tests.conftest import PASSWORD, login, make_user
@@ -194,6 +195,43 @@ def test_role_follows_entra_and_client_grants_stay(client, db, vault, configured
         r["tenant_id"] for r in db.execute("SELECT tenant_id FROM user_tenants WHERE user_id = ?", (user["id"],))
     ] == [a]
     assert db.execute("SELECT COUNT(*) FROM users WHERE entra_oid = ?", (AMY["oid"],)).fetchone()[0] == 1
+
+
+@responses.activate
+def test_entra_says_admin_or_staff_and_office_sentry_picks_the_staff_role(client, db, vault, configured):
+    sent = start(client)
+    come_back(client, sent, id_token(AMY, sent["nonce"], roles=["Analyst"]))
+    client.post("/logout")
+    amy = db.execute("SELECT id FROM users WHERE entra_oid = ?", (AMY["oid"],)).fetchone()["id"]
+
+    def role_key():
+        user = db.execute("SELECT * FROM users WHERE id = ?", (amy,)).fetchone()
+        return office_roles.role_of(db, user).key
+
+    assert role_key() == "second_line"
+    # On her page an admin can pick another staff role, but not make her an Administrator or a client.
+    login(client, "owner")
+    first_line, administrator = office_roles.by_key(db, "first_line"), office_roles.by_key(db, "administrator")
+    text = page(client, f"/admin/users/{amy}")
+    assert "app role assigned in Entra decides" in text
+    client.post(f"/admin/users/{amy}", data={"role": str(administrator.id)})
+    assert role_key() == "second_line"
+    assert "Change it there" in page(client, f"/admin/users/{amy}")
+    client.post(f"/admin/users/{amy}", data={"role": str(first_line.id)})
+    assert role_key() == "first_line"
+    client.post("/logout")
+
+    # Signing in as an Analyst again keeps First line; Admin in Entra makes her an Administrator, and taking
+    # it away again lands on Second line, not on a role picked for her before.
+    for entra_roles, expected in (
+        (["Analyst"], "first_line"),
+        (["Admin"], "administrator"),
+        (["Analyst"], "second_line"),
+    ):
+        sent = start(client)
+        come_back(client, sent, id_token(AMY, sent["nonce"], roles=entra_roles), code=f"code-{expected}")
+        assert role_key() == expected
+        client.post("/logout")
 
 
 @responses.activate

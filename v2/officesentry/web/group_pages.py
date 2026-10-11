@@ -8,7 +8,7 @@ from flask import Blueprint, Response, abort, g, render_template
 
 from ..db import audit
 from ..reports import branding, data_reports, group_page
-from .access import login_required, tenant_or_404
+from .access import needs, tenant_or_404
 from .printing import pdf_response
 
 bp = Blueprint("group_pages", __name__)
@@ -27,7 +27,7 @@ def _page(tenant_id: int, gid: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/groups")
-@login_required
+@needs("reports.people")
 def groups(tenant_id: int):
     t = tenant_or_404(tenant_id)
     found = group_page.directory(g.db, t)
@@ -36,14 +36,14 @@ def groups(tenant_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/groups/<gid>")
-@login_required
+@needs("reports.people")
 def group(tenant_id: int, gid: str):
     t, page = _page(tenant_id, gid)
     return render_template("object_page.html", tenant=t, page=page, tab="group_pages")
 
 
 @bp.get("/tenants/<int:tenant_id>/groups/<gid>.pdf")
-@login_required
+@needs("reports.people", "export")
 def group_pdf(tenant_id: int, gid: str):
     t, page = _page(tenant_id, gid)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "group.pdf")
@@ -51,7 +51,7 @@ def group_pdf(tenant_id: int, gid: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/groups/<gid>.xlsx")
-@login_required
+@needs("reports.people", "export")
 def group_xlsx(tenant_id: int, gid: str):
     t, page = _page(tenant_id, gid)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "group.xlsx")

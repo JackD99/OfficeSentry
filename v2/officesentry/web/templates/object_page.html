@@ -19,7 +19,7 @@
     <div class="badges">{% for text, tone in page.badges %}<span class="pill {{ PILL.get(tone, '') }}">{{ text }}</span>{% endfor %}</div>
   </div>
   <div class="person-actions">
-    {{ downloads([('PDF', page.path ~ '.pdf', 'This page as a PDF'), ('XLSX', page.path ~ '.xlsx', 'Every table, one sheet each')]) }}
+    {% if can('export', tenant.id) %}{{ downloads([('PDF', page.path ~ '.pdf', 'This page as a PDF'), ('XLSX', page.path ~ '.xlsx', 'Every table, one sheet each')]) }}{% endif %}
     {% if page.external %}<a class="small external-link" href="{{ page.external[1] }}" target="_blank" rel="noopener noreferrer">{{ page.external[0] }} {{ icon('external') }}</a>{% endif %}
   </div>
 </div>
