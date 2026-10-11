@@ -150,8 +150,12 @@ def _text(value) -> str:
 
 # Columns that count days from now: an account inactive for 170 days then is 200 days now, with nothing changed.
 DAY_COUNT_COLUMNS = frozenset({"Days", "Days waiting", "Days left", "Ends within"})
-# Day counts inside text cells (the Devices report's problems), compared without the number.
-DAY_COUNT_TEXT = re.compile(r"(No check-in for )\d+( days?)")
+# Day counts inside text cells (the problems with devices, mobile devices and distribution lists), compared
+# without the number.
+DAY_COUNT_TEXT = re.compile(r"((?:No check-in|Not synced) for |No mail in )\d+( days?)")
+# Buckets worked out from a date and the clock ("6 to 12 months", "30 to 90 days ago"), by the date's column:
+# they count as changed only when that date did, not when time alone moved them on.
+CLOCK_BUCKETS = {"Inactive for": "Last sign-in", "Activity": "Last sign-in"}
 
 
 def _volatile(column: str) -> bool:
@@ -191,9 +195,14 @@ def compare_sections(old: data_reports.Section | None, new: data_reports.Section
         return None
     columns = ref.columns
     keep = [i for i, c in enumerate(columns) if not _volatile(c) and c not in ref.drifts]
+    dated = {i: columns.index(CLOCK_BUCKETS[c]) for i, c in enumerate(columns) if CLOCK_BUCKETS.get(c) in columns}
+
+    def cell(row, i):
+        return row[i] if i < len(row) else ""
 
     def stable(row):
-        return tuple(_same(row[i]) for i in keep if i < len(row))
+        # A whole row can't show whether a bucket's date moved, so buckets are left out.
+        return tuple(_same(row[i]) for i in keep if i < len(row) and i not in dated)
 
     old_rows, new_rows = (old.rows if old else []), (new.rows if new else [])
     out = SectionChanges(ref.title, columns)
@@ -227,9 +236,10 @@ def compare_sections(old: data_reports.Section | None, new: data_reports.Section
                 continue
             was = before[key]
             diffs = [
-                (columns[i], was[i] if i < len(was) else "", row[i] if i < len(row) else "")
+                (columns[i], cell(was, i), cell(row, i))
                 for i in keep
-                if _same(was[i] if i < len(was) else "") != _same(row[i] if i < len(row) else "")
+                if _same(cell(was, i)) != _same(cell(row, i))
+                and (i not in dated or str(cell(was, dated[i])) != str(cell(row, dated[i])))
             ]
             if diffs:
                 out.changes.append(RowChange("changed", row, diffs))
