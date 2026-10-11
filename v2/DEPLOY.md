@@ -576,10 +576,20 @@ client asks for their data to be erased.
    docker compose run --rm --no-deps web python -m officesentry restore /data/backups/officesentry-20261005-033000.db.gz
    ```
 
-   A backup kept on the host goes in first with
-   `docker compose cp ./officesentry-20261005-033000.db.gz web:/data/restore.db.gz`
-   (then restore `/data/restore.db.gz`), or from the `/backups` folder if you
-   mounted one. Older, uncompressed `.db` backups restore the same way.
+   A backup in the `/backups` folder, if you mounted one, restores from there
+   (`restore /backups/officesentry-20261005-033000.db.gz`). A single backup file
+   kept elsewhere on the host goes in first with
+
+   ```bash
+   docker compose run --rm --no-deps -T --entrypoint sh web -c 'cat > /data/restore.db.gz' < officesentry-20261005-033000.db.gz
+   ```
+
+   then restore `/data/restore.db.gz`. (`docker compose cp` leaves the file
+   owned by root, which the portal can't read.) The activity history only comes
+   back from the `events` folder beside the backup, so restore from the backups
+   folder when you have it; a file restored without it says so, and the history
+   then starts again from what Microsoft still keeps (30 days). Older,
+   uncompressed `.db` backups restore the same way.
    Versions of Office Sentry from before October 2026 can't read `.db.gz`
    files: unpack one first with `gunzip -k <file>` and restore the `.db`.
 
@@ -601,9 +611,38 @@ client asks for their data to be erased.
 4. Start again: `docker compose up -d`. A backup from an older version is
    upgraded when the portal starts.
 
-**Moving to a new server** is the same: install as in *First start* (skip
-creating the admin), stop both containers, put back `secrets.json` as in step
-3, copy in the backup, restore, start.
+### Moving to a new server
+
+Move the whole backups folder, not just a database file: its `events` folder
+is the activity history.
+
+1. On the old server, stop the worker, make a last backup and stop the portal:
+
+   ```bash
+   docker compose stop worker
+   docker compose exec web python -m officesentry backup --dir /backups
+   docker compose stop
+   ```
+
+   (Without a `/backups` folder, leave out `--dir /backups` and copy the backups
+   out of the volume with `docker compose cp web:/data/backups ./officesentry-backups`.)
+2. Copy the folder to the new server (`scp -r` or `rsync -a`), say to
+   `/srv/officesentry-backups`, and give it to the container's user there:
+   `sudo chown -R 10001 /srv/officesentry-backups`.
+3. Install as in *First start* (skip creating the admin), with the
+   `docker-compose.override.yml` from [Backups](#backups) that mounts the folder
+   at `/backups`.
+4. Stop both containers and put back `secrets.json` as in step 3 of
+   [Restoring a backup](#restoring-a-backup).
+5. Restore the newest backup from the folder. It says how many activity history
+   files it put back:
+
+   ```bash
+   docker compose run --rm --no-deps web python -m officesentry restore /backups/officesentry-20261005-033000.db.gz
+   ```
+
+6. Start again: `docker compose --profile https up -d`, then point your domain
+   at the new server.
 
 ### Restoring from the off-site copy
 
@@ -630,9 +669,9 @@ Office Sentry's own scripts.
    OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh restore
    ```
 
-   It fetches the newest database copy from the storage, stops the portal and
-   worker, restores it (keeping the empty database it replaces as
-   `pre-restore-*`) and starts them. Sign in with your usual account. If the
+   It fetches the newest database copy and the activity history from the
+   storage, stops the portal and worker, restores them (keeping the empty
+   database it replaces as `pre-restore-*`) and starts them. Sign in with your usual account. If the
    restore fails, it says why and leaves the portal and worker stopped, so
    nothing starts on a missing or half-restored database; fix the problem and
    run it again.
@@ -674,13 +713,25 @@ Old backups are still encrypted with the old key.
 
 Read the release's notes first ([releases](https://github.com/JackD99/OfficeSentry/releases),
 or `CHANGELOG.md`), above all **Action required**, **New Microsoft
-permissions** and **Database upgrade**. Then set the new version in `.env`
-(`OFFICESENTRY_VERSION=2.1.0`) and run:
+permissions** and **Database upgrade**. Skipping releases (2.0.0 straight to
+2.2.0, say) is fine; read those parts for every release in between.
 
-```bash
-docker compose pull
-docker compose up -d
-```
+1. Download the new release's `docker-compose.yml` and `Caddyfile` over your
+   copies, every time: releases change them without always saying so (2.1.0
+   gave the keys their own volume, 2.2.0 gave the portal longer to start and
+   hardened Caddy). Keep changes of your own in `docker-compose.override.yml`,
+   which a new download doesn't touch.
+2. Set the new version in `.env` (`OFFICESENTRY_VERSION=2.2.0`).
+3. Run:
+
+   ```bash
+   docker compose --profile https pull
+   docker compose --profile https up -d
+   ```
+
+   Leave out `--profile https` if you run your own reverse proxy (*First
+   start*, step 4). With Caddy, leaving it out keeps Caddy on its old
+   container and settings.
 
 The portal upgrades the database on start, before the worker starts, after
 saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept. The
@@ -690,8 +741,11 @@ allows it 15 minutes to come up before Docker calls it unhealthy; if `up -d` giv
 worker starts, run `docker compose up -d` again once the portal answers. The version now
 running shows at the foot of the menu and at `/health`.
 
-If the release notes change `docker-compose.yml` or `Caddyfile`, download
-the new ones as well; they are attached to every release.
+Updated from a release before 2.1.0? `docker compose exec web cat
+/keys/secrets.json` should now print the key. If it says *No such file*, the
+`docker-compose.yml` is still the old one, which keeps the key in the data
+volume: download the release's and run `docker compose --profile https up -d`
+again. The portal's log then says **Moved the key file**.
 
 ### When a release adds permissions
 
@@ -718,7 +772,10 @@ waiting for the client's approval, and clients stay *Healthy*.
 
 Running your own build of the `v2` folder instead (a branch, or changes of
 your own)? Add `COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml` to
-`.env`, and update with `git pull` then `docker compose up -d --build`.
+`.env`, and update with `git pull` then `docker compose up -d --build`. With
+`COMPOSE_FILE` set, Docker no longer reads `docker-compose.override.yml` by
+itself, so if you have one (the `/backups` folder from Backups, say), add it:
+`COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml:docker-compose.override.yml`.
 
 ### Rolling back an update
 
@@ -729,10 +786,14 @@ refuses to start, and its log (`docker compose logs web`) names the copy to
 restore.
 
 1. `docker compose stop web worker`
-2. Go back to the version you had: set it in `.env` (`OFFICESENTRY_VERSION=2.0.0`)
+2. Going back to 2.0.0, from before the keys moved to their own volume? It
+   looks for `secrets.json` in the data volume, so copy it back now, before
+   2.0.0 runs any command (it would make a new key of its own):
+   `docker compose run --rm --no-deps -T --entrypoint sh web -c 'cp -p /keys/secrets.json /data/secrets.json'`.
+3. Go back to the version you had: set it in `.env` (`OFFICESENTRY_VERSION=2.0.0`)
    and run `docker compose pull`. Building your own? `git checkout <commit>`
    and `docker compose build`.
-3. Restore the copy taken before the upgrade. Its name ends with the version
+4. Restore the copy taken before the upgrade. Its name ends with the version
    that made it (`-from-2.0.0`), when it was made by 2.0.0 or later:
 
    ```bash
@@ -743,10 +804,6 @@ restore.
    Versions from before the `restore` command: stop both containers, copy the
    backup over `/data/officesentry.db`, and delete `/data/officesentry.db-wal`
    and `/data/officesentry.db-shm` before starting.
-4. Going back to a version from before the keys moved to their own volume
-   (October 2026)? It looks for `secrets.json` in the data volume, so copy it
-   back first:
-   `docker compose run --rm --no-deps -T --entrypoint sh web -c 'cp -p /keys/secrets.json /data/secrets.json'`.
 5. `docker compose up -d`
 
 ## Stopping

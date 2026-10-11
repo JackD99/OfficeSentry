@@ -1,8 +1,13 @@
 """Telling sign-in problems apart, in plain words."""
 
+import re
+
+import pytest
+import requests
 import responses
 
-from officesentry import connection_check, store
+from officesentry import connection_check, msauth, store
+from officesentry.certs import generate_certificate
 from officesentry.connection_check import explain
 from officesentry.graph import GRAPH_ROOT
 from officesentry.msauth import TokenError
@@ -170,3 +175,87 @@ def test_old_raw_sign_in_errors_are_translated_on_display():
     assert run_error(raw).startswith("Sign-in failed: The app registration is missing Office Sentry's redirect URI.")
     assert run_error("Exchange said no") == "Exchange said no"
     assert "5 to 10 minutes" in str(explain("AADSTS700027: Client assertion contains an invalid signature"))
+
+
+# MSAL looks the tenant up with Microsoft before it asks for a token. These answer that lookup the way
+# Microsoft does, so the failures go through MSAL itself rather than a stand-in.
+LOGIN = "https://login.microsoftonline.com"
+UNKNOWN_TENANT = {
+    "error": "invalid_tenant",
+    "error_description": "AADSTS90002: Tenant 'contoso-typo.onmicrosoft.com' not found. Trace ID: x",
+}
+
+
+def _tenant_lookup(rsps, **answer):
+    rsps.get(re.compile(re.escape(LOGIN) + r"/common/discovery/instance.*"), json={"metadata": []})
+    rsps.get(re.compile(re.escape(LOGIN) + r"/[^/]+/v2\.0/\.well-known/openid-configuration.*"), **answer)
+
+
+def _check(tenant="contoso-typo.onmicrosoft.com"):
+    cert = generate_certificate("check")
+    return connection_check.check(tenant, "11111111-2222-3333-4444-555555555555", cert.key_pem, cert.thumbprint)
+
+
+def test_a_tenant_microsoft_doesnt_know_is_explained():
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        _tenant_lookup(rsps, status=400, json=UNKNOWN_TENANT)
+        result = _check()
+    assert not result.ok and result.title == "Microsoft can't find this tenant."
+
+
+def test_not_reaching_microsoft_is_explained():
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        rsps.get(re.compile(re.escape(LOGIN) + r"/.*"), body=requests.ConnectionError("Name or service not known"))
+        result = _check()
+    assert not result.ok and result.title == "Office Sentry couldn't reach Microsoft."
+    assert LOGIN in result.fix
+
+
+def test_check_connection_now_without_internet_says_so(client, db, two_tenants):
+    alpha, _ = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        rsps.get(re.compile(re.escape(LOGIN) + r"/.*"), body=requests.ConnectionError("Name or service not known"))
+        resp = client.post(f"/tenants/{alpha}/test-connection", follow_redirects=True)
+    assert resp.status_code == 200
+    assert "Office Sentry couldn&#39;t reach Microsoft." in resp.get_data(as_text=True)
+
+
+def test_a_provider_kept_between_runs_signs_in_once_microsoft_answers_again():
+    cert = generate_certificate("retry")
+    provider = msauth.certificate_token_provider(
+        "contoso.onmicrosoft.com", "app-id", cert.key_pem, cert.thumbprint, GRAPH_ROOT
+    )
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        rsps.get(re.compile(re.escape(LOGIN) + r"/.*"), body=requests.ConnectionError("Network is unreachable"))
+        with pytest.raises(TokenError) as raised:
+            provider()
+    assert raised.value.code == "network_error"
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        _tenant_lookup(
+            rsps,
+            json={
+                "token_endpoint": f"{LOGIN}/contoso.onmicrosoft.com/oauth2/v2.0/token",
+                "authorization_endpoint": f"{LOGIN}/contoso.onmicrosoft.com/oauth2/v2.0/authorize",
+                "issuer": f"{LOGIN}/contoso.onmicrosoft.com/v2.0",
+            },
+        )
+        rsps.post(
+            f"{LOGIN}/contoso.onmicrosoft.com/oauth2/v2.0/token",
+            json={"access_token": "tok", "token_type": "Bearer", "expires_in": 3600},
+        )
+        assert provider() == "tok"
+
+
+def test_a_collection_that_cant_reach_microsoft_fails_as_a_network_error(db, two_tenants, vault, monkeypatch):
+    from officesentry.worker import default_graph_factory
+
+    monkeypatch.setattr(msauth, "_PROVIDERS", type(msauth._PROVIDERS)())
+    alpha, _ = two_tenants
+    store.enqueue_run(db, alpha, "users")
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        rsps.get(re.compile(re.escape(LOGIN) + r"/.*"), body=requests.ConnectionError("Network is unreachable"))
+        assert execute_run(db, store.claim_next_run(db), default_graph_factory(vault)) == "failed"
+    error = db.execute("SELECT error FROM runs WHERE tenant_id = ?", (alpha,)).fetchone()[0]
+    assert "Couldn't reach Microsoft's sign-in service" in error
