@@ -167,6 +167,7 @@ def names_to_hide(conn, cfg: Config | None = None) -> dict[str, str]:
         names[host] = "[portal]"
     if conn is None:
         return names
+    names.update(_past_names(conn))
     for row in conn.execute("SELECT id, name, tenant_ref FROM tenants").fetchall():
         names[row["name"]] = f"[client {row['id']}]"
         names[row["tenant_ref"]] = f"[client {row['id']}]"
@@ -176,6 +177,49 @@ def names_to_hide(conn, cfg: Config | None = None) -> dict[str, str]:
         row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
         if row and row[0]:
             names[row[0]] = "[your company]"
+    return names
+
+
+TENANT_NAMED = ("tenant_paused", "tenant_resumed", "tenant_archived", "tenant_restored")
+USER_NAMED = (
+    "user_created",
+    "user_password_reset",
+    "user_two_step_reset",
+    "user_signed_out",
+    "user_unlocked",
+    "user_deleted",
+    "user_access_changed",
+)
+
+
+def _past_names(conn) -> dict[str, str]:
+    """The names the activity log keeps for clients renamed or deleted since, and for accounts deleted since,
+    read from its entries as ``web/tenant_admin.py``, ``lifecycle.py`` and ``web/admin.py`` write them.
+    Without these the Redactor only knows today's names."""
+    names: dict[str, str] = {}
+    for row in _tolerant(
+        conn,
+        "SELECT action, tenant_id, detail FROM audit_log"
+        " WHERE detail != '' AND (action LIKE 'tenant%' OR action LIKE 'user%') ORDER BY id",
+    ):
+        action, detail, client = row["action"], row["detail"], f"[client {row['tenant_id']}]"
+        if action in TENANT_NAMED:
+            names[detail] = client
+        elif action == "tenant_created":  # "<ref>", "<ref> (gcc-high)", "... (CSV import)"
+            names[detail.split(" ")[0]] = client
+        elif action == "tenant_updated":  # "name 'Old' -> 'New'; tenant old -> new; ..."
+            for change in detail.split("; "):
+                if m := re.fullmatch(r"name (['\"])(.+)\1 -> (['\"])(.+)\3", change):
+                    names[m[2]] = names[m[4]] = client
+                elif m := re.fullmatch(r"tenant (\S+) -> (\S+)", change):
+                    names[m[1]] = names[m[2]] = client
+        elif action == "tenant_deleted":  # "Name (ref): 3 runs, ...; client accounts deleted: a, b"
+            if m := re.match(r"(.+) \(([^()]+)\): ", detail):
+                names[m[1]] = names[m[2]] = client
+            _, _, accounts = detail.partition("; client accounts deleted: ")
+            names.update(dict.fromkeys(filter(None, accounts.split(", ")), "[user]"))
+        elif action in USER_NAMED and not detail.startswith("deleted client account #"):
+            names[re.split(r" \(|: ", detail, maxsplit=1)[0]] = "[user]"
     return names
 
 
@@ -262,7 +306,7 @@ def build(
         "summary.json",
         "Summary",
         "Office Sentry's version, Python, operating system, the database's version and size, disk space",
-        lambda: _summary(conn, cfg, data_dir, now, config_error),
+        lambda: _summary(conn, cfg, data_dir, now, config_error, redact),
     )
     part(
         "environment.json",
@@ -354,7 +398,7 @@ def write(pkg: Package, out: Path | None) -> Path | None:
 # -- The parts -----------------------------------------------------------------------------------------------
 
 
-def _summary(conn, cfg, data_dir: Path, now: datetime, config_error: str | None) -> dict:
+def _summary(conn, cfg, data_dir: Path, now: datetime, config_error: str | None, redact: Redactor) -> dict:
     db_path = cfg.db_path if cfg else data_dir / "officesentry.db"
     summary = {
         "made_at": now.strftime(ISO),
@@ -362,7 +406,7 @@ def _summary(conn, cfg, data_dir: Path, now: datetime, config_error: str | None)
         "python": platform.python_version(),
         "platform": f"{platform.system()} {platform.release()} ({platform.machine()})",
         "docker": Path("/.dockerenv").exists(),
-        "data_dir": str(data_dir),
+        "data_dir": redact(data_dir),  # /home/<name>/... outside Docker
         "database_file_bytes": db_path.stat().st_size if db_path.exists() else None,
         "database_wal_bytes": wal.stat().st_size if (wal := db_path.with_name(db_path.name + "-wal")).exists() else 0,
         "events_folder_bytes": _folder_bytes(data_dir / "events"),
@@ -371,20 +415,20 @@ def _summary(conn, cfg, data_dir: Path, now: datetime, config_error: str | None)
         else 0,
         "log_bytes": logs.sizes(data_dir),
         "errors_last_24h": logs.recent_errors(data_dir, 24, now),
-        "config_error": config_error,
+        "config_error": redact(config_error) if config_error else None,
     }
     try:
         used, free, total = system_health.disk_usage(data_dir)
         summary["disk"] = {"used_percent": used, "free_bytes": free, "total_bytes": total}
     except OSError as exc:
-        summary["disk"] = {"error": str(exc)}
+        summary["disk"] = {"error": redact(exc)}
     if conn is not None:
         try:
             summary["schema_version"] = schema_version(conn)
             summary["schema_expected"] = latest_version()
             summary["upgraded_by_release"] = stored_app_version(conn)
         except sqlite3.Error as exc:
-            summary["database_error"] = f"{type(exc).__name__}: {exc}"
+            summary["database_error"] = redact(f"{type(exc).__name__}: {exc}")
     else:
         summary["database_error"] = "the database couldn't be opened"
     return summary
@@ -420,7 +464,7 @@ def _environment(cfg, redact: Redactor) -> dict:
             "session_hours": cfg.session_hours,
             "public_demo": cfg.public_demo,
             "encryption_keys": len(cfg.encryption_keys),
-            "secrets_file": str(cfg.secrets_file) if cfg.secrets_file else "(in the data folder)",
+            "secrets_file": redact(cfg.secrets_file) if cfg.secrets_file else "(in the data folder)",
         }
     return {"variables": env, "effective": effective}
 

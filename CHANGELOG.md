@@ -30,8 +30,9 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   jobs that publish images or deploy no longer leave their token in the checked-out code or build the website
   on the runner that holds the server's keys.
 - The support package also sweeps the System status checks it includes, whose messages can quote a run's or a
-  backup's error, and hides the portal's own address, IPv6 addresses and ranges, and secrets written in quotes
-  or as a header in printed data.
+  backup's error, and hides the portal's own address, the names a client or account had before it was renamed
+  or deleted, the data folder's path, IPv6 addresses and ranges, and secrets written in quotes or as a header
+  in printed data.
 - Behind a reverse proxy the portal no longer takes a path prefix from the forwarded headers, and sends HSTS only
   when the visitor came over HTTPS, so a proxy that doesn't pass `X-Forwarded-Proto` shows by its absence
   ([Securing the portal](v2/docs/securing-the-portal.md#behind-a-reverse-proxy)). The brand colours and logo

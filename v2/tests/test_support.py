@@ -12,6 +12,7 @@ import json
 import logging
 import zipfile
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -291,6 +292,34 @@ def test_health_checks_and_the_portal_address_are_swept_too(cfg, db, two_tenants
         "2001:db8",
     ):
         assert secret not in everything, secret
+
+
+def test_names_a_client_or_account_had_before_are_hidden_too(cfg, client, db, two_tenants, connection_id):
+    """The activity log keeps a renamed client's old name and ID, a deleted client's name and accounts, and a
+    deleted account's name. The Redactor learns them from it, as it does today's names. The data folder's
+    path is swept too, since outside Docker it names the server's own user."""
+    alpha, bravo = two_tenants
+    make_user(db, "admin")
+    gone = make_user(db, "temp.engineer", role="analyst", all_tenants=True)
+    bravo_account = make_user(db, "finance.bravo", role="client", tenants=[bravo])
+    login(client, "admin")
+    form = {"name": "Alpha Group", "tenant_ref": "alphagroup.co.uk", "connection_id": connection_id}
+    client.post(f"/tenants/{alpha}/edit", data=form)
+    assert store.get_tenant(db, alpha)["tenant_ref"] == "alphagroup.co.uk"
+    form = {"confirm_name": "Bravo Inc", "delete_users": bravo_account}
+    client.post(f"/tenants/{bravo}/delete", data=form)
+    client.post(f"/admin/users/{gone}/delete")
+    assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1 and not store.get_tenant(db, bravo)
+    logs.setup(cfg.data_dir, "web")
+    logging.getLogger("officesentry.test").error("Alpha Ltd, Bravo Inc and temp.engineer were here")
+
+    pkg = support.build(db, cfg, now=NOW)
+    everything = _bytes(pkg).decode()
+    assert f"[client {alpha}]" in pkg.files["activity.json"].decode()
+    for name in ("Alpha Ltd", "Alpha Group", "alphagroup.co.uk", "Bravo Inc", "finance.bravo", "temp.engineer"):
+        assert name not in everything, name
+    elsewhere = support.build(db, cfg, data_dir=Path("/home/northwind/officesentry/data"), now=NOW)
+    assert json.loads(elsewhere.files["summary.json"])["data_dir"] == "/home/[user]/officesentry/data"
 
 
 def test_zip_opens_with_the_readme_first(cfg, db, two_tenants):
