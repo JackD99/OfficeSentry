@@ -141,6 +141,14 @@ def _roomy_disk(monkeypatch):
     monkeypatch.setattr(system_health, "disk_usage", lambda path: (40.0, 60 * 2**30, 100 * 2**30))
 
 
+@pytest.fixture(autouse=True)
+def _fresh_mail_pacer(monkeypatch):
+    """Each test starts with nothing sent this minute, so emails sent by earlier tests never make it wait."""
+    from officesentry import mailer
+
+    monkeypatch.setattr(mailer, "PACER", mailer.Pacer())
+
+
 @pytest.fixture
 def cfg(tmp_path, monkeypatch):
     for var in ("SECRET_KEY", "ENCRYPTION_KEYS", "DATA_DIR"):
