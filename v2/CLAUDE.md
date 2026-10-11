@@ -85,6 +85,8 @@ overview and DEPLOY.md for running it on a server.
 
 Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 `ExchangeAccessDenied` fails the run with instructions to assign Global Reader.
+An answer longer than `exchange.MAX_PAGES` pages is cut there, and the run is
+partial with a warning naming the cmdlet (`RunContext.note_exchange_cuts`).
 
 The two SharePoint collectors list sites and OneDrives through
 `collectors/sharepoint_lookup.Lookups`, both asking for the same fields
@@ -177,15 +179,19 @@ needing goes in those lists.
   (`rollups.check_matrix`) is every check for every tenant, evaluated from
   stored data with accepted risks from `findings`. All
   `/across` pages are admin and analyst only, over `visible_tenants()`.
-  `/changes` and `/across/checks` (and their downloads) read each tenant's
-  stored row from `summary_cache` (`reports/precomputed.py`, kinds
-  `changes:<days>` and `checks`) while its fingerprint matches, and build and
-  store it otherwise. The worker builds them in a `precompute` task after the
-  tenant's collection and once a day (every row again when retention removed
+  Every page with one row per tenant (`/changes`, `/across/checks`,
+  `/across/evidence`, `/across/<report key>`, the month-end queue, `/projects`
+  and the Accounts home, and their downloads) reads each tenant's stored row
+  from `summary_cache` (`reports/precomputed.py`, kinds `changes:<days>`,
+  `checks`, `evidence`, `rollup:<key>`, `review` and `projects`) while its
+  fingerprint matches, and builds and stores it otherwise. The worker builds
+  them in a `precompute` task (`precomputed.refresh`) after the tenant's
+  collection and once a day (every row again when retention removed
   something). If a row comes to depend on something else, add it to
   `Rows.fingerprint`; `tests/test_precomputed.py` checks stored rows equal the
-  live build (`across(..., now=...)` and `check_matrix(..., now=...)` never
-  use them). Rows are per tenant: only ever read them for `scoped_tenants()`.
+  live build (a call with `now=...` never uses them). Rows are per tenant:
+  only ever read them for `scoped_tenants()`. The same task keeps each
+  tenant's rows in `search_index` (`search_index.py`) for the sidebar search.
   The change report matches table rows on their first column; set
   `Section(compare=False)` for event logs and time series. Columns named
   `Last ...`, `... (UTC)` or containing "change", and the day counts in
@@ -323,9 +329,12 @@ that are exactly an account's sign-in name or address become `UserLink`s in
 anything to link people; PDFs and spreadsheets show the plain name.
 
 Staff search every visible tenant's latest snapshot from the sidebar box
-(`web/search.py`, `/search`, admin and analyst only); to make something
-searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
-`show` linking the person's page or the detail report filtered to the row.
+(`web/search.py`, `/search`, admin and analyst only). A tenant whose
+`search_index` rows were built from its latest runs (`search_index.current`)
+is searched through them; the rest are scanned, so nothing is missed. To make
+something searchable, add a `Kind(key, collector, kind, values)` to
+`search_index.KINDS` and a `show` under its key in `search.SHOW`, linking the
+person's page or the detail report filtered to the row.
 
 ## Home pages by role
 
@@ -487,7 +496,8 @@ words for people; a handler's own failure isn't retried. Pages show
 progress from the rows (`tasks.batch_progress`, a JSON route polled by
 `_progress.html`). Finished tasks are pruned after 30 days. Table report
 PDFs keep the first `printing.PDF_MAX_ROWS` (2,000) rows per table and say
-so (`printing.cap_rows`); the XLSX and CSV have every row.
+so (`printing.cap_rows`, and `cap_rollup` and `cap_changes` for rollups and
+change reports); the XLSX and CSV have every row.
 
 The dashboard and the All clients review read each tenant's row from
 `rollup_cache` (`monthly_review.rollup_row(..., cached=True)`), rebuilt when
