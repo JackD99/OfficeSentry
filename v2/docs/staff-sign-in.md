@@ -67,10 +67,11 @@ with a role:
 
 | Role in Entra | In Office Sentry |
 |---|---|
-| Admin | Everything, including settings, clients and users. |
-| Analyst | Works with the clients an Office Sentry admin grants. |
+| Admin | **Administrator**: everything, including settings, clients and users. |
+| Analyst | **Second line** at first, with the clients an Office Sentry admin grants. On their user page an admin can pick another staff role (Team leader, First line, Account manager, Auditor or a custom one), which stays at later sign-ins. |
 
-A role change applies at the person's next sign-in. Someone removed from the app can't sign in with
+A role change applies at the person's next sign-in. Moving someone from Admin to Analyst in Entra makes them
+Second line again. Someone removed from the app can't sign in with
 Microsoft any more.
 
 New staff don't need an account made for them: their account appears on **Settings → Users** at their first
@@ -84,7 +85,8 @@ Existing accounts are linked to a Microsoft account in one of two ways:
   name (the user principal name, such as `jo@yourmsp.com`; never the mail address, which Microsoft doesn't
   verify), the two are linked automatically and their client grants are kept.
 
-A linked account shows its role as *set in Entra* on its user page. An admin can **Disconnect** it there,
+A linked account shows its role as *partly set in Entra* on its user page: whether they're an Administrator or
+staff comes from Entra, and only the staff roles can be picked there. An admin can **Disconnect** it there,
 after which the person signs in with a password again; the person can do the same on their Account page.
 
 ## Turning passwords off for staff

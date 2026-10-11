@@ -257,8 +257,10 @@ Office Sentry holds read access to many clients, so it is built to do as little 
   isn't on a fixed allow-list of `Get-` cmdlets. It never creates or changes anything in a client's tenant.
 - **Certificate sign-in, no credential files.** The app signs in with a certificate whose private key is encrypted
   in the database. Secrets and private keys are never downloadable; only the public `.cer` is, by admins.
-- **Tenant isolation.** Deny by default: people see only the clients they're granted, every client page goes
-  through one access check, and anything else returns 404. Clients see only their own reports.
+- **Tenant isolation and roles.** Deny by default: people see only the clients they're granted, every client
+  page goes through one access check, and anything else returns 404. What they may do there is a role made of
+  capabilities (built-in: Administrator, Team leader, Second line, First line, Account manager, Auditor and
+  Client viewer), narrowed or widened per person and per client by an admin. Clients see only their own reports.
 - **The portal itself:** staff can sign in with their own Microsoft account (Entra ID, under your Conditional
   Access and MFA; roles assigned in Entra), or with two-step sign-in, which is required for everyone on new
   installs, client accounts included; wrong passwords

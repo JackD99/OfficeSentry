@@ -20,7 +20,7 @@ from werkzeug.local import LocalProxy
 from ..db import audit, connect, transaction
 from ..mailer import valid_email
 from ..reports import branding, charts, summary
-from .access import roles_required
+from .access import needs
 
 bp = Blueprint("branding", __name__)
 
@@ -102,7 +102,7 @@ def _save(values: dict[str, str]) -> None:
 
 
 @bp.route("/admin/branding", methods=["GET", "POST"])
-@roles_required("admin")
+@needs("settings.manage")
 def settings():
     if request.method == "POST":
         values = {

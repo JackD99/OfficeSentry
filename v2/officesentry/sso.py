@@ -540,8 +540,9 @@ def account_for(conn, identity: Identity, s: dict, now: str | None = None):
     changed = user["role"] != role
     conn.execute(
         "UPDATE users SET entra_oid = ?, entra_upn = ?, entra_linked_at = COALESCE(entra_linked_at, ?),"
-        " role = ?, session_version = session_version + ? WHERE id = ?",
-        (identity.oid, identity.upn, now, role, int(changed), user["id"]),
+        " role = ?, role_id = CASE WHEN role = ? THEN role_id END,"  # a new kind: its built-in role (roles.role_of)
+        " session_version = session_version + ? WHERE id = ?",
+        (identity.oid, identity.upn, now, role, role, int(changed), user["id"]),
     )
     return conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone(), (
         "role_changed" if changed and outcome == "signed_in" else outcome

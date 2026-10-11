@@ -17,13 +17,35 @@ overview and DEPLOY.md for running it on a server.
   multi-tenant read-only app. `tests/test_no_writes.py` fails on any
   `.post/.put/.patch/.delete/.request(` outside its `ALLOWED` files, and
   checks a full collection only sends GETs (plus `Get-` cmdlets).
-- **Every route needs `@login_required` or `@roles_required`.** Anything
-  tenant-scoped loads the tenant with `access.tenant_or_404()`.
-  `tests/test_access.py::test_every_page_requires_login` enforces the first;
+- **Every route needs `@needs(...)`** naming the capabilities it needs
+  (`permissions.py`; `kind="staff"` for a page clients never see), or
+  `@login_required` for the few pages anyone signed in may open (listed in
+  `tests/test_roles.py::ANYONE`). Inside a view, `can()` and `require()`
+  answer the same question for one client; a view that only knows what it
+  needs once it has read its URL (which report) calls `need_also()`. Anything
+  tenant-scoped loads the tenant with `access.tenant_or_404()`, which is also
+  where a capability taken away on one client becomes a 403.
+  `tests/test_access.py::test_every_page_requires_login` enforces sign-in,
+  `tests/test_roles.py` opens every route as every built-in role and expects
+  403 exactly where the role lacks what the view declared, and
   `tests/test_isolation_walk.py` opens every route that takes a tenant (or
   one of its objects) with another tenant's IDs and expects a refusal. A new
   URL argument fails there until it's listed in `TENANT_ARGS` (seed an object
-  for it in the `world` fixture) or `OTHER_ARGS`.
+  for it in the `world` fixture) or `OTHER_ARGS`. Templates use
+  `can('<capability>', tenant.id)` to show or hide; never `current_user.role`
+  except to tell a client account from staff. Roles live in `roles` (built-in
+  ones by `key`, editable except Administrator, custom ones too) and a person's
+  overrides in `user_access`; `roles.py` reads and writes both (every change
+  audited: `role_created`, `role_updated`, `role_deleted`,
+  `user_access_changed`) and `web/roles.py` and `admin.user_access` are their
+  pages. Someone with `users.manage` who isn't an Administrator only hands out
+  what they hold everywhere, only on clients they see, can't change their own
+  role or access, and can't change an account that holds more than they do
+  (`admin._out_of_reach`, `_givable`; `web/roles._grantable`), so nobody
+  raises their own access. A new capability is a `Capability` in `permissions.CAPABILITIES`,
+  added to the built-in roles that should hold it (`TEMPLATES`; the
+  migration seeded those rows, so a later change to a template needs a
+  migration of its own if existing installs should pick it up).
 - **Graph paths are relative to the version** (`"/users"`, `version="beta"`).
 - **Microsoft hosts come from `clouds.py`** (commercial, GCC High, DoD,
   China). A tenant (`tenants.cloud`) only signs in with an app connection of
@@ -678,7 +700,7 @@ change is audited; note text is never put in the audit log.
   link: it never expires and comes back to `/consent/callback` without a
   sign-in. That route is the one exception to "every route needs a
   decorator": it hands a client state to the public `client_returned` page and
-  everything else to `_consent_return` (`@roles_required("admin")`). The
+  everything else to `_consent_return` (`@needs("clients.manage")`). The
   public page never records consent and never shows Microsoft's text; it
   notes `approved_at` and queues a `consent_check` task. Only
   `onboarding.confirm` (signing in as the app, `connection_check.check`)
@@ -717,7 +739,7 @@ analyst (`user_tenant_groups`): `access._GRANTED` adds its tenants, now and
 later, and ignores it for every other role. Never read group grants anywhere
 else.
 
-Staff pages that list tenants are `@group_aware` (under `@roles_required`)
+Staff pages that list tenants are `@group_aware` (under `@needs`)
 and read `scoped_tenants()` instead of `visible_tenants()`: the dashboard,
 `/across/*` (and their downloads), `/changes*`, the month-end queue and
 Client settings. The choice is kept on the sign-in (`sessions.group_id`); a GET

@@ -8,7 +8,7 @@ from flask import Blueprint, Response, abort, g, render_template
 
 from ..db import audit
 from ..reports import branding, data_reports, mailbox_page
-from .access import login_required, tenant_or_404
+from .access import needs, tenant_or_404
 from .printing import pdf_response
 
 bp = Blueprint("mailboxes", __name__)
@@ -27,7 +27,7 @@ def _page(tenant_id: int, mailbox_id: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/mailboxes")
-@login_required
+@needs("reports.email")
 def mailboxes(tenant_id: int):
     t = tenant_or_404(tenant_id)
     found = mailbox_page.directory(g.db, t)
@@ -36,14 +36,14 @@ def mailboxes(tenant_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/mailboxes/<mailbox_id>")
-@login_required
+@needs("reports.email")
 def mailbox(tenant_id: int, mailbox_id: str):
     t, page = _page(tenant_id, mailbox_id)
     return render_template("object_page.html", tenant=t, page=page, tab="mailboxes")
 
 
 @bp.get("/tenants/<int:tenant_id>/mailboxes/<mailbox_id>.pdf")
-@login_required
+@needs("reports.email", "export")
 def mailbox_pdf(tenant_id: int, mailbox_id: str):
     t, page = _page(tenant_id, mailbox_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "mailbox.pdf")
@@ -51,7 +51,7 @@ def mailbox_pdf(tenant_id: int, mailbox_id: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/mailboxes/<mailbox_id>.xlsx")
-@login_required
+@needs("reports.email", "export")
 def mailbox_xlsx(tenant_id: int, mailbox_id: str):
     t, page = _page(tenant_id, mailbox_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "mailbox.xlsx")
