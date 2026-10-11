@@ -15,6 +15,7 @@ from . import (  # noqa: F401
     identity_reports,
     licence_changes,
     mail_compliance,
+    mail_flow,
     mail_reports,
     mailbox_page,
     mailbox_trend,

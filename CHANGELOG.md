@@ -134,6 +134,11 @@ client's approval.
   with their members and owners, the guests and people from other organisations in them, the apps added to
   each team (custom uploads flagged), and teams nobody has used in 90 days. Usage reports also read your
   tenant's "conceal names" setting, so they say outright when Microsoft hides names.
+- **Mail flow by domain** report (under *Email*): how much mail each domain received, sent and passed between
+  colleagues, and how much was delivered, sent to Junk, quarantined or failed, per day for 30 days, with domains
+  where more than 5% of mail fails flagged. It also lists Microsoft's top spam and phishing recipients for the
+  last 30 days. Only counts are kept from the message trace, never subjects or addresses; it needs no new
+  permission (Global Reader, as for distribution lists).
 - **File and folder permissions** report (Files and Teams): who can open each shared file or folder in
   SharePoint and OneDrive and how (given access directly, sent a link, an anyone or organisation-wide link),
   who shared it and when, what was newly shared in the last 30 days, links past their expiry or expiring
@@ -228,8 +233,27 @@ client's approval.
   manager's home page (was "Clients") is now **Accounts**. Columns headed "Tenant" are now "Client";
   saved views and bookmarked links that filter or sort on that column keep working. The group digest is
   now the "Client digest", and its spreadsheet is named `client-digest-...`.
+- **Shorter pages.** A page with several long tables shows the first 10 rows of each on a laptop (5 on a
+  phone) with "Show all N rows" under it, so the next table is a scroll away; a page with one long table
+  keeps every row on a laptop and 20 on a phone. A cell listing more than three accounts or items shows the
+  first two and "and N more", which opens the rest. On a phone, short values in a stacked table sit beside
+  their label instead of under it. The SharePoint storage and Sign-ins reports went from about 35,000 pixels
+  tall on a phone to under 15,000, and Devices from 21,000 to 6,000.
+- **A person's page, and the new mailbox and group pages,** open with a summary (what needs attention and
+  open findings beside the account's facts), then each part at the page's full width, so no table is
+  squeezed into a narrow column. Every part folds to its heading: open on a laptop, folded on a phone, and a
+  "Details" link opens the part it points at.
+- **Data collection** lists the sources that need a look first and folds away the ones that collected fine;
+  the **month-end review** shows each failing check on one line with "Add a note" at its end.
+- A user's settings show what their role opens beside the form on a wide screen.
+- Report tables and a person's page show dates as "8 Oct 2026, 09:22" rather than `2026-10-08T09:22:00Z`.
 
 ### Fixed
+
+- Nothing on a phone is wider than the screen any more: the person page, a second client's overview and the
+  offboarding page scrolled sideways because a long address or a two-column grid didn't fit.
+- In the monthly review on a phone, the account or item in each finding was squeezed into a third of the
+  card, one word per line; it now uses the card's width, with its severity beside it.
 
 - An Admin activity collection could be marked partial, with a warning that Microsoft timed out, when a
   second ticked over between two readings of the clock during the run; nothing was actually missing.

@@ -376,8 +376,16 @@ EXCHANGE: tuple[Endpoint, ...] = tuple(
         "Exchange.ManageAsApp and Global Reader",
         ("exchange", "message_trace"),
         api="exchange",
-        fallback="10 days a query; list activity is kept as daily counts so each run reads only "
-        "what's new. Without access, lists are shown without activity",
+        fallback="10 days a query; list activity and mail flow are kept as daily counts so each run reads "
+        "only what's new. Without access, lists are shown without activity and mail flow isn't counted",
+    ),
+    Endpoint(
+        "Get-MailTrafficSummaryReport",
+        ("beta",),
+        "Exchange.ManageAsApp and Global Reader",
+        ("exchange",),
+        api="exchange",
+        fallback="Undocumented InvokeCommand endpoint; the top spam and phishing recipients are left out without it",
     ),
 )
 
