@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ...mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
 from ...text import plural as _plural
-from ..data_reports import Section, _describe_actions, _describe_conditions, _type
+from ..data_reports import PageLink, Section, _describe_actions, _describe_conditions, _type
 from ..mail_reports import _account, _Directory, _grants, _size
 from .base import Part, Person, part
 
@@ -70,6 +70,12 @@ def mailbox_part(p: Person) -> Part:
                 allowed.append("SMTP AUTH")
             result.facts.append(("Older protocols allowed", ", ".join(allowed) or "None"))
         result.summary = result.summary or _type(box.get("RecipientTypeDetails"))
+        result.facts.append(
+            (
+                "More",
+                PageLink("Everything about this mailbox", f"/tenants/{p.snap.tenant['id']}/mailboxes/{box['_id']}"),
+            )
+        )
 
     rules = [
         r

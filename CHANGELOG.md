@@ -20,6 +20,14 @@ None.
 
 No.
 
+### Added
+
+- One page per mailbox: Users > Mailboxes lists every mailbox with its size, forwarding, who else can
+  open it and its inbox rules, and each opens a page with what needs attention first, then size and growth
+  over the retained months, forwarding and inbox rules, who can open or send from it, protocols and
+  settings, its automatic reply, the phones syncing it, email activity, open findings and what changed.
+  Mailbox addresses in reports and search results open the page, and it downloads as PDF and XLSX.
+
 ### Fixed
 
 - A report email retried after midnight, sent again with Retry the next week, or approved late now names

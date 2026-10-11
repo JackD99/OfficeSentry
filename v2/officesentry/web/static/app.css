@@ -789,6 +789,11 @@ a.tile.link:hover .go { opacity: 1; color: var(--accent); transform: translateX(
 .person-head .person-actions { flex: none; align-self: center; }
 .person-actions .leaver-link { display: block; margin-top: var(--space-1-5); text-align: right; }
 .part-downloads { margin: -4px 0 12px; }
+.person-actions .external-link { display: block; margin-top: var(--space-1-5); text-align: right; }
+.person-actions .external-link .icon { width: 14px; height: 14px; vertical-align: -2px; }
+.card.part .part-chart { padding: var(--space-2) 0 var(--space-3); border-bottom: 0; }
+.part-intro { margin: 0 0 var(--space-2); }
+.link-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1-5); font-size: var(--fs-base); }
 .card.part .kv { margin-bottom: var(--space-1); }
 .part-sub { font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); margin: 18px 0 4px; display: flex; gap: var(--space-2); align-items: center; }
 .card-head + .scroll-x > .part-table { margin-top: -4px; }

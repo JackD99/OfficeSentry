@@ -115,6 +115,10 @@ changed over time. Useful for offboarding checks and "was this account compromis
 
 ![An account page: needs attention, MFA, admin roles, licences and devices](docs/screenshots/person.png)
 
+Mailboxes get the same treatment: **Users > Mailboxes** lists every mailbox with its size, forwarding and who
+else can open it, and each has a page with its size and growth over time, inbox rules, access, protocols, automatic
+reply, the phones syncing it and what changed. Mailbox addresses in reports and search results open it.
+
 ### Across all clients, and what changed
 
 The **Tenants** page puts every client side by side, worst first. **All tenants** compares any report across every

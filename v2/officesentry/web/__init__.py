@@ -28,6 +28,7 @@ from . import (
     groups,
     history,
     home,
+    mailboxes,
     onboarding,
     people,
     projects,
@@ -200,6 +201,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(data_retention.bp)
     app.register_blueprint(across.bp)
     app.register_blueprint(people.bp)
+    app.register_blueprint(mailboxes.bp)
     app.register_blueprint(history.bp)
     app.register_blueprint(saved_views.bp)
     app.register_blueprint(tenant_admin.bp)
