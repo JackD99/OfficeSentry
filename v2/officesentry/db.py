@@ -23,15 +23,43 @@ def utcnow() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def connect(db_path: Path | str) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path, timeout=30, isolation_level=None)
+BUSY_TIMEOUT_MS = 30_000  # how long a write waits for another connection's write lock (the worker's default)
+QUICK_WAIT_MS = 250  # the wait for a write a page can skip (try_write)
+
+
+def connect(db_path: Path | str, busy_timeout_ms: int = BUSY_TIMEOUT_MS) -> sqlite3.Connection:
+    conn = sqlite3.connect(db_path, timeout=busy_timeout_ms / 1000, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute(f"PRAGMA busy_timeout = {int(busy_timeout_ms)}")
     # Zero deleted content when it costs no extra I/O (pruned snapshots, removed people);
     # tenant deletion turns it fully on (lifecycle.delete_tenant).
     conn.execute("PRAGMA secure_delete = FAST")
     return conn
+
+
+def is_locked(exc: BaseException) -> bool:
+    """True when SQLite refused because another connection holds the write lock ("database is locked" or
+    "busy"), as opposed to any other operational error."""
+    return isinstance(exc, sqlite3.OperationalError) and ("locked" in str(exc) or "busy" in str(exc))
+
+
+def try_write(conn: sqlite3.Connection, sql: str, params=(), wait_ms: int = QUICK_WAIT_MS) -> bool:
+    """Run one write outside a transaction, waiting at most ``wait_ms`` for the write lock; False if it was
+    still held. For bookkeeping a page can do without this once (noting a session was seen, storing a row
+    it just built): a long write elsewhere, such as a restore, a backup or an erase's VACUUM, then neither
+    holds the page up nor fails it, and the next page does the bookkeeping instead."""
+    usual = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+    conn.execute(f"PRAGMA busy_timeout = {int(wait_ms)}")
+    try:
+        conn.execute(sql, params)
+        return True
+    except sqlite3.OperationalError as exc:
+        if not is_locked(exc):
+            raise
+        return False
+    finally:
+        conn.execute(f"PRAGMA busy_timeout = {int(usual)}")
 
 
 @contextmanager

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
+import sqlite3
 from datetime import timedelta
 
 from flask import Flask, g, render_template, request
@@ -12,7 +14,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from .. import __version__, system_alerts, system_health, worker
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
-from ..db import audit_counted, connect, migrate
+from ..db import audit_counted, connect, is_locked, migrate
 from . import (
     access,
     across,
@@ -44,6 +46,12 @@ from . import (
 )
 
 csrf = CSRFProtect()
+log = logging.getLogger(__name__)
+
+# How long a page's write waits for the write lock before the portal says it's busy (the 503 below). The
+# worker waits its usual 30 seconds; a person at a browser shouldn't, and a lock held longer than this is a
+# restore, a backup or an erase's VACUUM, which no wait of a few seconds outlasts.
+WEB_BUSY_TIMEOUT_MS = 5_000
 
 
 def create_app(cfg: Config | None = None) -> Flask:
@@ -87,7 +95,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     def _open_db():
         # The worker can't report that it has stopped, so the portal watches it (system_alerts.py).
         system_alerts.start_watchdog(app, cfg)
-        g.db = connect(cfg.db_path)
+        g.db = connect(cfg.db_path, busy_timeout_ms=WEB_BUSY_TIMEOUT_MS)
         g.csp_nonce = secrets.token_urlsafe(16)
         access.load_user()
 
@@ -159,6 +167,22 @@ def create_app(cfg: Config | None = None) -> Flask:
     def _error(code: int, message: str, detail: str = ""):
         return render_template("error.html", code=code, message=message, detail=detail), code
 
+    @app.errorhandler(sqlite3.OperationalError)
+    def _busy(exc):
+        # A write that waited WEB_BUSY_TIMEOUT_MS for the lock and still found it held (a restore, a backup,
+        # an erase's VACUUM): a page that says so and asks for another go, not a 500. Other errors stay errors.
+        if not is_locked(exc):
+            raise exc
+        log.warning("The database was locked for %s %s; asked the person to try again", request.method, request.path)
+        page = render_template(
+            "error.html",
+            code=503,
+            message="Office Sentry is busy right now.",
+            detail="Something else is writing to its database, such as a restore, a backup or a large delete. "
+            "Wait a moment, then try again.",
+        )
+        return page, 503, {"Retry-After": "10"}
+
     @app.errorhandler(403)
     def _forbidden(_e):
         # Refusals raised with abort(403) outside roles_required (a client on a staff page) are counted too.
@@ -171,7 +195,7 @@ def create_app(cfg: Config | None = None) -> Flask:
         return _error(
             404,
             "Page not found.",
-            "The link may be out of date, or the page belongs to a tenant you haven't been given access to.",
+            "The link may be out of date, or the page belongs to a client you haven't been given access to.",
         )
 
     @app.errorhandler(CSRFError)

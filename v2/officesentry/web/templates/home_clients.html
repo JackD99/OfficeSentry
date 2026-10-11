@@ -1,14 +1,14 @@
-{#- Clients (home.clients): the account manager's view, the answer first, then a line per client. -#}
+{#- Accounts (home.clients): the account manager's view, the answer first, then a line per client. -#}
 {% extends "base.html" %}
 {% from "_macros.html" import icon %}
 {% from "_groups.html" import group_picker with context %}
 {% from "_home.html" import home_switch, make_home with context %}
-{% block title %}Clients · Office Sentry{% endblock %}
+{% block title %}Accounts · Office Sentry{% endblock %}
 {% set STATE_TONE = {'draft': '', 'in_review': 'warn', 'approved': 'accent', 'sent': 'ok'} %}
 {% block content %}
 <div class="page-head">
   <div class="head-title">
-    <h1>Clients</h1>
+    <h1>Accounts</h1>
     {{ make_home('clients') }}
   </div>
   <div class="actions">{{ group_picker() }}{{ home_switch('clients') }}</div>
@@ -17,14 +17,14 @@
 {% if not data.rows %}
 <div class="card empty">
   <h3>No clients yet</h3>
-  {% if current_user.role == 'admin' %}<p>Add a client tenant, and its licence waste, renewals and monthly reports show here after its first collection.</p>
-  <a class="btn primary" href="{{ url_for('tenants.dashboard') }}">Go to Tenants</a>
-  {% else %}<p>You haven't been given access to any active tenants yet. Ask an admin to grant access.</p>{% endif %}
+  {% if current_user.role == 'admin' %}<p>Add a client, and its licence waste, renewals and monthly reports show here after its first collection.</p>
+  <a class="btn primary" href="{{ url_for('tenants.dashboard') }}">Go to Clients</a>
+  {% else %}<p>You haven't been given access to any active clients yet. Ask an admin to grant access.</p>{% endif %}
 </div>
 {% else %}
 <div class="callout lead-answer {{ 'warn' if data.waste or data.to_approve or data.renewals else 'ok' }}" role="status">{{ icon('price') }}
   <div><strong>{{ sentence }}</strong>
-    <div class="small">Waste is at your <a href="{{ url_for('reports.prices') if current_user.role == 'admin' else url_for('across.rollup', key='licences') }}">licence prices</a>; renewals and trial ends come from each tenant's subscriptions.</div></div>
+    <div class="small">Waste is at your <a href="{{ url_for('reports.prices') if current_user.role == 'admin' else url_for('across.rollup', key='licences') }}">licence prices</a>; renewals and trial ends come from each client's subscriptions.</div></div>
 </div>
 
 <div class="tiles">
@@ -71,6 +71,6 @@
   </table>
   </div>
 </div>
-<p class="footnote">Most licence waste first. The Tenants page has findings and data health for each client.</p>
+<p class="footnote">Most licence waste first. The Clients page has findings and data health for each client.</p>
 {% endif %}
 {% endblock %}
