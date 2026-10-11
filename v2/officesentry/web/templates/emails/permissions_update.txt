@@ -1,0 +1,17 @@
+{#- The message an admin copies to ask a connected client to approve a new batch of permissions (onboarding_whats_new.html). First line is the subject. -#}
+Subject: New read-only reports for {{ tenant.name }}: one approval needed
+Hi {{ (row.contact_name.split()[0] if row and row.contact_name else 'there') }},
+
+Office Sentry, which we use for {{ tenant.name }}'s Microsoft 365 reports, can now report on more of your Microsoft 365: {{ new|length }} new read-only permission{{ 's' if new|length != 1 }}. Nothing changes until you approve them, and everything you have today keeps working.
+
+What's new:
+{% for i in new %}- {{ i.adds }}
+{% endfor %}
+To approve, a Global Administrator of your Microsoft 365 opens this link, signs in and presses Accept. It takes a minute:
+{{ link }}
+
+Microsoft lists every permission the app has, old and new, all of them read-only. The attached PDF says what each new one reads and why. Office Sentry still can't change anything in your tenant, and it never reads email, files or chats.
+
+Thanks,
+{{ brand.display_name }}{% if brand.contact %}
+{{ brand.contact }}{% endif %}

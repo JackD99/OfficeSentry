@@ -14,11 +14,10 @@ from .. import month_end
 from ..db import audit
 from ..reports import branding, designs
 from ..reports.export import pdf_available
-from .access import roles_required, tenant_or_404, visible_tenants
+from .access import needs, tenant_or_404, visible_tenants
 from .printing import pdf_response
 
 bp = Blueprint("designs", __name__)
-STAFF = ("admin", "analyst")
 MAX_DOCUMENT_BYTES = 256 * 1024
 # The preview is a report page framed by the editor: the portal's policy, except that it may be framed
 # by the portal itself and runs no script at all.
@@ -69,7 +68,7 @@ def _slug(text: str) -> str:
 
 
 @bp.get("/reporting/designs")
-@roles_required(*STAFF)
+@needs("designs.manage")
 def index():
     rows = designs.list_designs(g.db)
     used = designs.usage(g.db)
@@ -80,7 +79,7 @@ def index():
 
 
 @bp.post("/reporting/designs")
-@roles_required(*STAFF)
+@needs("designs.manage")
 def create():
     name = request.form.get("name", "").strip()
     starter = request.form.get("starter", "blank")
@@ -95,7 +94,7 @@ def create():
 
 
 @bp.get("/reporting/designs/<int:design_id>")
-@roles_required(*STAFF)
+@needs("designs.manage")
 def edit(design_id: int):
     row = _design_or_404(design_id)
     tenants = _tenants()
@@ -114,7 +113,7 @@ def edit(design_id: int):
 
 
 @bp.post("/reporting/designs/<int:design_id>")
-@roles_required(*STAFF)
+@needs("designs.manage")
 def save(design_id: int):
     """The editor's autosave: the whole document as JSON. Answers with what was stored."""
     row = _design_or_404(design_id)
@@ -131,7 +130,7 @@ def save(design_id: int):
 
 
 @bp.post("/reporting/designs/<int:design_id>/rename")
-@roles_required(*STAFF)
+@needs("designs.manage")
 def rename(design_id: int):
     row = _design_or_404(design_id)
     name = request.form.get("name", "").strip()
@@ -147,7 +146,7 @@ def rename(design_id: int):
 
 
 @bp.post("/reporting/designs/<int:design_id>/duplicate")
-@roles_required(*STAFF)
+@needs("designs.manage")
 def duplicate(design_id: int):
     row = _design_or_404(design_id)
     new_id = designs.create(
@@ -158,7 +157,7 @@ def duplicate(design_id: int):
 
 
 @bp.post("/reporting/designs/<int:design_id>/delete")
-@roles_required("admin")
+@needs("designs.manage", "settings.manage")  # it also drops the design from every plan and schedule
 def delete(design_id: int):
     row = _design_or_404(design_id)
     designs.remove(g.db, row["id"])
@@ -168,7 +167,7 @@ def delete(design_id: int):
 
 
 @bp.get("/reporting/designs/<int:design_id>/preview")
-@roles_required(*STAFF)
+@needs("designs.manage")
 def preview(design_id: int):
     """The design on one tenant, as the editor's preview pane shows it (empty blocks named, no toolbar)."""
     row = _design_or_404(design_id)
@@ -188,7 +187,7 @@ def preview(design_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/designs")
-@roles_required(*STAFF)
+@needs("reports.security", kind="staff")
 def tenant_designs(tenant_id: int):
     t = tenant_or_404(tenant_id)
     rows = designs.list_designs(g.db)
@@ -202,7 +201,7 @@ def tenant_designs(tenant_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/designs/<int:design_id>")
-@roles_required(*STAFF)
+@needs("reports.security", kind="staff")
 def tenant_design(tenant_id: int, design_id: int):
     t = tenant_or_404(tenant_id)
     row = _design_or_404(design_id)
@@ -216,7 +215,7 @@ def tenant_design(tenant_id: int, design_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/designs/<int:design_id>.pdf")
-@roles_required(*STAFF)
+@needs("reports.security", "export", kind="staff")
 def tenant_design_pdf(tenant_id: int, design_id: int):
     t = tenant_or_404(tenant_id)
     row = _design_or_404(design_id)

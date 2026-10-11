@@ -67,7 +67,7 @@
     </li>
     <li>
       <div class="step-title">Office Sentry creates the sign-in app</div>
-      <div class="step-body">A single-tenant app named “{{ sign_in.name if sign_in else default_app_name }}” with no permissions at all: it only tells Office Sentry who signed in. It gets a certificate whose private key never leaves Office Sentry, two roles (<strong>Admin</strong> and <strong>Analyst</strong>), and you're assigned Admin. Only people you assign can sign in.</div>
+      <div class="step-body">A single-tenant app named “{{ sign_in.name if sign_in else default_app_name }}” with no permissions at all: it only tells Office Sentry who signed in. It gets a certificate whose private key never leaves Office Sentry, an app role for each Office Sentry role (<strong>Admin</strong> for Administrator, <strong>Analyst</strong> for Second line, and so on), and you're assigned Admin. Only people you assign can sign in.</div>
     </li>
     <li>
       <div class="step-title">Try it</div>
@@ -83,7 +83,7 @@
         <li>Make the certificate here and download its .cer file.</li>
         <li>In the Entra admin centre: <em>App registrations → New registration</em>. Name it <em>{{ default_app_name }}</em>. Supported account types: <em>Accounts in this organizational directory only</em>. Redirect URI (Web): <code>{{ redirect_uri }}</code>.</li>
         <li>Under <em>Certificates &amp; secrets → Certificates</em>, upload the .cer file.</li>
-        <li>Under <em>App roles</em>, create two roles, both for <em>Users/Groups</em>: display name and value <code>Admin</code>, and display name and value <code>Analyst</code>.</li>
+        <li>Under <em>App roles</em>, create a role for each Office Sentry role you'll use, all for <em>Users/Groups</em>, with these values: {% for value, name in app_roles %}<code>{{ value }}</code> ({{ name }}){{ ', ' if not loop.last else '' }}{% endfor %}. <code>Admin</code> is the one you need now.</li>
         <li>Under <em>Enterprise applications → {{ default_app_name }} → Properties</em>, set <em>Assignment required</em> to Yes. Under <em>Users and groups</em>, assign yourself the Admin role.</li>
         <li>Copy the app's <em>Application (client) ID</em> and <em>Directory (tenant) ID</em> from its overview page into the form below.</li>
       </ol>
@@ -122,7 +122,7 @@
       <legend>People in your tenant with no Office Sentry role</legend>
       {% for key, label in default_roles.items() %}
       <label class="choice"><input type="radio" name="default_role" value="{{ key }}"{% if (s.sso_default_role or '') == key %} checked{% endif %}>
-        <span><span class="choice-title">{{ label }}</span>{% if not key %}<span class="hint">Only people assigned Admin or Analyst in Entra get in. Recommended.</span>{% else %}<span class="hint">Anyone in your tenant who can reach the app gets an analyst account that sees no clients until you grant some. Needs <em>Assignment required</em> off on the enterprise app.</span>{% endif %}</span></label>
+        <span><span class="choice-title">{{ label }}</span>{% if not key %}<span class="hint">Only people assigned a role in Entra get in. Recommended.</span>{% else %}<span class="hint">Anyone in your tenant who can reach the app gets a Second line account that sees no clients until you grant some. Needs <em>Assignment required</em> off on the enterprise app.</span>{% endif %}</span></label>
       {% endfor %}
     </fieldset>
     <div class="form-actions"><button class="primary">Save</button></div>
@@ -130,16 +130,33 @@
 </section>
 
 <div class="grid-2">
-<section class="card">
+<section class="card" id="roles">
   <div class="card-head"><h2>Who can sign in</h2></div>
-  <p>Roles come from Entra. Assign a person, or a group, to a role on the app in the Entra admin centre; it applies the next time they sign in.</p>
-  <dl class="kv">
-    {% for r in roles %}<dt>{{ r.displayName }}</dt><dd>{{ r.description }}</dd>{% endfor %}
-  </dl>
+  <p>Roles come from Entra. Assign a person, or a group, to an app role on the sign-in app in the Entra admin centre; it gives them the Office Sentry role below the next time they sign in. Someone with more than one gets the first in this list.</p>
+  <table class="small">
+    <thead><tr><th>App role in Entra</th><th>Office Sentry role</th></tr></thead>
+    <tbody>
+    {% for value, name in app_roles %}<tr><td class="mono">{{ value }}</td><td>{{ name }}</td></tr>{% endfor %}
+    {% for role, value in custom_roles if value %}<tr><td class="mono">{{ value }}</td><td>{{ role.name }} <span class="faint">custom</span></td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% if custom_roles %}
+  <details class="small"{% if custom_roles|map(attribute=1)|select|list %} open{% endif %}>
+    <summary>Custom roles from Entra</summary>
+    <p class="muted">Create an app role on the sign-in app (<em>App registrations → {{ s.sso_app_name or default_app_name }} → App roles</em>, for <em>Users/Groups</em>), then type its value next to the role it gives. Leave it empty for a role nobody gets from Entra.</p>
+    <form method="post" action="{{ url_for('sso.save_role_values') }}">
+      {{ csrf() }}
+      {% for role, value in custom_roles %}
+      <label>{{ role.name }}<input name="value-{{ role.id }}" value="{{ value }}" maxlength="60" pattern="[A-Za-z0-9][A-Za-z0-9._:\-]{0,59}" placeholder="App role value, such as ServiceDesk" autocomplete="off" spellcheck="false"></label>
+      {% endfor %}
+      <div class="form-actions"><button>Save</button></div>
+    </form>
+  </details>
+  {% endif %}
   <ol class="steps small">
     <li>Open <a href="{{ admin_centre }}" target="_blank" rel="noopener noreferrer">Enterprise applications → {{ s.sso_app_name or default_app_name }} → Users and groups</a> in the Entra admin centre.</li>
     <li>Choose <em>Add user/group</em>, pick the people or a group, and pick the role.</li>
-    <li>Which clients an analyst sees is still set on their <a href="{{ url_for('admin.users') }}">user page</a> here.</li>
+    <li>Which clients someone sees is still set on their <a href="{{ url_for('admin.users') }}">user page</a> here.</li>
   </ol>
   {% if not me_linked %}
   <div class="callout" role="status">{{ icon('shield') }}<div class="grow"><strong>Connect your own account</strong> so you can sign in with Microsoft too.</div>

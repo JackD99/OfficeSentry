@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% from "_roles.html" import ROLE_HELP %}
+{% from "_macros.html" import icon %}
 {% block title %}Users · Office Sentry{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Users</h1><div class="sub">People who can sign in to Office Sentry.</div></div></div>
+<div class="page-head"><div><h1>Users</h1><div class="sub">People who can sign in to Office Sentry.</div></div>
+  <div class="actions"><a class="btn" href="{{ url_for('roles.index') }}">{{ icon('users') }} Roles</a></div></div>
 <div class="grid-main">
 <section class="card flush">
   <table class="stack-sm">
@@ -10,8 +11,9 @@
     <tbody>
     {% for u in users %}
     <tr><td><a class="strong" href="{{ url_for('admin.edit_user', user_id=u.id) }}">{{ u.username }}</a>{% if u.id == current_user.id %} <span class="faint small">(you)</span>{% endif %}</td>
-      <td data-label="Role"><span class="pill {{ 'accent' if u.role == 'admin' else '' }}">{{ u.role|capitalize }}</span></td>
-      <td data-label="Clients">{% if u.role == 'admin' or u.all_tenants %}All{% elif u.role == 'analyst' and group_grants.get(u.id) %}Granted and {{ group_grants[u.id]|plural('group') }}{% else %}Granted only{% endif %}</td>
+      {% set r = role_of[u.id] %}
+      <td data-label="Role"><span class="pill {{ 'accent' if r.kind == 'admin' else '' }}">{{ r.name }}</span>{% if overrides.get(u.id) %} <span class="faint small" title="Capabilities added or taken away for this person">{{ overrides[u.id]|plural('override') }}</span>{% endif %}</td>
+      <td data-label="Clients">{% if scope_of(u) == 'all' %}All{% elif r.kind != 'client' and group_grants.get(u.id) %}Granted and {{ group_grants[u.id]|plural('group') }}{% else %}Granted only{% endif %}</td>
       <td data-label="Sign-in">{% if u.entra_oid %}Microsoft{% if u.password_hash != '!' %} <span class="muted small">or password</span>{% endif %}{% elif u.totp_enabled_at %}Password <span class="pill ok">2-step on</span>{% else %}Password <span class="pill">2-step off</span>{% endif %}</td>
       <td data-label="Status">{% if u.disabled %}<span class="pill">Disabled</span>{% elif u.locked_until %}<span class="pill warn" title="Locked until {{ u.locked_until|when }}">Locked</span>{% else %}<span class="pill ok">Active</span>{% endif %}</td>
       <td data-label="Last sign-in" class="nowrap">{% if u.last_login_at %}<time title="{{ u.last_login_at|when }}">{{ u.last_login_at|ago }}</time>{% else %}<span class="muted">Never</span>{% endif %}</td></tr>
@@ -23,7 +25,7 @@
   <h2>Two-step sign-in</h2>
   {% set p = two_step.policy %}
   <p>{% if p == 'all' %}Two-step sign-in is required for everyone, client accounts included.
-    {% elif p == 'staff' %}Two-step sign-in is required for admins and analysts. Client accounts can turn it on themselves.
+    {% elif p == 'staff' %}Two-step sign-in is required for staff. Client accounts can turn it on themselves.
     {% else %}Two-step sign-in isn't required for anyone.{% endif %}
     <span class="muted small">{% if two_step.from_env %}Set by <code>OFFICESENTRY_REQUIRE_MFA={{ p }}</code>.{% else %}The default for this install; <code>OFFICESENTRY_REQUIRE_MFA</code> isn't set.{% endif %}</span></p>
   {% if p != 'all' %}
@@ -33,7 +35,7 @@
 {% if microsoft_sign_in %}
 <section class="card">
   <h2>Staff who sign in with Microsoft</h2>
-  <p class="small">They appear here by themselves at their first sign-in, with the role assigned to them in Entra. Grant them clients on their page afterwards. <a href="{{ url_for('sso.settings_page') }}">Staff sign-in settings</a>.</p>
+  <p class="small">They appear here by themselves at their first sign-in, with the role their app role in Entra gives them. Grant them clients on their page afterwards. <a href="{{ url_for('sso.settings_page') }}">Staff sign-in settings</a>.</p>
 </section>
 {% endif %}
 <section class="card">
@@ -44,14 +46,14 @@
     <fieldset class="choices">
       <legend>Role</legend>
       {% for r in roles %}
-      <label class="choice"><input type="radio" name="role" value="{{ r }}" {% if r == 'client' %}checked{% endif %}>
-        <span><span class="strong">{{ r|capitalize }}</span><span class="hint">{{ ROLE_HELP.get(r, '') }}</span></span></label>
+      <label class="choice"><input type="radio" name="role" value="{{ r.id }}" {% if r.key == 'client_viewer' %}checked{% endif %}{% if r.id not in givable %} disabled{% endif %}>
+        <span><span class="strong">{{ r.name }}</span><span class="hint">{{ r.description }}</span></span></label>
       {% endfor %}
     </fieldset>
     <label>Initial password <input type="password" name="password" minlength="12" autocomplete="new-password" required>
       <span class="hint">At least 12 characters. Share it with them securely; they choose their own the first time they sign in.</span></label>
     <div class="form-actions"><button class="primary">Add user</button></div>
-    <p class="footnote">New users see no clients until you grant them on their page.</p>
+    <p class="footnote">New users see no clients until you grant them on their page, unless their role covers every client.</p>
   </form>
 </section>
 </div>

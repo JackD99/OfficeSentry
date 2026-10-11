@@ -34,7 +34,7 @@ td.num { white-space: nowrap; }
 .sidebar .spacer { flex: 1; }
 .account { border-top: 1px solid var(--sidebar-line); padding: var(--space-3) var(--space-2-5) 0; display: grid; gap: var(--space-0-5); }
 .account .name { color: var(--sidebar-strong); font-weight: 600; }
-.account .role { font-size: var(--fs-xs); color: var(--sidebar-muted); text-transform: capitalize; }
+.account .role { font-size: var(--fs-xs); color: var(--sidebar-muted); }
 .account .links { display: flex; gap: var(--space-3); margin-top: var(--space-1-5); font-size: var(--fs-sm); }
 .account a, .account button.link { color: var(--sidebar-text); }
 .mobile-bar { display: none; }
@@ -234,6 +234,11 @@ details.help > summary { font-size: var(--fs-base); }
 .settings-nav a { padding: 5px 11px; border-radius: var(--radius-pill); color: var(--muted); font-weight: 500; font-size: var(--fs-sm); white-space: nowrap; }
 .settings-nav a:hover { color: var(--text); background: var(--sunken); text-decoration: none; }
 .settings-nav a.active { background: var(--text); color: var(--surface); }
+/* On a laptop the row wraps rather than hiding its end; on a phone it scrolls sideways. */
+@media (min-width: 641px) { .settings-nav { flex-wrap: wrap; overflow: visible; row-gap: var(--space-1); } }
+.package-form label.identifiers { align-items: flex-start; }
+.package-form label.identifiers input { margin-top: 4px; }
+.package-form .form-actions { margin-top: var(--space-3); }
 
 /* -- Month-end review: suggested projects and quick fixes, and the approve bar on phones ------------ */
 .action-row.suggestions { display: block; }
@@ -796,6 +801,11 @@ a.tile.link:hover .go { opacity: 1; color: var(--accent); transform: translateX(
 .person-head .person-actions { flex: none; align-self: center; }
 .person-actions .leaver-link { display: block; margin-top: var(--space-1-5); text-align: right; }
 .part-downloads { margin: -4px 0 12px; }
+.person-actions .external-link { display: block; margin-top: var(--space-1-5); text-align: right; }
+.person-actions .external-link .icon { width: 14px; height: 14px; vertical-align: -2px; }
+.card.part .part-chart { padding: var(--space-2) 0 var(--space-3); border-bottom: 0; }
+.part-intro { margin: 0 0 var(--space-2); }
+.link-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1-5); font-size: var(--fs-base); }
 .card.part .kv { margin-bottom: var(--space-1); }
 .part-sub { font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); margin: 18px 0 4px; display: flex; gap: var(--space-2); align-items: center; }
 .card-head + .scroll-x > .part-table { margin-top: -4px; }
@@ -823,7 +833,7 @@ a.tile.link:hover .go { opacity: 1; color: var(--accent); transform: translateX(
 }
 @media (max-width: 640px) {
   table.stack-sm.part-table td.wrap:empty { display: none; }
-  .part-table tr[class*="flag-"] td:first-child { padding-left: var(--space-2) !important; }
+  .part-table tr[class*="flag-"] td { padding-left: var(--space-2) !important; }
 }
 
 /* -- Report tables: filters, columns, saved views, sticky headers --------------------- */
@@ -1339,6 +1349,22 @@ button.layout-head { padding: 8px 10px; }
 input.copy-text { font-size: var(--fs-sm); margin: var(--space-1) 0 0; }
 .sent-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-3); }
 .send-steps details.by-hand { margin-top: var(--space-3); }
+/* A person's effective access on their user page: what their role (and overrides) open, by group. */
+.cap-list { list-style: none; padding: 0; margin: var(--space-1-5) 0 var(--space-3); display: grid; gap: var(--space-1); grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); font-size: var(--fs-sm); }
+.cap-list li.faint s { text-decoration-color: var(--decor); }
+/* The role editor's preview (role_edit.html): menu entries and tabs the ticked capabilities open. */
+.preview-list { list-style: none; padding: 0; margin: var(--space-1-5) 0 var(--space-3); display: grid; gap: var(--space-1); font-size: var(--fs-sm); }
+.preview-list li { display: flex; gap: var(--space-1-5); align-items: flex-start; }
+.preview-list li .icon { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+.preview-list li.off { color: var(--faint); }
+.preview-list li.off .icon { visibility: hidden; }
+.plain-list { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-1); }
+/* Per-person overrides on the user page: a row per capability, as the role gives it, allowed or taken away. */
+.override-table td, .override-table th { padding: var(--space-1-5) var(--space-2); }
+.override-table .radios { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.override-table .radios label { display: inline-flex; gap: var(--space-1); align-items: center; font-weight: 400; margin: 0; white-space: nowrap; }
+.override-details { margin-bottom: var(--space-3); }
+.check-grid label.check .sub { display: block; }
 
 /* Sign in with Microsoft (login.html): the Microsoft button leads; the password form follows an "or" line, or
  * folds away when passwords are off for staff. */

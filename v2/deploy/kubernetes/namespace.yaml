@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: officesentry
+  labels:
+    # The pod runs as a non-root user with every capability dropped and a read-only root, so it passes the
+    # strictest built-in Pod Security level.
+    pod-security.kubernetes.io/enforce: restricted

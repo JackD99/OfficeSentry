@@ -5,8 +5,12 @@
   are ordinary tenants: admins see them, analysts only when granted them (one by one, or through a
   group the import put them in, see ``access._GRANTED``).
 * ``state()`` says where a tenant has got (``STATES``: not sent, sent, approved, consented, Global
-  Reader missing, connected), from stored state only: the tenant row, its ``onboarding`` row and the
+  Reader missing, new permissions to approve, sent or approved, connected), from stored state only: the
+  tenant row, its ``onboarding`` row, its ``permission_requests`` row for the current batch and the
   ``connection`` collector's latest result. Pages never call Microsoft for it.
+* A connected client is asked for a new batch of permissions (``permission_batch``) with the same link:
+  marking it sent and coming back through it are recorded per batch, and the next connection check reads
+  what was granted.
 * Consent is only ever recorded by signing in. ``confirm()`` asks Microsoft for a token as the app and
   reads ``/organization`` (``connection_check.check``, one GET); when that works the tenant is consented
   and its first collection queued. It runs as a ``consent_check`` task: queued when a client's admin
@@ -24,7 +28,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from . import clouds, connection_check, lifecycle, store, tasks, tenant_groups, tenant_health
+from . import clouds, connection_check, lifecycle, permission_batch, store, tasks, tenant_groups, tenant_health
 from .db import audit, transaction, utcnow
 from .devices import parse_ts
 from .discovery import tenant_id_for_domain
@@ -316,8 +320,12 @@ STATES = {  # key -> (label, tone), in the order a tenant moves through them
     "approved": ("Approved, confirming", "accent"),
     "consented": ("Consented", "accent"),
     "global_reader": ("Global Reader missing", "warn"),
+    "new_permissions": ("New permissions to approve", "warn"),
+    "new_sent": ("New permissions sent", "info"),
+    "new_approved": ("Approved, re-checking", "accent"),
     "connected": ("Connected", "ok"),
 }
+NEW_STATES = {"new_permissions", "new_sent", "new_approved"}
 
 
 def _state(key: str, detail: str) -> State:
@@ -343,18 +351,34 @@ def app_name(connection, result: dict | None) -> str:
     return (result or {}).get("app_name") or (connection["name"] if connection else "") or "Office Sentry"
 
 
-def state(tenant, row, result: dict | None) -> State:
-    """Where ``tenant`` has got, from its ``onboarding`` row (or None) and the connection collector's result."""
+def state(tenant, row, result: dict | None, request=None) -> State:
+    """Where ``tenant`` has got, from its ``onboarding`` row (or None), the connection collector's result and
+    its ``permission_requests`` row for the current batch (or None)."""
     r = result or {}
     if tenant["consented_at"]:
         if not r.get("roles_checked"):
             return _state("consented", "Consent confirmed. Global Reader is checked with the first collection.")
-        if r.get("global_reader"):
+        if not r.get("global_reader"):
+            return _state(
+                "global_reader",
+                "Consent confirmed. Next: the client gives the app the Global Reader role, for mailbox reports.",
+            )
+        new = permission_batch.waiting(r)
+        if not new:
             return _state("connected", "Consent and Global Reader are in place.")
-        return _state(
-            "global_reader",
-            "Consent confirmed. Next: the client gives the app the Global Reader role, for mailbox reports.",
-        )
+        count = f"{len(new)} new read-only permission{'s' if len(new) > 1 else ''}"
+        approved = request["approved_at"] if request else None
+        if approved and approved >= (r.get("checked_at") or ""):
+            return _state("new_approved", f"The client approved the {count}. Office Sentry is re-reading them.")
+        if approved:
+            return _state(
+                "new_sent",
+                f"The client approved, but the {count} {'is' if len(new) == 1 else 'are'} still not granted. Check "
+                "your app registration asks for them (App connection), then send the link again.",
+            )
+        if request and request["sent_at"]:
+            return _state("new_sent", f"Waiting for the client to approve the {count}.")
+        return _state("new_permissions", f"Everything works. Send the client the link to approve the {count}.")
     approved = row["approved_at"] if row else None
     if approved:
         if row["check_error"] and (row["checked_at"] or "") >= approved:
@@ -373,11 +397,25 @@ class Entry:
     connection: object
     app: str
     problem: str | None  # why no consent link can be made (no app connection for its cloud), or None
+    request: object = None  # permission_requests row for the current batch, or None
+
+    @property
+    def needs_link(self) -> bool:
+        """The client has something to approve: the app itself, or a new batch of permissions."""
+        return not self.tenant["consented_at"] or self.state.key in NEW_STATES
+
+    @property
+    def sent_at(self) -> str | None:
+        """When the link for what the client has to approve now went out."""
+        if self.state.key in NEW_STATES:
+            return self.request["sent_at"] if self.request else None
+        return self.row["sent_at"] if self.row else None
 
 
 def tracker(conn, tenants) -> list[Entry]:
     """Every tenant's state, for the onboarding page. ``tenants`` are the ones the person sees."""
     rows = rows_for(conn, [t["id"] for t in tenants])
+    requests = permission_batch.requests_for(conn, [t["id"] for t in tenants])
     connections = {c["id"]: c for c in store.list_connections(conn)}
     entries = []
     for t in tenants:
@@ -394,22 +432,31 @@ def tracker(conn, tenants) -> list[Entry]:
             Entry(
                 t,
                 rows.get(t["id"]),
-                state(t, rows.get(t["id"]), result),
+                state(t, rows.get(t["id"]), result, requests.get(t["id"])),
                 connection,
                 app_name(connection, result),
                 problem,
+                requests.get(t["id"]),
             )
         )
     return entries
 
 
 def mark_sent(conn, tenant_ids, user: str, sent: bool = True) -> int:
-    """Record that the consent link went to these tenants (or, with ``sent=False``, take it back)."""
+    """Record that the consent link went to these tenants (or, with ``sent=False``, take it back). For a client
+    that already consented, the link asks for the current batch of new permissions, so that's recorded."""
     ids = list(tenant_ids)
     if not ids:
         return 0
     now = utcnow()
     with transaction(conn, immediate=True):
+        marks = ",".join("?" * len(ids))
+        consented = [
+            r["id"]
+            for r in conn.execute(f"SELECT id FROM tenants WHERE id IN ({marks}) AND consented_at IS NOT NULL", ids)
+        ]
+        permission_batch.mark_sent(conn, consented, user, sent)
+        ids = [t for t in ids if t not in consented]
         if sent:
             conn.executemany(
                 "INSERT INTO onboarding (tenant_id, sent_at, sent_by) VALUES (?, ?, ?)"
@@ -423,7 +470,7 @@ def mark_sent(conn, tenant_ids, user: str, sent: bool = True) -> int:
             )
         for t in ids:
             audit(conn, user, "consent_link_sent" if sent else "consent_link_unsent", t)
-    return len(ids)
+    return len(ids) + len(consented)
 
 
 def save_contact(conn, tenant_id: int, name: str, email: str) -> None:
@@ -438,8 +485,9 @@ def save_contact(conn, tenant_id: int, name: str, email: str) -> None:
 def client_approved(conn, tenant) -> None:
     """Someone came back from the consent link sent to this client saying they approved. Not proof: note it
     and queue a sign-in to confirm. For a tenant that already consented (approving again after new
-    permissions), re-read its permissions instead."""
+    permissions), note it for the current batch and re-read its permissions instead."""
     if tenant["consented_at"]:
+        permission_batch.note_approved(conn, tenant["id"])
         if tenant["enabled"] and not tenant["archived_at"]:
             store.enqueue_run(conn, tenant["id"], "connection", requested_by="Client consent")
         return
@@ -591,6 +639,22 @@ CLIENT_WORDS: dict[str, str] = {
     "MailboxSettings.Read": "Mailbox settings such as inbox rules. Never emails.",
     "Exchange.ManageAsApp": "Mailbox settings, phones that sync mail and distribution lists from Exchange Online, "
     "using read-only commands only.",
+    # Added in 2.2 (permission_batch.BATCHES)
+    "Channel.ReadBasic.All": "The names and kinds of channels in each team (standard, private, shared). Never "
+    "the messages in them.",
+    "ChannelMember.Read.All": "Who is a member of each channel, and whether they're a guest or from another "
+    "organisation.",
+    "TeamsAppInstallation.ReadForTeam.All": "Which apps are added to each team.",
+    "ReportSettings.Read.All": "Whether your Microsoft 365 usage reports hide people's names.",
+    "PrivilegedEligibilitySchedule.Read.AzureADGroup": "Who can activate membership of a group that grants admin "
+    "rights (Privileged Identity Management).",
+    "BitLockerKey.ReadBasic.All": "Whether each device has a BitLocker recovery key saved in Entra ID. Never the "
+    "key itself.",
+    "DeviceManagementConfiguration.Read.All": "Intune configuration and compliance policies, such as firewall, "
+    "screen lock and update settings.",
+    "DeviceManagementApps.Read.All": "Intune app protection policies and which managed apps are deployed.",
+    "SharePoint Sites.Read.All": "Who has access to each SharePoint site and list, through SharePoint's own "
+    "permission lists. Never what's in the files.",
 }
 NEVER_READS = (
     "Email, attachments, calendars or contacts.",

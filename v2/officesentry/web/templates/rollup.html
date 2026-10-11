@@ -30,7 +30,7 @@
 {% if not rollup.rows %}
 <div class="card empty">
   <h3>No clients to show</h3>
-  <p>{% if current_user.role == 'admin' %}Add a client to see it here.{% else %}You haven't been given access to any clients yet. Ask an admin to grant access.{% endif %}</p>
+  <p>{% if can('clients.manage') %}Add a client to see it here.{% else %}You haven't been given access to any clients yet. Ask an admin to grant access.{% endif %}</p>
 </div>
 {% else %}
 <div class="tiles">

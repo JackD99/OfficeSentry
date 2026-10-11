@@ -1,0 +1,22 @@
+{#- The Get started checklist (first_run.py): on Today, Accounts and Clients for admins until the first collection. -#}
+{% macro get_started(steps) -%}
+{% set done = steps|selectattr('done')|list|length %}
+<section class="card wizard get-started" aria-labelledby="get-started-title">
+  <div class="card-head"><h2 id="get-started-title">Get started</h2><span class="small muted">{{ done }} of {{ steps|length }} done</span></div>
+  <p class="sub m0">From here to your first report. Each step ticks itself off as Office Sentry sees it done.</p>
+  <ol class="setup-steps flush-steps">
+    {% set ns = namespace(current=false) %}
+    {% for s in steps %}
+    {% set is_current = not s.done and not ns.current %}
+    {% if is_current %}{% set ns.current = true %}{% endif %}
+    <li class="{{ 'done' if s.done else ('current' if is_current else '') }}">
+      <div class="step-title">{{ s.title }}</div>
+      <div class="step-body">{{ s.text }}
+        {% if is_current and s.href %}<div class="form-actions"><a class="btn primary" href="{{ s.href }}">{{ s.action }}</a></div>{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+  <div class="card-foot small muted">Then, when you like: <a href="{{ url_for('branding.settings') }}">your logo and colours on reports</a>, <a href="{{ url_for('email.settings') }}">email delivery</a> and <a href="{{ url_for('admin.users') }}">accounts for your team</a>.</div>
+</section>
+{%- endmacro %}
