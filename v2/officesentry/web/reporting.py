@@ -392,7 +392,7 @@ def review(period: str, tenant_id: int):
     report = monthly_review.build(g.db, t)
     r = month_end.review(g.db, t["id"], period)
     state = month_end.state_of(g.db, t["id"], period, r)
-    severe, flags = month_end.flags_for(g.db, t, report, period, datetime.now(UTC))
+    severe, flags = month_end.flags_for(g.db, t, month_end.facts_of(report), period, datetime.now(UTC))
     taken = {a["rule_key"] for a in month_end.actions(g.db, t["id"]) if a["rule_key"]}
     staff_users = [
         u["username"]

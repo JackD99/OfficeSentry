@@ -156,7 +156,8 @@ jobs:
   windows:
     # Windows without Docker: no Pango, so PDF buttons fall back to print-ready pages and the tests that
     # need real PDF rendering skip themselves. The files below cover the parts that differ on Windows
-    # (file modes, paths, SQLite files, the waitress server). Not required until it has a run of passes.
+    # (file modes, paths, SQLite files, the waitress server, date formats on the account page). Not required
+    # until it has a run of passes.
     # On the weekly and manual runs, and on pull requests once the repo is public: while it's private, Windows
     # minutes count double against GitHub Free's allowance.
     name: test (Windows, no Pango)
@@ -179,6 +180,7 @@ jobs:
           pytest -n auto tests/test_foundation.py tests/test_access.py tests/test_login_security.py
           tests/test_scheduling.py tests/test_backups.py tests/test_serve.py tests/test_recording.py
           tests/test_pdf_export.py tests/test_reports.py tests/test_email.py tests/test_encoding.py
+          tests/test_user_profile.py
 
   docker:
     needs: changes
