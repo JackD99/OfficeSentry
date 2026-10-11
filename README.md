@@ -2,7 +2,7 @@
 
 **Branded Microsoft 365 security and licensing reports for every client, without gathering anything by hand.**
 Office Sentry reads each client's Microsoft 365 every night, keeps the history, and turns it into the reports an MSP
-actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, 46 detail reports, a page for
+actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, 47 detail reports, a page for
 every person, mailbox, group and site, a view across all clients, and what changed since last month. It never changes
 anything in a client's tenant.
 
@@ -92,7 +92,9 @@ See the full 19-page [example PDF](examples/sharepoint-storage.pdf) for a client
 only one, each site's owners, administrators, members and guests, what the default library grants and to whom,
 every guest with the sites they can reach, and who administers many sites. **Site permissions** goes a level
 deeper with SharePoint's own permissions: who is in each SharePoint group, the permission level each person and
-group holds, the lists, libraries and subsites with permissions of their own, and any guest with full control. **Teams channels, guests and apps** does
+group holds, the lists, libraries and subsites with permissions of their own, and any guest with full control. **File and folder permissions** answers who can open what: every file
+and folder with permissions of its own, who shared it and when, links past or near their expiry, and people
+outside who can edit. **Teams channels, guests and apps** does
 the same for Teams: each team's private and shared channels with their members, the guests and people from other
 organisations in them, the apps added to each team (custom uploads flagged) and teams nobody has used in 90 days.
 
@@ -100,7 +102,7 @@ organisations in them, the apps added to each team (custom uploads flagged) and 
 
 ### Detail reports you can filter, save and export
 
-46 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
+47 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
 values (or by age, for dates), sorted and have columns hidden; the view can be saved and reused on any client, and
 the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline figure opens the rows behind it.
 
@@ -126,7 +128,7 @@ the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline f
 The full list (mailboxes, inbox rules, shared mailboxes, mailbox size and its trend, automatic replies, mobile
 devices, distribution lists, mail flow per domain, legacy sign-ins, passwords and sign-in methods, admins and roles,
 administrative units, apps and consents, guests and sharing, groups and Teams, Teams channels with their guests and
-apps, empty, nested and expiring groups, who can reach each SharePoint site and its permission levels, email domains with SPF, DKIM, DMARC and
+apps, empty, nested and expiring groups, who can reach each SharePoint site and its permission levels, who can open each shared file and folder, email domains with SPF, DKIM, DMARC and
 MTA-STS, hybrid identity, admin activity, licence changes month by month, tenant settings, Microsoft 365 usage,
 Secure Score and more) is in the [technical reference](v2/README.md#reports). The **Reports** page finds any of them
 by name or by the job you're doing ("Offboarding check", "Insurance renewal", "Storage cleanup").

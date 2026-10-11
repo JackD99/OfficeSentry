@@ -191,7 +191,8 @@ client's approval.
   activity and open findings, and each opens a page with what needs attention first, then its storage over the
   retained months with the libraries and largest files that fill it, its sharing settings and the files shared
   from it, the team or Microsoft 365 group behind it (or its owner), its activity, open findings and what
-  changed, with links to the Site access and Site permissions reports for who can reach it. Site addresses in
+  changed, with links to the Site access, Site permissions and File and folder permissions reports for who
+  can reach it. Site addresses in
   reports, the group page and search results open the page, and it downloads as PDF and XLSX.
 - Four checks in areas that were thin. **Accounts:** no account reports to a manager whose sign-in is
   blocked. **Guests:** no guest from another organisation owns a team or group. **Storage:** no mailbox and
