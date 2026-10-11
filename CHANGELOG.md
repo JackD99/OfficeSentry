@@ -31,6 +31,11 @@ No.
 
 ### Added
 
+- **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
+  and whether the rule is paused), restricted management units, how many users, groups and devices are in
+  each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
+  and the members of each unit by name. A new Administrative units collector reads them with the permissions
+  the app already has, and each person's page shows the units they are in and administer.
 - **Licence changes** report (Tenant and licences): every paid licence given to or taken from an account, with
   when it happened (to the day for the last month, to the month before that), whether it came directly or
   from a group, and, where the directory audit log has been read, who made the change. Licences bought and
@@ -164,6 +169,12 @@ No.
   quick, and the worker erases the last copies in the background, rebuilding the file only when there's
   room. If that can't be done, System status says so under **Deleted clients**, the team is alerted, and
   it's tried again every hour.
+- Every response now carries `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy: same-origin`
+  and `X-Permitted-Cross-Domain-Policies: none`, and the bundled Caddy drops the `Server` header.
+- The portal's access log (Docker and `serve`) records the path only, not the query string or the referer,
+  which carried search terms, filter values and the one-time setup link.
+- The containers get a process limit, and the bundled Caddy runs with every capability but binding its
+  ports dropped, like the portal and worker.
 
 ## 2.1.0 (2026-10-10)
 
