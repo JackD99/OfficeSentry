@@ -78,6 +78,9 @@ main { max-width: 1600px; margin: 0 auto; padding: 28px 32px 64px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
 .stack > * + * { margin-top: var(--space-3); }
 .scroll-x { overflow-x: auto; }
+/* A scroll box is positioned so it also clips visually hidden text (.sr-only, position: absolute) in what
+   it scrolls: otherwise that text stays where the table put it and widens the whole page. */
+:is(.scroll-x, .table-scroll, .chart-scroll) { position: relative; }
 
 /* -- Stat tiles ------------------------------------------------------------ */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
@@ -853,6 +856,7 @@ a.tile.link:hover .go { opacity: 1; color: var(--accent); transform: translateX(
 .timeline li.tone-ok { border-left-color: var(--ok); }
 .timeline .when { color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
 .timeline .area { font-weight: 600; color: var(--text); }
+.timeline .what { min-width: 0; overflow-wrap: anywhere; } /* a long address breaks rather than widening the page */
 #attention .list > li { align-items: baseline; }
 @media (max-width: 640px) {
   .person-head .person-actions { width: 100%; }
@@ -1060,8 +1064,11 @@ textarea.copy-text { font-size: var(--fs-sm); resize: vertical; margin: var(--sp
   .search-group .list > li { flex-direction: column; gap: var(--space-1); }
   .search-group .list .pill { min-width: 0; }
 }
-/* All tenants: one row per tenant or every row, totals, and the checks matrix */
-.across-mode { margin: -4px 0 16px; }
+/* All clients: the report picker (_across.html) with one row per client or every row beside it, totals,
+   and the checks matrix. */
+.across-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); flex-wrap: wrap; margin-bottom: 18px; }
+.across-bar > :is(.report-menu, .report-menu-sm, .across-mode) { margin: 0; }
+@media (max-width: 960px) { .across-bar .report-menu-sm { flex: 1 1 100%; } }
 .jump a.active { color: var(--text); font-weight: 600; }
 tfoot .total-row th, tfoot .total-row td { border-top: 2px solid var(--border-strong); background: var(--surface-2); font-weight: 600; }
 tfoot .total-row th { text-align: left; }
@@ -1479,7 +1486,7 @@ details.sources-fine[open] > summary { border-bottom: 1px solid var(--border); }
 @media (min-width: 1100px) {
   .parts .card.part .kv { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); column-gap: var(--space-8); }
 }
-.parts .timeline li { grid-template-columns: 120px 1fr; }
+@media (min-width: 641px) { .parts .timeline li { grid-template-columns: 120px minmax(0, 1fr); } }
 details.part > summary.card-head { color: var(--text); font-weight: inherit; }
 details.part > summary.card-head h2 { display: flex; align-items: center; gap: var(--space-2); }
 details.part > summary.card-head h2::before { content: ""; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; margin-right: var(--space-0-5); }

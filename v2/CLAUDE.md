@@ -441,7 +441,7 @@ turning each step's `target` into a link.
   (`web/styleguide.py`). A new shared component or state goes there too.
 - `tests/browser` (`pytest tests/browser --ui`, in the pinned Playwright image;
   see its README) screenshots about 34 pages at laptop and phone widths, light
-  and dark, against baselines, and runs axe-core. CI runs it
+  and dark, against baselines, fails any page wider than the window, and runs axe-core. CI runs it
   (`.github/workflows/ui.yml`) on PRs that touch templates or CSS; refresh the
   baselines with `--update` when a change is meant, and look at them.
 - Admin settings are one sidebar entry. A new settings page goes in `SETTINGS`
@@ -477,6 +477,8 @@ turning each step's `target` into a link.
   Custom reports for staff) are in `report_picker()`, an "All reports" menu above the report (every report
   in columns with a search box, the report's area beside it) and a select on phones, so the report gets the
   page's width; a page that uses it wraps itself in `.report-layout` with the report in `.report-main`.
+  All clients (`_across.html`, `across_picker()`) has the same menu, listing the summaries, Checks and every
+  detail report and linking to their All clients pages.
 - Show times with the `ts()` macro or the `ago`/`when`/`day` filters, never raw
   ISO strings. Licence flags go through the `capability` filter. Python code
   outside `web/` (reports, emails) uses the same functions from
