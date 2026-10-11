@@ -305,6 +305,7 @@ consent page, mailboxes failing without Global Reader and the worker not running
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
+- [Securing the portal](v2/docs/securing-the-portal.md): hardening defaults, what you have to do, reverse proxies
 - [Example reports](examples/)
 - [Roadmap](ROADMAP.md): what's planned next, and what never will be
 

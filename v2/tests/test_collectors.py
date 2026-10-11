@@ -226,6 +226,31 @@ def test_users_fall_back_without_p1(db, two_tenants, factory):
 
 
 @responses.activate
+def test_users_fall_back_without_the_audit_log_permission(db, two_tenants, factory):
+    """Sign-in activity needs AuditLog.Read.All; a tenant consented before it was asked for (or outside Office
+    Sentry) still gets its users, with the run partial and the permission named."""
+    alpha, _ = two_tenants
+    responses.get(
+        f"{V1}/users",
+        status=403,
+        json={
+            "error": {
+                "code": "Authorization_RequestDenied",
+                "message": "Insufficient privileges to complete the operation.",
+            }
+        },
+    )
+    plain = [{k: v for k, v in u.items() if k != "signInActivity"} for u in USERS]
+    responses.get(f"{V1}/users", json={"value": plain})
+    run_id, status = _run(db, alpha, "users", factory)
+    assert status == "partial"
+    run = db.execute("SELECT error FROM runs WHERE id = ?", (run_id,)).fetchone()
+    assert "AuditLog.Read.All" in run["error"] and "Insufficient privileges" in run["error"]
+    users = store.run_objects(db, run_id, "user")
+    assert len(users) == len(USERS) and all(u["signInActivityAvailable"] is False for u in users)
+
+
+@responses.activate
 def test_users_skip_activity_when_tenant_known_without_p1(db, two_tenants, factory):
     alpha, _ = two_tenants
     store.set_capabilities(db, alpha, {"entra_p1": False})
