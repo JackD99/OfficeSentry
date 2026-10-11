@@ -259,6 +259,25 @@ needing goes in those lists.
   (or a framework pack) is a `QuestionSet` passed to `questionnaires.register()`,
   which refuses unknown topics; the page (`?set=`), PDF answer sheet, XLSX,
   CSV and text download pick it up.
+- Schemes (`reports/schemes.py`) judge a tenant against a certification or
+  framework: a `Scheme` is themes of `Control`s, each judged from check
+  results (`rules`, with `support` checks adding "Supporting:"/"But:" lines)
+  or from a topic's answer (`topic`), with the requirement paraphrased, the
+  scope line (what Microsoft 365 can't show), a `fix` and `figures`. Verdicts
+  are Pass, Fail, Partly, Your evidence and Not collected; a `strict` scheme
+  (certification) turns any gap into Fail, a control can override that, and
+  an engineer's saved answer wins. `assess(conn, tenant, key, since=)` judges
+  the day's data and, with `since`, the same controls from that day's
+  `TenantSnapshot` for the "what changed" view. Each scheme is its own module
+  (`schemes_cyber_essentials.py`: Cyber Essentials and CE Plus, with the
+  assessor's tests as `Audit`s) registered with `schemes.register()`, which
+  refuses unknown rules, topics, question sets and groups, and names its
+  question set so the form's answers sit on the same page. Pages and
+  downloads are `web/evidence.py` (`/tenants/<id>/evidence/<scheme>`, `.pdf`,
+  `.docx` from `reports/docx_writer.py`, `.txt`, `.xlsx`, `.csv`, all from
+  `reports/scheme_export.py`); the client's Evidence page lists every scheme
+  with its verdict. Paraphrase scheme documents, never copy them, and name
+  the version and source in the scheme.
 - Client-facing reports (page + PDF) extend `templates/reports/_layout.html`
   (cover, MSP branding, running headers and page numbers) and build from the
   macros in `reports/_components.html` (verdict, KPI tile, severity bar,

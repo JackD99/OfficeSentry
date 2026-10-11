@@ -111,7 +111,7 @@
     <a class="report-link primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">
       <span class="title">Monthly review {{ icon('arrow') }}</span><span class="desc">Security and licensing summary with recommendations. PDF and XLSX.</span></a>
     <a class="report-link" href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}">
-      <span class="title">Questionnaires and evidence {{ icon('arrow') }}</span><span class="desc">Answers to paste into insurance, supplier and Cyber Essentials forms.</span></a>
+      <span class="title">Evidence and certifications {{ icon('arrow') }}</span><span class="desc">Cyber Essentials readiness with the fixes, and answers for insurance and supplier forms.</span></a>
     {% endif %}
     {% if can('projects.view', tenant.id) %}
     <a class="report-link" href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}">

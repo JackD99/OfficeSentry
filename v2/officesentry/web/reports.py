@@ -20,6 +20,7 @@ from ..reports import (
     findings_report,
     library,
     questionnaires,
+    schemes,
     tables,
     views,
 )
@@ -175,8 +176,23 @@ def _set_key(value: str | None, default: str | None = questionnaires.DEFAULT) ->
 @bp.get("/tenants/<int:tenant_id>/evidence")
 @needs("reports.security")
 def evidence_pack(tenant_id: int):
-    """Questionnaire answers for one question set (insurance by default), or the controls view."""
+    """The client's Evidence page: every scheme with its verdict (``web/evidence.py`` has each scheme's page).
+    With ``set=``, a question set's answers (insurance, supplier), or the controls view."""
     t = tenant_or_404(tenant_id)
+    if not request.args.get("set"):
+        results = schemes.assess_all(g.db, t)
+        return render_template(
+            "evidence_index.html",
+            tenant=t,
+            groups=[(title, [r for r in results if r.scheme in found]) for title, found in schemes.grouped()],
+            sets=[
+                s
+                for s in questionnaires.SETS.values()
+                if not any(x.questions == s.key for x in schemes.SCHEMES.values())
+            ],
+            oldest_data=results[0].oldest_data if results else None,
+            V=schemes,
+        )
     view = _set_key(request.args.get("set"))
     pack = evidence.build(g.db, t)
     sheet = questionnaires.sheet(pack, view) if view != CONTROLS_VIEW else None
@@ -207,7 +223,14 @@ def evidence_answer(tenant_id: int, key: str):
         abort(404)
     view = _set_key(request.form.get("set"), None)
     show = request.form.get("show") if request.form.get("show") in ("input", "attention") else None
-    back = url_for("reports.evidence_pack", tenant_id=t["id"], set=view, show=show) + f"#answer-{key}"
+    scheme = request.form.get("scheme") if request.form.get("scheme") in schemes.SCHEMES else None
+    if scheme:  # a scheme's page (web/evidence.py): back to the control or form answer that was edited
+        anchor = request.form.get("anchor") or ""
+        if not re.fullmatch(r"[a-z0-9_-]+", anchor):
+            anchor = f"answer-{key}"
+        back = url_for("evidence.scheme_page", tenant_id=t["id"], scheme=scheme, show=show) + f"#{anchor}"
+    else:
+        back = url_for("reports.evidence_pack", tenant_id=t["id"], set=view, show=show) + f"#answer-{key}"
     if request.form.get("action") == "clear":
         if evidence_answers.clear_override(g.db, t["id"], key, g.user["username"]):
             flash("Back to the suggested answer.", "success")

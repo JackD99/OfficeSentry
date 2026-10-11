@@ -26,6 +26,7 @@ import re
 import secrets
 import sys
 import zlib
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -1334,6 +1335,49 @@ def groups(db, ids: list[int]) -> None:
         tenant_groups.set_members(db, gid, members)
 
 
+SHOWCASE = "Fabrikam Dental Group"  # the client most screenshots show; its engineer has written some answers
+EVIDENCE_ANSWERS = {  # what the showcase client's engineer has written for the questions Microsoft 365 can't answer
+    "firewall_boundary": (
+        "Yes",
+        "A WatchGuard Firebox T45 firewall protects the internet connection at the Manchester practice, and the "
+        "Leeds practice uses the same model. Home and remote workers are protected by the Microsoft Defender "
+        "Firewall on their company laptops, enforced by Intune.",
+    ),
+    "software_firewall": (
+        "Yes",
+        "Microsoft Defender Firewall is turned on for every Windows laptop and desktop and enforced by an Intune "
+        "endpoint security policy; the two Macs use the built-in macOS firewall.",
+    ),
+    "backups": (
+        "Yes",
+        "Microsoft 365 mail, OneDrive, SharePoint and Teams data is backed up daily by Datto SaaS Protection to "
+        "storage separate from Microsoft 365, kept for 12 months, with credentials separate from the Microsoft 365 "
+        "administrator accounts. The last restore test was on 2 September 2026.",
+    ),
+    "anti_malware": (
+        "Yes",
+        "All laptops and desktops run Microsoft Defender Antivirus with Defender for Endpoint, which updates "
+        "automatically, scans files on access and blocks malicious websites through SmartScreen. Phones and tablets "
+        "only install apps from the Apple App Store and Google Play, enforced by Intune.",
+    ),
+    "patching_14_days": (
+        "Yes",
+        "Windows updates install through Intune update rings with a 3-day deferral, and Harbour IT checks every "
+        "Monday that no device is more than 14 days behind. Router and firewall firmware is updated within 14 days "
+        "of a security release by Harbour IT.",
+    ),
+}
+
+
+def evidence_answers(db, tenant_id: int) -> None:
+    """The showcase client's engineer has answered some of the questions Microsoft 365 can't show, so the
+    evidence packs show saved answers next to the suggested ones."""
+    from officesentry.reports import evidence_answers as answers
+
+    for key, (answer, text) in EVIDENCE_ANSWERS.items():
+        answers.set_override(db, tenant_id, key, answer, text, "Not known", "demo")
+
+
 def populate(
     db,
     vault,
@@ -1361,6 +1405,8 @@ def populate(
         list_history(db, tid, now)
         ids.append(tid)
     groups(db, ids)
+    showcase = next((i for i, t in zip(ids, TENANTS, strict=False) if t["name"] == SHOWCASE), ids[0])
+    evidence_answers(db, showcase)
     for part, price in PRICES.items():
         db.execute(
             "INSERT OR REPLACE INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES (?, ?, ?)",
@@ -1431,33 +1477,35 @@ def main() -> None:
     from officesentry.db import connect, migrate
 
     cfg = load_config(data_dir=args.data_dir)
-    db = connect(cfg.db_path)
-    migrate(db)
-    if db.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]:
-        sys.exit(f"{args.data_dir} already has tenants; use a new data directory.")
-    ids = populate(db, Vault(cfg.encryption_keys))
-    if args.public:
-        from officesentry.web import public_demo
+    with closing(connect(cfg.db_path)) as db:
+        migrate(db)
+        if db.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]:
+            sys.exit(f"{args.data_dir} already has tenants; use a new data directory.")
+        ids = populate(db, Vault(cfg.encryption_keys))
+        if args.public:
+            from officesentry.web import public_demo
 
-        # Nobody signs in with a password: visitors are this account without one (public_demo.py).
+            # Nobody signs in with a password: visitors are this account without one (public_demo.py).
+            db.execute(
+                "INSERT INTO users (username, password_hash, role, role_id, all_tenants, created_at)"
+                " VALUES (?, ?, 'analyst', (SELECT id FROM roles WHERE key = 'second_line'), 1, ?)",
+                (public_demo.USERNAME, generate_password_hash(secrets.token_urlsafe(32)), utcnow()),
+            )
+            db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')", (public_demo.MARKER,))
+            print(f"Added {len(ids)} demo tenants to {cfg.db_path} for the public demo site")
+            return
+        generated = secrets.token_urlsafe(12) if args.password is None else None
         db.execute(
             "INSERT INTO users (username, password_hash, role, role_id, all_tenants, created_at)"
-            " VALUES (?, ?, 'analyst', (SELECT id FROM roles WHERE key = 'second_line'), 1, ?)",
-            (public_demo.USERNAME, generate_password_hash(secrets.token_urlsafe(32)), utcnow()),
+            " VALUES (?, ?, 'admin', 1, 1, ?)",
+            (args.admin, generate_password_hash(args.password or generated), utcnow()),
         )
-        db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')", (public_demo.MARKER,))
-        print(f"Added {len(ids)} demo tenants to {cfg.db_path} for the public demo site")
-        return
-    password = args.password or secrets.token_urlsafe(12)
-    db.execute(
-        "INSERT INTO users (username, password_hash, role, role_id, all_tenants, created_at)"
-        " VALUES (?, ?, 'admin', 1, 1, ?)",
-        (args.admin, generate_password_hash(password), utcnow()),
-    )
-    team(db, ids)
-    print(f"Added {len(ids)} demo tenants to {cfg.db_path}")
-    print(f"Sign in as {args.admin} / {password}")
-    print(f"Start the portal: OFFICESENTRY_DATA_DIR={args.data_dir} python -m officesentry web")
+        team(db, ids)
+        print(f"Added {len(ids)} demo tenants to {cfg.db_path}")
+        # A password the operator chose isn't echoed back (it would land in shell and CI logs); a generated
+        # one has to be, since this is the only time anyone sees it.
+        print(f"Sign in as {args.admin} / {generated}" if generated else f"Sign in as {args.admin}")
+        print(f"Start the portal: OFFICESENTRY_DATA_DIR={args.data_dir} python -m officesentry web")
 
 
 if __name__ == "__main__":

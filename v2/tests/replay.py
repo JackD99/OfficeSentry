@@ -6,7 +6,9 @@ have gets a 404, so a collector that starts asking for something new fails
 loudly instead of silently reading nothing.
 
 Until the fixture is re-recorded, a test can name the exceptions: ``stand_ins``
-answers a new Graph request (a path, where ``{id}`` stands for any one segment)
+answers a new Graph request (a path, where ``{id}`` stands for any one segment;
+``<path>?$skiptoken`` for the later pages of a recorded call whose next link
+the collector didn't follow when the recording was made)
 or a new Exchange cmdlet (``"Get-..."``, any parameters) with a body of the
 documented shape, and
 ``new_fields`` lets a request whose ``$select`` asks for more fields than were
@@ -26,6 +28,7 @@ from officesentry.graph import GRAPH_ROOT
 from officesentry.recording import TIMESTAMP, request_key
 
 FIXTURES = Path(__file__).parent / "fixtures"
+PAGED = "?$skiptoken"  # on a stand-in path: the later pages of a recorded call
 
 
 def load(name: str = "live_tenant.json") -> dict:
@@ -88,22 +91,26 @@ def mock(
             re.compile(
                 "".join("[^/]+" if part == "{id}" else re.escape(part) for part in re.split(r"(\{id\})", path)) + r"\Z"
             ),
+            paged,
             body,
         )
-        for path, body in stand_ins.items()
+        for path, paged, body in (
+            (path.removesuffix(PAGED), path.endswith(PAGED), body) for path, body in stand_ins.items()
+        )
         if path.startswith("/")
     ]
 
     def graph_cb(request):
-        path = request_key(request.url)[0]
-        key = json.dumps(request_key(request.url))
+        path, query = request_key(request.url)
+        key = json.dumps((path, query))
         if key not in graph and path in new_fields:
             entries = _recorded_subset(graph, request.url)
             if entries:
                 graph[key] = entries
         if key not in graph:
-            for pattern, body in patterns:
-                if pattern.match(path):
+            later_page = any(k == "$skiptoken" for k, _ in query)
+            for pattern, paged, body in patterns:
+                if pattern.match(path) and paged == later_page:
                     return 200, {}, json.dumps(body)
         return serve(graph, key, request.url)
 

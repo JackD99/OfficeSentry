@@ -133,7 +133,7 @@ def test_read_only_users_cannot_override(client, db, two_tenants):
     login(client, "client")
     assert client.post(f"/tenants/{alpha}/evidence/answers/legacy_auth", data={"answer": "Yes"}).status_code == 403
     assert db.execute("SELECT COUNT(*) FROM evidence_answer_overrides").fetchone()[0] == 0
-    page = client.get(f"/tenants/{alpha}/evidence").get_data(as_text=True)
+    page = client.get(f"/tenants/{alpha}/evidence?set=insurance").get_data(as_text=True)
     assert "Copy all answers" in page and "Change this answer" not in page and "Write this answer" not in page
 
 
@@ -145,7 +145,7 @@ def test_overrides_reach_page_pdf_and_exports(client, db, two_tenants, monkeypat
     make_user(db, "client", role="client", tenants=[alpha])
 
     login(client, "admin")
-    page = client.get(f"/tenants/{alpha}/evidence").get_data(as_text=True)
+    page = client.get(f"/tenants/{alpha}/evidence?set=insurance").get_data(as_text=True)
     assert "Blocked at the firewall." in page and "Answer set by jack on" in page
     assert "Suggested from the data: <strong>No</strong>" in page  # staff still see the suggestion
     assert "Data changed since this was set" not in page
@@ -169,7 +169,7 @@ def test_overrides_reach_page_pdf_and_exports(client, db, two_tenants, monkeypat
 
     client.post("/logout")
     login(client, "client")
-    page = client.get(f"/tenants/{alpha}/evidence").get_data(as_text=True)
+    page = client.get(f"/tenants/{alpha}/evidence?set=insurance").get_data(as_text=True)
     assert "Blocked at the firewall." in page and "Suggested from the data" not in page
 
 
@@ -182,7 +182,7 @@ def test_data_changed_hint(client, db, two_tenants):
     assert a.answer == YES and a.data_changed
     make_user(db, "admin")
     login(client, "admin")
-    page = client.get(f"/tenants/{alpha}/evidence").get_data(as_text=True)
+    page = client.get(f"/tenants/{alpha}/evidence?set=insurance").get_data(as_text=True)
     assert "Data changed since this was set" in page
 
 
