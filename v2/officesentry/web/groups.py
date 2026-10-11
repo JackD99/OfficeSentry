@@ -2,7 +2,8 @@
 
 The picker (``group_aware`` views, ``templates/_groups.html``) narrows a page to
 one group of the tenants someone already sees. The choice is kept on their
-sign-in session (``sessions.group_id``), so the dashboard, All tenants, What
+sign-in session (``sessions.group_id``; on the public demo, where visitors have
+no session row, in the signed cookie), so the dashboard, All tenants, What
 changed, the month-end queue, Client tenants and their downloads all show the
 same group until they pick another; ``?group=<id>`` (or ``?group=all``) on any
 of those pages picks one and redirects to the plain URL, so links can carry a
@@ -16,7 +17,7 @@ from dataclasses import dataclass, field
 from functools import wraps
 from urllib.parse import urlencode
 
-from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, session, url_for
 
 from .. import tenant_groups
 from ..db import audit, transaction
@@ -46,9 +47,28 @@ class Scope:
         return self.group.name if self.group else "All clients"
 
 
+COOKIE_KEY = "group"  # a public demo visitor's choice, in the signed cookie
+
+
 def _save_choice(group_id: int | None) -> None:
     if g.get("session_row") is not None:
         g.db.execute("UPDATE sessions SET group_id = ? WHERE id = ?", (group_id, g.session_row["id"]))
+    elif g.get("public_demo"):
+        # Demo visitors have no sessions row (public_demo.py), so their choice rides in the cookie. Like the
+        # row's, it only ever narrows: scope() ignores a group that isn't offered.
+        if group_id is None:
+            session.pop(COOKIE_KEY, None)
+        else:
+            session[COOKIE_KEY] = group_id
+
+
+def _chosen() -> int | None:
+    if g.get("session_row") is not None:
+        return g.session_row["group_id"]
+    if g.get("public_demo"):
+        value = session.get(COOKIE_KEY)
+        return value if isinstance(value, int) else None
+    return None
 
 
 def scope() -> Scope:
@@ -57,7 +77,7 @@ def scope() -> Scope:
         return g.group_scope
     tenants = visible_tenants(g.db, g.user)
     options = tenant_groups.options(g.db, tenants)
-    chosen = g.session_row["group_id"] if g.get("session_row") is not None else None
+    chosen = _chosen()
     group = next((o for o in options if o.id == chosen), None)
     g.group_scope = Scope(group, options, len(tenants))
     g.scope_tenants = tenant_groups.only(g.db, tenants, group.id if group else None)
