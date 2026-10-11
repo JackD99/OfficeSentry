@@ -133,6 +133,11 @@ No.
   (they name the old app), and the page says how many clients must approve again.
 - The public demo no longer keeps a visitor's address in the activity log when they open or download a
   report; what was opened is still recorded.
+- Deleting a client no longer rebuilds the whole database inside the web request, which failed for want of
+  room in Docker and left the client's data readable on disk while saying it was erased. The delete is
+  quick, and the worker erases the last copies in the background, rebuilding the file only when there's
+  room. If that can't be done, System status says so under **Deleted clients**, the team is alerted, and
+  it's tried again every hour.
 
 ## 2.1.0 (2026-10-10)
 

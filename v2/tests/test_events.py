@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 import responses
 
-from officesentry import backups, changes, events, lifecycle, retention, store
+from officesentry import backups, changes, events, lifecycle, retention, store, tasks
 from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.reports import activity_history
 from tests import adminactivitydata as ad
@@ -303,7 +303,11 @@ def test_tenants_never_see_each_others_events_and_deletion_is_clean(db, two_tena
 
     removed = lifecycle.delete_tenant(db, store.get_tenant(db, alpha), "test")
     assert removed["history_signins"] == len(a_rows)
+    # The files are cleaned by the erase task the delete queues, in the background.
+    assert tasks.drain(None, db, None, None) == 1
     assert events.counts(db, bravo)["signins"] == len(b_rows)
+    on_disk = b"".join(p.read_bytes() for p in events.root(db).rglob("*.db*"))
+    assert b"ann@x.com" not in on_disk and b"zed@y.com" in on_disk
     for path in (events.root(db)).rglob("*.db"):
         with closing(sqlite3.connect(path)) as raw:  # `with` on a connection alone commits, never closes
             table = events.TABLE[path.parent.name]
