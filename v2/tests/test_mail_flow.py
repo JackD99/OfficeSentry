@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 from officesentry import store
 from officesentry.collectors import mail_flow
-from officesentry.reports import data_reports
+from officesentry.reports import data_reports, rollups
 from tests import graphdata as gd
 from tests import seed
 from tests.seed import seed_tenant
@@ -108,15 +108,25 @@ def test_query_budget_leaves_the_rest_for_next_run(db, two_tenants, monkeypatch)
 
 
 def test_without_the_message_trace_the_top_recipients_still_show(db, two_tenants):
-    alpha, _ = two_tenants
+    alpha, bravo = two_tenants
     data = copy.deepcopy(gd.EXCHANGE)
     data["Get-MessageTraceV2"] = DENIED
     seed_tenant(db, alpha, exchange=data)
     assert _run(db, alpha)["status"] == "partial"
     report = _report(db, alpha)
-    assert report.notes and "message trace" in report.notes[0] and "Access denied" in report.notes[0]
+    assert "message trace" in report.notice and "Access denied" in report.notice
     assert _table(report, "Mail per domain")[0]["Received"] == 0
     assert len(_table(report, "Top spam recipients")) == 2
+    # Mail that wasn't counted isn't a reassuring zero, and stays out of the totals across clients.
+    tiles = {t.label: (t.value, t.tone) for t in report.tiles}
+    for label in ("Messages", "Delivered", "Quarantined", "Failed"):
+        assert tiles[label] == ("Not read", None)
+    assert tiles["Phishing recipients"] == (1, "warn")
+    seed_tenant(db, bravo)
+    rollup = rollups.build(db, db.execute("SELECT * FROM tenants").fetchall(), "mail-flow")
+    row = next(r for r in rollup.rows if r.tenant["id"] == alpha)
+    assert row.values["c:Quarantined"] == "Not read" and "c:Quarantined" not in row.tones
+    assert "c:Messages" not in rollup.total_row().values
 
 
 def test_without_the_summary_the_tile_says_not_read(db, two_tenants):
