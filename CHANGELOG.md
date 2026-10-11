@@ -20,25 +20,69 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   `X-OfficeSentry-Key-Id` says which secret signed it. Change your receiver to check the new signature when you
   upgrade (it can accept either while you switch); until then it refuses every alert ([v2/DEPLOY.md, "Signed
   webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
-
-### New Microsoft permissions
-
-None.
-
-### Database upgrade
-
-No.
+- **Staff sign-in with Microsoft** needs nothing on upgrade: it's off until an admin sets it up.
 
 ### Added
 
+- **A Get started checklist for new installs.** After creating the first admin, the home page lists the
+  four steps to the first report (the app connection, the first client, its consent and its first
+  collection), ticks each off as Office Sentry sees it done and goes away after the first collection.
+
+### New Microsoft permissions
+
+None for client tenants. Setting up staff sign-in creates a separate app in your own tenant with no API
+permissions.
+
+### Database upgrade
+
+Yes, applied on start as usual: migration 37 adds a table for the search index, and migration 38 adds
+Microsoft account links on users and how each session was started.
+
+### Added
+
+- **Settings → Support** and a support package: one zip of the version, settings, health checks, recent
+  failures and the portal's and worker's logs to attach to a bug report, with keys, certificates, tokens,
+  addresses and client names taken out (clients appear as numbers unless you tick *Include client
+  identifiers*). `python -m officesentry support-package` makes the same zip from the shell when the portal
+  won't start, over a broken database or a configuration that won't load.
+  [Getting help](v2/docs/getting-help.md) says what's in it.
+- The portal and the worker keep a short rolling log in `<data dir>/logs/` (three files of 2 MB each), and
+  every line says which request, user, client, run or task it belongs to. A page that fails shows a
+  reference to quote; the same reference is on the error's line in the log and in the `X-Request-ID` header.
+- **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
+  Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with Admin and Analyst
+  roles to assign people or groups to in Entra. Staff then press *Sign in with Microsoft* and use their
+  work account, under the MSP's own Conditional Access and MFA; new staff get an account at their first
+  sign-in, existing accounts link from their Account page. Passwords stay as the break-glass route until
+  turned off, and `python -m officesentry staff-sign-in --passwords on` turns them back on from the
+  server. Client accounts keep passwords. See [docs/staff-sign-in.md](v2/docs/staff-sign-in.md).
 - **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
   and whether the rule is paused), restricted management units, how many users, groups and devices are in
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
   and the members of each unit by name. A new Administrative units collector reads them with the permissions
   the app already has, and each person's page shows the units they are in and administer.
+- One page per mailbox: Users > Mailboxes lists every mailbox with its size, forwarding, who else can
+  open it and its inbox rules, and each opens a page with what needs attention first, then size and growth
+  over the retained months, forwarding and inbox rules, who can open or send from it, protocols and
+  settings, its automatic reply, the phones syncing it, email activity, open findings and what changed.
+  Mailbox addresses in reports and search results open the page, and it downloads as PDF and XLSX.
 
 ### Changed
 
+- Pages that show every client at once stay quick as the number of clients grows. The insurance evidence
+  rollup, every report's All clients rollup, the month-end queue, Recommended projects and the Accounts home
+  page now read rows the worker keeps up to date after each collection, as What changed and the check
+  matrix already did; a row is rebuilt the moment anything behind it changes, so nothing shown is older
+  than the live page would be. At 200 clients the Accounts page went from 6 seconds to half a second, the
+  month-end queue from 3.4 seconds to under a tenth, the insurance evidence rollup from 4 seconds to under
+  a tenth, and a report's All clients rollup from about a second to under a tenth.
+- The sidebar search reads an index the worker keeps, instead of scanning every client's data on each
+  search. A client whose index is behind its latest collection is still scanned, so nothing is missed.
+- PDFs of an All clients rollup, What changed and a client's change report keep the first 2,000 rows and
+  say so, as table reports already did, so a very large client can't run a download into the server's
+  timeout. The spreadsheet downloads still have every row.
+- `DEPLOY.md` gives measured page, download and worker times at 200 clients ("How fast"), and
+  `scripts/timings.py` measures them.
 - **"Clients" for the companies you look after.** Pages, menus, emails, PDFs, spreadsheets and the docs now
   say client where they said tenant; "tenant" is kept only for the Microsoft 365 side (Tenant ID, consent in
   the client's tenant). In the menu, Tenants is now **Clients**, All tenants is **All clients**, and under
@@ -143,6 +187,10 @@ No.
   now, try again in a moment" instead of an error page.
 - On Windows without Docker, an account's page no longer fails once its sign-in history is kept: the
   dates on it are written the same way on every platform.
+- A tenant whose consent is missing the AuditLog.Read.All permission still gets its users collected each
+  night, with the run partial and the permission named, instead of the Users collection failing.
+- An Exchange list longer than 200 pages (200,000 results) is cut there with a warning naming the
+  cmdlet, instead of failing the whole collection.
 - A session or proxy setting that can't work (`OFFICESENTRY_SESSION_HOURS=0`, which signed everyone out
   on their next request) stops the portal at start with a plain message, like the other settings.
 - A form sent after the session had ended comes back, after signing in, to the page the form was on
@@ -176,6 +224,17 @@ No.
   which carried search terms, filter values and the one-time setup link.
 - The containers get a process limit, and the bundled Caddy runs with every capability but binding its
   ports dropped, like the portal and worker.
+- The activity log now records pages people weren't allowed to open (another client's tenant, a staff-only
+  page) and forms sent with a stale token, counted per person, address and hour with the latest page named,
+  so a client account probing for other clients' data is visible under *Settings → Activity log*.
+- Form-token, wrong-method, oversized-upload and server-error responses use the portal's own error page with
+  plain wording, instead of the web server's.
+- Passwords on lists of commonly used passwords (`password1234`, `qwerty123456` and 20,000 more of 12
+  characters or longer), or containing the person's username or "officesentry", are refused wherever a
+  password is chosen: first-run setup, the account page, the forced change after an admin's reset, and the
+  admin's user forms. Existing passwords aren't checked until they're changed.
+- A new docs page, [Securing the portal](v2/docs/securing-the-portal.md), lists what the portal does by
+  itself, what the person running it has to do, and how to put it behind Caddy, nginx, Traefik or a CDN.
 
 ## 2.1.0 (2026-10-10)
 

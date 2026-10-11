@@ -5,12 +5,14 @@ never show anyone a tenant they can't open."""
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from officesentry import findings, lifecycle, store, tasks, tenant_groups, worker
-from officesentry.reports import month_changes, precomputed, rollups
+from officesentry import findings, lifecycle, month_end, projects, search_index, store, tasks, tenant_groups, worker
+from officesentry.reports import data_reports, month_changes, precomputed, rollups
+from officesentry.reports.identity_reports import Money
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_collection_performance import _plan
@@ -320,3 +322,143 @@ def test_stored_rows_only_reach_people_who_see_the_tenant(client, db, history):
     for path in ("/changes", "/across/checks"):
         page = client.get(path).get_data(as_text=True)
         assert "Bravo Inc" in page and "Alpha Ltd" not in page, path
+
+
+# -- The other kinds: evidence, report rollups, the month-end queue, projects ---------------------------
+
+
+def _rollup_rows(rollup) -> list:
+    return [(r.tenant["id"], r.note, r.values, r.tones, r.links, r.attention) for r in rollup.rows]
+
+
+def test_stored_evidence_rows_match_the_live_build(db, history):
+    first = rollups.evidence_rollup(db, _tenants(db))  # builds and stores each row
+    assert set(_stored(db, "evidence")) == set(history)
+    stored = rollups.evidence_rollup(db, _tenants(db))
+    live = rollups.evidence_rollup(db, _tenants(db), now=datetime.now(UTC))
+    assert _rollup_rows(first) == _rollup_rows(stored) == _rollup_rows(live)
+    assert first.to_table().rows == live.to_table().rows
+    assert any(r.values.get("in_place") for r in stored.rows) and any(r.tones for r in stored.rows)
+
+
+def test_stored_report_rollups_match_the_live_build(db, history):
+    tenants = _tenants(db)
+    for key in data_reports.REPORTS:
+        first = rollups.data_rollup(db, tenants, key)
+        assert set(_stored(db, f"rollup:{key}")) == set(history), key
+        stored = rollups.data_rollup(db, tenants, key)
+        live = rollups.data_rollup(db, tenants, key, now=datetime.now(UTC))
+        assert _rollup_rows(first) == _rollup_rows(stored) == _rollup_rows(live), key
+        assert [c.label for c in stored.columns] == [c.label for c in live.columns], key
+        assert stored.to_table().rows == live.to_table().rows, key
+    # Money comes back as money, with its currency; other headline values as they were.
+    back = rollups._decode(rollups._encode(Money(12.5, "EUR")))
+    assert isinstance(back, Money) and back == 12.5 and back.currency == "EUR"
+    assert [rollups._decode(rollups._encode(v)) for v in (3, "4 of 9", None, 0.5)] == [3, "4 of 9", None, 0.5]
+
+
+def test_stored_review_facts_and_projects_match_the_live_build(db, history):
+    tenants = _tenants(db)
+    first = month_end.review_facts(db, tenants)
+    assert set(_stored(db, "review")) == set(history)
+    stored = month_end.review_facts(db, tenants)
+    live = month_end.review_facts(db, tenants, now=datetime.now(UTC))
+    assert first == stored == live
+    assert stored[history[0]].verdict.label and stored[history[0]].oldest
+
+    def rows(pipeline):
+        return [
+            (r.tenant["id"], r.note, [asdict(rec) for rec in r.recommendations], r.quick_fixes) for r in pipeline.rows
+        ]
+
+    first = projects.pipeline(db, tenants)
+    assert set(_stored(db, "projects")) == set(history)
+    assert (
+        rows(first)
+        == rows(projects.pipeline(db, tenants))
+        == rows(projects.pipeline(db, tenants, now=datetime.now(UTC)))
+    )
+    assert any(r.recommendations for r in first.rows)
+    # What the account manager sets on a project is part of the row.
+    rec = next(rec for r in first.rows for rec in r.recommendations)
+    owner = next(r.tenant["id"] for r in first.rows if r.recommendations)
+    projects.set_status(db, owner, rec.project.key, "declined", "Not now", "admin")
+    again = projects.pipeline(db, tenants)
+    assert any(rec.status == "declined" and rec.note == "Not now" for r in again.rows for rec in r.recommendations)
+    assert rows(again) == rows(projects.pipeline(db, tenants, now=datetime.now(UTC)))
+
+
+def test_the_other_pages_read_the_stored_rows(client, db, history):
+    alpha, _ = history
+    make_user(db, "admin")
+    login(client, "admin")
+    client.get("/across/evidence")
+    client.get("/across/mfa")
+    client.get("/projects")
+    some_control = next(iter(_stored(db, "evidence")[alpha]["controls"]))
+    db.execute(
+        "UPDATE summary_cache SET data = json_set(data, ?, 'Stored status') WHERE kind = 'evidence' AND tenant_id = ?",
+        (f"$.controls.{some_control}", alpha),
+    )
+    db.execute(
+        "UPDATE summary_cache SET data = json_set(data, '$.headlines[0][1]', 'Stored figure')"
+        " WHERE kind = 'rollup:mfa' AND tenant_id = ?",
+        (alpha,),
+    )
+    db.execute(
+        "UPDATE summary_cache SET data = json_set(data, '$.projects[0].size', 'Stored size')"
+        " WHERE kind = 'projects' AND tenant_id = ?",
+        (alpha,),
+    )
+    assert "Stored status" in client.get("/across/evidence.csv").get_data(as_text=True)
+    assert "Stored figure" in client.get("/across/mfa").get_data(as_text=True)
+    assert "Stored figure" in client.get("/across/mfa.csv").get_data(as_text=True)
+    assert "Stored size" in client.get("/projects.csv").get_data(as_text=True)
+
+
+def test_the_month_end_queue_reads_the_stored_rows(client, db, history):
+    alpha, bravo = history
+    make_user(db, "admin")
+    login(client, "admin")
+    values = {
+        "name": "Monthly",
+        "reports": ["review"],
+        "include_xlsx": 1,
+        "day_of_month": 1,
+        "hour": 8,
+        "timezone": "UTC",
+        "subject": "{client} report",
+        "message": "",
+        "mode": "approval",
+        "delivery": "portal",
+        "bcc_team": 0,
+    }
+    plan = month_end.get_plan(db, month_end.save_plan(db, values, "admin"))
+    month_end.apply_plan(db, plan, [alpha, bravo], "admin", "UTC")
+    period = month_end.current_period("UTC")
+    queue = {r.tenant["id"]: r for r in month_end.queue(db, _tenants(db), period)}
+    live = {r.tenant["id"]: r for r in month_end.queue(db, _tenants(db), period, now=datetime.now(UTC))}
+    assert {t: (r.verdict, r.flags, r.new_severe) for t, r in queue.items()} == {
+        t: (r.verdict, r.flags, r.new_severe) for t, r in live.items()
+    }
+    assert set(_stored(db, "review")) == {alpha, bravo}
+    db.execute(
+        "UPDATE summary_cache SET data = json_set(data, '$.verdict[1]', 'Stored verdict') WHERE kind = 'review'"
+        " AND tenant_id = ?",
+        (alpha,),
+    )
+    assert "Stored verdict" in client.get(f"/reporting/{period}").get_data(as_text=True)
+    # The review screen builds the report itself and never shows a stored verdict.
+    assert "Stored verdict" not in client.get(f"/reporting/{period}/{alpha}").get_data(as_text=True)
+
+
+def test_refresh_builds_every_kind_and_the_search_index(db, history):
+    alpha, _ = history
+    db.execute("DELETE FROM summary_cache")
+    precomputed.refresh(db, store.get_tenant(db, alpha))
+    kinds = {r["kind"] for r in db.execute("SELECT kind FROM summary_cache WHERE tenant_id = ?", (alpha,))}
+    expected = {"changes:7", "changes:30", "changes:90", "checks", "evidence", "review", "projects", "search"}
+    expected |= {f"rollup:{key}" for key in data_reports.REPORTS}
+    assert kinds == expected
+    assert db.execute("SELECT COUNT(*) FROM search_index WHERE tenant_id = ?", (alpha,)).fetchone()[0] > 0
+    assert alpha in search_index.current(db, _tenants(db))

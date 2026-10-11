@@ -259,6 +259,22 @@ def test_deploy_keeps_the_settings_files_out_of_the_demo_and_closes_ssh_after_a_
     assert workflow.count("cancel-in-progress: false") == 1  # runs never overlap, so the rule found is this run's
 
 
+def test_the_shell_scripts_pass_shellcheck():
+    """The server and deploy scripts, at ShellCheck's strictest level; the lint job runs the same."""
+    workflow = yaml.safe_load((V2.parent / ".github" / "workflows" / "v2.yml").read_text(encoding="utf-8"))
+    steps = [step.get("run", "") for step in workflow["jobs"]["lint"]["steps"]]
+    assert any("git ls-files -z '*.sh' | xargs -0 shellcheck --severity=style" in run for run in steps)
+    scripts = sorted(str(p.relative_to(V2.parent)) for p in V2.parent.glob("**/*.sh") if ".git" not in p.parts)
+    assert {"v2/deploy/start.sh", "v2/deploy/jobs.sh", ".github/scripts/scheduled_issue.sh"} <= set(scripts)
+    shellcheck = shutil.which("shellcheck")
+    if not shellcheck:
+        pytest.skip("shellcheck isn't installed")
+    result = subprocess.run(  # noqa: S603 (the repository's own scripts)
+        [shellcheck, "--severity=style", *scripts], cwd=V2.parent, capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stdout
+
+
 @pytest.fixture
 def env_cfg(cfg, monkeypatch):
     monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))

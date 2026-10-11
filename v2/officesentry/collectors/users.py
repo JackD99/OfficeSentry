@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..graph import LicenseRequired
+from ..graph import LicenseRequired, PermissionMissing
 from .base import Collector, RunContext, register
 
 # Microsoft's largest page when signInActivity is selected (999 without it). That listing is limited to
@@ -101,6 +101,13 @@ class Users(Collector):
                 activity = True
             except LicenseRequired:
                 ctx.warn("Sign-in activity needs Entra ID P1; collected users without it")
+            except PermissionMissing as exc:
+                # AuditLog.Read.All not consented (an older consent, or one granted outside Office Sentry):
+                # the users themselves need only User.Read.All, so they're still collected.
+                ctx.warn(
+                    f"Sign-in activity needs the AuditLog.Read.All permission ({exc.message}); collected users "
+                    "without it"
+                )
         if users is None:
             users = ctx.paged(
                 ctx.graph.get_all(

@@ -8,13 +8,14 @@ import sqlite3
 from datetime import timedelta
 
 from flask import Flask, g, render_template, request
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFError, CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .. import __version__, system_alerts, system_health, worker
+from .. import __version__, logs, system_alerts, system_health, worker
+from .. import sso as staff_sign_in
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
-from ..db import connect, is_locked, migrate
+from ..db import audit_counted, connect, is_locked, migrate
 from . import (
     access,
     across,
@@ -30,6 +31,7 @@ from . import (
     groups,
     history,
     home,
+    mailboxes,
     onboarding,
     people,
     projects,
@@ -39,10 +41,14 @@ from . import (
     saved_views,
     search,
     styleguide,
+    support,
     system,
     tenant_admin,
     tenants,
     upcoming,
+)
+from . import (
+    sso as sso_web,
 )
 
 csrf = CSRFProtect()
@@ -56,6 +62,7 @@ WEB_BUSY_TIMEOUT_MS = 5_000
 
 def create_app(cfg: Config | None = None) -> Flask:
     cfg = cfg or load_config()
+    logs.setup(cfg.data_dir, "web")
     app = Flask(__name__)
     app.config.update(
         SECRET_KEY=cfg.secret_key,
@@ -98,6 +105,15 @@ def create_app(cfg: Config | None = None) -> Flask:
         g.db = connect(cfg.db_path, busy_timeout_ms=WEB_BUSY_TIMEOUT_MS)
         g.csp_nonce = secrets.token_urlsafe(16)
         access.load_user()
+        # Every line logged while handling this request names it (logs.py); the id goes back in the
+        # X-Request-ID header and on the error page, so a report can quote it.
+        g.request_id = logs.new_request_id()
+        user = g.get("user")
+        g.log_token = logs.push(
+            req=g.request_id,
+            user=user["username"] if user else None,
+            tenant=(request.view_args or {}).get("tenant_id"),
+        )
 
     # On the public demo site, nothing but reading (after load_user, which sets g.public_demo).
     app.before_request(public_demo.refuse_changes)
@@ -108,6 +124,7 @@ def create_app(cfg: Config | None = None) -> Flask:
         db = g.pop("db", None)
         if db is not None:
             db.close()
+        logs.pop(g.pop("log_token", None))
 
     @app.after_request
     def _security_headers(resp):
@@ -122,6 +139,8 @@ def create_app(cfg: Config | None = None) -> Flask:
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["X-Frame-Options"] = "SAMEORIGIN" if override else "DENY"
         resp.headers["Referrer-Policy"] = "same-origin"
+        if request_id := g.get("request_id"):
+            resp.headers["X-Request-ID"] = request_id
         resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         # A page the portal opens can't keep a handle on it, and no other site can embed its pages, downloads,
         # brand logo or files (emails carry the logo as image data, not a link).
@@ -156,8 +175,11 @@ def create_app(cfg: Config | None = None) -> Flask:
         worker_down = admin and not worker.is_alive(g.db)
         # ...and when a certificate Office Sentry signs in with is within 60 days of expiring.
         # Not on the page that already says so in full.
-        here = {"admin.connections": "connection", "email.settings": "mail"}.get(request.endpoint)
+        here = {"admin.connections": "connection", "email.settings": "mail", "sso.settings_page": "sign_in"}.get(
+            request.endpoint
+        )
         certificates = [e for e in cert_lifecycle.expiring(g.db) if e.kind != here] if admin else []
+        sign_in = staff_sign_in.settings(g.db) if g.get("db") is not None else {}
         return {
             "current_user": user,
             "csp_nonce": g.get("csp_nonce", ""),
@@ -167,7 +189,13 @@ def create_app(cfg: Config | None = None) -> Flask:
             "group_scope": g.get("group_scope"),
             "public_demo": bool(g.get("public_demo")),
             "public_demo_link": public_demo.link() if g.get("public_demo") else "",
+            # Sign in with Microsoft (sso.py): the sign-in page's button, and whether staff may still use passwords.
+            "microsoft_sign_in": staff_sign_in.enabled(sign_in),
+            "staff_passwords_off": sign_in.get("sso_passwords") == "off",
         }
+
+    def _error(code: int, message: str, detail: str = ""):
+        return render_template("error.html", code=code, message=message, detail=detail), code
 
     @app.errorhandler(sqlite3.OperationalError)
     def _busy(exc):
@@ -187,19 +215,71 @@ def create_app(cfg: Config | None = None) -> Flask:
 
     @app.errorhandler(403)
     def _forbidden(_e):
-        return render_template(
-            "error.html", code=403, message="You don't have access to this page.", detail="Ask an admin if you need it."
-        ), 403
+        # Refusals raised with abort(403) outside roles_required (a client on a staff page) are counted too.
+        access.refused()
+        return _error(403, "You don't have access to this page.", "Ask an admin if you need it.")
 
     @app.errorhandler(404)
     def _not_found(_e):
         # Tenants someone hasn't been granted are 404s too, so say both without confirming either.
+        return _error(
+            404,
+            "Page not found.",
+            "The link may be out of date, or the page belongs to a client you haven't been given access to.",
+        )
+
+    @app.errorhandler(CSRFError)
+    def _csrf_failed(_e):
+        # The form's token didn't match the session: usually a page left open past sign-out or the idle limit,
+        # sometimes a request another site tried to make. Counted per address and hour, with the person's name
+        # when a session is still there (the check runs before the request's user is loaded).
+        if "db" not in g:
+            g.db = connect(cfg.db_path)
+        if "user" not in g:
+            access.load_user()
+        user = g.get("user")
+        audit_counted(
+            g.db, "csrf_failed", (request.remote_addr or "")[:64], user["username"] if user else None, request.path
+        )
+        return _error(
+            400,
+            "That form couldn't be sent.",
+            "Your session ended, or the page was open too long. Go back, reload the page and try again.",
+        )
+
+    @app.errorhandler(400)
+    def _bad_request(_e):
+        return _error(400, "That request couldn't be understood.", "Go back and try again.")
+
+    @app.errorhandler(405)
+    def _method_not_allowed(_e):
+        return _error(405, "That page can't be opened this way.", "Use the portal's own links and buttons.")
+
+    @app.errorhandler(413)
+    def _too_large(_e):
+        limit = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+        return _error(413, "That file is too large.", f"Uploads are limited to {limit} MB.")
+
+    @app.errorhandler(500)
+    def _server_error(_e):
+        return _error(
+            500,
+            "Something went wrong on the server.",
+            "Nothing was changed. Try again in a moment; if it keeps happening, tell your admin, who can read the "
+            "portal's log.",
+        )
+
+    @app.errorhandler(500)
+    def _failed(_e):
+        # Flask has already logged the traceback with this request's id in its context.
         return render_template(
             "error.html",
-            code=404,
-            message="Page not found.",
-            detail="The link may be out of date, or the page belongs to a client you haven't been given access to.",
-        ), 404
+            code=500,
+            message="Something went wrong on our side.",
+            detail="It has been logged. Try again; if it keeps happening, quote the reference below when you ask "
+            "for help.",
+            reference=g.get("request_id"),
+        ), 500
 
     @app.get("/health")
     def health():
@@ -230,6 +310,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(data_retention.bp)
     app.register_blueprint(across.bp)
     app.register_blueprint(people.bp)
+    app.register_blueprint(mailboxes.bp)
     app.register_blueprint(history.bp)
     app.register_blueprint(saved_views.bp)
     app.register_blueprint(tenant_admin.bp)
@@ -240,6 +321,8 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(groups.bp)
     app.register_blueprint(upcoming.bp)
     app.register_blueprint(system.bp)
+    app.register_blueprint(support.bp)
     app.register_blueprint(styleguide.bp)
     app.register_blueprint(designs.bp)
+    app.register_blueprint(sso_web.bp)
     return app

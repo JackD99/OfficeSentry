@@ -44,7 +44,7 @@ TENANT_ARGS = {
     "note_id",
 }
 # URL arguments that don't: names (report keys, table slugs, a month, a file extension, a static file),
-# a person's account inside a tenant (only ever with tenant_id), and objects that belong to Office Sentry
+# a person's account or a mailbox inside a tenant (only ever with tenant_id), and objects that belong to Office Sentry
 # itself (portal users, app connections, report plans, sign-in sessions, someone's own saved views, tenant
 # groups, which are admin-only), and flags a route sets itself (``resolved`` on the findings downloads).
 OTHER_ARGS = {
@@ -54,6 +54,7 @@ OTHER_ARGS = {
     "filename",
     "period",
     "user_id",
+    "mailbox_id",
     "conn_id",
     "plan_id",
     "session_id",
@@ -148,6 +149,7 @@ def _url(rule, ids: dict) -> str:
         "ext": "csv",
         "table": "x",
         "user_id": USERS[0]["id"],
+        "mailbox_id": USERS[0]["id"],  # Ann's mailbox has her account's object ID
     }
 
     def value(m):
