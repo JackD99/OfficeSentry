@@ -22,14 +22,20 @@ from ..findings import finding_key, lifecycle_map, resolved_since
 from ..licences import LicenceSummary, licence_summary, load_prices
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .charts import line_chart
+from .charts import line_chart, month_columns
 
 TITLE = "Monthly Security & Licensing Review"
+# The review without its appendix: the two summary pages, as its own report a plan or schedule can send.
+SUMMARY_KEY = "review-summary"
+SUMMARY_TITLE = "Monthly review: summary only"
+SUMMARY_STEM = "security-review-summary"
 STALE_AFTER = timedelta(hours=36)  # data older than this is flagged in the report
 PERIOD = timedelta(days=28)
 SPARK_DAYS = 90  # how far back a figure's sparkline goes
 # Findings first seen this soon after a tenant's first collection are its baseline, not "new".
 BASELINE = timedelta(days=1)
+TREND_MONTHS = 12  # months in the summary's "found and fixed" chart
+MIN_CHART_MONTHS = 6  # columns it keeps for a client with less history
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 
 
@@ -81,6 +87,25 @@ class Freshness:
 
 
 @dataclass
+class MonthCount:
+    """Findings found (first seen or back again) and fixed in one calendar month; None before collection began."""
+
+    month: date  # the first day
+    found: int | None
+    fixed: int | None
+
+
+@dataclass
+class FixedGroup:
+    """The findings of one check fixed in the period, for "What we did this month"."""
+
+    key: str
+    title: str
+    severity: str
+    subjects: list[str]
+
+
+@dataclass
 class Report:
     title: str
     tenant: dict
@@ -98,6 +123,23 @@ class Report:
     accepted: list[tuple[RuleResult, Finding, object]] = field(default_factory=list)
     new_count: int = 0
     first_report: bool = False  # history starts inside this period, so there's nothing to compare with
+    months: list[MonthCount] = field(default_factory=list)  # oldest first, ending with this month
+    fixed: list[FixedGroup] = field(default_factory=list)  # most fixed first
+
+    @property
+    def months_chart(self) -> str:
+        """Found and fixed by month, once there are two months with data; "" before."""
+        known = [m for m in self.months if m.found is not None]
+        if len(known) < 2:
+            return ""
+        # Months before the first collection are left out, keeping at least six columns so a new client's
+        # chart isn't two giant slots.
+        shown = self.months[min(self.months.index(known[0]), max(len(self.months) - MIN_CHART_MONTHS, 0)) :]
+        return month_columns(
+            [(m.month, m.found, m.fixed) for m in shown],
+            label=f"Findings found and fixed each month since {known[0].month:%B %Y}",
+            series=("Found", "Fixed"),
+        )
 
     @property
     def failing(self) -> list[RuleResult]:
@@ -161,6 +203,59 @@ def _baseline_end(conn, tenant_id: int, now: datetime) -> str:
     ).fetchone()
     first = datetime.fromisoformat(row["first"].replace("Z", "+00:00")) if row and row["first"] else now
     return (first + BASELINE).strftime(ISO)
+
+
+def _month_starts(now: datetime, count: int) -> list[date]:
+    first = date(now.year, now.month, 1)
+    out = [first]
+    while len(out) < count:
+        d = out[-1]
+        out.append(date(d.year - (d.month == 1), 12 if d.month == 1 else d.month - 1, 1))
+    return out[::-1]
+
+
+def found_and_fixed(conn, tenant_id: int, now: datetime, baseline_end: str, months: int = TREND_MONTHS):
+    """``MonthCount`` per calendar month, the last ``months`` up to this one. A finding counts as found in the
+    month it was first seen (after the first collection's baseline) or came back, and fixed in the month it was
+    resolved. Months before the first collection have no data."""
+    starts = _month_starts(now, months)
+    since = datetime(starts[0].year, starts[0].month, 1, tzinfo=UTC).strftime(ISO)
+    rows = conn.execute(
+        "SELECT first_seen, reopened_at, resolved_at FROM findings WHERE tenant_id = ?"
+        " AND (first_seen >= ? OR reopened_at >= ? OR resolved_at >= ?)",
+        (tenant_id, since, since, since),
+    ).fetchall()
+    found: dict[str, int] = {}
+    fixed: dict[str, int] = {}
+    for r in rows:
+        if r["first_seen"] > baseline_end:
+            found[r["first_seen"][:7]] = found.get(r["first_seen"][:7], 0) + 1
+        if r["reopened_at"]:
+            found[r["reopened_at"][:7]] = found.get(r["reopened_at"][:7], 0) + 1
+        if r["resolved_at"]:
+            fixed[r["resolved_at"][:7]] = fixed.get(r["resolved_at"][:7], 0) + 1
+    began = (datetime.fromisoformat(baseline_end.replace("Z", "+00:00")) - BASELINE).strftime("%Y-%m")
+    out = []
+    for start in starts:
+        key = f"{start:%Y-%m}"
+        known = key >= began and key <= now.strftime("%Y-%m")
+        out.append(MonthCount(start, found.get(key, 0) if known else None, fixed.get(key, 0) if known else None))
+    return out
+
+
+def fixed_groups(resolved, results: list[RuleResult]) -> list[FixedGroup]:
+    """The period's resolved findings by check, most fixed first, then most severe."""
+    titles = {r.key: r.title for r in results}
+    groups: dict[str, FixedGroup] = {}
+    for row in resolved:
+        g = groups.get(row["rule_key"])
+        if g is None:
+            title = titles.get(row["rule_key"], row["rule_key"].replace("_", " ").capitalize())
+            g = groups[row["rule_key"]] = FixedGroup(row["rule_key"], title, row["severity"], [])
+        elif SEVERITY_RANK.get(row["severity"], 9) < SEVERITY_RANK.get(g.severity, 9):
+            g.severity = row["severity"]
+        g.subjects.append(row["subject"])
+    return sorted(groups.values(), key=lambda g: (-len(g.subjects), SEVERITY_RANK.get(g.severity, 9), g.title))
 
 
 def build(conn, tenant, now: datetime | None = None) -> Report:
@@ -239,6 +334,7 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
             counts[f.severity] += 1
             new_count += f.new
 
+    resolved = list(resolved_since(conn, tenant["id"], since))
     return Report(
         title=TITLE,
         tenant=dict(tenant),
@@ -252,10 +348,12 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
         counts=counts,
         period_start=period_start,
         changes=all_changes(conn, tenant["id"], since),
-        resolved=list(resolved_since(conn, tenant["id"], since)),
+        resolved=resolved,
         accepted=accepted,
         new_count=new_count,
         first_report=first_report,
+        months=found_and_fixed(conn, tenant["id"], now, baseline_end),
+        fixed=fixed_groups(resolved, results),
     )
 
 
