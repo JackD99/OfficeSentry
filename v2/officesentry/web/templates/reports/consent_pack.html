@@ -55,7 +55,7 @@
   <div class="table-wrap"><table class="data">
     <thead><tr><th>Permission</th><th>What it reads</th></tr></thead>
     <tbody>
-    {% for name, words in permissions %}<tr><td class="nw"><code>{{ name }}</code></td><td>{{ words }}</td></tr>{% endfor %}
+    {% for name, api, words in permissions %}<tr><td class="nw"><code>{{ name }}</code>{% if api %}<br><span class="muted">{{ api }}</span>{% endif %}</td><td>{{ words }}</td></tr>{% endfor %}
     </tbody>
   </table></div>
 </section>

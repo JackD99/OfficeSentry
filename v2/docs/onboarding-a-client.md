@@ -377,23 +377,35 @@ The [check catalogue](checks.md) lists the licence note for each check.
 
 ## Re-consent when permissions change
 
-Adding a permission to the app means every client must approve again. Until a
-client does, the Manage page lists the new permission as missing, and data
-sources that need it fail with `Graph 403 Authorization_RequestDenied` (or
-are partial). *Settings → Client settings* shows which clients still miss it.
+A release that adds permissions adds them together (a batch, listed in the
+release notes under **New Microsoft permissions**), so each client approves
+once. Until a client does, its Manage page shows the new permissions as *To
+do*, reports that need them say they're waiting for the client's approval, and
+the client stays *Healthy*; everything else keeps working. *Settings → Client
+settings* shows "N new to approve" next to each such client.
 
-1. **Add the permission to the app registration** in your own (MSP) tenant:
+1. **Update the app registration** in your own (MSP) tenant, once: *Settings
+   → App connection → Update the app*, and sign in as a Global Administrator,
+   Application Administrator or Cloud Application Administrator. Office
+   Sentry adds the new permissions and keeps everything else
+   (`python -m officesentry update-app` does the same). Or add them by hand:
    *App registrations → (the app) → API permissions → Add a permission*,
-   application permissions. *Settings → App connection → Permissions the app
-   asks for* lists what this version of Office Sentry expects. Don't create
+   application permissions (*Permissions the app asks for* on the same page
+   lists them, marked *New*), then press *I've added them*. Don't create
    the app again (with *Sign in to Microsoft* or `create-app`): that makes a
    second app, and existing clients stay on the first. Office Sentry refuses
    a second app for a cloud that already has one from the App connection page.
-2. **Re-consent each client**: on the **Manage** page, open *Re-grant consent
-   (after new permissions)* under Settings, or *Open consent link* next to
-   *Permissions*, the same way as step 2.
-3. Press **Check connection now**, then **Refresh all data** on the Data
-   collection page.
+2. **Ask each client to approve**: *Settings → Client settings → Onboarding*
+   lists them under *New permissions*. Each client's *What's new* page has the
+   email to send, the approval link (the same one as before) and a PDF saying
+   what each new permission reads and adds. Mark it sent; when the client
+   comes back from Microsoft's page, Office Sentry re-reads its permissions.
+3. Reports that were waiting fill in with the next collection, or press
+   **Refresh all data** on the Data collection page.
+
+A permission from before the batch that a client removed is still a problem,
+not a *To do*: re-consent with *Re-grant consent (after new permissions)* on
+the Manage page.
 
 ## Pausing and archiving
 

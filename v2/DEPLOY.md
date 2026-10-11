@@ -693,6 +693,29 @@ running shows at the foot of the menu and at `/health`.
 If the release notes change `docker-compose.yml` or `Caddyfile`, download
 the new ones as well; they are attached to every release.
 
+### When a release adds permissions
+
+Some releases ask Microsoft for new read-only permissions (the notes list
+them under **New Microsoft permissions**), released together so each client
+approves once. After updating:
+
+1. **Update your app, once.** *Settings → App connection* shows "Update this
+   app" on each app connection that doesn't ask for them yet. Press *Update the
+   app* and sign in to your own (the MSP's) tenant as a Global Administrator,
+   Application Administrator or Cloud Application Administrator: Office Sentry
+   adds the new permissions to its app registration and keeps everything else.
+   From the command line, `docker compose run --rm worker python -m officesentry
+   update-app` does the same. Or add them by hand in the Entra admin centre and
+   press *I've added them*.
+2. **Ask each client to approve.** *Settings → Client settings → Onboarding*
+   lists the clients with new permissions to approve. Each one's *What's new*
+   page has the email to send, the same approval link as before and a PDF
+   saying what each new permission reads and adds. Office Sentry re-reads a
+   client's permissions when they come back from Microsoft's page.
+
+Nothing breaks in the meantime: reports that need a new permission say they're
+waiting for the client's approval, and clients stay *Healthy*.
+
 Running your own build of the `v2` folder instead (a branch, or changes of
 your own)? Add `COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml` to
 `.env`, and update with `git pull` then `docker compose up -d --build`.

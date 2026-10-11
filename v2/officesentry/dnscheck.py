@@ -145,7 +145,24 @@ class DomainHealth:
 
     @property
     def microsoft_365(self) -> bool:
+        """Mail for the domain arrives through Microsoft 365 (its MX records)."""
         return any(h.endswith(M365_MX) for h in self.mx)
+
+    @property
+    def sends_from_microsoft_365(self) -> bool:
+        """Microsoft 365 sends mail as the domain: its MX is Microsoft 365, or its SPF record authorises
+        Microsoft 365, as it does for a domain behind a third-party mail gateway whose users still send
+        from Outlook. Either way Microsoft 365 should sign that mail with DKIM."""
+        if self.microsoft_365:
+            return True
+        terms = (self.spf or "").lower().split()
+        return any(t.lstrip("+-~?").partition(":")[2] in SPF_TRUSTED_INCLUDES for t in terms if ":" in t)
+
+    @property
+    def behind_gateway(self) -> bool:
+        """Mail arrives through another provider (a gateway such as Mimecast or Proofpoint) and goes on to
+        Microsoft 365, which still sends for the domain."""
+        return self.sends_mail and not self.microsoft_365 and self.sends_from_microsoft_365
 
     def unknown(self, area: str) -> bool:
         """Whether a failed lookup leaves this area unknown. Without the MX records nothing is known, since
@@ -393,9 +410,17 @@ def issues(h: DomainHealth, transport: bool = False) -> list[Issue]:
     if h.dmarc and not h.dmarc_reports:
         out.append(Issue("low", "DMARC", "DMARC has no rua= address, so nobody sees the reports"))
 
-    if h.microsoft_365 and not all(h.dkim.get(s) for s in DKIM_SELECTORS):
+    if h.sends_from_microsoft_365 and not all(h.dkim.get(s) for s in DKIM_SELECTORS):
         missing = [s for s in DKIM_SELECTORS if not h.dkim.get(s)]
-        out.append(Issue("medium", "DKIM", f"Microsoft 365 DKIM isn't set up ({', '.join(missing)} CNAME missing)"))
+        why = (
+            ". Mail arrives through a gateway, but SPF says Microsoft 365 sends for this domain, so its DKIM "
+            "signing is still needed"
+            if h.behind_gateway
+            else ""
+        )
+        out.append(
+            Issue("medium", "DKIM", f"Microsoft 365 DKIM isn't set up ({', '.join(missing)} CNAME missing){why}")
+        )
     if transport and h.transport_checked:
         out += _transport_issues(h)
     rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -485,7 +510,7 @@ def summary(h: DomainHealth) -> dict[str, str]:
             return "Missing"
         return {"high": "Fail", "medium": "Weak", "low": "OK"}.get(found.get(area), "Pass")
 
-    dkim = "n/a" if not h.microsoft_365 and not h.unknown("DKIM") else word("DKIM", any(h.dkim.values()))
+    dkim = "n/a" if not h.sends_from_microsoft_365 and not h.unknown("DKIM") else word("DKIM", any(h.dkim.values()))
     return {"SPF": word("SPF", bool(h.spf)), "DMARC": word("DMARC", bool(h.dmarc)), "DKIM": dkim}
 
 

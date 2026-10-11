@@ -25,7 +25,7 @@ from collections.abc import Callable
 
 from officesentry.checks import RULES
 from officesentry.collectors import REGISTRY
-from officesentry.entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
+from officesentry.entra import PERMISSIONS
 from officesentry.reports.data_reports import REPORTS
 
 PACKAGE = "officesentry"
@@ -139,7 +139,7 @@ def _codes(items) -> str:
 
 
 def permission_users() -> dict[str, list[str]]:
-    users: dict[str, list[str]] = {p: [] for p in (*GRAPH_PERMISSIONS, *EXCHANGE_PERMISSIONS)}
+    users: dict[str, list[str]] = {p: [] for p in PERMISSIONS}
     for key, cls in sorted(REGISTRY.items()):
         for permission in cls.permissions:
             users.setdefault(permission, []).append(key)
@@ -220,14 +220,13 @@ def render() -> str:
     ]
     users = permission_users()
     for permission in sorted(users):
-        if permission in GRAPH_PERMISSIONS:
-            api, purpose = "Microsoft Graph", GRAPH_PERMISSIONS[permission]
-        elif permission in EXCHANGE_PERMISSIONS:
-            api, purpose = "Exchange Online", EXCHANGE_PERMISSIONS[permission]
+        if permission in PERMISSIONS:
+            resource, name, purpose = PERMISSIONS[permission]
+            api = resource.name.removeprefix("Office 365 ")
         else:
-            api, purpose = "?", "Not in the app's permission list"
+            api, name, purpose = "?", permission, "Not in the app's permission list"
         used = _codes(users[permission]) if users[permission] else "not used by a collector yet"
-        out.append(f"| `{permission}` | {api} | {_cell(purpose)} | {used} |")
+        out.append(f"| `{name}` | {api} | {_cell(purpose)} | {used} |")
     out.append("")
     return "\n".join(out)
 
