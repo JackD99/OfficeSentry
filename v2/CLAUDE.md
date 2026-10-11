@@ -181,7 +181,7 @@ needing goes in those lists.
   `Rollup.total_row()` sums counts and money only (int or `Money` headlines,
   not scores or percentages). "Every row" (`/across/<key>/rows/<table slug>`,
   `rollups.all_rows`) stacks each visible tenant's rows from the same builders
-  under a Tenant column, as one `DataReport`, so `views` filters, sorts, saved
+  under a Client column, as one `DataReport`, so `views` filters, sorts, saved
   views and the CSV/XLSX/PDF downloads work unchanged; it keeps
   `rollups.MAX_ROWS` per table and says when it cut. `/across/checks`
   (`rollups.check_matrix`) is every check for every tenant, evaluated from
@@ -251,7 +251,7 @@ needing goes in those lists.
 - PDF routes return `web/printing.pdf_response(template, filename, ...)`: a
   WeasyPrint PDF, or without WeasyPrint (Windows without Docker) the same
   template as a print-ready page that opens the browser's print window. Table
-  reports (detail, All tenants, What changed) use `reports/detail.html`,
+  reports (detail, All clients, What changed) use `reports/detail.html`,
   `rollup.html`, `changes.html` and `tenant_changes.html` with
   `document = true` (and `wide = true` for landscape).
 - `tests/test_live_fixture.py` replays `tests/fixtures/live_tenant.json`, real
@@ -317,12 +317,12 @@ searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
 
 `home.py` (pages in `web/home.py`, staff only, `@group_aware` over `scoped_tenants()`): **Today**
 (`/today`, for technicians: critical and high findings new in the last day, failed or out-of-date
-collections, access not granted yet, and Coming up items due within a week) and **Clients** (`/clients`, for
+collections, access not granted yet, and Coming up items due within a week) and **Accounts** (`/clients`, for
 account managers: licence waste from the cached rollup rows, renewals in 30 days, this month's month-end
 reports to approve and projects to propose). Each opens with one sentence (`Today.sentence()`,
 `Clients.sentence()`), then the detail, from stored state only. A person's choice is `users.home` (Account
 settings, or "Make this my home page" on either page); `/home` (the sidebar's Home and the logo) opens it,
-and signing in without a page to go back to lands there. Clients keep the dashboard. A new reason on Today
+and signing in without a page to go back to lands there. Client users keep the dashboard. A new reason on Today
 is a `Reason` with a `kind` in `home.KINDS` and a `target` that `web/home._link` turns into a URL.
 
 ## Web UI conventions
@@ -470,7 +470,7 @@ progress from the rows (`tasks.batch_progress`, a JSON route polled by
 PDFs keep the first `printing.PDF_MAX_ROWS` (2,000) rows per table and say
 so (`printing.cap_rows`); the XLSX and CSV have every row.
 
-The dashboard and the All tenants review read each tenant's row from
+The dashboard and the All clients review read each tenant's row from
 `rollup_cache` (`monthly_review.rollup_row(..., cached=True)`), rebuilt when
 its `_fingerprint` changes (latest run, findings, prices, currency, app
 connections, the code, the day). If the row comes to depend on something
@@ -616,7 +616,7 @@ change is audited; note text is never put in the audit log.
 - Anything the tenant granted the app beyond `entra.GRAPH_PERMISSIONS` and
   `EXCHANGE_PERMISSIONS` (the collector's `other`), and any directory role
   besides Global Reader, is a warning (`tenant_health.extra_permissions`,
-  `extra_roles`) on Manage and the Client tenants list.
+  `extra_roles`) on Manage and the Client settings list.
 - App certificates (`cert_lifecycle.py`): `expiring()` grades every
   certificate in use, each app connection's and the mail app's, at 60, 30
   and 7 days and expired, for the App connection page, the admin banner in
@@ -690,7 +690,7 @@ else.
 Staff pages that list tenants are `@group_aware` (under `@needs`)
 and read `scoped_tenants()` instead of `visible_tenants()`: the dashboard,
 `/across/*` (and their downloads), `/changes*`, the month-end queue and
-Client tenants. The choice is kept on the sign-in (`sessions.group_id`); a GET
+Client settings. The choice is kept on the sign-in (`sessions.group_id`); a GET
 with `?group=<id>` or `?group=all` picks and redirects to the plain URL. The
 picker (`_groups.html`, `group_picker()`) only offers groups holding a
 tenant the person sees, and downloads say which group they cover

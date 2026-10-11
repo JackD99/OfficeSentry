@@ -62,7 +62,7 @@ def _tenant_names() -> dict[int, str]:
 def tenant_label(tenant_id: int | None, names: dict[int, str]) -> str:
     if tenant_id is None:
         return ""
-    return names.get(tenant_id, f"Tenant #{tenant_id} (deleted or not visible)")
+    return names.get(tenant_id, f"Client #{tenant_id} (deleted or not visible)")
 
 
 @bp.get("/admin/activity")
@@ -107,7 +107,7 @@ def export():
     names = _tenant_names()
     table = Table(
         "Activity log",
-        ["Time (UTC)", "User", "Action", "Tenant", "Address", "Detail"],
+        ["Time (UTC)", "User", "Action", "Client", "Address", "Detail"],
         [
             [
                 r["ts"],

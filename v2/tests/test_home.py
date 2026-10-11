@@ -92,7 +92,7 @@ def test_clients_page_with_data(client, db, two_tenants):
     resp = client.get("/clients")
     assert resp.status_code == 200
     page = resp.get_data(as_text=True)
-    assert 'aria-current="page">Clients</a>' in page and "Alpha Ltd" in page and "Bravo Inc" in page
+    assert 'aria-current="page">Accounts</a>' in page and "Alpha Ltd" in page and "Bravo Inc" in page
     assert "renewal" in page and 'id="client-table"' in page
 
 

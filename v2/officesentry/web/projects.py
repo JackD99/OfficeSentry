@@ -54,9 +54,9 @@ def download(ext: str):
             [table],
             cover=_cover(
                 "Recommended projects",
-                "All tenants",
+                "All clients",
                 "Projects each client's Microsoft 365 data shows they need, and where each one stands.",
-                facts=[("Tenants with a recommendation", data.tenants_with, ""), ("Projects", len(table.rows), "")],
+                facts=[("Clients with a recommendation", data.tenants_with, ""), ("Projects", len(table.rows), "")],
             ),
         )
     )

@@ -41,24 +41,24 @@ def _latest_runs(tenant_id: int) -> dict:
 def not_connected(tenant) -> str | None:
     """Why collection can't run for this tenant yet, in plain words, or None when it can."""
     if tenant["archived_at"]:
-        return "This tenant is archived. Restore it under Manage to collect again."
+        return "This client is archived. Restore it under Manage to collect again."
     if not tenant["enabled"]:
-        return "Collection is paused for this tenant. Resume it under Manage."
+        return "Collection is paused for this client. Resume it under Manage."
     connection = store.get_connection(g.db, tenant["connection_id"]) if tenant["connection_id"] else None
     cloud = clouds.of(tenant)
     if not connection:
         if not cloud.is_default and not any(clouds.of(c).key == cloud.key for c in store.list_connections(g.db)):
             return clouds.app_needed(cloud)
-        return "This tenant isn't connected yet: choose its app connection under Manage."
+        return "This client isn't connected yet: choose its app connection under Manage."
     if clouds.of(connection).key != cloud.key:
         return clouds.app_needed(cloud)
     if not connection["client_id"]:
         return (
-            "This tenant isn't connected yet: its app connection has no application (client) ID. "
+            "This client isn't connected yet: its app connection has no application (client) ID. "
             "Add it under App connection first."
         )
     if not tenant["consented_at"]:
-        return "This tenant isn't connected yet: a tenant admin needs to grant consent first."
+        return "This client isn't connected yet: a tenant admin needs to grant consent first."
     return None
 
 
@@ -156,7 +156,7 @@ def new_tenant():
         elif conn_id is not None and connection is None:
             abort(400)
         elif g.db.execute("SELECT 1 FROM tenants WHERE tenant_ref = ?", (ref,)).fetchone():
-            flash("That tenant is already added.", "error")
+            flash("That client is already added.", "error")
         else:
             if cloud_mismatch(cloud, connection):
                 # Add it anyway with this cloud's app if there's exactly one, else none: the tenant page then
@@ -444,7 +444,7 @@ def _consent_return():
                 "Open the consent link again and sign in as an administrator of that tenant."
             )
         elif g.db.execute("SELECT 1 FROM tenants WHERE tenant_ref = ? AND id <> ?", (returned, t["id"])).fetchone():
-            refused = "Another tenant in Office Sentry already uses this tenant ID, so consent wasn't recorded here."
+            refused = "Another client in Office Sentry already uses this tenant ID, so consent wasn't recorded here."
         else:
             swap_to = returned
         if refused:
@@ -473,7 +473,7 @@ def _consent_return():
             store.enqueue_run(g.db, t["id"], key, requested_by=g.user["username"])
         flash("Consent recorded. A first collection has been queued.", "success")
     else:
-        flash("Consent recorded. Collection is paused for this tenant; resume it under Manage.", "success")
+        flash("Consent recorded. Collection is paused for this client; resume it under Manage.", "success")
     return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
 
 

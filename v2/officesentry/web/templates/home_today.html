@@ -16,9 +16,9 @@
 {% if not data.tenants %}
 <div class="card empty">
   <h3>No clients to look after yet</h3>
-  {% if can('clients.manage') %}<p>Add a client tenant, and what needs you each day shows here after its first collection.</p>
-  <a class="btn primary" href="{{ url_for('tenants.dashboard') }}">Go to Tenants</a>
-  {% else %}<p>You haven't been given access to any active tenants yet. Ask an admin to grant access.</p>{% endif %}
+  {% if can('clients.manage') %}<p>Add a client, and what needs you each day shows here after its first collection.</p>
+  <a class="btn primary" href="{{ url_for('tenants.dashboard') }}">Go to Clients</a>
+  {% else %}<p>You haven't been given access to any active clients yet. Ask an admin to grant access.</p>{% endif %}
 </div>
 {% else %}
 <div class="callout lead-answer {{ data.rows[0].tone if data.rows else 'ok' }}" role="status">{{ icon('alert' if data.rows else 'check') }}
@@ -65,6 +65,6 @@
   <a class="btn" href="{{ url_for('upcoming.index') }}">{{ icon('calendar') }} See what's coming up</a></div>
 {% endif %}
 {% if data.without %}<p class="footnote">Couldn't read: {% for t, part in data.without %}{{ part }} for {{ t.name }}{{ ', ' if not loop.last }}{% endfor %}.</p>{% endif %}
-<p class="footnote">{% if data.rows and data.fine %}{{ data.fine|plural('other client') }} {{ 'needs' if data.fine == 1 else 'need' }} nothing today. {% endif %}Every client, worst first, is on <a href="{{ url_for('tenants.dashboard') }}">Tenants</a>.</p>
+<p class="footnote">{% if data.rows and data.fine %}{{ data.fine|plural('other client') }} {{ 'needs' if data.fine == 1 else 'need' }} nothing today. {% endif %}Every client, worst first, is on <a href="{{ url_for('tenants.dashboard') }}">Clients</a>.</p>
 {% endif %}
 {% endblock %}

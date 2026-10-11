@@ -29,7 +29,7 @@ from .tenants import _cfg, cloud_mismatch
 bp = Blueprint("onboarding", __name__, url_prefix="/admin/onboarding")
 
 MAX_UPLOAD = onboarding.MAX_BYTES
-FILTERS = {"waiting": "Still onboarding", "all": "All tenants"}
+FILTERS = {"waiting": "Still onboarding", "all": "All clients"}
 ON_CLIENT = {"sent", "approved"}  # the tracker's "Waiting on client" tile, as the filter ?state=client
 
 
@@ -134,11 +134,11 @@ def bulk():
     picked = {int(x) for x in request.form.getlist("tenant") if x.isdigit()}
     tenants = [t for t in visible_tenants(g.db, g.user) if t["id"] in picked]
     if not tenants:
-        flash("Tick at least one tenant first.", "error")
+        flash("Tick at least one client first.", "error")
     elif action in ("sent", "unsent"):
         n = onboarding.mark_sent(g.db, [t["id"] for t in tenants], g.user["username"], sent=action == "sent")
         flash(
-            f"Marked {n} {'tenant' if n == 1 else 'tenants'} as {'sent' if action == 'sent' else 'not sent'}.",
+            f"Marked {n} {'client' if n == 1 else 'clients'} as {'sent' if action == 'sent' else 'not sent'}.",
             "success",
         )
     elif action == "check":
@@ -148,10 +148,10 @@ def bulk():
         if waiting:
             audit(g.db, g.user["username"], "consent_check_requested", detail=f"{len(waiting)} tenants")
         flash(
-            f"Checking {len(waiting)} {'tenant' if len(waiting) == 1 else 'tenants'} by signing in to each. "
+            f"Checking {len(waiting)} {'client' if len(waiting) == 1 else 'clients'} by signing in to each. "
             "Reload the page in a minute to see the results."
             if waiting
-            else "Every tenant you ticked has already consented.",
+            else "Every client you ticked has already consented.",
             "success",
         )
     else:
@@ -220,7 +220,7 @@ def import_tenants():
     if request.form.get("confirm") == "1" and not parsed.error and parsed.new:
         ids = onboarding.create(g.db, parsed, g.user["username"])
         flash(
-            f"Added {len(ids)} {'tenant' if len(ids) == 1 else 'tenants'}. Next: send each client their consent link.",
+            f"Added {len(ids)} {'client' if len(ids) == 1 else 'clients'}. Next: send each client their consent link.",
             "success",
         )
         return redirect(url_for("onboarding.index", show="waiting"))
@@ -318,7 +318,7 @@ def mark_sent(tenant_id: int):
 def check(tenant_id: int):
     t = tenant_or_404(tenant_id)
     if t["consented_at"]:
-        flash("Consent is already confirmed for this tenant.", "success")
+        flash("Consent is already confirmed for this client.", "success")
     else:
         onboarding.queue_check(g.db, t["id"], priority=store.PRIORITY_WAITING, user=g.user["username"])
         audit(g.db, g.user["username"], "consent_check_requested", t["id"])

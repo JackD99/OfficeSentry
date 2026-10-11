@@ -3,7 +3,7 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, sev_counts, downloads %}
 {% from "_across.html" import across_head with context %}
-{% block title %}Checks · All tenants · Office Sentry{% endblock %}
+{% block title %}Checks · All clients · Office Sentry{% endblock %}
 {% macro check_href(t, key, c) -%}
 {% if c.status == 'accepted' %}{{ url_for('reports.tenant_findings', tenant_id=t.id, view='accepted') }}#check-{{ key }}
 {%- else %}{{ url_for('reports.tenant_findings', tenant_id=t.id) }}#check-{{ key }}{% endif %}
@@ -25,18 +25,18 @@
 
 {% if not matrix.rows %}
 <div class="card empty">
-  <h3>No tenants to show</h3>
-  <p>{% if can('clients.manage') %}Add a tenant to see it here.{% else %}You haven't been given access to any tenants yet. Ask an admin to grant access.{% endif %}</p>
+  <h3>No clients to show</h3>
+  <p>{% if can('clients.manage') %}Add a client to see it here.{% else %}You haven't been given access to any clients yet. Ask an admin to grant access.{% endif %}</p>
 </div>
 {% else %}
 {% set no_data = matrix.rows|selectattr('note')|list|length %}
 <div class="tiles">
-  <div class="tile"><div class="label">Tenants</div><div class="value">{{ matrix.rows|length }}</div>
+  <div class="tile"><div class="label">Clients</div><div class="value">{{ matrix.rows|length }}</div>
     <div class="foot">that you look after</div></div>
   <div class="tile{% if matrix.with_failures %} tone-warn{% endif %}"><div class="label">With failing checks</div><div class="value">{{ matrix.with_failures }}</div>
     <div class="foot">of {{ matrix.checks|length }} checks</div></div>
   <div class="tile"><div class="label">No data yet</div><div class="value">{{ no_data }}</div>
-    <div class="foot">{% if no_data %}the reason is under each tenant's name{% else %}every tenant has data{% endif %}</div></div>
+    <div class="foot">{% if no_data %}the reason is under each client's name{% else %}every client has data{% endif %}</div></div>
 </div>
 
 <nav class="subtabs" aria-label="Check category">
@@ -56,15 +56,15 @@
       </p>
     </div>
     <div class="toolbar-actions">
-      {% if matrix.rows|length > 5 %}<input class="search sm" type="search" data-filter="check-matrix" placeholder="Filter tenants…" aria-label="Filter tenants">{% endif %}
-      {{ downloads([('XLSX', url_for('across.checks_download', ext='xlsx'), 'Every check for every tenant'),
-                    ('CSV', url_for('across.checks_download', ext='csv'), 'Every check for every tenant')]) }}
+      {% if matrix.rows|length > 5 %}<input class="search sm" type="search" data-filter="check-matrix" placeholder="Filter clients…" aria-label="Filter clients">{% endif %}
+      {{ downloads([('XLSX', url_for('across.checks_download', ext='xlsx'), 'Every check for every client'),
+                    ('CSV', url_for('across.checks_download', ext='csv'), 'Every check for every client')]) }}
     </div>
   </div>
   <div class="table-scroll{{ ' tall' if matrix.rows|length > 12 }}">
   <table class="stack-sm sortable check-matrix" id="check-matrix">
     <thead><tr>
-      <th aria-sort="none"><button type="button" class="sort">Tenant</button></th>
+      <th aria-sort="none"><button type="button" class="sort">Client</button></th>
       <th class="num" aria-sort="none" title="Failing checks by their worst finding: critical, high, medium and low"><button type="button" class="sort">Failing</button></th>
       {% if chosen %}
       {% for key, title, category in chosen[1] %}<th class="chk-col" aria-sort="none"><button type="button" class="sort">{{ title }}</button></th>{% endfor %}
@@ -97,7 +97,7 @@
   </table>
   </div>
 </div>
-<p class="footnote">Results come from each tenant's latest collection, with the same checks as the monthly review. A failing or accepted check opens that tenant's findings for it.{% if not chosen %} Pick a category to see its checks by name.{% endif %}</p>
+<p class="footnote">Results come from each client's latest collection, with the same checks as the monthly review. A failing or accepted check opens that client's findings for it.{% if not chosen %} Pick a category to see its checks by name.{% endif %}</p>
 {% endif %}
 {% endblock %}
 {% block scripts %}
