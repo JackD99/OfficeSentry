@@ -259,6 +259,30 @@ def test_deploy_keeps_the_settings_files_out_of_the_demo_and_closes_ssh_after_a_
     assert workflow.count("cancel-in-progress: false") == 1  # runs never overlap, so the rule found is this run's
 
 
+def test_the_hetzner_token_and_the_backup_keys_stay_away_from_the_code_the_deploy_builds():
+    """The deploy job checks out code and builds the website with it (installing what that needs), so its
+    secrets go only to the steps that use them, and nothing is written into every later step's environment."""
+    workflow = (V2.parent / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+    server = yaml.safe_load(workflow)["jobs"]["server"]
+    steps, names = server["steps"], [step.get("name") for step in server["steps"]]
+    assert "HCLOUD_TOKEN" not in server["env"]
+    given = [step["name"] for step in steps if "HCLOUD_TOKEN" in step.get("env", {})]
+    assert given == ["Open SSH to this runner in the Hetzner firewall", "Close SSH again"]
+    checkout = next(i for i, step in enumerate(steps) if step.get("uses", "").startswith("actions/checkout@"))
+    assert not [step.get("name") for step in steps[checkout:] if "GITHUB_ENV" in step.get("run", "")]
+    # The firewall's ID goes from the step that opens SSH to the one that closes it, and only as a number.
+    opening = next(step for step in steps if step.get("id") == "open-ssh")
+    assert 'if [[ ! "$id" =~ ^[0-9]+$ ]]' in opening["run"]
+    assert opening["run"].index('echo "firewall_id=$id" >> "$GITHUB_OUTPUT"') < opening["run"].index("set_rules")
+    closing = steps[-1]
+    assert closing["name"] == "Close SSH again"
+    assert closing["if"] == "always() && steps.open-ssh.outputs.firewall_id != ''"
+    assert closing["env"]["FIREWALL_ID"] == "${{ steps.open-ssh.outputs.firewall_id }}"
+    # The backup password and storage keys reach the disk only once the website's build has finished.
+    built = max(names.index("Take the website's screenshots and example reports"), names.index("Build the website"))
+    assert names.index("Write the server's settings files") > built
+
+
 def test_the_server_address_and_portal_name_stay_out_of_public_run_logs():
     """A step's log opens with its settings, where only secrets are hidden (deploy.yml's opening comment)."""
     workflows = V2.parent / ".github" / "workflows"

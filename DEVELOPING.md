@@ -50,8 +50,9 @@ nothing left queued, the checks run against the new snapshot, findings are
 synced, alerts go out and the cross-tenant pages' cached rows are rebuilt.
 
 **A page request.** Each request opens its own database connection and loads
-the person from the server-side session. Every route has `@login_required` or
-`@roles_required`, and anything about one tenant loads it through
+the person from the server-side session. Every route has `@needs(...)`, naming
+the capabilities it needs (`permissions.py`), or `@login_required` for the few
+pages anyone signed in may open. Anything about one tenant loads it through
 `access.tenant_or_404()`, the single authorization gate. A report page calls
 a builder in `reports/` that reads a `TenantSnapshot` (the latest successful
 data per collector) and returns plain data. The same data becomes the web
@@ -100,7 +101,8 @@ responses, which is what most check and report tests start from.
 
 Some safety rules are tests, so breaking one fails CI rather than relying on
 review: nothing writes to a tenant (`test_no_writes.py`), every page needs a
-sign-in (`test_access.py`), no one sees another tenant's data
+sign-in (`test_access.py`), every page refuses a role that lacks the
+capabilities it needs (`test_roles.py`), no one sees another tenant's data
 (`test_isolation_walk.py`), every Microsoft call is listed in `endpoints.py`
 (`test_ratelimit.py`), and every check and report survives missing or odd
 data (`test_robustness.py`).
