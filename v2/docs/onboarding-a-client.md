@@ -1,4 +1,4 @@
-# Onboarding a client tenant
+# Onboarding a client
 
 For MSP technicians adding a client's Microsoft 365 tenant to Office Sentry,
 getting the first data in, keeping its connection healthy, reading what the
@@ -23,9 +23,9 @@ errors and their fixes.
 - **The app connection is ready.** *Settings → App connection* shows the
   connection as *Ready* once it has a certificate and the app's client ID.
   You set this up once for all clients: press *Sign in to Microsoft* there and
-  Office Sentry creates the app, then offers to add your first tenant.
-- **You are an Office Sentry admin.** Only admins can add tenants, see consent
-  links and change or delete tenants. Analysts can see connection health and
+  Office Sentry creates the app, then offers to add your first client.
+- **You are an Office Sentry admin.** Only admins can add clients, see consent
+  links and change or delete clients. Analysts can see connection health and
   press *Check connection now*.
 - **The client has someone who can sign in as a Global Administrator** of
   their tenant, or you reach the client through Partner Center with a GDAP
@@ -33,19 +33,19 @@ errors and their fixes.
   Center (GDAP)* below). Approving Microsoft Graph application permissions
   for the whole organisation needs one of those two roles.
 
-## 1. Add the tenant
+## 1. Add the client
 
-1. *Tenants → Add tenant*.
-2. **Client name**: how the tenant appears in Office Sentry and on reports.
+1. *Clients → Add client*.
+2. **Client name**: how the client appears in Office Sentry and on reports.
 3. **Tenant ID or domain**: the client's Directory (tenant) ID, or any domain
    the tenant uses, such as `contoso.onmicrosoft.com`. A domain is replaced by
    the tenant ID once consent is granted.
 4. If you have more than one app connection, pick one. Most MSPs have one.
 
-The tenant's **Overview** then shows a **setup checklist**. It ticks itself
+The client's **Overview** then shows a **setup checklist**. It ticks itself
 off from what Office Sentry can see, and stays until every step is done:
 
-1. Tenant added.
+1. Client added.
 2. Admin consent granted (step 2 below).
 3. Global Reader assigned (step 3).
 4. First full collection done (step 4).
@@ -70,12 +70,12 @@ Two things decide whether Office Sentry records it:
 - **The return page needs the same signed-in Office Sentry admin, in the same
   browser** that opened the link. A link opened from another browser or by
   another admin records nothing.
-- **When the tenant was added by domain**, Office Sentry asks Microsoft's
+- **When the client was added by domain**, Office Sentry asks Microsoft's
   public sign-in metadata which tenant ID that domain belongs to, and only
   switches to the tenant ID that comes back with the consent if they match.
   If Microsoft can't be asked just then, the consent is recorded and the
-  tenant keeps using the domain (which works); you can enter the tenant ID
-  under *Manage → Settings* later. A tenant that already has its tenant ID
+  client keeps using the domain (which works); you can enter the tenant ID
+  under *Manage → Settings* later. A client that already has its tenant ID
   never changes it on consent.
 
 So the quickest way is to open the link **yourself**, in the browser where you
@@ -85,7 +85,7 @@ is a Global Administrator of the client's tenant.
 ### Sending the link to the client
 
 To have the client's Global Administrator approve it, send them the client
-link instead: *Settings → Client tenants → Onboarding*, then the tenant's
+link instead: *Settings → Client settings → Onboarding*, then the client's
 **Send…** (or **Copy link** in the list). That page has the link, a message to
 paste into an email, a **Consent pack PDF** to attach (how to approve, what
 Office Sentry reads and never reads, and how to remove it) and **Mark as
@@ -118,7 +118,7 @@ account in the client's tenant:
    **Privileged Role Administrator** (or Global Administrator), and they've
    activated it if it's just-in-time.
 2. They open the client's consent link (from the Onboarding page, or **Grant
-   admin consent** on the tenant's checklist if they're also an Office
+   admin consent** on the client's checklist if they're also an Office
    Sentry admin) and sign in with their partner account. The link names the
    client's tenant, which is what makes Microsoft apply their GDAP roles
    there; a link to `/common` or `/organizations` would consent in the
@@ -169,7 +169,7 @@ What you see when you come back from the consent page:
 | *Consent was not granted: …* | The admin cancelled, or Microsoft refused; Microsoft's reason follows. |
 | *Consent came from a different tenant than this one.* (or *than contoso.com*) | Someone approved from another tenant, for example signed in to your own MSP tenant, or the link was tampered with. Nothing is recorded. Sign in to the client's tenant and try again. |
 | *That consent link has already been used or has expired …* | The link was used before, is over an hour old, or came back to a different browser or admin. Nothing is recorded. Open a fresh link from the page. |
-| *Office Sentry couldn't confirm the tenant ID …* | Consent is recorded, but the tenant keeps its domain because Microsoft's sign-in metadata couldn't be read just then. |
+| *Office Sentry couldn't confirm the tenant ID …* | Consent is recorded, but the client keeps its domain because Microsoft's sign-in metadata couldn't be read just then. |
 
 ## 3. Assign Global Reader (for mailbox data)
 
@@ -209,7 +209,7 @@ can't provide. A large tenant can take a while. To collect again later, use
 
 ## Onboarding many clients
 
-*Settings → Client tenants → Onboarding* (admins) is for adding clients in
+*Settings → Client settings → Onboarding* (admins) is for adding clients in
 bulk and following each one through consent.
 
 1. **Import from CSV.** One row per client with column names on the first
@@ -221,14 +221,14 @@ bulk and following each one through consent.
    1,000 rows at a time; **Download a template** has the layout. You see every
    row first, with what's wrong with any of them, which app connection each
    cloud uses, any groups the import creates and which analysts will see the
-   new tenants through a group. Nothing is added until you press **Import**.
-   Tenants already in Office Sentry are skipped, never changed.
-2. **Send.** Each tenant's **Send…** page has its link, an email to paste and
+   new clients through a group. Nothing is added until you press **Import**.
+   Clients already in Office Sentry are skipped, never changed.
+2. **Send.** Each client's **Send…** page has its link, an email to paste and
    the consent pack PDF (see *Sending the link to the client* above). For a
-   mail merge, **Consent links (CSV)** lists every tenant that hasn't
-   consented with its contact and link. Tick tenants and press **Mark as
+   mail merge, **Consent links (CSV)** lists every client that hasn't
+   consented with its contact and link. Tick clients and press **Mark as
    sent**.
-3. **Follow.** The list shows each tenant's state:
+3. **Follow.** The list shows each client's state:
 
 | State | Meaning |
 |---|---|
@@ -239,18 +239,18 @@ bulk and following each one through consent.
 | Global Reader missing | Consented, but the app doesn't hold Global Reader, so mailbox reports can't be collected (step 3 below). |
 | Connected | Consent and Global Reader in place. |
 
-Imported tenants are ordinary tenants: admins see them; analysts and client
+Imported clients are ordinary clients: admins see them; analysts and client
 users only once they're given access, one by one or through a group (an
-analyst given a group sees the imported tenants in it).
+analyst given a group sees the imported clients in it).
 
 ## 5. Connection health: the Manage page
 
-Every tenant's **Manage** page (under **Settings**, admins and analysts) has a **Connection
+Every client's **Manage** page (under **Settings**, admins and analysts) has a **Connection
 health** list, one line per thing that can go wrong, each with what to do:
 
 | Line | What it checks | Typical fix |
 |---|---|---|
-| App connection | The tenant has an app connection with a client ID. | Choose it under *Settings*, or add the client ID under *Settings → App connection*. |
+| App connection | The client has an app connection with a client ID. | Choose it under *Settings*, or add the client ID under *Settings → App connection*. |
 | Admin consent | Consent is recorded. | Grant admin consent (step 2). |
 | Sign-in | Office Sentry can sign in to the tenant. Failures are explained in plain words (see *Errors on failed runs* below). | Usually the certificate or consent. |
 | Permissions | Which of the app's permissions the tenant actually granted, read from the app's own enterprise app in the tenant. Missing ones are listed by name. | A Global Administrator opens the consent link again; it grants every permission at once. |
@@ -266,7 +266,7 @@ requests and the permissions the app already has (`Application.Read.All`,
 `RoleManagement.Read.Directory`). **Check connection now** queues it on its
 own; the result appears within a minute or so (reload the page).
 
-The tenant's overall status is one of:
+The client's overall status is one of:
 
 | Status | Meaning |
 |---|---|
@@ -276,18 +276,18 @@ The tenant's overall status is one of:
 | Paused | Collection and emailed reports are paused (see *Pausing and archiving*). |
 | Archived | Hidden from lists and reports until restored. |
 
-**Every client at once**: *Settings → Client tenants* (also *Connection
-health* on the Tenants page) lists every tenant with its status, consent,
+**Every client at once**: *Settings → Client settings* (also *Connection
+health* on the Clients page) lists every client with its status, consent,
 missing permissions, Global Reader, last good collection and failing data
-sources, the ones that need fixing first. Click a tenant to open its Manage
+sources, the ones that need fixing first. Click a client to open its Manage
 page.
 
-Admins also edit the tenant under *Manage → Settings*: its name, notes for the
+Admins also edit the client under *Manage → Settings*: its name, notes for the
 team, its app connection (moving to an app with a different client ID needs
 consent again), and its tenant ID or domain. The tenant ID can't change once
 data has been collected, except from a domain to the tenant ID it stands for
 (checked against Microsoft's public sign-in metadata for that domain):
-to report on a different tenant, add it as a new one. *Test sign-in* there
+to report on a different tenant, add it as a new client. *Test sign-in* there
 signs in from the portal straight away without checking permissions.
 
 ## 6. Read the Data collection page
@@ -340,7 +340,7 @@ from Microsoft rather than Office Sentry, it is marked *typically*.
 
 | Error | Cause and fix |
 |---|---|
-| `tenant has no app connection with a client ID` | The app connection is missing its client ID. Add it under *Settings → App connection*. |
+| `client has no app connection with a client ID` | The app connection is missing its client ID. Add it under *Settings → App connection*. |
 | `Graph 401 …` with `AADSTS700016` (typically *Application … was not found in the directory*) | No consent in this tenant yet, or the tenant ID or domain is wrong. Get consent (step 2). |
 | `Graph 401 …` with `AADSTS700027` (typically about the client assertion or certificate) | The certificate isn't on the app registration, or it has expired. Check *Settings → App connection* for the expiry date, and that the `.cer` is uploaded to the app. |
 | `Graph 403 Authorization_RequestDenied: …` | A permission isn't consented in this tenant, usually after the app gained a permission. Re-consent (see below). |
@@ -349,7 +349,7 @@ from Microsoft rather than Office Sentry, it is marked *typically*.
 | `Graph 0 network_error: …` / `Exchange 0 network_error: …` | The Office Sentry server couldn't reach Microsoft after several retries. Check its internet access, proxy and DNS. |
 | `Exchange 0 too_many_pages: … returned more than 200 pages` | An exceptionally large Exchange result. |
 | `worker stopped before the run finished` | The worker was stopped or restarted mid-run. Refresh that data source. |
-| `unknown tenant or collector` | The run refers to a data source that no longer exists, usually after an upgrade. Safe to ignore. |
+| `unknown client or collector` | The run refers to a data source that no longer exists, usually after an upgrade. Safe to ignore. |
 | Any other `SomeError: …` | An unexpected error in Office Sentry. The run's log has the full details; report it with that log. |
 
 ## Checks that show "not checked"
@@ -375,19 +375,19 @@ The [check catalogue](checks.md) lists the licence note for each check.
 
 ## Re-consent when permissions change
 
-Adding a permission to the app means every tenant must approve again. Until a
-tenant does, the Manage page lists the new permission as missing, and data
+Adding a permission to the app means every client must approve again. Until a
+client does, the Manage page lists the new permission as missing, and data
 sources that need it fail with `Graph 403 Authorization_RequestDenied` (or
-are partial). *Settings → Client tenants* shows which tenants still miss it.
+are partial). *Settings → Client settings* shows which clients still miss it.
 
 1. **Add the permission to the app registration** in your own (MSP) tenant:
    *App registrations → (the app) → API permissions → Add a permission*,
    application permissions. *Settings → App connection → Permissions the app
    asks for* lists what this version of Office Sentry expects. Don't create
    the app again (with *Sign in to Microsoft* or `create-app`): that makes a
-   second app, and existing tenants stay on the first. Office Sentry refuses
+   second app, and existing clients stay on the first. Office Sentry refuses
    a second app for a cloud that already has one from the App connection page.
-2. **Re-consent each tenant**: on the **Manage** page, open *Re-grant consent
+2. **Re-consent each client**: on the **Manage** page, open *Re-grant consent
    (after new permissions)* under Settings, or *Open consent link* next to
    *Permissions*, the same way as step 2.
 3. Press **Check connection now**, then **Refresh all data** on the Data
@@ -399,19 +399,19 @@ On the **Manage** page, admins can:
 
 - **Pause collection**, for example while a client's contract is on hold.
   Nothing is collected (scheduled or manual), no emailed reports or alert
-  emails go out, and the tenant drops out of the team digest. Its data, reports
-  and findings stay, and the tenant still shows (marked *Paused*) in lists and
+  emails go out, and the client drops out of the team digest. Its data, reports
+  and findings stay, and the client still shows (marked *Paused*) in lists and
   to its client users. **Resume** picks up at the next nightly collection.
 - **Archive** a client you've stopped working with but who may come back. An
-  archived tenant is also paused, and is hidden from the Tenants page, All
-  tenants, What changed, the Reports page, digests and its client users.
-  Admins find it under *Settings → Client tenants → Archived*, where
+  archived client is also paused, and is hidden from the Clients page, All
+  clients, What changed, the Reports page, digests and its client users.
+  Admins find it under *Settings → Client settings → Archived*, where
   **Restore** brings it back (still paused, so resume it when ready). Grants
   for analysts and client users are kept.
 
 ## Offboarding a client
 
-On the tenant's **Manage** page, choose **Offboard…** (admins only). The page
+On the client's **Manage** page, choose **Offboard…** (admins only). The page
 walks through it:
 
 1. **Download a final copy**: the monthly review and insurance evidence pack
@@ -427,29 +427,29 @@ walks through it:
    (including accepted risks), emailed reports, alert emails, client contacts,
    email history, and which Office Sentry users lose access.
 4. **Delete permanently**: tick any client accounts that had access to this
-   tenant only, if they should go too (they'd see nothing afterwards), type the
-   tenant's name and press *Delete … permanently*.
+   client only, if they should go too (they'd see nothing afterwards), type the
+   client's name and press *Delete … permanently*.
 
 Everything is removed in one transaction, and Office Sentry checks that
 nothing tenant-scoped is left before it commits; if anything would be, nothing
-is deleted. Other users keep their accounts and just lose this tenant. The
-activity log keeps an entry saying who deleted the tenant, when, and what was
+is deleted. Other users keep their accounts and just lose this client. The
+activity log keeps an entry saying who deleted the client, when, and what was
 removed.
 
 Erasure, for a client's data-protection request:
 
-- **Activity log**: entries about the tenant keep who did what and when, but
+- **Activity log**: entries about the client keep who did what and when, but
   details that name the client's people (accepted findings, which hold a
   user's sign-in name; contacts' email addresses; alert errors) are replaced
-  with *(removed when the tenant was deleted)*. Client accounts deleted with
-  the tenant are renamed *deleted client account #N* in the log and their
+  with *(removed when the client was deleted)*. Client accounts deleted with
+  the client are renamed *deleted client account #N* in the log and their
   addresses are cleared; the offboarding entry lists their usernames as the
   record of what was erased.
 - **Database file**: the delete overwrites the removed rows
   (`secure_delete`), then compacts the file and empties the write-ahead log,
   so nothing can be read back from free space.
 - **Backups**: copies made by the `backup` command before the
-  delete still contain the tenant until they rotate out (the last 7 are
+  delete still contain the client until they rotate out (the last 7 are
   kept), and so do any copies you took off the server. Delete those yourself
   if the client needs erasure sooner.
 
@@ -458,10 +458,10 @@ the `v2` folder on the server (back up first):
 
 ```bash
 docker compose exec web python -m officesentry backup
-docker compose exec web python -m officesentry delete-tenant <number>   # asks you to type the tenant's name
+docker compose exec web python -m officesentry delete-tenant <number>   # asks you to type the client's name
 docker compose exec web python -m officesentry delete-tenant <number> --delete-client-users
 ```
 
 Without Docker, run the same `python -m officesentry ...` commands in the
-virtual environment. The number is the one in the tenant's address
+virtual environment. The number is the one in the client's address
 (`/tenants/<number>`).
