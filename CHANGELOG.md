@@ -53,6 +53,17 @@ Microsoft. Nobody's access changes. As ever, a copy of the database is made firs
 
 ### Fixed
 
+- **A large month-end no longer loses emails to Microsoft's sending limit.** Exchange Online takes 30
+  messages a minute from one mailbox; approving more clients than that at once had the rest refused ("429
+  ApplicationThrottled") and left Approved with "Send failed", to be sent again one by one. Approvals and
+  scheduled report emails now go out at that pace and wait out Microsoft's "too many messages" and "service
+  unavailable" answers, for up to ten minutes, before they count as failed (in a longer outage the rest fail
+  at once, as before). A test email or Send now from a page still sends at once.
+- **The month-end queue flags a client a whole data source never came in for** ("Mailboxes not collected",
+  or "2 data sources not collected") instead of marking it Ready, so a client whose Exchange access was
+  never granted isn't approved and sent a report with that part missing. A client that removed the app,
+  whose report could only say "Nothing has been collected, so no security checks could run", is flagged
+  "No checks could run": it was marked Ready and sent in bulk before.
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.

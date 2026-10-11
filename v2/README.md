@@ -530,7 +530,9 @@ These areas have no real recording and are tested with simulated data only:
   an emailed report, and prunes old snapshots. Month-end approvals and report
   emails run as background tasks in the same worker, so approving 200 clients
   returns at once and the page shows progress; work a crashed worker left is
-  picked up again, and a client's month is still sent exactly once.
+  picked up again, and a client's month is still sent exactly once. Emails go
+  out at Exchange Online's 30 messages a minute per mailbox and wait out
+  Microsoft's "too many messages" answers, so a large month-end isn't refused.
 
 ## Sign-in security
 
