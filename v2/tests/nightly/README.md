@@ -53,9 +53,9 @@ sends a `Deprecation` or `Sunset` header the recording doesn't have. Re-recordin
 headers, which acknowledges them; they stay listed in every report, with their dates. No response is saved
 or uploaded, and the log shows each collector's status only.
 
-In GitHub Actions it signs in with no stored secret: the run's own OIDC token, which the test tenant's app
-trusts through a federated credential. Until the two repository variables below exist the workflow skips
-itself. To set it up (once, about 10 minutes):
+In GitHub Actions it signs in with no stored password or key: the run's own OIDC token, which the test
+tenant's app trusts through a federated credential. Until the `CANARY_CLIENT_ID` variable below exists the
+workflow skips itself. To set it up (once, about 10 minutes):
 
 1. Go to **https://entra.microsoft.com** and sign in to the test tenant as a Global Administrator.
 2. Open **Applications**, then **App registrations**, then **All applications**, and click the test app
@@ -68,9 +68,9 @@ itself. To set it up (once, about 10 minutes):
    `repo:JackD99/OfficeSentry:ref:refs/heads/main`.
 6. Set **Name** to `github-canary-main`, leave **Audience** as `api://AzureADTokenExchange`, and click **Add**.
 7. Still on the app, open **Overview** and copy the **Application (client) ID** and the **Directory (tenant) ID**.
-8. In GitHub, open the repository's **Settings**, then **Secrets and variables**, then **Actions**, then the
-   **Variables** tab (not Secrets), and add two repository variables:
-   - `CANARY_TENANT_ID`: the Directory (tenant) ID
+8. In GitHub, open the repository's **Settings**, then **Secrets and variables**, then **Actions**. Add the
+   first as a repository secret (**Secrets** tab) and the second as a repository variable (**Variables** tab):
+   - `CANARY_TENANT_ID`: the Directory (tenant) ID, a secret so it never shows in the public run logs
    - `CANARY_CLIENT_ID`: the Application (client) ID
 9. Open **Actions**, click **canary**, then **Run workflow** on `main`. It takes about three minutes; a green
    run with "Nothing changed" in its summary means it works.

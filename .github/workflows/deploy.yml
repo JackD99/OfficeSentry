@@ -13,9 +13,13 @@ name: Deploy
 # and demo still follow main. Unset, a deploy builds the chosen ref on the server (v2/DEPLOY.md, "Production
 # from releases").
 #
-# Run logs will be public once the repository is, so nothing here prints the
-# first-admin link, the portal's logs or a secret: the status action reports
-# health and error counts only.
+# Run logs are public, so nothing here prints the first-admin link, the
+# portal's logs or a secret: the status action reports health and error counts
+# only. Every step's log opens with its settings, and only secrets are hidden
+# there, so the server's address, the portal's name, extra .env lines and the
+# backup location are read from secrets of those names (DEPLOY_HOST,
+# OFFICESENTRY_DOMAIN, OFFICESENTRY_SETTINGS, BACKUP_REPOSITORY) when they
+# exist. A variable of the same name still works, but shows in every run.
 on:
   workflow_dispatch:
     inputs:
@@ -93,7 +97,7 @@ jobs:
       REF: ${{ github.event.workflow_run.head_sha || inputs.ref || github.sha }}
       RELEASES_ONLY: ${{ vars.PRODUCTION_FROM_TAGS == 'true' }}
       IMAGE: ghcr.io/jackd99/officesentry
-      HOST: ${{ vars.DEPLOY_HOST }}
+      HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
       # The public demo (v2/deploy/public/) runs while DEMO_ENABLED is "true". Deploys and website-and-demo
       # runs rebuild it from their code (a docs-only change leaves it), and it starts afresh every night by itself.
       DEMO_DOMAIN: ${{ vars.DEMO_ENABLED == 'true' && vars.OFFICESENTRY_DEMO_DOMAIN || '' }}
@@ -111,18 +115,18 @@ jobs:
         env:
           HAS_KEY: ${{ secrets.DEPLOY_SSH_KEY != '' }}
           SETUP_CODE: ${{ secrets.SETUP_CODE }}
-          DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
-          BACKUP_REPOSITORY: ${{ vars.BACKUP_REPOSITORY }}
+          DOMAIN: ${{ secrets.OFFICESENTRY_DOMAIN || vars.OFFICESENTRY_DOMAIN }}
+          BACKUP_REPOSITORY: ${{ secrets.BACKUP_REPOSITORY || vars.BACKUP_REPOSITORY }}
           HAS_BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD != '' }}
           HAS_BACKUP_KEY_ID: ${{ secrets.BACKUP_KEY_ID != '' }}
           HAS_BACKUP_SECRET_KEY: ${{ secrets.BACKUP_SECRET_KEY != '' }}
         run: |
           missing=""
-          [ -n "$HOST" ] || missing="$missing DEPLOY_HOST (variable)"
+          [ -n "$HOST" ] || missing="$missing DEPLOY_HOST (secret)"
           [ -n "$HCLOUD_TOKEN" ] || missing="$missing HCLOUD_TOKEN (secret)"
           [ "$HAS_KEY" = true ] || missing="$missing DEPLOY_SSH_KEY (secret)"
           if [ "$DEPLOYS" = true ] || [ "$ACTION" = setup-link ]; then
-            [ -n "$DOMAIN" ] || missing="$missing OFFICESENTRY_DOMAIN (variable)"
+            [ -n "$DOMAIN" ] || missing="$missing OFFICESENTRY_DOMAIN (secret)"
           fi
           if [ "$ACTION" = setup-link ] && [ "${#SETUP_CODE}" -lt 20 ]; then
             echo "::error::The setup-link action needs a SETUP_CODE secret of at least 20 characters (a long random password works). Add it under Settings > Secrets and variables > Actions > New repository secret, then run this again. v2/DEPLOY.md, step 6, has the steps."
@@ -175,12 +179,12 @@ jobs:
       - name: Write the server's settings files
         if: env.DEPLOYS == 'true'
         env:
-          DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
+          DOMAIN: ${{ secrets.OFFICESENTRY_DOMAIN || vars.OFFICESENTRY_DOMAIN }}
           TIMEZONE: ${{ vars.OFFICESENTRY_TIMEZONE || 'UTC' }}
-          EXTRA: ${{ vars.OFFICESENTRY_SETTINGS }}
-          # A secret, so the addresses stay out of the run logs, which will be public with the repository.
+          EXTRA: ${{ secrets.OFFICESENTRY_SETTINGS || vars.OFFICESENTRY_SETTINGS }}
+          # A secret, so the addresses stay out of the run logs, which are public.
           PORTAL_IPS: ${{ secrets.PORTAL_ALLOWED_IPS }}
-          BACKUP_REPOSITORY: ${{ vars.BACKUP_REPOSITORY }}
+          BACKUP_REPOSITORY: ${{ secrets.BACKUP_REPOSITORY || vars.BACKUP_REPOSITORY }}
           BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD }}
           BACKUP_KEY_ID: ${{ secrets.BACKUP_KEY_ID }}
           BACKUP_SECRET_KEY: ${{ secrets.BACKUP_SECRET_KEY }}
@@ -320,7 +324,7 @@ jobs:
           fi
           printf '%s %s\n' "$HOST" "$want" > ~/.ssh/known_hosts
           if [ -n "$seen" ] && [ "${want%% *}" = ssh-ed25519 ] && [ "$seen" != "$want" ]; then
-            echo "::error::The server at $HOST shows a different SSH key from the DEPLOY_HOST_KEY secret, so nothing was sent to it. If you rebuilt or replaced the server, set DEPLOY_HOST_KEY to: $seen. If you didn't, change nothing and check the DEPLOY_HOST variable and the server in the Hetzner console."
+            echo "::error::The server at $HOST shows a different SSH key from the DEPLOY_HOST_KEY secret, so nothing was sent to it. If you rebuilt or replaced the server, set DEPLOY_HOST_KEY to: $seen. If you didn't, change nothing and check the DEPLOY_HOST secret and the server in the Hetzner console."
             exit 1
           fi
 
@@ -389,7 +393,6 @@ jobs:
         if: env.ACTION == 'setup-link'
         env:
           SETUP_CODE: ${{ secrets.SETUP_CODE }}
-          DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
         run: |
           # Its output is the current link, so it's only searched, never shown.
           if ! out=$(ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry setup-link' 2>&1); then
@@ -401,7 +404,8 @@ jobs:
             exit 1
           fi
           printf '%s' "$SETUP_CODE" | ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web sh -c "umask 077 && cat > /data/setup-token"'
-          echo "Open https://$DOMAIN/setup and enter your SETUP_CODE secret as the setup code." | tee -a "$GITHUB_STEP_SUMMARY"
+          # The portal's name stays out of the public log and summary; you know it.
+          echo 'Open `https://<your domain>/setup` and enter your SETUP_CODE secret as the setup code.' | tee -a "$GITHUB_STEP_SUMMARY"
 
       # backup: a database copy now, then the off-site copy when it's set up.
       # restore-drill: restore the newest off-site copy to a scratch volume and check it.
