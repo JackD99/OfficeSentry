@@ -47,7 +47,7 @@ Office Sentry is built so that it can't change anything in your tenant.
   `Get-AcceptedDomain`, `Get-CASMailbox`, `Get-DistributionGroup`,
   `Get-DistributionGroupMember`, `Get-HostedOutboundSpamFilterPolicy`,
   `Get-InboxRule`, `Get-Mailbox`, `Get-MailboxPermission`, `Get-MailboxStatistics`,
-  `Get-MessageTraceV2`, `Get-MobileDevice`, `Get-MobileDeviceStatistics`,
+  `Get-MailTrafficSummaryReport`, `Get-MessageTraceV2`, `Get-MobileDevice`, `Get-MobileDeviceStatistics`,
   `Get-OrganizationConfig`, `Get-Recipient`, `Get-RecipientPermission`,
   `Get-RemoteDomain`, `Get-TransportConfig`.
 
@@ -57,10 +57,14 @@ Office Sentry is built so that it can't change anything in your tenant.
   `Get-MobileDevice` and `Get-MobileDeviceStatistics` return the phones and
   tablets that sync with each mailbox (model, operating system, access state
   and when each last synced). `Get-MessageTraceV2` is Exchange's message trace,
-  which lists each message's sender, recipients, subject and time; Office
-  Sentry asks it only about mail sent to distribution lists and keeps only how
-  many messages each list received per day and when the last one arrived,
-  never subjects or senders.
+  which lists each message's sender, recipients, subject and time. Office
+  Sentry keeps only counts from it: how many messages each distribution list
+  received per day and when the last one arrived, and how many messages each
+  of the tenant's domains received, sent and delivered, sent to Junk,
+  quarantined or failed per day. It never keeps subjects, senders or
+  recipients. `Get-MailTrafficSummaryReport` returns Microsoft's own summary
+  of the 20 people who got the most spam and phishing in the last 30 days:
+  their addresses and how many such messages each got.
 
 The only thing Office Sentry ever creates is its own app registration, once,
 in your **MSP's** tenant when they set it up. It never creates or changes

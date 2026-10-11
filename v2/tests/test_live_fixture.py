@@ -70,6 +70,9 @@ STAND_INS: dict[str, dict] = {
     "/v1.0/directory/administrativeUnits/{id}/members": {"value": []},
     # The Teams collector's activity report (2.2); the test tenant has no Teams, so Microsoft lists no teams.
     "/beta/reports/getTeamsTeamActivityDetail(period='D90')": {"value": []},
+    # Mail flow (2.2): the whole message trace a day at a time, and Microsoft's top spam and phishing recipients.
+    "Get-MessageTraceV2(EndDate,ResultSize,StartDate)": {"value": []},
+    "Get-MailTrafficSummaryReport": {"value": []},
 }
 NEW_FIELDS: frozenset[str] = frozenset()
 
@@ -128,7 +131,9 @@ def test_stand_ins_are_only_for_requests_not_recorded():
             path, query = replay.request_key(e["url"])
             recorded.add(path + replay.PAGED if any(k == "$skiptoken" for k, _ in query) else path)
         elif e["api"] == "exchange":
-            recorded.add(e["cmdlet"]["CmdletName"])
+            name = e["cmdlet"]["CmdletName"]
+            recorded.add(name)
+            recorded.add(f"{name}({','.join(sorted(e['cmdlet'].get('Parameters') or {}))})")
     assert not set(STAND_INS) & recorded
     assert not any(re.fullmatch(path.replace("{id}", "[^/]+"), r) for path in STAND_INS for r in recorded)
 
