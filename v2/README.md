@@ -4,7 +4,8 @@ Read-only Microsoft 365 reporting for MSPs: nightly snapshots of every
 client's Microsoft 365, cross-client rollups, month-over-month changes and
 branded client reports. The [root README](../README.md) is the product page
 with screenshots; this page lists every feature in detail and covers setup
-and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
+and development. Running it on a server is in [DEPLOY.md](DEPLOY.md), and on
+Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/README.md).
 
 ## Reports
 
@@ -452,10 +453,12 @@ These areas have no real recording and are tested with simulated data only:
   MSP's own Conditional Access and MFA. *Settings → Staff sign-in* creates a
   small single-tenant app in the MSP's tenant with the same device-code wizard
   as the app connection (`sso.py`, `app_setup.py`); the read-only client app and
-  its permissions are untouched. Roles are the app's **Admin** and **Analyst**
-  app roles, assigned to people or groups in Entra and read from the ID token at
-  every sign-in; which clients an analyst sees is still granted here, so tenant
-  isolation doesn't change. Existing accounts link from the Account page or by a
+  its permissions are untouched. The app has an app role for each built-in role
+  (Admin, TeamLeader, Analyst for Second line, FirstLine, AccountManager,
+  Auditor), and a custom role can be given an app role value of its own; they're
+  assigned to people or groups in Entra and read from the ID token at every
+  sign-in ([docs/staff-sign-in.md](docs/staff-sign-in.md)). Which clients
+  someone sees is still granted here, so tenant isolation doesn't change. Existing accounts link from the Account page or by a
   matching username; new staff get an account at their first sign-in. Passwords
   stay as the break-glass route until an admin signed in with Microsoft turns
   them off (`python -m officesentry staff-sign-in --passwords on` turns them

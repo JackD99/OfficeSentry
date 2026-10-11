@@ -180,10 +180,10 @@ def create_user():
     return redirect(url_for("admin.edit_user", user_id=cur.lastrowid))
 
 
-# Someone who signs in with Microsoft gets Admin or Analyst from Entra at each sign-in (sso.account_for).
+# Someone who signs in with Microsoft gets their role from Entra at each sign-in (sso.account_for).
 _SET_IN_ENTRA = (
-    "{username} signs in with Microsoft, so the app role assigned in Entra decides whether they're an "
-    "Administrator or staff. Change it there."
+    "{username} signs in with Microsoft, so their role is the app role assigned to them in Entra. Change it "
+    "there; Settings → Staff sign-in says which app role gives which role."
 )
 
 
@@ -201,7 +201,7 @@ def edit_user(user_id: int):
         if request.form.get("password") and not _admin_password_ok():
             return redirect(url_for("admin.edit_user", user_id=user_id))
         role = _role_from_form(current_role)
-        if user["entra_oid"] and role.kind != current_role.kind:
+        if user["entra_oid"] and role.id != current_role.id:
             flash(_SET_IN_ENTRA.format(username=user["username"]), "error")
             return redirect(url_for("admin.edit_user", user_id=user_id))
         if role.id != current_role.id and not _givable(role):

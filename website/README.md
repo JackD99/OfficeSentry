@@ -13,10 +13,14 @@ Which files become pages is the `SECTIONS` list at the top of `build.py`:
 
 | Menu section | Pages |
 |---|---|
-| Get started | the root README's "Quick start" section, `v2/DEPLOY.md`, `v2/docs/onboarding-a-client.md`, `v2/docs/troubleshooting.md` |
+| Get started | the root README's "Quick start" section, `v2/DEPLOY.md`, `v2/docs/onboarding-a-client.md`, `v2/docs/staff-sign-in.md`, `v2/docs/troubleshooting.md`, `v2/docs/getting-help.md`, `v2/docs/securing-the-portal.md` |
+| Deploy | `v2/docs/deploy/README.md` (the list of platforms) and each guide in `v2/docs/deploy/` |
 | Reference | `v2/README.md`, `v2/docs/checks.md`, `v2/docs/what-office-sentry-reads.md`, `examples/README.md` |
-| Project | `SECURITY.md`, `CHANGELOG.md`, `CONTRIBUTING.md` |
+| Project | `SECURITY.md`, `CHANGELOG.md`, `ROADMAP.md`, `DEVELOPING.md`, `CONTRIBUTING.md`, `SUPPORT.md` |
 | Guides | any other file in `v2/docs/`, added by itself |
+
+A new guide in `v2/docs/deploy/` isn't added by itself: list it under Deploy in `SECTIONS` and in the table
+in `v2/docs/deploy/README.md` (`v2/tests/test_deploy_platforms.py` fails until both are done).
 
 - A page's title is its file's first heading, unless `SECTIONS` gives one.
 - Links between these files become links between pages, and headings keep GitHub's anchors, so a link

@@ -3,6 +3,7 @@ Staff sign-in settings page with its setup wizard."""
 
 from __future__ import annotations
 
+import json
 import re
 
 from cryptography.fernet import InvalidToken
@@ -21,7 +22,7 @@ from flask import (
     url_for,
 )
 
-from .. import app_setup, cert_lifecycle, clouds, entra, sso
+from .. import app_setup, cert_lifecycle, clouds, entra, permissions, roles, sso
 from ..certs import cert_der
 from ..db import audit, transaction, utcnow
 from . import sessions
@@ -130,12 +131,14 @@ def callback():
                     g.db,
                     user["username"],
                     "user_created",
-                    detail=f"{user['username']} ({user['role']}), Microsoft sign-in",
+                    detail=f"{user['username']} ({roles.role_of(g.db, user).name}), Microsoft sign-in",
                 )
             elif outcome == "linked":
                 audit(g.db, user["username"], "microsoft_connected", detail=f"{identity.upn} (matched the username)")
             elif outcome == "role_changed":
-                audit(g.db, user["username"], "user_updated", detail=f"role from Entra: {user['role']}")
+                audit(
+                    g.db, user["username"], "user_updated", detail=f"role from Entra: {roles.role_of(g.db, user).name}"
+                )
     except sso.Refused as exc:
         audit(g.db, identity.username, "login_failed", detail=f"Microsoft: {exc}"[:300])
         flash(str(exc), "error")
@@ -229,7 +232,8 @@ def settings_page():
         redirect_uri=_redirect_uri(),
         default_app_name=sso.DEFAULT_NAME,
         setup_permissions=sso.SETUP_PERMISSIONS,
-        roles=sso.APP_ROLE_DEFINITIONS,
+        app_roles=_app_roles(),
+        custom_roles=_custom_roles(s),
         default_roles=sso.DEFAULT_ROLES,
         linked=linked,
         staff=staff,
@@ -239,6 +243,57 @@ def settings_page():
         me_linked=bool(g.user["entra_oid"]),
         notes=[n for n in (s.get("sso_notes") or "").split("\n") if n],
     )
+
+
+def _app_roles() -> list[tuple[str, str]]:
+    """(app role value, the Office Sentry role it gives, by its name here) for the sign-in app's own roles."""
+    names = {r.key: r.name for r in roles.all_roles(g.db) if r.key}
+    return [(value, names.get(key, permissions.TEMPLATE_BY_KEY[key].name)) for value, key in sso.APP_ROLES.items()]
+
+
+def _custom_roles(s: dict) -> list[tuple[roles.Role, str]]:
+    """Every custom staff role, with the app role value that reaches it from Entra ('' for none)."""
+    value_of = {role_id: value for value, role_id in sso.custom_values(s).items()}
+    return [
+        (r, value_of.get(r.id, "")) for r in roles.all_roles(g.db) if not r.built_in and r.kind == permissions.STAFF
+    ]
+
+
+@bp.post("/admin/sign-in/roles")
+@needs("settings.manage")
+def save_role_values():
+    """The app role value in Entra that gives each custom role, one form field per role (``value-<id>``)."""
+    s = sso.settings(g.db)
+    taken = {v.lower() for v in sso.APP_ROLES}
+    values: dict[str, int] = {}
+    for role, _old in _custom_roles(s):
+        value = request.form.get(f"value-{role.id}", "").strip()
+        if not value:
+            continue
+        if not sso.VALUE_RE.match(value):
+            flash(
+                f"“{value}” can't be an app role value: letters, digits and . _ : - only, no spaces, up to 60.",
+                "error",
+            )
+            return redirect(url_for("sso.settings_page") + "#roles")
+        if value.lower() in taken:
+            flash(f"{value} is already an app role of the sign-in app, or given to another role.", "error")
+            return redirect(url_for("sso.settings_page") + "#roles")
+        taken.add(value.lower())
+        values[value] = role.id
+    if values != sso.custom_values(s):
+        with transaction(g.db):
+            sso.save(g.db, {"sso_role_values": json.dumps(values, sort_keys=True) if values else ""})
+            names = {r.id: r.name for r, _v in _custom_roles(s)}
+            audit(
+                g.db,
+                g.user["username"],
+                "staff_sign_in_changed",
+                detail="roles from Entra: "
+                + (", ".join(f"{v}={names[i]}" for v, i in sorted(values.items())) or "none"),
+            )
+    flash("Saved.", "success")
+    return redirect(url_for("sso.settings_page") + "#roles")
 
 
 @bp.post("/admin/sign-in")

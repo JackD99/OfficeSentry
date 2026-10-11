@@ -1,8 +1,8 @@
 name: Delete run logs
 # Run logs are public. When some showed what they shouldn't have (the server's address, the portal's name),
 # this deletes the logs of one workflow's runs up to a run number; the runs stay listed, without logs. It
-# can't be undone. Run it by hand: Actions > Delete run logs > Run workflow (v2/DEPLOY.md, "When the
-# repository goes public"); only people with write access can.
+# can't be undone. Run it by hand: Actions > Delete run logs > Run workflow; only people with write access
+# can.
 on:
   workflow_dispatch:
     inputs:
