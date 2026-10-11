@@ -37,6 +37,16 @@ No.
   settings, its automatic reply, the phones syncing it, email activity, open findings and what changed.
   Mailbox addresses in reports and search results open the page, and it downloads as PDF and XLSX.
 
+### Changed
+
+- **"Clients" for the companies you look after.** Pages, menus, emails, PDFs, spreadsheets and the docs now
+  say client where they said tenant; "tenant" is kept only for the Microsoft 365 side (Tenant ID, consent in
+  the client's tenant). In the menu, Tenants is now **Clients**, All tenants is **All clients**, and under
+  Settings, Client tenants is **Client settings** and Tenant groups is **Client groups**. The account
+  manager's home page (was "Clients") is now **Accounts**. Columns headed "Tenant" are now "Client";
+  saved views and bookmarked links that filter or sort on that column keep working. The group digest is
+  now the "Client digest", and its spreadsheet is named `client-digest-...`.
+
 ### Fixed
 
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
@@ -123,6 +133,14 @@ No.
 - A database upgrade on a large database no longer fails the deploy: the portal's health check allows 15
   minutes to start, the start script waits that long and then starts the worker, and Docker keeps the
   containers running while it is itself updated (`live-restore`, on new servers).
+- A deploy no longer copies the portal's settings files, among them the off-site backup password, into
+  the public demo's folder on the server, and removes the copies earlier deploys left. The temporary SSH
+  rule it opens in the Hetzner firewall is removed by a second job too, in case GitHub loses the deploy
+  job's runner before it can close it.
+- A long write to the database (a restore, a backup, a large delete) no longer makes every page fail:
+  pages don't wait for it to note a sign-in was seen or to store a dashboard row, and a change that
+  still finds the database locked after five seconds is answered with "Office Sentry is busy right
+  now, try again in a moment" instead of an error page.
 
 ### Security
 

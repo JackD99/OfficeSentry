@@ -15,7 +15,7 @@ from ..text import plural
 from .data_reports import DataReport, Rows, Section, Tile
 from .registry import report
 
-NOT_COLLECTED = 'Risky users haven\'t been collected yet. Refresh "Risky users" on the tenant page.'
+NOT_COLLECTED = 'Risky users haven\'t been collected yet. Refresh "Risky users" on the client page.'
 NO_P2 = (
     "Risky users come from Entra ID Protection, which needs Entra ID P2 (included in Microsoft 365 E5, or as "
     "an add-on to Business Premium or E3). This tenant doesn't have it. The Sign-in activity report still "
@@ -23,7 +23,7 @@ NO_P2 = (
 )
 NO_PERMISSION = (
     "Office Sentry can't read this tenant's risky users. It needs the IdentityRiskyUser.Read.All "
-    "permission: open the tenant page, send the consent link to the client's Global Admin again and "
+    "permission: open the client page, send the consent link to the client's Global Admin again and "
     "ask them to accept."
 )
 

@@ -133,7 +133,7 @@ def refused(ctx: RunContext, what: str, exc: PermissionMissing) -> tuple[str, st
     return (
         "permission",
         f"{what[0].upper()}{what[1:]} needs the Sites.Read.All permission. Re-send the consent link from the "
-        f"tenant page to add it. ({exc.message})",
+        f"client page to add it. ({exc.message})",
     )
 
 
@@ -142,5 +142,5 @@ DENIED_TEXT = (
     "SharePoint refused Office Sentry's app although this tenant granted the Sites.Read.All permission, so "
     "sending the consent link again won't help. The client's SharePoint may restrict which apps can read it "
     "(an app access policy or restricted site access), or SharePoint may not be set up yet. The run log on the "
-    "tenant page has Microsoft's message."
+    "client page has Microsoft's message."
 )
