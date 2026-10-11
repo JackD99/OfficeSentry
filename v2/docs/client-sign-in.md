@@ -87,8 +87,9 @@ scopes only (`openid`, `profile`, `email`): their people can sign in here, and O
 person's name and sign-in address, nothing else. They approve once for everyone, and land on a thank-you
 page. The message to send their people includes the link until the approval is noted.
 
-Office Sentry notes the approval when Microsoft says it was given for that client's own tenant, and again when
-someone from it first signs in. It's shown on the page; it doesn't change who can sign in.
+Office Sentry notes the approval when someone from that client first signs in with Microsoft, which they can
+only do once it's approved. The thank-you page records nothing, since anyone with the link could open it. The
+approval is shown on the page; it doesn't change who can sign in.
 
 ## When a client's tenant ID isn't known yet
 

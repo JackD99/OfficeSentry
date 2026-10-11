@@ -27,7 +27,7 @@ from itsdangerous import BadSignature, URLSafeSerializer
 from .. import app_setup, cert_lifecycle, clouds, entra, permissions, roles, sso, store
 from ..certs import cert_der
 from ..db import audit, audit_counted, transaction, utcnow
-from . import public_demo, sessions
+from . import sessions
 from .access import login_required, needs, safe_next, visible_tenants
 from .admin import _out_of_reach, _user_or_404
 from .auth import confirm_password
@@ -86,7 +86,7 @@ def start():
 def callback():
     s = sso.settings(g.db)
     if (tenant := _approval_tenant(request.args.get("state"))) is not None:
-        return _approval_returned(s, tenant)  # a client's administrator, back from approving the sign-in app
+        return _approval_returned(tenant)  # a client's administrator, back from approving the sign-in app
     flow = sso.Flow.from_dict(session.pop(FLOW_KEY, None))
     if not sso.is_configured(s):
         abort(404)
@@ -284,10 +284,11 @@ def _approval_tenant(state: str | None):
     return tenant if tenant is not None and tenant["created_at"] == data["c"] else None
 
 
-def _approval_returned(s: dict, t):
+def _approval_returned(t):
     """Public: a client's administrator back from Microsoft's approval page, with no Office Sentry sign-in.
-    Notes the approval when Microsoft says it was given for this client's own tenant; shows none of
-    Microsoft's text, only a known explanation."""
+    Thanks them, or explains a known problem, from what the address says; shows none of Microsoft's text.
+    Nothing is recorded for the client, since anyone holding the link can write that address: a client
+    counts as approved once someone from its tenant signs in (``sso.client_account_for``)."""
     error = request.args.get("error")
     returned = request.args.get("tenant", "").lower()
     approved = not error and request.args.get("admin_consent", "").lower() == "true"
@@ -297,13 +298,6 @@ def _approval_returned(s: dict, t):
         "client_sign_in_approved" if mine else "client_sign_in_not_approved",
         (request.remote_addr or "")[:64],
     )
-    if mine and not t["archived_at"] and not public_demo.active(g.db):
-        with transaction(g.db):
-            g.db.execute(
-                "UPDATE tenants SET sign_in_approved_at = COALESCE(sign_in_approved_at, ?) WHERE id = ?",
-                (utcnow(), t["id"]),
-            )
-            audit(g.db, None, "client_sign_in_approved", t["id"], f"tenant {returned}")
     problem = sso.known_problem(error, request.args.get("error_description"), clients=True) if error else None
     return render_template(
         "client_sign_in_approved.html",

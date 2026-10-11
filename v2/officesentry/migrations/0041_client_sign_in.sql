@@ -5,8 +5,8 @@
 -- linked before this (their tenant is the MSP's own, sso_tenant).
 ALTER TABLE users ADD COLUMN entra_tid TEXT;
 
--- When a client's own administrator approved the sign-in app for their organisation (the approval link's
--- answer), or a person from that client first signed in with Microsoft.
+-- When a person from that client first signed in with Microsoft, which they can only do once their
+-- organisation has approved the sign-in app.
 ALTER TABLE tenants ADD COLUMN sign_in_approved_at TEXT;
 
 -- When the person last confirmed it's them with Microsoft (accounts with no password confirm a security

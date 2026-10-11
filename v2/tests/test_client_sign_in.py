@@ -500,13 +500,15 @@ def test_the_approval_link_asks_only_for_sign_in(client, db, world):
     assert urlsplit(_approval_link(client, bravo)).path == f"/{BRAVO}/v2.0/adminconsent"
 
 
-def test_the_approval_return_records_only_the_clients_own_tenant(client, db, world):
+def test_the_approval_return_page_records_nothing(client, db, world):
+    """Anyone holding the link can write the return address, so it only thanks or explains; a client counts
+    as approved once someone from it signs in (test_client_signs_in_with_their_own_work_account)."""
     alpha, _ = world
     login(client, "owner")
     state = parse_qs(urlsplit(_approval_link(client, alpha)).query)["state"][0]
     client.post("/logout")
 
-    # Approved, but from another organisation: not recorded.
+    # Approved, but from another organisation.
     text = page(client, f"/login/microsoft/callback?admin_consent=True&tenant={BRAVO}&state={state}")
     assert "another organisation" in text and "Alpha Ltd" not in text
     assert store.get_tenant(db, alpha)["sign_in_approved_at"] is None
@@ -523,7 +525,7 @@ def test_the_approval_return_records_only_the_clients_own_tenant(client, db, wor
 
     text = page(client, f"/login/microsoft/callback?admin_consent=True&tenant={ALPHA}&state={state}")
     assert "Thank you" in text and "Alpha Ltd" not in text and ALPHA not in text
-    assert store.get_tenant(db, alpha)["sign_in_approved_at"]
+    assert store.get_tenant(db, alpha)["sign_in_approved_at"] is None
     actions = [r["action"] for r in db.execute("SELECT action FROM audit_log")]
     assert "client_sign_in_approved" in actions and "client_sign_in_not_approved" in actions
 

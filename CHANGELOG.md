@@ -21,7 +21,7 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 ### Database upgrade
 
 Yes, applied on start as usual: migration 41 adds the tenant a Microsoft account belongs to on each account,
-when each client's administrator approved client sign-in, and when a session last confirmed a change with
+when someone from each client first signed in with Microsoft, and when a session last confirmed a change with
 Microsoft. Nobody's access changes. As ever, a copy of the database is made first.
 
 ### Added

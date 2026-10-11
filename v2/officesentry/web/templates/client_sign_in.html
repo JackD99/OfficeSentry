@@ -14,7 +14,7 @@
     <div class="foot">{% if ready %}With their own work account.{% elif not clients_enabled %}Client accounts use a password.{% elif not same_cloud %}Another Microsoft cloud.{% elif own %}Your own tenant.{% else %}Tenant ID not known yet.{% endif %}</div></div>
   <div class="tile"><div class="label">Approved by {{ tenant.name }}</div>
     <div class="value small-value">{% if approved %}<span class="pill ok">Approved</span>{% else %}<span class="pill">Not yet</span>{% endif %}</div>
-    <div class="foot">{% if approved %}{{ ts(approved) }}{% else %}Their administrator approves once.{% endif %}</div></div>
+    <div class="foot">{% if approved %}{{ ts(approved) }}{% else %}Noted when someone there first signs in.{% endif %}</div></div>
 </div>
 
 {% if not clients_enabled %}
