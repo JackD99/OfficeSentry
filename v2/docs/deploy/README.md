@@ -13,7 +13,6 @@ New to it and just want it running? A small Linux server with Docker is the simp
 | You run | Guide | Tested |
 |---|---|---|
 | A Linux server with Docker | [Running it on your own server](../../DEPLOY.md#first-start) | Yes: the project's own server runs it |
-| A Hetzner server, set up from a phone | [Hetzner, from a phone](../../DEPLOY.md#hetzner-from-a-phone) | Yes: the project's own server |
 | Portainer | [Portainer](portainer.md) | The stack file, with Docker Compose; Portainer's screens not yet |
 | Dockge, Komodo, Coolify or Dokploy | [Other container managers](container-managers.md) | The stack file, with Docker Compose; the managers not yet |
 | Unraid, Synology or TrueNAS | [Unraid, Synology and TrueNAS](nas.md) | The stack file, with Docker Compose; the NAS systems not yet |

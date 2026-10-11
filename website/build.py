@@ -79,7 +79,7 @@ SECTIONS = [
                 "v2/DEPLOY.md",
                 "install",
                 "Running it on your own server",
-                blurb="HTTPS, a Hetzner server from your phone, backups, updates and Windows.",
+                blurb="Docker on a Linux server: HTTPS, backups, off-site copies, updates and Windows.",
             ),
             Doc(
                 "v2/docs/onboarding-a-client.md",

@@ -18,9 +18,11 @@ exactly the Docker setup in [Running it on your own server](../../DEPLOY.md).
    file where the host takes *user data* or *cloud-init* (the table below says where), and add your SSH key.
 3. **The firewall.** Inbound TCP 443 from your office and home addresses only (client users who sign in need
    theirs there too), TCP 80 from anywhere (Let's Encrypt checks there before issuing the certificate; Caddy
-   only redirects it to 443), and SSH from your own address, or none if the host has a web console.
-4. **Your domain.** An **A** record for it with the server's IPv4 address. (On Cloudflare, keep the proxy
-   off: [Cloudflare](cloudflare.md).)
+   only redirects it to 443), and SSH from your own address, or none if the host has a web console. A phone
+   on mobile data changes address often: add its current address while you need it, and remove it after.
+4. **Your domain.** An **A** record for it with the server's IPv4 address. Add an **AAAA** (IPv6) record only
+   if the firewall lists your IPv6 addresses too, or browsers that prefer IPv6 won't get in. (On Cloudflare,
+   keep the proxy off: [Cloudflare](cloudflare.md).)
 5. **The first admin.** A few minutes after the server starts, on its console or over SSH:
 
    ```bash
@@ -67,9 +69,12 @@ documentation describes.
 
 ### Hetzner
 
-Hetzner has its own guide, [Hetzner, from a phone](../../DEPLOY.md#hetzner-from-a-phone), which deploys and
-updates from GitHub Actions and is how the project's own server runs. The start-up file here works on Hetzner
-too, for a server you look after yourself.
+In the [Hetzner Cloud console](https://console.hetzner.cloud), make the firewall first: **Firewalls → Create
+firewall** with the two inbound rules from step 3 and no rule for SSH unless you'll use it. Then **Servers →
+Add server**: Ubuntu 24.04, a shared vCPU type with 2 vCPUs and 4 GB (x86, or Arm64 from 2.1.0), your SSH
+key, the firewall ticked, **Backups** ticked (Hetzner keeps a copy of the whole server for 7 days) and the
+start-up file in **Cloud config**. Hetzner's servers sign in as `root`, so step 5 is `ssh root@<address>`
+(add an SSH rule for your own address to the firewall while you do, and remove it afterwards).
 
 ### A host without cloud-init
 

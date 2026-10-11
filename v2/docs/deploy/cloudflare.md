@@ -18,8 +18,11 @@ alone](#what-cloudflare-must-leave-alone) with either.
 
 ## DNS only
 
-The way [Hetzner, from a phone](../../DEPLOY.md#4-point-your-domain-at-it) describes: an **A** record with the
-proxy off (grey cloud, "DNS only"), and Caddy makes the certificate itself. Nothing else changes.
+In Cloudflare: the domain → **DNS → Records → Add record**, type **A**, the name (such as `sentry`), the
+server's IPv4 address, and **Proxy status** off (grey cloud, "DNS only"). Caddy makes the certificate itself,
+so nothing under Cloudflare's SSL/TLS settings needs changing, and your server's firewall keeps the
+allow-list. With the proxy on, every visitor would reach the server from a Cloudflare address, so that
+allow-list would block everyone: that's the [Proxied](#proxied) setup below.
 
 ## Cloudflare Tunnel
 

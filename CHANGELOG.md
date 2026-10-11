@@ -92,6 +92,10 @@ Microsoft account links on users and how each session was started.
 
 ### Changed
 
+- [Running it on your own server](v2/DEPLOY.md) no longer has the Hetzner walkthrough, which was written for
+  the project's own server. Off-site backups, the restore drill and restoring from the off-site copy are now
+  written for any server, with `deploy/jobs.sh` run in the folder with `docker-compose.yml`.
+
 - Pages that show every client at once stay quick as the number of clients grows. The insurance evidence
   rollup, every report's All clients rollup, the month-end queue, Recommended projects and the Accounts home
   page now read rows the worker keeps up to date after each collection, as What changed and the check
@@ -257,7 +261,7 @@ Microsoft account links on users and how each session was started.
 - The Deploy workflow reads the server's address and the portal's name from the secrets `DEPLOY_HOST` and
   `OFFICESENTRY_DOMAIN` (and `OFFICESENTRY_SETTINGS` and `BACKUP_REPOSITORY` when they're secrets), since a
   public repository's run logs show every variable a step reads. Variables of those names still work; add
-  each as a secret to hide it ([v2/DEPLOY.md, step 5](v2/DEPLOY.md#5-tell-github-where-to-deploy)). The
+  each as a secret to hide it. The
   live canary takes the test tenant's ID from the secret `CANARY_TENANT_ID` for the same reason.
 - The activity log now records pages people weren't allowed to open (another client's tenant, a staff-only
   page) and forms sent with a stale token, counted per person, address and hour with the latest page named,
@@ -343,8 +347,7 @@ copied collection reads back exactly as its snapshot.
 - The project's website ([website/](website/README.md)): a page about Office Sentry and these docs as web
   pages with search, rebuilt from the repository whenever a doc changes, and a public read-only demo.
 - Deploy workflow: a `restore-drill` action, backup status in `status`, and a `PRODUCTION_FROM_TAGS`
-  variable that makes the portal take release tags only, as the published image pinned by digest
-  ([v2/DEPLOY.md, "Production from releases"](v2/DEPLOY.md#production-from-releases)).
+  variable that makes the portal take release tags only, as the published image pinned by digest.
 - Activity history: every sign-in and directory audit event is kept beyond the 30 days Microsoft keeps them.
   Each collection reads on from where the last one stopped, so a run that times out, hits its page limit or
   is interrupted carries on next time with nothing lost or counted twice, and a busy tenant's sign-in log is
