@@ -138,6 +138,12 @@ def test_security_headers(client, db):
     csp = resp.headers["Content-Security-Policy"]
     assert "default-src 'self'" in csp and "frame-ancestors 'none'" in csp
     assert resp.headers["X-Frame-Options"] == "DENY"
+    for url in ("/login", "/brand/logo", "/brand.css", "/health", "/nowhere"):
+        headers = client.get(url).headers
+        assert headers["Cross-Origin-Opener-Policy"] == "same-origin", url
+        assert headers["Cross-Origin-Resource-Policy"] == "same-origin", url
+        assert headers["X-Permitted-Cross-Domain-Policies"] == "none", url
+        assert headers["X-Content-Type-Options"] == "nosniff" and headers["Referrer-Policy"] == "same-origin", url
 
 
 def test_csrf_enforced_when_enabled(cfg, db):
