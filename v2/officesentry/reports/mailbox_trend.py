@@ -19,7 +19,7 @@ from .mail_reports import _no_exchange, _size
 from .registry import report
 from .sharepoint import storage_chart
 
-NOT_COLLECTED = "Mailbox sizes haven't been collected yet. Refresh Mailbox size on the tenant page."
+NOT_COLLECTED = "Mailbox sizes haven't been collected yet. Refresh Mailbox size on the client page."
 SPANS = (30, 90)  # days back each mailbox is compared with
 MIN_SPAN = 7  # a comparison needs at least this many days of history
 SOON_DAYS = 30

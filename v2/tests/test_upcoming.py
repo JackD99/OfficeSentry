@@ -222,7 +222,7 @@ def test_our_own_certificates(db, tenant, connection_id):
     assert not any(i.type == "Office Sentry certificate" for i in _items(db, [tenant]).values())
     ours = _items(db, [tenant], ours=True)["The Test app certificate"]
     assert (ours.tenant, ours.window, ours.severity, ours.days) == (None, "Next 30 days", "high", 20)
-    assert "Collection from every client tenant stops" in ours.detail
+    assert "Collection from every client stops" in ours.detail
     assert ours.href == f"/admin/connections#conn-{connection_id}"
 
 
@@ -322,7 +322,7 @@ def test_empty_state(client, db):
     make_user(db, "admin")
     login(client, "admin")
     page = client.get("/upcoming").get_data(as_text=True)
-    assert "No tenants to show" in page
+    assert "No clients to show" in page
 
 
 # -- The weekly email -----------------------------------------------------------------------------

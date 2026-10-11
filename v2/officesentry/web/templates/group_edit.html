@@ -1,24 +1,24 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, csrf %}
-{% block title %}{{ group.name }} · Tenant groups{% endblock %}
+{% block title %}{{ group.name }} · Client groups{% endblock %}
 {% block content %}
-<div class="crumbs"><a href="{{ url_for('groups.index') }}">Tenant groups</a><span>/</span><span>{{ group.name }}</span></div>
+<div class="crumbs"><a href="{{ url_for('groups.index') }}">Client groups</a><span>/</span><span>{{ group.name }}</span></div>
 <div class="page-head"><div><h1>{{ group.name }}</h1>
-  <div class="sub">{{ chosen|length|plural('tenant') }}{% if group.category %} · {{ group.category }}{% endif %}</div></div>
+  <div class="sub">{{ chosen|length|plural('client') }}{% if group.category %} · {{ group.category }}{% endif %}</div></div>
   <div class="actions"><a class="btn" href="{{ url_for('tenants.dashboard', group=group.id) }}">{{ icon('eye') }} Show this group on the dashboard</a></div></div>
 
 {% if analysts %}
-<div class="callout">{{ icon('users') }}<span class="grow"><strong>{{ analysts|length|plural('analyst') }} can see every tenant in this group:</strong> {{ analysts|join(', ') }}.
-  Tenants you add here become visible to them straight away, and tenants you remove are hidden from them.</span></div>
+<div class="callout">{{ icon('users') }}<span class="grow"><strong>{{ analysts|length|plural('analyst') }} can see every client in this group:</strong> {{ analysts|join(', ') }}.
+  Clients you add here become visible to them straight away, and clients you remove are hidden from them.</span></div>
 {% endif %}
 
 <form method="post" class="grid-main">
   {{ csrf() }}
   <section class="card">
-    <div class="card-head"><h2>Tenants in this group</h2><span class="meta" id="member-count">{{ chosen|length }} of {{ tenants|length }} ticked</span></div>
+    <div class="card-head"><h2>Clients in this group</h2><span class="meta" id="member-count">{{ chosen|length }} of {{ tenants|length }} ticked</span></div>
     {% if tenants %}
     <div class="member-tools">
-      <input class="search" type="search" id="member-filter" placeholder="Filter tenants…" aria-label="Filter tenants">
+      <input class="search" type="search" id="member-filter" placeholder="Filter clients…" aria-label="Filter clients">
       <button type="button" class="sm ghost" data-tick="1">Tick shown</button>
       <button type="button" class="sm ghost" data-tick="0">Untick shown</button>
     </div>
@@ -31,7 +31,7 @@
       {% endfor %}
     </div>
     {% else %}
-    <p class="muted">No tenants yet. Add tenants first, then put them in groups.</p>
+    <p class="muted">No clients yet. Add clients first, then put them in groups.</p>
     {% endif %}
   </section>
 
@@ -50,10 +50,10 @@
 
 <section class="card narrow-lg danger-zone">
   <h2>Delete group</h2>
-  <p class="muted small">The tenants stay; only the group goes.
-    {% if usage.digests %}{{ usage.digests|plural('digest') }} covering this group will cover every tenant instead.{% endif %}
-    {% if usage.analysts %}{{ usage.analysts|plural('analyst') }} granted this group will stop seeing its tenants, unless granted them another way.{% endif %}</p>
-  <form method="post" action="{{ url_for('groups.delete', group_id=group.id) }}" data-confirm="Delete the group {{ group.name }}? Its tenants are kept.">
+  <p class="muted small">The clients stay; only the group goes.
+    {% if usage.digests %}{{ usage.digests|plural('digest') }} covering this group will cover every client instead.{% endif %}
+    {% if usage.analysts %}{{ usage.analysts|plural('analyst') }} granted this group will stop seeing its clients, unless granted them another way.{% endif %}</p>
+  <form method="post" action="{{ url_for('groups.delete', group_id=group.id) }}" data-confirm="Delete the group {{ group.name }}? Its clients are kept.">
     {{ csrf() }}<button class="danger">Delete {{ group.name }}</button>
   </form>
 </section>
