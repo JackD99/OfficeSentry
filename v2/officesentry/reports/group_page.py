@@ -26,7 +26,7 @@ from ..devices import parse_ts
 from ..licences import sku_name
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .data_reports import PAGE_INDEXES, VISIBILITY, Highlight, PageIndex, PageLink, Section
+from .data_reports import PAGE_INDEXES, VISIBILITY, Highlight, Link, PageIndex, PageLink, Section
 from .distribution_lists import MEMBER_TYPES, _activity, _Owners, _recent
 from .distribution_lists import RECENT_DAYS as MAIL_DAYS
 from .distribution_lists import UNUSED_DAYS as MAIL_UNUSED_DAYS
@@ -46,6 +46,7 @@ from .object_page import (
     sources_for,
 )
 from .profile.base import HISTORY_LIMIT, Event, Part
+from .site_page import matches_group, site_key, site_path
 
 KIND = "group"
 URL = "groups"
@@ -641,19 +642,9 @@ def mail_part(m: Group) -> Part | None:
 
 def _team_site(m: Group) -> dict | None:
     """The team site of a Microsoft 365 group, matched by the group's address or its site address."""
-    if not m.m365:
+    if not m.m365 or not m.mail:
         return None
-    local = m.mail.split("@")[0].lower() if m.mail else ""
-    for s in m.snap.objects("sharepoint_usage", "site") or []:
-        template = _lower(s.get("template"))
-        if not template.startswith("group") or s.get("deleted"):
-            continue
-        url = _lower(s.get("url")).rstrip("/")
-        if (m.mail and _lower(s.get("ownerPrincipalName")) == m.mail.lower()) or (
-            local and url.endswith("/sites/" + local)
-        ):
-            return s
-    return None
+    return next((s for s in m.snap.objects("sharepoint_usage", "site") or [] if matches_group(s, m.mail)), None)
 
 
 @part(KIND, 50)
@@ -682,10 +673,7 @@ def files_part(m: Group) -> Part | None:
         ),
         None,
     )
-    link = PageLink(url, url)
-    link.safe_href = url
-    link.page_href = ""
-    result.facts.append(("Site", link))
+    result.facts.append(("Site", Link(url, url, page_href=site_path(m.tenant_id, site_key(site)))))
     used = (storage or {}).get("used") if storage else site.get("storageUsed")
     if isinstance(used, int):
         limit = (storage or {}).get("limit")

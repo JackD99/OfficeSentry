@@ -29,6 +29,8 @@ from .. import search_index
 from ..checks.apps import app_risks
 from ..reports import sign_in_reports
 from ..reports.group_page import group_type
+from ..reports.sharepoint import site_type, size
+from ..reports.site_page import site_key
 from ..reports.views import slug
 from ..search_index import KINDS
 from ..snapshot import TenantSnapshot
@@ -50,6 +52,7 @@ COLLECTOR_CAPABILITY = {
     "groups": "reports.people",
     "mailboxes": "reports.email",
     "inbox_rules": "reports.email",
+    "sharepoint_usage": "reports.files",
     "sign_ins": "reports.identity",
     "app_consents": "reports.devices",
     "devices": "reports.devices",
@@ -268,12 +271,20 @@ def _group(t: Tenant, g: dict, _v: str) -> Hit:
     )
 
 
+def _site(t: Tenant, s: dict, _v: str) -> Hit:
+    words = [site_type(s).lower(), size(s.get("storageUsed") or 0)]
+    if s.get("anyoneLinks"):
+        words.append(plural(s["anyoneLinks"], "anyone link"))
+    return Hit("Site", s["url"], ", ".join(words), url_for("site_pages.site", tenant_id=t.id, site_id=site_key(s)))
+
+
 # How a match of each kind in ``search_index.KINDS`` is shown: (tenant, object, the value that matched).
 SHOW: dict[str, Callable[[Tenant, dict, str], Hit]] = {
     "person": _person,
     "group": _group,
     "mailbox": _mailbox,
     "forwarding": _forwarding,
+    "site": _site,
     "rule": _rule,
     "failure_ip": _failure_ip,
     "risky": _risky,
