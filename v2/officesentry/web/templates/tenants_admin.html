@@ -72,6 +72,8 @@
       <td data-label="Consent">{% if c.consent %}<span class="pill ok">{{ icon('check') }}Granted</span>{% else %}<span class="pill accent">Not yet</span>{% endif %}</td>
       <td data-label="Permissions">{% if c.missing is none %}<span class="faint">Not checked</span>
         {% elif c.missing %}<span class="pill bad" title="Missing: {{ c.missing|join(', ') }}">{{ c.missing|length }} missing</span>
+        {% elif c.waiting %}{% set label = c.waiting|length ~ ' new to approve' %}{% set why = "Waiting for the client's approval: " ~ c.waiting|join(', ') %}
+          {% if current_user.role == 'admin' %}<a class="pill accent" href="{{ url_for('onboarding.send', tenant_id=t.id) }}" title="{{ why }}">{{ label }}</a>{% else %}<span class="pill accent" title="{{ why }}">{{ label }}</span>{% endif %}
         {% else %}<span class="pill ok">{{ icon('check') }}All</span>{% endif %}
         {% if c.extra_permissions %}<span class="pill warn" title="Not asked for: {{ c.extra_permissions|join(', ') }}">{{ c.extra_permissions|length }} extra</span>{% endif %}</td>
       <td data-label="Global Reader">{% if c.global_reader is none %}<span class="faint">Not checked</span>

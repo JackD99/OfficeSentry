@@ -16,9 +16,9 @@ from datetime import UTC, datetime
 from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, url_for
 from itsdangerous import BadSignature, URLSafeSerializer
 
-from .. import clouds, onboarding, store, tenant_health
+from .. import clouds, onboarding, permission_batch, store, tenant_health
 from ..db import audit, audit_counted
-from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS, admin_consent_url
+from ..entra import GRAPH_APP_ID, PERMISSIONS, admin_consent_url
 from ..reports import tables
 from . import public_demo
 from .access import roles_required, tenant_or_404, visible_tenants
@@ -29,8 +29,9 @@ from .tenants import _cfg, cloud_mismatch
 bp = Blueprint("onboarding", __name__, url_prefix="/admin/onboarding")
 
 MAX_UPLOAD = onboarding.MAX_BYTES
-FILTERS = {"waiting": "Still onboarding", "all": "All clients"}
+FILTERS = {"waiting": "Still to do", "all": "All clients"}
 ON_CLIENT = {"sent", "approved"}  # the tracker's "Waiting on client" tile, as the filter ?state=client
+GROUPED = {"client": ON_CLIENT, "new": onboarding.NEW_STATES}  # ?state= values that stand for several states
 
 
 def _client_serializer() -> URLSafeSerializer:
@@ -108,12 +109,18 @@ def index():
     show = request.args.get("show", "waiting" if any(e.state.key != "connected" for e in everything) else "all")
     show = show if show in FILTERS else "all"
     state = request.args.get("state", "")
-    state = state if state in onboarding.STATES or state == "client" else ""
-    wanted = ON_CLIENT if state == "client" else {state}
+    state = state if state in onboarding.STATES or state in GROUPED else ""
+    wanted = GROUPED.get(state, {state})
     entries = [
         e for e in everything if (show == "all" or e.state.key != "connected") and (not state or e.state.key in wanted)
     ]
-    links = {e.tenant["id"]: client_link(e.tenant, e.connection) for e in entries if not e.tenant["consented_at"]}
+    links = {e.tenant["id"]: client_link(e.tenant, e.connection) for e in entries if e.needs_link}
+    counts["new"] = sum(counts[k] for k in onboarding.NEW_STATES)
+    # App registrations that don't ask for the new permissions yet: approving now would grant only the old ones.
+    asking = {
+        e.connection["id"]: e.connection for e in everything if e.state.key in onboarding.NEW_STATES and e.connection
+    }
+    behind = [c for c in asking.values() if not permission_batch.app_ready(g.db, c)]
     return render_template(
         "onboarding.html",
         entries=entries,
@@ -124,6 +131,8 @@ def index():
         filters=FILTERS,
         states=onboarding.STATES,
         links=links,
+        behind=behind,
+        batch=permission_batch.CURRENT,
     )
 
 
@@ -145,13 +154,27 @@ def bulk():
         waiting = [t for t in tenants if not t["consented_at"] and not t["archived_at"]]
         for t in waiting:
             onboarding.queue_check(g.db, t["id"], priority=store.PRIORITY_WAITING, user=g.user["username"])
-        if waiting:
-            audit(g.db, g.user["username"], "consent_check_requested", detail=f"{len(waiting)} tenants")
+        # A client asked for new permissions: re-read what it granted.
+        rereading = [
+            t
+            for t in tenants
+            if t["consented_at"]
+            and t["enabled"]
+            and not t["archived_at"]
+            and permission_batch.waiting(tenant_health.connection_result(g.db, t["id"]))
+        ]
+        for t in rereading:
+            store.enqueue_run(g.db, t["id"], "connection", requested_by=g.user["username"])
+        if waiting or rereading:
+            audit(
+                g.db, g.user["username"], "consent_check_requested", detail=f"{len(waiting) + len(rereading)} tenants"
+            )
+        n = len(waiting) + len(rereading)
         flash(
-            f"Checking {len(waiting)} {'client' if len(waiting) == 1 else 'clients'} by signing in to each. "
+            f"Checking {n} {'client' if n == 1 else 'clients'} by signing in to each. "
             "Reload the page in a minute to see the results."
-            if waiting
-            else "Every client you ticked has already consented.",
+            if n
+            else "Every client you ticked has already approved everything.",
             "success",
         )
     else:
@@ -162,10 +185,11 @@ def bulk():
 @bp.get("/export.csv")
 @roles_required("admin")
 def export():
-    """Every tenant that hasn't consented yet, with its contact and consent link, for a mail merge."""
+    """Every client with something to approve (the app, or new permissions), with its contact and consent link,
+    for a mail merge."""
     rows = []
     for e in onboarding.tracker(g.db, visible_tenants(g.db, g.user)):
-        if e.tenant["consented_at"]:
+        if not e.needs_link:
             continue
         rows.append(
             [
@@ -259,27 +283,44 @@ def _send_context(t):
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
     result = tenant_health.connection_result(g.db, t["id"])
     row = onboarding.row_for(g.db, t["id"])
+    request_row = permission_batch.request_for(g.db, t["id"])
+    waiting = permission_batch.waiting(result) if t["consented_at"] else []
     return {
         "tenant": t,
         "connection": connection,
         "row": row,
-        "state": onboarding.state(t, row, result),
+        "ask": request_row,
+        "state": onboarding.state(t, row, result, request_row),
         "link": client_link(t, connection),
         "app": onboarding.app_name(connection, result),
         "cloud": clouds.of(t),
         "today": datetime.now(UTC),
+        "batch": permission_batch.CURRENT,
+        "new": [i for i in permission_batch.items(onboarding.CLIENT_WORDS) if i.permission in waiting],
     }
 
 
 @bp.get("/<int:tenant_id>")
 @roles_required("admin")
 def send(tenant_id: int):
+    """One client's page: sending the consent link and pack, or, for a client that already consented and has new
+    permissions to approve, What's new and why."""
     t = tenant_or_404(tenant_id)
     ctx = _send_context(t)
-    email = render_template("emails/consent_request.txt", brand=current_brand(), **ctx)
+    whats_new = ctx["state"].key in onboarding.NEW_STATES
+    email = render_template(
+        "emails/permissions_update.txt" if whats_new else "emails/consent_request.txt", brand=current_brand(), **ctx
+    )
     subject, _, body = email.partition("\n")
+    extra = {}
+    if whats_new:
+        extra["app_ready"] = permission_batch.app_ready(g.db, ctx["connection"])
     return render_template(
-        "onboarding_send.html", subject=subject.removeprefix("Subject: ").strip(), body=body.strip(), **ctx
+        "onboarding_whats_new.html" if whats_new else "onboarding_send.html",
+        subject=subject.removeprefix("Subject: ").strip(),
+        body=body.strip(),
+        **ctx,
+        **extra,
     )
 
 
@@ -306,10 +347,12 @@ def mark_sent(tenant_id: int):
     t = tenant_or_404(tenant_id)
     sent = request.form.get("sent", "1") == "1"
     onboarding.mark_sent(g.db, [t["id"]], g.user["username"], sent=sent)
-    flash(
-        "Marked as sent. The tracker checks for consent every hour from now on." if sent else "Marked as not sent.",
-        "success",
-    )
+    if not sent:
+        flash("Marked as not sent.", "success")
+    elif t["consented_at"]:
+        flash("Marked as sent. Office Sentry re-reads the client's permissions as soon as they come back.", "success")
+    else:
+        flash("Marked as sent. The tracker checks for consent every hour from now on.", "success")
     return redirect(url_for("onboarding.send", tenant_id=t["id"]))
 
 
@@ -317,7 +360,16 @@ def mark_sent(tenant_id: int):
 @roles_required("admin")
 def check(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    if t["consented_at"]:
+    if t["consented_at"] and permission_batch.waiting(tenant_health.connection_result(g.db, t["id"])):
+        if t["enabled"] and not t["archived_at"]:
+            store.enqueue_run(g.db, t["id"], "connection", requested_by=g.user["username"])
+            audit(g.db, g.user["username"], "connection_check_requested", t["id"])
+            flash(
+                "Checking which permissions the client has approved. Reload in a minute to see the result.", "success"
+            )
+        else:
+            flash("This client is paused or archived, so Office Sentry doesn't sign in to it.", "error")
+    elif t["consented_at"]:
         flash("Consent is already confirmed for this client.", "success")
     else:
         onboarding.queue_check(g.db, t["id"], priority=store.PRIORITY_WAITING, user=g.user["username"])
@@ -332,13 +384,38 @@ def pack(tenant_id: int):
     """The "send this to your client" pack: how to approve, and what Office Sentry reads and never reads."""
     t = tenant_or_404(tenant_id)
     ctx = _send_context(t)
-    words = onboarding.CLIENT_WORDS
-    permissions = [(p, words[p]) for p in (*GRAPH_PERMISSIONS, *EXCHANGE_PERMISSIONS)]
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "consent pack.pdf")
     return pdf_response(
         "reports/consent_pack.html",
         f"approve-office-sentry-{tables.slug(t['name'])}",
-        permissions=permissions,
+        permissions=_permission_rows(),
+        never=onboarding.NEVER_READS,
+        **ctx,
+    )
+
+
+def _permission_rows() -> list[tuple[str, str, str]]:
+    """(Microsoft's name, the API when it isn't Microsoft Graph, what it reads) for every permission."""
+    words = onboarding.CLIENT_WORDS
+    return [
+        (name, "" if resource.app_id == GRAPH_APP_ID else resource.name, words[p])
+        for p, (resource, name, _) in PERMISSIONS.items()
+    ]
+
+
+@bp.get("/<int:tenant_id>/whats-new.pdf")
+@roles_required("admin")
+def whats_new_pack(tenant_id: int):
+    """What's new and why, for a client asked to approve a new batch of permissions: what each one reads and
+    what it adds, and how to approve. Lists the ones the client hasn't approved, or the whole batch."""
+    t = tenant_or_404(tenant_id)
+    ctx = _send_context(t)
+    if not ctx["new"]:
+        ctx["new"] = permission_batch.items(onboarding.CLIENT_WORDS)
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], "whats new pack.pdf")
+    return pdf_response(
+        "reports/whats_new_pack.html",
+        f"office-sentry-new-permissions-{tables.slug(t['name'])}",
         never=onboarding.NEVER_READS,
         **ctx,
     )

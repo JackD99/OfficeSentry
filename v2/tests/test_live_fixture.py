@@ -287,13 +287,16 @@ def test_subscriptions_on_real_data(db, live):
 
 
 def test_connection_health_on_real_data(db, live):
-    # The test app holds every permission Office Sentry asks for, and Global Reader.
-    from officesentry import tenant_health
+    # The test app holds every permission Office Sentry asked for when it was recorded, and Global Reader.
+    from officesentry import permission_batch, tenant_health
 
     health = tenant_health.assess(db, live)
     result = health.result
-    assert result["app_found"] and result["global_reader"] and not result["missing"]
+    assert result["app_found"] and result["global_reader"] and not health.missing
     assert "Exchange.ManageAsAppV2" in result["other"]  # granted, but not one Office Sentry asks for
+    # Recorded before the 2.2 batch: those wait for approval, which is a step to do, not a problem.
+    assert set(health.waiting) <= set(permission_batch.CURRENT.permissions)
+    assert health.check("permissions").state in ("ok", "todo")
     assert health.onboarded
     # The replay signs in without an app connection; that is all there is to fix.
     assert [c.key for c in health.problems] == ["connection"], health.problems

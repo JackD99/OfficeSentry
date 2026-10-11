@@ -17,15 +17,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from . import store
+from . import permission_batch, store
 from .collectors import REGISTRY
-from .entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
+from .entra import PERMISSIONS
 from .formatting import capability
 from .schedule import nightly_collectors
 from .text import plural
 
 ISO = "%Y-%m-%dT%H:%M:%SZ"
-ALL_PERMISSIONS = len(GRAPH_PERMISSIONS) + len(EXCHANGE_PERMISSIONS)
+ALL_PERMISSIONS = len(PERMISSIONS)
 SIGN_IN_PREFIX = "Sign-in failed: "
 STATUS = {  # status -> (label, pill tone)
     "onboarding": ("Onboarding", "accent"),
@@ -47,7 +47,7 @@ class Check:
     state: str  # ok | bad | warn | todo | pending | unknown | info
     summary: str
     fix: str = ""
-    action: str = ""  # what the page offers next to it: consent | check | collect | collection | connection
+    action: str = ""  # what the page offers: consent | check | collect | collection | connection | whats_new
 
     @property
     def problem(self) -> bool:
@@ -90,6 +90,16 @@ class Health:
     @property
     def problems(self) -> list[Check]:
         return [c for c in self.checks if c.problem]
+
+    @property
+    def missing(self) -> list[str]:
+        """Permissions asked for from the start that the tenant hasn't granted."""
+        return permission_batch.missing_original(self.result)
+
+    @property
+    def waiting(self) -> list[str]:
+        """New permissions (from a batch) the client hasn't approved yet."""
+        return permission_batch.waiting(self.result)
 
     @property
     def next_step(self) -> Step | None:
@@ -323,12 +333,14 @@ def assess(conn, tenant, now: datetime | None = None) -> Health:
             full,
             "first full collection (collecting now)" if collecting else "collect everything",
         ),
+        # New permissions from a batch don't count here: an onboarded client stays onboarded when Office Sentry
+        # asks for more, and the What's new page asks for them (the "permissions" check says so).
         Step(
             "permissions",
             "All permissions granted",
-            bool(result and result.get("permissions_checked") and not result.get("missing")),
+            bool(result and result.get("permissions_checked") and not permission_batch.missing_original(result)),
             "re-grant admin consent for the missing permissions"
-            if result and result.get("missing")
+            if permission_batch.missing_original(result)
             else "check the permissions",
         ),
     ]
@@ -400,7 +412,8 @@ def _app_checks(result: dict | None, name: str) -> list[Check]:
                 "Properties → set Enabled for users to sign in to Yes.",
             )
         )
-    missing = result.get("missing") or []
+    missing = permission_batch.missing_original(result)
+    new = permission_batch.waiting(result)
     if not result.get("permissions_checked"):
         checks.append(
             Check(
@@ -422,6 +435,20 @@ def _app_checks(result: dict | None, name: str) -> list[Check]:
                 f"A Global Administrator of {name} opens the consent link again; it asks for every "
                 "permission at once. Then press Check connection now.",
                 "consent",
+            )
+        )
+    elif new:
+        release = permission_batch.release_of(new[0])
+        checks.append(
+            Check(
+                "permissions",
+                "Permissions",
+                "todo",
+                f"{plural(len(new), 'new permission')} from Office Sentry {release} waiting for {name}'s approval: "
+                f"{', '.join(new)}. Reports that need them say so; everything else works.",
+                "Send the client the approval link from What's new. Their Global Administrator approves once, on "
+                "Microsoft's page.",
+                "whats_new",
             )
         )
     else:
@@ -514,10 +541,10 @@ def extra_roles(result: dict | None) -> list[str]:
 def counts(health: Health) -> dict:
     """Short cell texts for the all-tenants admin table."""
     r = health.result or {}
-    missing = r.get("missing") or []
     return {
         "consent": bool(health.tenant["consented_at"]),
-        "missing": missing if r.get("permissions_checked") else None,
+        "missing": permission_batch.missing_original(r) if r.get("permissions_checked") else None,
+        "waiting": permission_batch.waiting(r),
         "extra_permissions": extra_permissions(r),
         "global_reader": r.get("global_reader") if r.get("roles_checked") else None,
         "extra_roles": extra_roles(r),

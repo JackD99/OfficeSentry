@@ -20,10 +20,9 @@ from flask import (
 )
 from werkzeug.security import generate_password_hash
 
-from .. import app_setup, cert_lifecycle, clouds, entra, store, tenant_groups, throttle
+from .. import app_setup, cert_lifecycle, clouds, entra, permission_batch, store, tenant_groups, throttle
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
-from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
 from ..text import plural
 from . import sessions
 from .access import ROLES, roles_required
@@ -250,18 +249,30 @@ def _address_problem() -> str | None:
 def connections():
     rows = store.list_connections(g.db)
     sign_in = app_setup.current(g.db, g.user["id"])
-    if (
+    if sign_in and sign_in["purpose"] == "update" and sign_in["status"] == "done":
+        app_setup.cancel(g.db, g.user["id"])  # updated: say so once
+        flash(
+            f"{sign_in['name']} now asks for every permission. Next: each client approves the new ones with its "
+            "link, from Onboarding.",
+            "success",
+        )
+        sign_in = None
+    elif (
         sign_in
         and sign_in["status"] == "done"
         and g.db.execute("SELECT 1 FROM tenants WHERE connection_id = ?", (sign_in["connection_id"],)).fetchone()
     ):
         app_setup.cancel(g.db, g.user["id"])  # the first tenant is added: the wizard is finished
         sign_in = None
+    updating = sign_in["connection_id"] if sign_in and sign_in["purpose"] == "update" else None
     return render_template(
         "connections.html",
         connections=rows,
-        permissions=GRAPH_PERMISSIONS,
-        exchange_permissions=EXCHANGE_PERMISSIONS,
+        permissions=entra.PERMISSIONS,
+        batch=permission_batch.CURRENT,
+        release_of=permission_batch.release_of,
+        app_ready={c["id"]: permission_batch.app_ready(g.db, c) for c in rows if c["client_id"]},
+        updating=updating,
         redirect_uri=_redirect_uri(),
         expiry={c["id"]: cert_lifecycle.connection_expiry(c) for c in rows},
         test_tenant={c["id"]: cert_lifecycle.test_tenant(g.db, c["id"]) for c in rows if c["next_thumbprint"]},
@@ -357,6 +368,50 @@ def check_setup():
     return _to_setup()
 
 
+@bp.post("/connections/<int:conn_id>/update")
+@roles_required("admin")
+def update_app(conn_id: int):
+    """Sign in to Microsoft to add a new batch of permissions to this connection's app registration."""
+    connection = store.get_connection(g.db, conn_id)
+    if connection is None:
+        abort(404)
+    if not connection["client_id"]:
+        flash("Save this connection's client ID first.", "error")
+        return redirect(url_for("admin.connections") + f"#conn-{conn_id}")
+    tenant = app_setup.tenant_ref(request.form.get("tenant", ""))
+    if tenant is None:
+        flash("Enter your tenant's domain or Directory (tenant) ID, or leave it blank.", "error")
+        return redirect(url_for("admin.connections") + f"#conn-{conn_id}")
+    try:
+        app_setup.start(
+            g.db,
+            current_app.extensions["officesentry.vault"],
+            g.user["id"],
+            g.user["username"],
+            tenant,
+            connection=connection,
+        )
+    except entra.SignInError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("admin.connections") + f"#conn-{conn_id}")
+
+
+@bp.post("/connections/<int:conn_id>/updated-by-hand")
+@roles_required("admin")
+def app_updated_by_hand(conn_id: int):
+    """The admin added the new permissions to the app registration in the Entra admin centre themselves."""
+    connection = store.get_connection(g.db, conn_id)
+    if connection is None:
+        abort(404)
+    permission_batch.mark_app(g.db, conn_id, g.user["username"], "by hand")
+    flash(
+        "Noted. Each client approves the new permissions with its link, from Onboarding. If a client approves and "
+        "they're still missing, the app registration doesn't ask for them yet.",
+        "success",
+    )
+    return redirect(url_for("admin.connections") + f"#conn-{conn_id}")
+
+
 @bp.post("/connections/setup/cancel")
 @roles_required("admin")
 def cancel_setup():
@@ -372,6 +427,10 @@ def _consent_again(conn_id: int, old: str, new: str) -> int:
     g.db.execute(
         "UPDATE onboarding SET sent_at = NULL, sent_by = NULL, approved_at = NULL, checked_at = NULL,"
         " check_error = NULL WHERE tenant_id IN (SELECT id FROM tenants WHERE connection_id = ?)",
+        (conn_id,),
+    )
+    g.db.execute(
+        "DELETE FROM permission_requests WHERE tenant_id IN (SELECT id FROM tenants WHERE connection_id = ?)",
         (conn_id,),
     )
     for tenant_id in ids:

@@ -19,6 +19,11 @@ The wizard asks for exactly what the ``create-app`` command asks for (``entra.se
 same app, and both finish with ``register_app``. That reuses a certificate generated earlier for the same
 cloud (a connection still "Needs client ID") rather than making a second connection, which used to leave
 newcomers with two connections and a consent link for the wrong one.
+
+The same sign-in also updates an existing app (``purpose="update"``, from the App connection page when a
+release adds a batch of permissions, ``permission_batch``; the ``update-app`` command does the same):
+``update_app`` adds the permissions the app doesn't ask for yet, keeps the rest, and records the batch on
+the connection. Each client then approves them with its own link.
 """
 
 from __future__ import annotations
@@ -28,7 +33,7 @@ from datetime import UTC, datetime, timedelta
 
 import requests
 
-from . import clouds, entra, store
+from . import clouds, entra, permission_batch, store
 from .certs import generate_certificate
 from .db import audit
 
@@ -108,9 +113,34 @@ def register_app(
         raise entra.SignInError(entra.create_problem(exc)) from exc
     client_id = str(app["appId"]).lower()
     if pending:
-        conn.execute("UPDATE app_connections SET client_id = ? WHERE id = ?", (client_id, pending["id"]))
-        return pending["id"], app
-    return store.create_connection(conn, vault, name[:100], cert, client_id=client_id, cloud=cloud), app
+        conn_id = pending["id"]
+        conn.execute("UPDATE app_connections SET client_id = ? WHERE id = ?", (client_id, conn_id))
+    else:
+        conn_id = store.create_connection(conn, vault, name[:100], cert, client_id=client_id, cloud=cloud)
+    # A new app asks for every permission, the latest batch's included.
+    conn.execute(
+        "UPDATE app_connections SET permissions_release = ? WHERE id = ?", (permission_batch.CURRENT.release, conn_id)
+    )
+    return conn_id, app
+
+
+def update_app(conn, token: str, connection, actor: str, how: str, session: requests.Session | None = None) -> int:
+    """Add every permission Office Sentry asks for to ``connection``'s app registration with ``token`` and record
+    the batch on the connection. Returns how many permissions were added (0 when the app already asked for them
+    all). Raises ``entra.SignInError`` in words for people when Microsoft refuses."""
+    try:
+        updated = entra.update_app_permissions(
+            token, connection["client_id"], session=session, cloud=connection["cloud"]
+        )
+    except entra.AppNotFound as exc:
+        raise entra.SignInError(
+            f"The tenant you signed in to has no app registration with client ID {connection['client_id']}. Sign in "
+            "to the tenant the app was created in (your own, the MSP's), as someone who can change it."
+        ) from exc
+    except requests.RequestException as exc:
+        raise entra.SignInError(entra.update_problem(exc)) from exc
+    permission_batch.mark_app(conn, connection["id"], actor, how)
+    return updated.added
 
 
 # -- The wizard's sign-in, one row per admin --------------------------------------------------------------
@@ -132,16 +162,20 @@ def start(
     name: str = DEFAULT_NAME,
     session: requests.Session | None = None,
     now: datetime | None = None,
+    connection=None,
 ):
     """Get a device code from Microsoft and remember it (encrypted) for this admin. Replaces any earlier one.
+    With ``connection``, the sign-in updates that connection's app instead of creating one.
     Raises ``entra.SignInError`` if Microsoft won't give one."""
     now = now or datetime.now(UTC)
+    if connection is not None:
+        cloud, name = clouds.of(connection).key, connection["name"]
     code = entra.start_device_sign_in(tenant, cloud, session=session)
     conn.execute("DELETE FROM setup_sign_ins WHERE user_id = ?", (user_id,))
     conn.execute(
         "INSERT INTO setup_sign_ins (user_id, cloud, tenant, name, device_code_enc, user_code, verification_uri,"
-        " poll_seconds, expires_at, next_poll_at, status, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?)",
+        " poll_seconds, expires_at, next_poll_at, status, created_at, updated_at, purpose, connection_id)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?, ?, ?)",
         (
             user_id,
             cloud,
@@ -155,9 +189,16 @@ def start(
             _iso(now),
             _iso(now),
             _iso(now),
+            "update" if connection is not None else "create",
+            connection["id"] if connection is not None else None,
         ),
     )
-    audit(conn, actor, "app_setup_started", detail=cloud if tenant == ANY_TENANT else f"{cloud} {tenant}")
+    audit(
+        conn,
+        actor,
+        "app_update_started" if connection is not None else "app_setup_started",
+        detail=cloud if tenant == ANY_TENANT else f"{cloud} {tenant}",
+    )
     return current(conn, user_id)
 
 
@@ -228,6 +269,8 @@ def check(
         return current(conn, user_id)
 
     home = entra.token_tenant(poll.token)
+    if row["purpose"] == "update":
+        return _finish_update(conn, row, poll.token, home, actor, user_id, session, now)
     try:
         conn_id, app = register_app(conn, vault, poll.token, redirect_uri, row["name"], row["cloud"], session=session)
     except entra.SignInError as exc:
@@ -239,6 +282,27 @@ def check(
         (conn_id, str(app["appId"]).lower(), home, _iso(now), row["id"]),
     )
     audit(conn, actor, "connection_created", detail=f"{row['name']} {app['appId']} {row['cloud']} (setup wizard)")
+    return current(conn, user_id)
+
+
+def _finish_update(conn, row, token: str, home: str | None, actor: str, user_id: int, session, now: datetime):
+    connection = store.get_connection(conn, row["connection_id"]) if row["connection_id"] else None
+    if connection is None or not connection["client_id"]:
+        _fail(conn, row, "That app connection was removed, or has no client ID, so there's nothing to update.", actor)
+        return current(conn, user_id)
+    try:
+        added = update_app(conn, token, connection, actor, "update wizard", session=session)
+    except entra.SignInError as exc:
+        _fail(conn, row, str(exc), actor)
+        return current(conn, user_id)
+    conn.execute(
+        "UPDATE setup_sign_ins SET status = 'done', device_code_enc = NULL, error = NULL, client_id = ?,"
+        " home_tenant = ?, updated_at = ? WHERE id = ?",
+        (connection["client_id"], home, _iso(now), row["id"]),
+    )
+    audit(
+        conn, actor, "app_updated", detail=f"{connection['name']} {connection['client_id']}: {added} permissions added"
+    )
     return current(conn, user_id)
 
 

@@ -23,11 +23,37 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
 
 ### New Microsoft permissions
 
-None.
+Nine read-only application permissions, released together so each client approves once. After updating,
+press **Update the app** under *Settings → App connection* (or run `update-app`), then send each client the
+approval link from its **What's new** page under *Onboarding* ([v2/DEPLOY.md, "When a release adds
+permissions"](v2/DEPLOY.md#when-a-release-adds-permissions)). Until a client approves, everything else keeps
+working and the reports that need them say they're waiting for approval.
+
+| Permission | API | For |
+|---|---|---|
+| `Channel.ReadBasic.All` | Microsoft Graph | Teams channels, including private and shared ones |
+| `ChannelMember.Read.All` | Microsoft Graph | Who is in each private and shared channel, guests and people from other organisations |
+| `TeamsAppInstallation.ReadForTeam.All` | Microsoft Graph | Apps added to each team |
+| `ReportSettings.Read.All` | Microsoft Graph | Whether usage reports hide people's names |
+| `PrivilegedEligibilitySchedule.Read.AzureADGroup` | Microsoft Graph | People who can activate a privileged group's membership (PIM for groups) |
+| `BitLockerKey.ReadBasic.All` | Microsoft Graph | Whether each device's BitLocker recovery key is saved (never the key) |
+| `DeviceManagementConfiguration.Read.All` | Microsoft Graph | Intune configuration and compliance policies |
+| `DeviceManagementApps.Read.All` | Microsoft Graph | Intune app protection policies and deployed apps |
+| `Sites.Read.All` | Office 365 SharePoint Online | SharePoint group members and who has access to each site and list |
 
 ### Database upgrade
 
-No.
+Yes, a small one: a column on app connections, one on setup sign-ins, and a table for each client's approval of
+a permission batch.
+
+### Added
+
+- **What's new, for permissions.** When a release adds permissions, the Onboarding tracker lists the clients
+  still to approve them ("New permissions to approve", then sent, then approved), and each client's **What's
+  new** page says what every new permission reads and adds, with the email to send, the approval link and a
+  PDF for the client. The App connection page updates your app registration with one sign-in (**Update the
+  app**), and the new `update-app` command does the same. A client that hasn't approved yet stays *Healthy*:
+  the missing permissions are a step to do, not a problem.
 
 ### Changed
 
