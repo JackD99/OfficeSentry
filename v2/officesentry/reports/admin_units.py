@@ -27,7 +27,7 @@ ADMINS_SHOWN = 20  # admin names listed per unit; the count is always complete
 MEMBER_ROWS = 5000  # member rows shown; a tenant with more sees a note
 PROCESSING = {"On": "Dynamic", "Paused": "Dynamic (paused)"}
 
-NOT_COLLECTED = "Administrative units haven't been collected yet. Refresh Administrative units on the tenant page."
+NOT_COLLECTED = "Administrative units haven't been collected yet. Refresh Administrative units on the client page."
 NO_UNITS = "The tenant has no administrative units: every admin role applies to the whole tenant."
 NO_ROLES = "Scoped admins show after the next collection of Admin roles."
 
@@ -81,7 +81,7 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         report.unavailable = (
             "Administrative units couldn't be read on the last collection"
             + (f": {reason}" if isinstance(reason, str) and reason else "")
-            + ". The collection log on the tenant page has the detail."
+            + ". The collection log on the client page has the detail."
         )
         return
     if units is None:
@@ -105,7 +105,7 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         )
     elif unread:
         report.notes.append(
-            f"Members of {plural(len(unread), 'unit')} couldn't be read. The collection log on the tenant page "
+            f"Members of {plural(len(unread), 'unit')} couldn't be read. The collection log on the client page "
             "says why."
         )
 

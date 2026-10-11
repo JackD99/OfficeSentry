@@ -13,7 +13,7 @@ def admin_units_part(p: Person) -> Part:
     units = p.snap.objects("admin_units", "admin_unit")
     if units is None:
         result.unavailable = (
-            "Administrative units haven't been collected yet. Refresh Administrative units on the tenant page."
+            "Administrative units haven't been collected yet. Refresh Administrative units on the client page."
         )
         return result
     units = [u for u in units if isinstance(u.get("_id"), str)]
