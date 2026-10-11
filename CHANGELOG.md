@@ -29,6 +29,15 @@ None.
 
 No.
 
+### Added
+
+- The **Empty, nested and dynamic groups** report now also lists teams and Microsoft 365 groups the
+  expiration policy will delete within 90 days (with their owners, flagged when no owner can sign in to
+  renew them), role-assignable groups (whose members hold admin roles, flagged when a guest is in one) and
+  every group that still holds a blocked account, naming the accounts. Group nesting keeps the member IDs
+  of security groups and distribution lists for that. **Coming up** and its weekly email list the teams and
+  groups about to expire alongside renewals and app secrets.
+
 ### Fixed
 
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were

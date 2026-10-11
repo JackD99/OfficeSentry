@@ -11,6 +11,7 @@ from openpyxl import load_workbook
 from officesentry import delivery, lifecycle, store, upcoming
 from officesentry.db import utcnow
 from tests import graphdata as gd
+from tests import groupdata as grp
 from tests import licencedata as ld
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -122,6 +123,32 @@ def test_app_secrets_and_certificates(db, tenant):
     rotated = items["Rotated app: “old” secret"]
     assert rotated.severity == "low" and "probably been replaced" in rotated.detail
     assert not any(t.startswith("Long gone") for t in items)  # expired years ago: the Apps report has it
+
+
+def test_teams_and_groups_expiring(db, two_tenants):
+    alpha, _ = two_tenants
+    expiry = {"g4": 20, "g2": 50, "g1": 200, "g3": -2}
+    groups = [{**g, "expirationDateTime": _in(expiry[g["id"]])} if g["id"] in expiry else g for g in grp.GROUPS]
+    seed_tenant(db, alpha, groups=groups)
+    items = _items(db, [store.get_tenant(db, alpha)])
+    board = items["Board expires"]
+    assert (board.type, board.window, board.severity, board.days) == (
+        "Team or group expiry",
+        "Next 30 days",
+        "medium",
+        20,
+    )
+    assert (
+        board.detail
+        == "Team with 2 members. Ann can renew it; otherwise it's deleted, and can be restored for 30 days."
+    )
+    assert board.href.endswith("/data/group-structure")
+    phoenix = items["Project Phoenix expires"]
+    assert (phoenix.window, phoenix.severity) == ("31 to 60 days", "medium")  # its only owner is blocked
+    assert phoenix.detail.startswith("Team with 3 members. No owner can sign in to renew it;")
+    marketing = items["Marketing expires"]
+    assert (marketing.window, marketing.now, marketing.severity) == ("Now", True, "high")  # no owner, past its date
+    assert "Sales expires" not in items  # 200 days away
 
 
 def test_mailbox_nearly_full_now(db, two_tenants):

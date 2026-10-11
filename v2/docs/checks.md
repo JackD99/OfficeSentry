@@ -191,7 +191,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `distribution-lists` | Distribution lists | Every distribution list with its members and owners, who can mail it, and empty, ownerless or unused lists. | `distribution_lists`, `mailboxes`, `users` |
 | `domains` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each of the tenant's domains, from public DNS. | `domain_health` |
 | `group-membership` | Group membership | Who is in which team and Microsoft 365 group: each person's teams and groups, each group's members, and every membership in one table. | `groups`, `users` |
-| `group-structure` | Empty, nested and dynamic groups | Groups with no members, groups inside other groups, and dynamic groups with their rules and whether they're paused. | `group_nesting`, `groups` |
+| `group-structure` | Empty, nested and dynamic groups | Groups with no members, groups inside other groups, dynamic groups with their rules and whether they're paused, teams and groups about to expire, role-assignable groups, and blocked accounts still in groups. | `group_nesting`, `groups`, `users` |
 | `groups` | Groups and Teams | Who can create teams and groups, which have no owner, and the guests in each. | `groups` |
 | `guests` | Guests and sharing | Who can invite and share externally, and every guest account. | `tenant_policies`, `users` |
 | `hybrid` | Hybrid identity | Directory sync from on-premises AD, password hash sync, how each domain signs in, and admin accounts synced from AD. | `admin_roles`, `directory_sync`, `users` |
