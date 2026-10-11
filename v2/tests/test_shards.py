@@ -52,6 +52,7 @@ def test_check_passes_when_the_parts_hold_every_test_once(tmp_path):
         ([(1, 2, 3, ["a", "b"]), (2, 2, 4, ["c"])], "disagree"),
         ([(1, 2, 3, ["a", "b"]), (2, 3, 3, ["c"])], "disagree"),
     ],
+    ids=["part-missing", "part-twice", "test-twice", "test-missing", "other-tests", "other-parts"],
 )
 def test_check_fails_when_a_test_is_missing_or_twice(tmp_path, parts, message):
     for n, part in enumerate(parts):
