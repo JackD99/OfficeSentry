@@ -136,6 +136,12 @@ first.
   come a one-file stack for container managers and NAS systems (`v2/deploy/stack/compose.yaml`), Kubernetes
   manifests (`v2/deploy/kubernetes/`) and a start-up file for a new cloud server
   (`v2/deploy/cloud-init-server.yaml`). Each guide says which of its steps have been tested.
+- One page per SharePoint site: Users > Sites lists every site with its storage, files, sharing links, last
+  activity and open findings, and each opens a page with what needs attention first, then its storage over the
+  retained months with the libraries and largest files that fill it, its sharing settings and the files shared
+  from it, the team or Microsoft 365 group behind it (or its owner), its activity, open findings and what
+  changed, with links to the site access and file permission reports for the detail. Site addresses in
+  reports, the group page and search results open the page, and it downloads as PDF and XLSX.
 
 ### Changed
 

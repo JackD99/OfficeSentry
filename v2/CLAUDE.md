@@ -351,13 +351,16 @@ person's page or the detail report filtered to the row.
 Each kind is one module (`reports/mailbox_page.py`: `/tenants/<id>/mailboxes/<object id>` and the
 Mailboxes list, routes in `web/mailboxes.py`; `reports/group_page.py`: `/tenants/<id>/groups/<group id>`
 for teams, Microsoft 365 and security groups and distribution lists, joined by directory id or address,
-and the Groups and teams list, routes in `web/group_pages.py`), imported in `reports/__init__.py`, with
+and the Groups and teams list, routes in `web/group_pages.py`; `reports/site_page.py`:
+`/tenants/<id>/sites/<site key>` for SharePoint sites, keyed by site id (`site_key`), and the Sites list,
+routes in `web/site_pages.py`), imported in `reports/__init__.py`, with
 its list in the Users tab's second row. A module registers how its objects are named in reports in
 `data_reports.PAGE_INDEXES` as a `PageIndex(build, where)`: `build` maps lower-cased names to page paths
 and `where(section title, column)` says which cells may link (None for any column; group names only link
 in group columns, so a department called Sales stays text). `data_reports.build()` and the person page
 turn matching plain cells into `PageLink`s after people are linked, so an address that is an account's
-still opens the person's page. Pages read stored snapshots only (`store.object_copies` for history) and
+still opens the person's page. A `Link` cell whose address is a site gets the site page as its `page_href` (`link_pages`):
+pages open that, while PDFs and spreadsheets keep the SharePoint address. Pages read stored snapshots only (`store.object_copies` for history) and
 link back to the reports the facts came from, filtered to the object (`Subject.report()`). Part order 15
 on the group page is kept free for Teams detail (channels, apps, guests per channel) once collected.
 

@@ -7,7 +7,11 @@ A page added here needs ``pytest tests/browser --ui --update -k <name>`` once (R
 
 from __future__ import annotations
 
+import zlib
 from dataclasses import dataclass, field
+
+# The demo's Finance site: its page key is the site ID the demo gives it (tests/sharepoint_data._site).
+FINANCE_SITE = f"11111111-1111-1111-1111-{zlib.crc32(b'https://fabrikam.sharepoint.com/sites/finance'):012d}"
 
 
 @dataclass(frozen=True)
@@ -38,6 +42,8 @@ PAGES = [
     Page("mailbox", "/tenants/{t}/mailboxes/x-acc"),
     Page("groups-list", "/tenants/{t}/groups"),
     Page("group", "/tenants/{t}/groups/g1"),
+    Page("sites-list", "/tenants/{t}/sites"),
+    Page("site", "/tenants/{t}/sites/" + FINANCE_SITE),
     Page("monthly-review", "/tenants/{t}/report"),
     Page("evidence", "/tenants/{t}/evidence"),
     Page("tenant-projects", "/tenants/{t}/projects"),
