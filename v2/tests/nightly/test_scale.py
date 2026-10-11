@@ -5,9 +5,11 @@ history, as default retention leaves it. The build itself is timed, then each pa
 an admin who sees every tenant: the first visit ("cold") works out what the worker would normally have
 precomputed, the second ("warm") is what people get on a normal day. Either going over its budget fails.
 
-The budgets are several times what a development machine takes today (Oct 2026: building 33 s; What
-changed 15.5 s cold and 0.07 s warm; Projects 1.7 s), so a slower GitHub runner and ordinary noise pass and
-a real slowdown doesn't. When a change makes a page legitimately slower, raise its budget here and say why.
+The budgets are several times what a development machine takes today (Oct 2026: building 40 s; What
+changed 27 s cold and 0.1 s warm; Clients 5 s cold and 0.3 s warm; Projects 2 s cold and 0.1 s warm), so a
+slower GitHub runner and ordinary noise pass and a real slowdown doesn't. When a change makes a page
+legitimately slower, raise its budget here and say why. ``scripts/timings.py`` times more pages, the
+downloads and the worker's jobs on the same data, for the numbers in DEPLOY.md.
 """
 
 from __future__ import annotations
@@ -24,13 +26,18 @@ from .conftest import V2, portal
 TENANTS = 200
 DAYS = int(os.environ.get("NIGHTLY_SCALE_DAYS", "90"))
 BUILD_BUDGET = 240  # seconds, for 200 tenants and 90 nights
-# Page: (cold, warm) budgets in seconds. {t} is the first tenant.
+# Page: (cold, warm) budgets in seconds. {t} is the first tenant, {period} this month's month-end period.
 PAGES = {
     "/": (20, 2),
+    "/clients": (30, 2),
     "/across/checks": (20, 2),
+    "/across/evidence": (20, 2),
+    "/across/mfa": (10, 2),
     "/changes": (90, 2),
-    "/projects": (10, 8),
-    "/search?q=adele": (5, 4),
+    "/projects": (10, 2),
+    "/reporting/{period}": (20, 2),
+    "/search?q=adele": (5, 2),
+    "/search?q=203.0.113": (5, 2),
     "/upcoming": (5, 2),
     "/tenants/{t}": (5, 2),
     "/tenants/{t}/findings": (5, 2),
@@ -81,8 +88,10 @@ def scale(tmp_path_factory, summary):
     )
     tenant = db.execute("SELECT MIN(id) FROM tenants").fetchone()[0]
     db.close()
-    _, client = portal(data, USERNAME, PASSWORD)
-    return client, tenant, took
+    cfg, client = portal(data, USERNAME, PASSWORD)
+    from officesentry.month_end import current_period
+
+    return client, {"t": tenant, "period": current_period(cfg.timezone)}, took
 
 
 def test_building_200_tenants_stays_within_budget(scale):
@@ -92,9 +101,9 @@ def test_building_200_tenants_stays_within_budget(scale):
 
 @pytest.mark.parametrize("page", PAGES)
 def test_page_stays_fast_at_200_tenants(page, scale, summary):
-    client, tenant, _ = scale
+    client, fill, _ = scale
     cold_budget, warm_budget = PAGES[page]
-    url = page.format(t=tenant)
+    url = page.format(**fill)
     times = []
     for _ in range(2):
         start = time.monotonic()
