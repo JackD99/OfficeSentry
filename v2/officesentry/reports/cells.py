@@ -21,6 +21,9 @@ DATE_CELL = re.compile(
 PERCENT = re.compile(r"^(-?\d+(?:\.\d+)?)%$")
 SIGNED = re.compile(r"^[+-]\d{1,9}$")
 WHOLE = re.compile(r"^(0|[1-9]\d{0,8})$")
+# Control characters XML can't hold (openpyxl's ILLEGAL_CHARACTERS_RE): tenant text can carry them (an inbox
+# rule named with a vertical tab), and a spreadsheet or Word document refuses them. Tab and newlines stay.
+CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 # Long unbroken text (addresses, URLs, paths) gets break opportunities after these characters.
 BREAK_AFTER = re.compile(r"([@/\\._=&?:-])")
 LONG_TOKEN = 16
@@ -84,6 +87,11 @@ def pdf_cell(value) -> Markup:
     return breakable(display(value))
 
 
+def printable(text: str) -> str:
+    """``text`` without the control characters a spreadsheet or Word document can't hold."""
+    return CONTROL.sub("", text)
+
+
 def xlsx_value(value):
     """A cell for a spreadsheet: real dates and numbers where the text is one, never a formula."""
     if value is None:
@@ -93,8 +101,8 @@ def xlsx_value(value):
     if isinstance(value, (int, float, date)):
         return value
     if isinstance(value, (list, tuple, set)):
-        return ", ".join(str(v) for v in value)
-    text = str(value)
+        return printable(", ".join(str(v) for v in value))
+    text = printable(str(value))
     parsed = parse_date(text)
     if parsed is not None:
         return parsed[0]

@@ -2,12 +2,14 @@
 
 import base64
 import io
+import zipfile
 from datetime import UTC, date, datetime
+from xml.etree import ElementTree
 
 from openpyxl import load_workbook
 
 from officesentry import delivery, mailer
-from officesentry.reports import branding, cells, data_reports, tables, workbook
+from officesentry.reports import branding, cells, data_reports, docx_writer, tables, workbook
 from officesentry.reports.export import to_xlsx as review_xlsx
 from officesentry.reports.monthly_review import build
 from tests.conftest import login, make_user
@@ -69,6 +71,25 @@ def test_workbook_sheets_are_styled_filterable_and_typed():
     assert ws["E1"].value == "Flag" and ws["E2"].value == "high" and ws["E3"].value is None
     assert ws["A3"].data_type == "s" and ws["A3"].value == "=HYPERLINK(1)"  # never a formula
     assert ws.print_title_rows == "$1:$1"
+
+
+def test_tenant_text_with_control_characters_still_makes_a_workbook_and_a_document():
+    rule = "Move\x0bto RSS"  # an inbox rule's name as Exchange returned it
+    book = workbook.Book()
+    book.table("Inbox\x07rules", ["Rule", "Mail\x01box"], [[rule, [rule, "Archive"]]], description=rule)
+    data = book.save(workbook.Cover(rule, rule, intro=rule, facts=[(rule, rule, rule)], notes=[(rule, rule)]))
+    wb = load_workbook(io.BytesIO(data))
+    assert wb.sheetnames == ["Summary", "Inbox rules"]
+    assert [c.value for c in wb["Inbox rules"][1]] == ["Rule", "Mailbox"]
+    assert [c.value for c in wb["Inbox rules"][2]] == ["Moveto RSS", "Moveto RSS, Archive"]
+    assert "Moveto RSS" in [c for row in wb["Summary"].iter_rows(values_only=True) for c in row]
+    doc = docx_writer.Document(rule, rule)
+    doc.heading(rule)
+    doc.paragraph(rule, lead=rule)
+    doc.table([(rule, rule)])
+    with zipfile.ZipFile(io.BytesIO(doc.save())) as z:
+        for part in ("word/document.xml", "docProps/core.xml"):  # well-formed XML, so Word opens it
+            assert "Moveto RSS" in ElementTree.fromstring(z.read(part)).itertext()  # noqa: S314 (our own file)
 
 
 def test_plain_table_downloads_have_no_cover_unless_asked():

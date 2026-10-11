@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from io import BytesIO
 
-from .cells import xlsx_value
+from .cells import printable, xlsx_value
 from .safe_xlsx import no_formulas
 
 DEFAULT_ACCENT = "1F2937"
@@ -56,6 +56,11 @@ def _on(fill: str) -> str:
     r, g, b = (int(fill[i : i + 2], 16) / 255 for i in (0, 2, 4))
     lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
     return "FFFFFF" if lum < 0.55 else INK
+
+
+def _row(values: list) -> list:
+    """A summary sheet row with its text cleaned of characters a workbook can't hold."""
+    return [printable(v) if isinstance(v, str) else v for v in values]
 
 
 def _width(value) -> int:
@@ -118,7 +123,7 @@ class Book:
 
         ws = self.wb.create_sheet(self._name(title))
         flagged = bool(flags) and any(flags)
-        header = list(columns) + ([flag_name] if flagged else [])
+        header = [printable(str(c)) for c in columns] + ([flag_name] if flagged else [])
         ws.append(header)
         self.header(ws, 1, len(header))
         widths = [len(str(c)) + 3 for c in header]  # room for the filter button
@@ -175,7 +180,7 @@ class Book:
         ws.page_setup.paperSize = ws.PAPERSIZE_A4
         ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
         ws.sheet_properties.pageSetUpPr.fitToPage = True
-        ws.oddFooter.left.text = title.replace("&", "&&")
+        ws.oddFooter.left.text = printable(title).replace("&", "&&")
         ws.oddFooter.right.text = "Page &P of &N"
 
     def save(self, cover: Cover | None = None) -> bytes:
@@ -201,11 +206,11 @@ class Book:
         ws.column_dimensions["A"].width = 34
         ws.column_dimensions["B"].width = 22
         ws.column_dimensions["C"].width = 70
-        ws.append([cover.title])
+        ws.append(_row([cover.title]))
         ws["A1"].font = Font(bold=True, size=16, color=self.accent if self.accent != DEFAULT_ACCENT else INK)
         ws.row_dimensions[1].height = 24
         if cover.client:
-            ws.append([cover.client])
+            ws.append(_row([cover.client]))
             ws.cell(ws.max_row, 1).font = Font(bold=True, size=13, color=INK)
         line = []
         if cover.prepared_by:
@@ -215,10 +220,10 @@ class Book:
         if cover.tenant_ref:
             line.append(f"Microsoft 365 tenant {cover.tenant_ref}")
         if line:
-            ws.append([" · ".join(line)])
+            ws.append(_row([" · ".join(line)]))
             ws.cell(ws.max_row, 1).font = Font(color=MUTED)
         if cover.intro:
-            ws.append([cover.intro])
+            ws.append(_row([cover.intro]))
             ws.cell(ws.max_row, 1).font = Font(color=INK)
         if cover.facts:
             ws.append([])
@@ -226,7 +231,7 @@ class Book:
             self.header(ws, ws.max_row, 3)
             for fact in cover.facts:
                 label, value, note = (list(fact) + ["", ""])[:3]
-                ws.append([label, xlsx_value(value), note or None])
+                ws.append(_row([label, xlsx_value(value), note or None]))
                 cell = ws.cell(ws.max_row, 2)
                 cell.alignment = Alignment(horizontal="left")
                 if isinstance(cell.value, date):
@@ -237,7 +242,7 @@ class Book:
                     cell.number_format = "#,##0.00"
                 ws.cell(ws.max_row, 3).alignment = Alignment(wrap_text=True, vertical="top")
         for label, text in cover.notes:
-            ws.append([label, text])
+            ws.append(_row([label, text]))
             ws.cell(ws.max_row, 1).font = Font(bold=True)
             ws.merge_cells(start_row=ws.max_row, start_column=2, end_row=ws.max_row, end_column=3)
             ws.cell(ws.max_row, 2).alignment = Alignment(wrap_text=True, vertical="top")
@@ -246,7 +251,7 @@ class Book:
             ws.append(["Sheet", "Rows", "What it lists"])
             self.header(ws, ws.max_row, 3)
             for sheet, count, description in self.sheets:
-                ws.append([sheet, count, description or None])
+                ws.append(_row([sheet, count, description or None]))
                 cell = ws.cell(ws.max_row, 1)
                 cell.hyperlink = f"#'{sheet}'!A1"
                 cell.font = Font(color="1D4ED8", underline="single")

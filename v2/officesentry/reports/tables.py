@@ -48,7 +48,7 @@ def to_csv(table: Table) -> bytes:
 
 
 def sheet_name(title: str, used: set[str]) -> str:
-    name = re.sub(r"[\[\]:*?/\\]", " ", title).strip()[:31] or "Sheet"
+    name = re.sub(r"[\[\]:*?/\\\x00-\x1f]", " ", title).strip()[:31] or "Sheet"
     base, n = name, 2
     while name.lower() in used:
         suffix = f" ({n})"
