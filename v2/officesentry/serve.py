@@ -12,6 +12,10 @@ import sys
 
 from .config import Config
 
+# The path only, never the query string (search terms, filter values, the setup link) or the referer, which
+# carry what people looked at. The Dockerfile's gunicorn command uses the same.
+ACCESS_LOG_FORMAT = '%(h)s %(t)s "%(m)s %(U)s %(H)s" %(s)s %(b)s %(M)sms "%(a)s"'
+
 
 def serve(cfg: Config, host: str = "127.0.0.1", port: int = 8000, threads: int = 8, workers: int = 2) -> None:
     from .web import create_app
@@ -32,6 +36,7 @@ def serve(cfg: Config, host: str = "127.0.0.1", port: int = 8000, threads: int =
         "threads": max(1, threads // workers),
         "timeout": 120,
         "accesslog": "-",
+        "access_log_format": ACCESS_LOG_FORMAT,
     }
 
     class Gunicorn(BaseApplication):

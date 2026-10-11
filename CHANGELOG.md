@@ -162,11 +162,16 @@ No.
   quick, and the worker erases the last copies in the background, rebuilding the file only when there's
   room. If that can't be done, System status says so under **Deleted clients**, the team is alerted, and
   it's tried again every hour.
+- Every response now carries `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy: same-origin`
+  and `X-Permitted-Cross-Domain-Policies: none`, and the bundled Caddy drops the `Server` header.
+- The portal's access log (Docker and `serve`) records the path only, not the query string or the referer,
+  which carried search terms, filter values and the one-time setup link.
+- The containers get a process limit, and the bundled Caddy runs with every capability but binding its
+  ports dropped, like the portal and worker.
 - Passwords on lists of commonly used passwords (`password1234`, `qwerty123456` and 20,000 more of 12
   characters or longer), or containing the person's username or "officesentry", are refused wherever a
   password is chosen: first-run setup, the account page, the forced change after an admin's reset, and the
   admin's user forms. Existing passwords aren't checked until they're changed.
-
 
 ## 2.1.0 (2026-10-10)
 
