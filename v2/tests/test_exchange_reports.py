@@ -358,6 +358,7 @@ def test_distribution_lists(db, tenant):
             "Open to outside senders",
         )
     ] == [3, 1, 2, 0, 1]
+    assert _opens(report, tiles["No mail in 90 days"]) == []  # Old project gets no mail, but isn't watched long enough
     members = s["Members"].rows
     assert ["Sales", "Partner", "pat@partner.example", "External contact"] in members
     assert ["Everyone", "Sales", "sales@x.com", "Security group"] in members
@@ -433,6 +434,7 @@ def test_unused_list_is_flagged_once_watched_long_enough(db, tenant):
     attention = {r[0]: r for r in s["Lists that need attention"].rows}
     assert "No mail in 90 days" in attention["Old project"][1].parts
     assert "Everyone" not in attention and _tiles(report)["No mail in 90 days"].value == 1
+    assert _opens(report, _tiles(report)["No mail in 90 days"]) == ["Old project"]
     assert not report.notes
 
 
