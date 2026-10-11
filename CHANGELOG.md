@@ -117,8 +117,8 @@ No.
   containers running while it is itself updated (`live-restore`, on new servers).
 - The file pickers on Branding and the onboarding import look like the portal's other buttons and show
   the chosen file's name, the Activity log's filters sit level on one row with their button, the partial-run
-  notice carries the same icon as other notices, Data retention says once what the next pass would delete,
-  the onboarding "Send link" button has its full label, and a report plan's Save and Cancel stay in view
+  notice carries the same icon as other notices, each Data retention section says plainly what the next pass would
+  delete, the onboarding "Send link" button has its full label, and a report plan's Save and Cancel stay in view
   on a long form like the scheduled-email form's.
 
 ### Security
