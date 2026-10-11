@@ -109,6 +109,13 @@ first.
   every group that still holds a blocked account, naming the accounts. Group nesting keeps the member IDs
   of security groups and distribution lists for that. **Coming up** and its weekly email list the teams and
   groups about to expire alongside renewals and app secrets.
+- **Licence changes** report (Tenant and licences): every paid licence given to or taken from an account, with
+  when it happened (to the day for the last month, to the month before that), whether it came directly or
+  from a group, and, where the directory audit log has been read, who made the change. Licences bought and
+  assigned month by month for the last year with what they cost at your prices, a chart of assigned licences
+  against bought, and how bought licences and the monthly cost moved since a month ago, for checking a
+  client's bill. Built from Office Sentry's own history; no new permission. The monthly review's "since last
+  month" changes and What changed now list who was given or lost a licence.
 
 ### Changed
 

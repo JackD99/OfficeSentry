@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-54 checks, 34 data sources (collectors) and 41 detail reports.
+54 checks, 34 data sources (collectors) and 42 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -200,6 +200,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `inactive` | Inactive accounts | Members and guests who haven't signed in for a long time, and old invitations. | `admin_roles`, `tenant_profile`, `users` |
 | `inbox-rules` | Inbox rules | Rules that forward, delete or hide mail, and every rule in every mailbox. | `inbox_rules`, `mailboxes` |
 | `legacy-auth` | Legacy sign-ins | Sign-ins with SMTP AUTH, IMAP, POP and other protocols that can't do MFA, and which mailboxes still allow them. | `legacy_signins`, `mailboxes` |
+| `licence-changes` | Licence changes | Who was given or lost a licence and when, who made the change, and licences bought and assigned month by month, from Office Sentry's own history. | `tenant_profile`, `users` |
 | `licence-rightsizing` | Licence right-sizing | People who could move to a cheaper licence, and services people are licensed for but don't use. | `m365_usage`, `mailbox_usage`, `tenant_profile`, `users` |
 | `licences` | Licence waste | Paid licences nobody uses, in money, and the accounts holding them. | `tenant_profile`, `users` |
 | `mailbox-holds` | Mailbox holds and archiving | Which mailboxes are on litigation hold or have an archive, leavers' mailboxes that aren't held, and large mailboxes that need an archive. | `mailbox_usage`, `mailboxes`, `users` |
