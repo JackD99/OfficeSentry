@@ -19,7 +19,8 @@
                    ('alerts.settings', 'Alerts', []), ('branding.settings', 'Branding', []),
                    ('retention.settings', 'Data retention', []), ('admin.users', 'Users', ['admin.edit_user']),
                    ('sso.settings_page', 'Staff sign-in', []),
-                   ('activity.index', 'Activity log', []), ('system.status', 'System status', [])] %}
+                   ('activity.index', 'Activity log', []), ('system.status', 'System status', []),
+                   ('support.index', 'Support', [])] %}
 {% set SETTINGS_ENDPOINTS = SETTINGS|map(attribute=0)|list + SETTINGS|map(attribute=2)|sum(start=[]) %}
 {% macro nav_link(endpoint, label, ico, match=()) -%}
 {% set ep = request.endpoint or '' %}

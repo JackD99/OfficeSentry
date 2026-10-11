@@ -40,6 +40,15 @@ Microsoft account links on users and how each session was started.
 
 ### Added
 
+- **Settings → Support** and a support package: one zip of the version, settings, health checks, recent
+  failures and the portal's and worker's logs to attach to a bug report, with keys, certificates, tokens,
+  addresses and client names taken out (clients appear as numbers unless you tick *Include client
+  identifiers*). `python -m officesentry support-package` makes the same zip from the shell when the portal
+  won't start, over a broken database or a configuration that won't load.
+  [Getting help](v2/docs/getting-help.md) says what's in it.
+- The portal and the worker keep a short rolling log in `<data dir>/logs/` (three files of 2 MB each), and
+  every line says which request, user, client, run or task it belongs to. A page that fails shows a
+  reference to quote; the same reference is on the error's line in the log and in the `X-Request-ID` header.
 - **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
   Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with Admin and Analyst
   roles to assign people or groups to in Entra. Staff then press *Sign in with Microsoft* and use their

@@ -379,6 +379,9 @@ These areas have no real recording and are tested with simulated data only:
 - [Troubleshooting](docs/troubleshooting.md): the common setup errors
   (`AADSTS50011`, `create-app`, Global Reader, the worker not running) and
   their fixes.
+- [Getting help](docs/getting-help.md): where to look first, the support
+  package (one zip of versions, settings, health, failures and logs with
+  secrets and client names taken out) and how to report a problem.
 - [Securing the portal](docs/securing-the-portal.md): what the portal does
   by itself, what the person running it has to do, and reverse proxy setups
   for Caddy, nginx, Traefik and a CDN.
