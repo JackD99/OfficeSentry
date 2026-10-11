@@ -68,6 +68,7 @@ VOLATILE: dict[str, tuple[str, ...]] = {
     "onedrive": ("reportDate", "lastActivityDate", "storageUsed", "files", "activeFiles"),
     "site": ("reportDate", "lastActivityDate", "storageUsed", "files", "activeFiles", "pageViews"),
     "mailbox_size": ("totalBytes", "itemCount", "deletedBytes"),
+    "team": ("lastActivity", "activeUsers", "messages", "meetings"),
 }
 
 # A run still holds its snapshot: it stored nothing, or retention hasn't removed what it stored.
