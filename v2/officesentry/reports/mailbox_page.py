@@ -20,7 +20,16 @@ from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .auto_replies import OUTSIDE, _at, first_seen, state
-from .data_reports import PAGE_INDEXES, Highlight, Section, UserLink, _describe_actions, _describe_conditions, user_path
+from .data_reports import (
+    PAGE_INDEXES,
+    Highlight,
+    PageIndex,
+    Section,
+    UserLink,
+    _describe_actions,
+    _describe_conditions,
+    user_path,
+)
 from .data_reports import _type as mailbox_type
 from .mail_reports import _account, _Directory, _grants, _size
 from .mobile_devices import ACCESS, APPS, _device, platform
@@ -92,7 +101,7 @@ def _index(snap: TenantSnapshot) -> dict[str, str]:
     return out
 
 
-PAGE_INDEXES.append(_index)
+PAGE_INDEXES.append(PageIndex(_index))  # an address is unmistakable in any column
 
 
 def find_mailbox(snap: TenantSnapshot, mailbox_id: str) -> dict | None:

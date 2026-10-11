@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 from ... import adminactivity, devices
 from ...snapshot import TenantSnapshot
-from ..data_reports import DataReport, Highlight, Section, link_people, people_index
+from ..data_reports import DataReport, Highlight, Section, link_pages, link_people, page_index, people_index
 from ..identity_reports import _roles
 from ..monthly_review import setting
 
@@ -131,6 +131,7 @@ class Person:
         self.attention: list[Attention] = []
         self.roles = (_roles(snap) or {}).get(self.id)
         self._index: dict[str, str] | None = None
+        self._pages: list = []
 
     @property
     def admin(self) -> bool:
@@ -142,7 +143,9 @@ class Person:
     def link(self, sections: list[Section]) -> None:
         if self._index is None:
             self._index = people_index(self.snap)
+            self._pages = page_index(self.snap)
         link_people(sections, self.snap.tenant["id"], self._index)
+        link_pages(sections, self._pages)
 
     def named(self, value) -> bool:
         return isinstance(value, str) and value.lower() in self.keys

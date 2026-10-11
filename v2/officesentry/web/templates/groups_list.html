@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, tenant_header with context %}
+{% block title %}Groups and teams · {{ tenant.name }}{% endblock %}
+{% block content %}
+{{ tenant_header(tenant, 'group_pages') }}
+
+{% if not collected %}
+<div class="card empty"><h3>No groups yet</h3><p>Groups show here once Groups and Teams has been collected for this client.</p></div>
+{% elif not rows %}
+<div class="card empty"><h3>No groups</h3><p>This client has no groups, or none were returned on the last collection.</p></div>
+{% else %}
+<div class="tiles">
+  {% for h in tiles %}
+  <div class="tile">
+    <div class="label">{% if h.tone %}<span class="dot {{ 'bad' if h.tone == 'bad' else ('ok' if h.tone == 'ok' else 'warn') }}"></span>{% endif %}{{ h.label }}</div>
+    <div class="value{% if h.value is string and h.value|length > 9 %} wordy{% endif %}">{{ h.value }}</div>
+    {% if h.foot %}<div class="foot">{{ h.foot }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<section class="card flush">
+  <div class="card-head toolbar">
+    <h2>Every group <span class="count-badge">{{ rows|length }}</span></h2>
+    <div class="toolbar-actions">
+      <input class="search sm" type="search" data-filter="groups" placeholder="Find a group…" aria-label="Find a group">
+    </div>
+  </div>
+  <p class="intro">Open any group to see its owners and members, what it gives them, its mail and files, how it's set up and its history on one page. Groups with open findings or no active owner come first.</p>
+  <div class="scroll-x">
+  <table class="stack-sm sortable" id="groups">
+    <thead><tr>
+      <th aria-sort="none"><button type="button" class="sort">Group</button></th>
+      <th aria-sort="none"><button type="button" class="sort">Type</button></th>
+      <th aria-sort="none"><button type="button" class="sort">Owners</button></th>
+      <th aria-sort="none" class="num"><button type="button" class="sort">Members</button></th>
+      <th aria-sort="none" class="num"><button type="button" class="sort">Guests</button></th>
+      <th aria-sort="none"><button type="button" class="sort">Membership</button></th>
+      <th aria-sort="none"><button type="button" class="sort">Created</button></th>
+      <th aria-sort="none" class="num"><button type="button" class="sort">Open findings</button></th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr data-name="{{ (r.name ~ ' ' ~ r.mail ~ ' ' ~ r.type)|lower }}">
+      <td class="wrap"><a class="strong" href="{{ url_for('group_pages.group', tenant_id=tenant.id, gid=r.id) }}">{{ r.name }}</a>{% if r.mail %}<span class="sub">{{ r.mail }}</span>{% endif %}</td>
+      <td data-label="Type">{{ r.type }}</td>
+      <td data-label="Owners">{% if not r.owners_ok %}<span class="pill bad">{{ r.owners }}</span>{% elif r.owners == 'Not checked' or not r.owners %}<span class="muted">{{ r.owners or 'Not read' }}</span>{% else %}{{ r.owners }}{% endif %}</td>
+      <td data-label="Members" class="num" data-sort="{{ r.members if r.members is not none else -1 }}">{% if r.members is none %}<span class="muted">Not read</span>{% elif r.members == 0 %}<span class="pill warn">0</span>{% else %}{{ r.members }}{% endif %}</td>
+      <td data-label="Guests" class="num">{% if r.guests %}<span class="pill warn">{{ r.guests }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
+      <td data-label="Membership">{{ r.membership }}</td>
+      <td data-label="Created">{% if r.created %}{{ r.created|day }}{% endif %}</td>
+      <td data-label="Open findings" class="num">{% if r.findings %}<span class="pill warn">{{ r.findings }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}
