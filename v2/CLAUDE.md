@@ -441,7 +441,8 @@ turning each step's `target` into a link.
   (`web/styleguide.py`). A new shared component or state goes there too.
 - `tests/browser` (`pytest tests/browser --ui`, in the pinned Playwright image;
   see its README) screenshots about 34 pages at laptop and phone widths, light
-  and dark, against baselines, fails any page wider than the window, and runs axe-core. CI runs it
+  and dark, against baselines, fails any page wider than the window (the
+  page-scroll check of `tests/layout/audit.js`), and runs axe-core. CI runs it
   (`.github/workflows/ui.yml`) on PRs that touch templates or CSS; refresh the
   baselines with `--update` when a change is meant, and look at them.
 - `tests/layout` (`pytest tests/layout --layout -n 4`; see its README) opens
