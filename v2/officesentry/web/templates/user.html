@@ -3,7 +3,7 @@
 {% block title %}{{ profile.name }} · {{ tenant.name }}{% endblock %}
 {% set PILL = {'ok': 'ok', 'warn': 'warn', 'bad': 'bad'} %}
 {% macro cell(v) -%}
-{% if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text }}</a>{% elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>{% else %}{{ v }}{% endif %}
+{% if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text }}</a>{% elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>{% else %}{{ v|readable }}{% endif %}
 {%- endmacro %}
 {% block content %}
 {{ tenant_header(tenant, 'users') }}

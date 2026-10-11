@@ -8,7 +8,7 @@
 {%- if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text }}</a>
 {%- elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>
 {%- elif v.parts is defined and v.parts|length > 3 %}{{ v.parts[:2]|join(', ') }}<details class="more"><summary>and {{ v.parts|length - 2 }} more</summary>{{ v.parts[2:]|join(', ') }}</details>
-{%- else %}{{ v }}{% endif -%}
+{%- else %}{{ v|readable }}{% endif -%}
 {%- endmacro %}
 
 {% macro filter_menu(tv) -%}
