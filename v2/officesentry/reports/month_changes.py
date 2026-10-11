@@ -251,6 +251,15 @@ def compare_report(
         return result
     if [r["id"] if r else None for r in old_runs] == [r["id"] if r else None for r in new_runs]:
         return result  # nothing collected since: nothing can have changed
+    missing = [
+        REGISTRY[c].title for c, then, latest in zip(collectors, old_runs, new_runs, strict=True) if latest and not then
+    ]
+    if missing:  # compared with nothing, everything it adds to the report would look new
+        result.note = (
+            f"{' and '.join(missing)} hadn't been collected by the start of the period, so there's nothing to "
+            "compare with."
+        )
+        return result
     gone = [
         REGISTRY[c].title
         for c, r in zip(collectors, old_runs, strict=True)

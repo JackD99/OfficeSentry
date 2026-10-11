@@ -257,6 +257,19 @@ def test_change_report_compares_every_report_with_the_start_of_the_period(client
     assert client.get(f"/tenants/{bravo}/changes?days=999").status_code == 200  # bad periods fall back
 
 
+def test_a_report_missing_one_of_its_data_sources_at_the_start_is_not_compared(db, two_tenants):
+    # MFA registration failed before the period began: every account's registration would look new.
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    _backdate(db, alpha, 40)
+    db.execute("UPDATE runs SET status = 'failed' WHERE tenant_id = ? AND collector = 'mfa_registration'", (alpha,))
+    seed_tenant(db, alpha)
+    report = month_changes.build(db, store.get_tenant(db, alpha), 30)
+    mfa = next(r for r in report.reports if r.key == "mfa")
+    assert mfa.count == 0 and mfa.note.startswith("MFA registration hadn't been collected by the start of the period")
+    assert not next(r for r in report.reports if r.key == "guests").note  # it had all its data then
+
+
 def test_old_snapshots_skip_runs_whose_objects_were_pruned(db, two_tenants):
     alpha, _ = two_tenants
     tenant = db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone()
