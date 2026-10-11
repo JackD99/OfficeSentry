@@ -33,11 +33,6 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - An upgrade tried again within an hour of going back to the old version now copies the database again
   first. Before, it reused the first attempt's copy, so going back a second time lost what was written in
   between.
-
-## [2.2.1] - Unreleased
-
-### Fixed
-
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
@@ -752,7 +747,6 @@ first, then upgrades it on start. New installs start with an empty database.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
 [2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
-[2.2.1]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0
