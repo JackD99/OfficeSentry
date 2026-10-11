@@ -13,7 +13,7 @@ def devices_part(p: Person) -> Part:
     result = Part("devices", "Devices")
     entra = devices.objects(p.snap, "entra_device")
     if entra is None:
-        result.unavailable = "Devices haven't been collected yet. Refresh Devices on the tenant page."
+        result.unavailable = "Devices haven't been collected yet. Refresh Devices on the client page."
         return result
     status = devices.objects(p.snap, "intune_status") or []
     if not (status and status[0].get("available")):

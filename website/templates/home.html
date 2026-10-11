@@ -94,14 +94,14 @@
     <article class="feature">
       <div class="feature-copy">
         <h3>Every client at once, and what changed</h3>
-        <p><strong>All tenants</strong> compares any report across every client, one row each. <strong>What changed</strong> lists the month's changes, most important first: new and fixed findings, admins, accounts, Conditional Access, forwarding, apps and devices.</p>
+        <p><strong>All clients</strong> compares any report across every client, one row each. <strong>What changed</strong> lists the month's changes, most important first: new and fixed findings, admins, accounts, Conditional Access, forwarding, apps and devices.</p>
         <ul class="ticks">
           <li>{{ check() }}Every figure is clickable</li>
           <li>{{ check() }}A row-by-row comparison of every detail report</li>
         </ul>
-        <a class="more" href="/examples/what-changed-all-tenants.pdf">Open the What changed PDF</a>
+        <a class="more" href="/examples/what-changed-all-clients.pdf">Open the What changed PDF</a>
       </div>
-      <div class="feature-media">{{ window('all-tenants', "All tenants: the monthly review's figures for every client") }}</div>
+      <div class="feature-media">{{ window('all-tenants', "All clients: the monthly review's figures for every client") }}</div>
     </article>
 
     <article class="feature flip">
@@ -154,7 +154,7 @@
         <p>Microsoft keeps sign-ins and admin changes for 30 days. Office Sentry keeps them, by default sign-ins for six months and admin changes for seven years, for each client and each person.</p>
       </article>
       <article class="card">
-        {{ shot('tenant-groups', 'Tenant groups by sector and support tier') }}
+        {{ shot('tenant-groups', 'Client groups by sector and support tier') }}
         <h3>Groups of clients</h3>
         <p>Group clients by tier, sector or region. Filter the dashboard, every cross-client page and the digest emails by group, and give an analyst a group instead of a list.</p>
       </article>
@@ -203,7 +203,7 @@
       <li><strong>Read-only in your clients' tenants.</strong> The app that reads them asks only for read permissions. The code has no way to write to Microsoft Graph, and only runs Exchange commands that start with Get-.</li>
       <li><strong>Sending email is separate and optional.</strong> Reports and alerts go out through your own mail server, or through a second app in your own Microsoft 365 tenant that may send mail and nothing else, limited to one mailbox. It has no access to your clients.</li>
       <li><strong>Certificate sign-in, no stored passwords.</strong> The app signs in with a certificate whose private key is encrypted in the database. Secrets and private keys can never be downloaded.</li>
-      <li><strong>Every client kept apart.</strong> People see only the tenants they're given, and clients see only their own reports.</li>
+      <li><strong>Every client kept apart.</strong> People see only the clients they're given, and clients see only their own reports.</li>
       <li><strong>Runs on your own server.</strong> Your clients' data stays with you. There's no telemetry: nothing is sent to us.</li>
     </ul>
   </div>

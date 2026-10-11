@@ -777,7 +777,7 @@ def digest_data(conn, frequency: str, now: datetime, group_id: int | None = None
 def digest_xlsx(data: dict, brand=None, now: datetime | None = None) -> bytes:
     book = workbook.Book(brand.accent if brand else "")
     header = [
-        "Tenant",
+        "Client",
         "Critical",
         "High",
         "Medium",
@@ -809,16 +809,16 @@ def digest_xlsx(data: dict, brand=None, now: datetime | None = None) -> bytes:
                 "No" if r["stale_data"] else "Yes",
             ]
         )
-    book.table("Tenants", header, rows, description="Every tenant, worst first")
+    book.table("Clients", header, rows, description="Every client, worst first")
     cover = workbook.Cover(
-        "Tenant digest",
-        data.get("group") or "All tenants",
+        "Client digest",
+        data.get("group") or "All clients",
         now or datetime.now(UTC),
         brand.display_name if brand else "",
         accent=brand.accent if brand else "",
         intro=f"Since {day(data['since'])}.",
         facts=[
-            ("Tenants", data["tenants"], ""),
+            ("Clients", data["tenants"], ""),
             ("Need attention", data["urgent"], "critical or high findings"),
             ("New critical or high findings", data["new_severe"], ""),
             ("Fixed", data["fixed"], ""),
@@ -834,9 +834,9 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
     label = period_label(email_period(schedule, _cfg(app).timezone, now)[0])
     data = digest_data(conn, schedule["frequency"], now, schedule["group_id"])
     look, inline = email_brand(conn)
-    subject = f"Tenant digest · {data['group']} · {label}" if data["group"] else f"Tenant digest · {label}"
+    subject = f"Client digest · {data['group']} · {label}" if data["group"] else f"Client digest · {label}"
     filename = (
-        f"tenant-digest-{tables.slug(data['group'])}-" if data["group"] else "tenant-digest-"
+        f"client-digest-{tables.slug(data['group'])}-" if data["group"] else "client-digest-"
     ) + f"{local.strftime('%Y-%m-%d')}.xlsx"
     html = render(
         app,
@@ -848,19 +848,19 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
         message=schedule["message"],
         titles=RULE_TITLES,
         frequency=schedule["frequency"],
-        files=[("Every tenant's numbers", filename)] if schedule["include_xlsx"] else [],
+        files=[("Every client's numbers", filename)] if schedule["include_xlsx"] else [],
     )
     lines = [
-        f"Tenant digest for {label}" + (f": {data['group']}" if data["group"] else ""),
+        f"Client digest for {label}" + (f": {data['group']}" if data["group"] else ""),
         "",
-        f"Tenants: {data['tenants']}",
+        f"Clients: {data['tenants']}",
         f"Needing attention (critical or high): {data['urgent']}",
         f"New critical or high findings: {data['new_severe']}",
         f"Fixed: {data['fixed']}",
     ]
     if data["avg_score"] is not None:
         lines.append(f"Average Secure Score: {data['avg_score']:g}%")
-    lines += ["", "Tenants needing attention:"]
+    lines += ["", "Clients needing attention:"]
     for r in data["rows"]:
         if r["counts"]["critical"] or r["counts"]["high"]:
             lines.append(f"  {r['tenant']['name']}: {r['counts']['critical']} critical, {r['counts']['high']} high")
@@ -901,7 +901,7 @@ def schedule_titles(schedule, conn=None) -> list[str]:
         return report_titles(schedule["reports"], conn) + chosen
     if is_views(schedule):
         return chosen or ["Saved views"]
-    return [upcoming.TITLE] if is_upcoming(schedule) else ["Tenant digest"]
+    return [upcoming.TITLE] if is_upcoming(schedule) else ["Client digest"]
 
 
 EMAIL_ROWS = 5  # items listed per window in the Coming up email; the page has the rest
@@ -1005,7 +1005,7 @@ def views_data(conn, chosen: list[ScheduledView], group_id: int | None, now: dat
         f"SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL{in_group} ORDER BY name COLLATE NOCASE",
         {"group": group_id},
     ).fetchall()
-    label = group["name"] if group else "All tenants"
+    label = group["name"] if group else "All clients"
     results = []
     for v in chosen:
         if not can_schedule_view(v.report_key, across=True):
@@ -1020,8 +1020,8 @@ def views_data(conn, chosen: list[ScheduledView], group_id: int | None, now: dat
         out.filtered = [line for line in report.filtered if any(line.startswith(f"{s.title}:") for s in out.sections)]
         if any(rows.truncated(s.title) for s in out.sections):
             out.notice = (
-                f"Tables keep the first {rollups.MAX_ROWS:,} rows across tenants. Filter the view further, "
-                "or open each tenant's own report for the rest."
+                f"Tables keep the first {rollups.MAX_ROWS:,} rows across clients. Filter the view further, "
+                "or open each client's own report for the rest."
             )
         counts = [(s.title, len(s.rows)) for s in out.sections]
         lines = [

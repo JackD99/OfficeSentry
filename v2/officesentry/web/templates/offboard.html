@@ -34,7 +34,7 @@
 1. Goes to Roles and admins > Global Reader, selects {{ r.app_name or 'the Office Sentry app' }} and chooses Remove assignments.
 2. Goes to Enterprise applications, opens {{ r.app_name or 'the Office Sentry app' }}, chooses Properties, then Delete.
 
-This stops all access straight away. We are deleting everything Office Sentry collected from your tenant.</textarea>
+This stops all access straight away. We are deleting everything Office Sentry collected from your Microsoft 365.</textarea>
         <p class="small muted m0">The same steps are in <em>What Office Sentry reads</em> (docs/what-office-sentry-reads.md, "How to remove access"), the document you sent when onboarding.</p>
       </details>
     </div>
@@ -47,7 +47,7 @@ This stops all access straight away. We are deleting everything Office Sentry co
         <li>{{ stored.findings|plural('finding') }} ({{ stored.open_findings }} open), including accepted risks</li>
         {% if stored.history_signins or stored.history_audits %}<li>Activity history: {{ stored.history_signins|plural('sign-in') }}, {{ stored.history_daily|plural('daily sign-in summary', 'daily sign-in summaries') }} and {{ stored.history_audits|plural('directory audit event') }}</li>{% endif %}
         <li>{{ stored.schedules|plural('emailed report') }}, {{ stored.alerts|plural('alert email') }}, {{ stored.contacts|plural('client contact') }} and {{ stored.deliveries|plural('line') }} of email history</li>
-        <li>Access for {{ stored.access|plural('Office Sentry user') }}{% if other_users %}: {% for u in other_users %}{{ u.username }} ({{ u.role }}){{ ', ' if not loop.last }}{% endfor %} lose access to this tenant only{% endif %}</li>
+        <li>Access for {{ stored.access|plural('Office Sentry user') }}{% if other_users %}: {% for u in other_users %}{{ u.username }} ({{ u.role }}){{ ', ' if not loop.last }}{% endfor %} lose access to this client only{% endif %}</li>
       </ul>
       <p class="small muted m0">Activity log entries stay, so you can see who offboarded the client and when, but details naming the client's people (accepted findings, contacts, alert errors) and deleted client accounts' names and addresses are removed. Deleted data is overwritten in the database. Backups made before today still hold it until they rotate out (7 backups by default).</p>
     </div>
@@ -60,7 +60,7 @@ This stops all access straight away. We are deleting everything Office Sentry co
     {{ csrf() }}
     {% if client_users %}
     <fieldset>
-      <legend>Client accounts with no other tenant</legend>
+      <legend>Client accounts with no other client</legend>
       <p class="small muted">They won't be able to see anything once {{ tenant.name }} is gone.</p>
       <div class="check-list">
       {% for u in client_users %}<label class="check"><input type="checkbox" name="delete_users" value="{{ u.id }}"> Also delete <strong>{{ u.username }}</strong>{% if u.last_login_at %} <span class="muted small">(last signed in {{ u.last_login_at|ago }})</span>{% endif %}</label>{% endfor %}

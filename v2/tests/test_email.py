@@ -431,7 +431,7 @@ def test_failed_sends_retry_with_backoff_then_give_up(app, db, two_tenants, vaul
     assert s["last_period"] == "2026-10" and s["last_status"] == "failed" and s["attempts"] == 0
     assert db.execute("SELECT COUNT(*) FROM email_deliveries WHERE status = 'failed'").fetchone()[0] == 4
     error = db.execute("SELECT error FROM email_deliveries").fetchone()[0]
-    assert "smtp.example.com" in error and "connection refused" in error
+    assert error.count("smtp.example.com") == 1 and "connection refused" in error
     # The Retry button sends it again and clears the failure.
     FakeSMTP.fail_with = None
     failed = db.execute("SELECT * FROM email_deliveries ORDER BY id DESC").fetchone()
@@ -491,10 +491,10 @@ def test_digest_goes_to_team_only(client, db, two_tenants):
     assert [c["email"] for c in delivery.recipients(db, "schedule", sid)] == ["me@msp.com"]
     client.post(f"/schedules/{sid}/send")
     ((_, _, msg, to_addrs),) = sends()
-    assert to_addrs == ["me@msp.com"] and msg["Subject"].startswith("Tenant digest")
+    assert to_addrs == ["me@msp.com"] and msg["Subject"].startswith("Client digest")
     html = msg.get_body(("html",)).get_content()
     assert "Alpha Ltd" in html and "Bravo Inc" in html
-    assert [p.get_filename() for p in msg.iter_attachments()][0].startswith("tenant-digest-")
+    assert [p.get_filename() for p in msg.iter_attachments()][0].startswith("client-digest-")
     assert client.get(f"/schedules/{sid}/preview").status_code == 200
 
 
@@ -508,7 +508,7 @@ def test_analyst_cannot_see_digests(client, db, two_tenants):
     assert client.get("/emails/digests/new").status_code == 403
     assert client.post("/emails/team", data={"email": "x@y.com"}).status_code == 403
     page = client.get("/emails").get_data(as_text=True)
-    assert "Tenant digest" not in page
+    assert "Client digest" not in page
 
 
 # -- Alerts -----------------------------------------------------------------------------------

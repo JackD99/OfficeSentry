@@ -200,7 +200,7 @@ def save_rows_view(key: str, table: str):
         flash(f"You can keep up to {MAX_VIEWS} views. Delete one you don't use first.", "error")
         return redirect(f"{page}?{query}")
     store_view(g.db, g.user["id"], key, name, query)
-    flash(f"Saved “{name}”. It's under Views on this report, here and for every tenant.", "success")
+    flash(f"Saved “{name}”. It's under Views on this report, here and for every client.", "success")
     return redirect(f"{page}?{query}")
 
 
@@ -245,8 +245,8 @@ def checks_download(ext: str):
             cover=_cover(
                 "Checks",
                 scope().label,
-                "Every check's result for every tenant.",
-                facts=[("Tenants", len(matrix.rows), ""), ("With failing checks", matrix.with_failures, "")],
+                "Every check's result for every client.",
+                facts=[("Clients", len(matrix.rows), ""), ("With failing checks", matrix.with_failures, "")],
             ),
         )
     )
@@ -271,7 +271,7 @@ def rollup_download(key: str, ext: str):
                 scope().label,
                 data.description,
                 facts=[
-                    ("Tenants", len(data.rows), ""),
+                    ("Clients", len(data.rows), ""),
                     ("Need attention", data.with_attention, ""),
                     ("No data for this report", data.without_data, ""),
                 ],
@@ -353,7 +353,7 @@ def changes_download(ext: str):
             cover=_cover(
                 f"What changed in the last {days} days",
                 scope().label,
-                f"Changes in every tenant over the last {days} days, most important first.",
+                f"Changes in every client over the last {days} days, most important first.",
             ),
         )
     )

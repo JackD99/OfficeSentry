@@ -71,7 +71,7 @@ def pause(conn, tenant, user: str) -> int:
 
 def resume(conn, tenant, user: str) -> None:
     if tenant["archived_at"]:
-        raise ValueError("restore the tenant before resuming it")
+        raise ValueError("restore the client before resuming it")
     with transaction(conn, immediate=True):
         conn.execute("UPDATE tenants SET enabled = 1, paused_at = NULL WHERE id = ?", (tenant["id"],))
         audit(conn, user, "tenant_resumed", tenant["id"], tenant["name"])
@@ -175,7 +175,7 @@ def delete_tenant(conn, tenant, user: str, delete_users: list[int] = ()) -> dict
     allowed = {u["id"]: u["username"] for u in client_only_users(conn, tenant["id"])}
     unknown = set(delete_users) - set(allowed)
     if unknown:
-        raise DeleteError("only client accounts with no other tenant can be deleted with it")
+        raise DeleteError("only client accounts with no other client can be deleted with it")
     # Overwrite deleted content with zeros instead of leaving it in free pages. The old pages stay in the file
     # until the write-ahead log is written back, which the erase task does (see ``erase``).
     previous = conn.execute("PRAGMA secure_delete").fetchone()[0]
@@ -196,7 +196,7 @@ PERSONAL_DETAIL = (
     "alert_sent",
     "alert_failed",
 )
-REDACTED = "(removed when the tenant was deleted)"
+REDACTED = "(removed when the client was deleted)"
 
 
 def _scrub_audit(conn, tenant_id: int, deleted_users: dict[int, str]) -> None:
@@ -300,7 +300,7 @@ def request_erase(conn, user: str | None = None) -> None:
 def erase(conn, progress=lambda _text: None) -> str:
     """Remove what deleted tenants left on disk. Returns a note for the activity log ("" when there's nothing
     to say); raises EraseError, with words for people, when deleted data may still be readable."""
-    progress("Removing the activity history of deleted tenants")
+    progress("Removing the activity history of deleted clients")
     try:
         rows = events.sweep(conn)
     except (OSError, sqlite3.Error) as exc:

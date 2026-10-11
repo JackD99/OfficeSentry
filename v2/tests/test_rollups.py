@@ -114,12 +114,12 @@ def test_rollup_pages_and_downloads(client, db, two_tenants):
     resp = client.get("/across/review.csv")
     assert resp.mimetype == "text/csv" and "attachment" in resp.headers["Content-Disposition"]
     rows = _csv(resp.data)
-    assert rows[0][:2] == ["Tenant", "Tenant ID"] and {r[0] for r in rows[1:]} == {"Alpha Ltd", "Bravo Inc"}
+    assert rows[0][:2] == ["Client", "Tenant ID"] and {r[0] for r in rows[1:]} == {"Alpha Ltd", "Bravo Inc"}
     resp = client.get("/across/mailboxes.xlsx")
     assert resp.status_code == 200
     wb = load_workbook(io.BytesIO(resp.data))
-    assert wb.sheetnames[0] == "Summary" and wb["Summary"]["A2"].value == "All tenants"
-    assert wb.worksheets[1]["A1"].value == "Tenant"
+    assert wb.sheetnames[0] == "Summary" and wb["Summary"]["A2"].value == "All clients"
+    assert wb.worksheets[1]["A1"].value == "Client"
     assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'rollup_downloaded'").fetchone()[0] == 2
 
 
