@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 
@@ -88,10 +88,13 @@ class Section:
 
 @dataclass(frozen=True)
 class Link:
-    """A cell that links somewhere (a file in SharePoint, say). Only https addresses become links."""
+    """A cell that links somewhere (a file in SharePoint, say). Only https addresses become links.
+    ``page_href`` is set by ``link_pages`` when the address is a site with a page in Office Sentry: pages
+    open that, while PDFs and spreadsheets keep the address."""
 
     text: str
     href: str
+    page_href: str = ""
 
     def __str__(self) -> str:
         return self.text
@@ -162,8 +165,9 @@ def page_index(snap: TenantSnapshot) -> list[tuple[dict[str, str], Callable[[str
 
 
 def link_pages(sections: list[Section], indexes: list[tuple[dict[str, str], Callable | None]]) -> None:
-    """Turn every plain-text cell that is exactly a name in an index into a link to that page. Cells already
-    linked (people, files) are left alone, and a name is only linked where its index says it may be."""
+    """Turn every plain-text cell that is exactly a name in an index into a link to that page, and every
+    ``Link`` to an address in one (a site) into a link to its page. People and files are left alone, and a
+    name is only linked where its index says it may be."""
     if not indexes:
         return
     for section in sections:
@@ -173,8 +177,12 @@ def link_pages(sections: list[Section], indexes: list[tuple[dict[str, str], Call
             lookups.append({k: v for names in reversed(allowed) for k, v in names.items()})
         for row in section.rows:
             for i, v in enumerate(row):
-                if i < len(lookups) and type(v) is str and (href := lookups[i].get(v.lower())):
+                if i >= len(lookups):
+                    continue
+                if type(v) is str and (href := lookups[i].get(v.lower())):
                     row[i] = PageLink(v, href)
+                elif type(v) is Link and not v.page_href and (href := lookups[i].get(v.href.lower().rstrip("/"))):
+                    row[i] = replace(v, page_href=href)
 
 
 def people_index(snap: TenantSnapshot) -> dict[str, str]:

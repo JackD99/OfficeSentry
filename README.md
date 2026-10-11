@@ -121,6 +121,9 @@ reply, the phones syncing it and what changed. Mailbox addresses in reports and 
 So do groups: **Users > Groups and teams** lists every team, Microsoft 365 group, security group and distribution
 list, and each has a page with its owners and members, what membership gives (Conditional Access, admin roles,
 licences), its mail and team site, how it's set up and what changed.
+And SharePoint sites: **Users > Sites** lists every site with its storage, sharing links and last activity, and
+each has a page with its storage and what fills it, how it's shared, the team behind it, its activity and what
+changed. Site addresses in reports and on group pages open it.
 
 ### Across all clients, and what changed
 

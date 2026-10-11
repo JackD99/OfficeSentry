@@ -823,7 +823,7 @@ a.tile.link:hover .go { opacity: 1; color: var(--accent); transform: translateX(
 }
 @media (max-width: 640px) {
   table.stack-sm.part-table td.wrap:empty { display: none; }
-  .part-table tr[class*="flag-"] td:first-child { padding-left: var(--space-2) !important; }
+  .part-table tr[class*="flag-"] td { padding-left: var(--space-2) !important; }
 }
 
 /* -- Report tables: filters, columns, saved views, sticky headers --------------------- */

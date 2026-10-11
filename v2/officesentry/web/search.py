@@ -26,6 +26,8 @@ from ..checks.apps import app_risks
 from ..mailflow import inbox_rule_risk, mailbox_forwarding
 from ..reports import sign_in_reports
 from ..reports.group_page import group_type
+from ..reports.sharepoint import site_type, size
+from ..reports.site_page import site_key
 from ..reports.views import slug
 from ..snapshot import TenantSnapshot
 from ..text import plural
@@ -269,6 +271,13 @@ def _group(t: Tenant, g: dict, _v: str) -> Hit:
     )
 
 
+def _site(t: Tenant, s: dict, _v: str) -> Hit:
+    words = [site_type(s).lower(), size(s.get("storageUsed") or 0)]
+    if s.get("anyoneLinks"):
+        words.append(plural(s["anyoneLinks"], "anyone link"))
+    return Hit("Site", s["url"], ", ".join(words), url_for("site_pages.site", tenant_id=t.id, site_id=site_key(s)))
+
+
 # In the order results are listed within a tenant.
 KINDS: tuple[Kind, ...] = (
     Kind("users", "user", lambda u: (u.get("displayName"), u.get("userPrincipalName"), u.get("mail")), _person),
@@ -286,6 +295,12 @@ KINDS: tuple[Kind, ...] = (
         _mailbox,
     ),
     Kind("mailboxes", "mailbox", lambda m: (mailbox_forwarding(m),), _forwarding),
+    Kind(
+        "sharepoint_usage",
+        "site",
+        lambda s: (s["url"],) if isinstance(s.get("url"), str) and s["url"] and not s.get("deleted") else (),
+        _site,
+    ),
     Kind("inbox_rules", "inbox_rule", _rule_targets, _rule),
     Kind("sign_ins", "sign_in_failure_ip", lambda i: (i.get("ip"),), _failure_ip, ip=True),
     Kind("sign_ins", "risky_sign_in", lambda r: (r.get("ip"),), _risky, ip=True),

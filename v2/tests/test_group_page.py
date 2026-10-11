@@ -78,7 +78,8 @@ def test_team_page_brings_the_team_together(db, two_tenants):
     assert dict(parts["mail"].facts) == {"Address": "g1@x.com"} and parts["mail"].summary == "Mail-enabled"
     # The team site, matched by the group's address, with the headline sharing figures.
     files = dict(parts["files"].facts)
-    assert files["Site"].safe_href == SALES_SITE["siteUrl"] and not files["Site"].page_href
+    assert files["Site"].safe_href == SALES_SITE["siteUrl"]
+    assert files["Site"].page_href == f"/tenants/{alpha}/sites/{SALES_SITE['siteId'].lower()}"
     assert files["Storage"].startswith("5.0 GB") and files["Files"] == "10"
     assert files["Sharing links"] == "2 with anyone, 1 with guests" and files["External sharing"] == "On"
     assert parts["files"].tone == "warn"
@@ -318,7 +319,7 @@ def test_pages_render_and_are_tenant_scoped(client, db, two_tenants):
         assert heading in html, heading
     assert "In the reports" in html and "History" in html
     assert f'href="/tenants/{alpha}/users/u1"' in html  # Ann, the owner
-    assert f'href="{SALES_SITE["siteUrl"]}"' in html  # the team site, opened in a new tab
+    assert f'href="/tenants/{alpha}/sites/{SALES_SITE["siteId"]}"' in html  # the team site's own page
     assert client.get(f"/tenants/{alpha}/groups/nobody").status_code == 404
     xlsx = client.get(f"/tenants/{alpha}/groups/g1.xlsx")
     assert xlsx.status_code == 200
