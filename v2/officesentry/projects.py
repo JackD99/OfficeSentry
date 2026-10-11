@@ -627,7 +627,7 @@ def to_table(items: list[tuple[dict, Recommendation]]):
     from .reports.tables import Table
 
     columns = [
-        "Tenant",
+        "Client",
         "Tenant ID",
         "Project",
         "Priority",

@@ -1,19 +1,19 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, csrf %}
-{% block title %}Import tenants · Office Sentry{% endblock %}
+{% block title %}Import clients · Office Sentry{% endblock %}
 {% block content %}
-<div class="crumbs"><a href="{{ url_for('tenant_admin.clients') }}">Client tenants</a><span>/</span><a href="{{ url_for('onboarding.index') }}">Onboarding</a><span>/</span><span>Import</span></div>
-<div class="page-head"><div><h1>Import tenants from a CSV</h1>
+<div class="crumbs"><a href="{{ url_for('tenant_admin.clients') }}">Client settings</a><span>/</span><a href="{{ url_for('onboarding.index') }}">Onboarding</a><span>/</span><span>Import</span></div>
+<div class="page-head"><div><h1>Import clients from a CSV</h1>
   <div class="sub">{% if parsed and not parsed.error %}Check the list, then import. Nothing is added until you do.{% else %}Add many clients at once. You'll see the list before anything is added.{% endif %}</div></div></div>
 
 {% if not connections %}
-<div class="callout warn">{{ icon('alert') }}<div>Set up the <a href="{{ url_for('admin.connections') }}">app connection</a> first: imported tenants need it before their consent links work. You can still import now.</div></div>
+<div class="callout warn">{{ icon('alert') }}<div>Set up the <a href="{{ url_for('admin.connections') }}">app connection</a> first: imported clients need it before their consent links work. You can still import now.</div></div>
 {% endif %}
 
 {% if parsed and not parsed.error %}
 {% set new = parsed.new %}
 <div class="tiles">
-  <div class="tile{{ ' tone-ok' if new }}"><div class="label">Will be added</div><div class="value">{{ new|length }}</div><div class="foot">new tenants</div></div>
+  <div class="tile{{ ' tone-ok' if new }}"><div class="label">Will be added</div><div class="value">{{ new|length }}</div><div class="foot">new clients</div></div>
   <div class="tile"><div class="label">Already there</div><div class="value">{{ parsed.skipped|length }}</div><div class="foot">left as they are</div></div>
   <div class="tile{{ ' tone-bad' if parsed.broken }}"><div class="label">Need fixing</div><div class="value">{{ parsed.broken|length }}</div><div class="foot">left out; fix and import again</div></div>
 </div>
@@ -22,16 +22,16 @@
 <div class="card import-summary">
   <ul class="import-notes">
     {% for key, connection in uses.items() %}
-    <li>{{ icon('connection') }}<span>{% if connection %}{{ cloud_of(key).label }} tenants use the app connection <strong>{{ connection.name }}</strong>{% if not connection.client_id %} (it has no client ID yet, so consent links wait until it does){% endif %}.
-      {%- else %}<span class="bad-text">No app connection for {{ cloud_of(key).label }} yet</span>: those tenants are added without one, and their consent links wait until you set one up.{% endif %}</span></li>
+    <li>{{ icon('connection') }}<span>{% if connection %}{{ cloud_of(key).label }} clients use the app connection <strong>{{ connection.name }}</strong>{% if not connection.client_id %} (it has no client ID yet, so consent links wait until it does){% endif %}.
+      {%- else %}<span class="bad-text">No app connection for {{ cloud_of(key).label }} yet</span>: those clients are added without one, and their consent links wait until you set one up.{% endif %}</span></li>
     {% endfor %}
     {% if parsed.new_groups %}<li>{{ icon('tenants') }}<span>New {{ 'group' if parsed.new_groups|length == 1 else 'groups' }}: <strong>{{ parsed.new_groups|join(', ') }}</strong>.</span></li>{% endif %}
-    {% for name, analysts in granted.items() if analysts %}<li>{{ icon('eye') }}<span>Analysts given the group <strong>{{ name }}</strong> will see its new tenants: {{ analysts|join(', ') }}.</span></li>{% endfor %}
-    <li>{{ icon('shield') }}<span>Only admins see the other new tenants, until you give analysts or client users access.</span></li>
+    {% for name, analysts in granted.items() if analysts %}<li>{{ icon('eye') }}<span>Analysts given the group <strong>{{ name }}</strong> will see its new clients: {{ analysts|join(', ') }}.</span></li>{% endfor %}
+    <li>{{ icon('shield') }}<span>Only admins see the other new clients, until you give analysts or client users access.</span></li>
   </ul>
   <form method="post" class="form-actions">{{ csrf() }}
     <input type="hidden" name="text" value="{{ text }}"><input type="hidden" name="confirm" value="1">
-    <button class="primary">{{ icon('plus') }} Import {{ new|length|plural('tenant') }}</button>
+    <button class="primary">{{ icon('plus') }} Import {{ new|length|plural('client') }}</button>
     <a class="btn ghost" href="{{ url_for('onboarding.import_tenants') }}">Start again</a>
   </form>
 </div>
@@ -71,11 +71,11 @@
     <ul class="column-notes small">
       <li><strong>name</strong>: how the client appears in Office Sentry and on reports.</li>
       <li><strong>tenant</strong>: the Directory (tenant) ID, or any domain the tenant uses, such as contoso.onmicrosoft.com.</li>
-      <li><strong>group</strong> (optional): a tenant group; several separated by <code>;</code>. Missing groups are created.</li>
+      <li><strong>group</strong> (optional): a client group; several separated by <code>;</code>. Missing groups are created.</li>
       <li><strong>contact</strong> (optional): who to send the consent link to, as <code>jane@contoso.com</code> or <code>Jane Smith &lt;jane@contoso.com&gt;</code>. Also added to the client's email contacts.</li>
       <li><strong>cloud</strong> (optional): leave empty for Commercial; or GCC High, DoD or China.</li>
     </ul>
-    <p class="m0">Up to {{ '{:,}'.format(1000) }} rows at a time. Tenants already in Office Sentry are skipped, not changed.</p>
+    <p class="m0">Up to {{ '{:,}'.format(1000) }} rows at a time. Clients already in Office Sentry are skipped, not changed.</p>
   </div>
 </form>
 {% endif %}

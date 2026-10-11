@@ -371,7 +371,7 @@ def test_pdfs_cap_rollups_and_change_reports(app, monkeypatch):
     tenants = [{"id": i, "name": f"T{i}", "tenant_ref": str(i)} for i in range(25)]
     rollup = Rollup("mfa", "MFA", "", [Column("n", "N")], [RollupRow(t, {"n": 1}) for t in tenants], datetime.now(UTC))
     capped = printing.cap_rollup(rollup, 10)
-    assert len(capped.rows) == 10 and "first 10 of 25 tenants" in capped.footnote and len(rollup.rows) == 25
+    assert len(capped.rows) == 10 and "first 10 of 25 clients" in capped.footnote and len(rollup.rows) == 25
     assert printing.cap_rollup(capped, 10) is capped
 
     changes = [RowChange("added", [f"row {i}"], columns=["Name"]) for i in range(25)]
@@ -419,5 +419,5 @@ def test_pdfs_cap_rollups_and_change_reports(app, monkeypatch):
             days=30,
             generated_at=datetime.now(UTC),
         )
-    assert "first 10 of 25 tenants" in html[0] and "T9<" in html[0] and "T10<" not in html[0]
-    assert "first 10 of 25 tenants" in html[1] and "T9<" in html[1] and "T10<" not in html[1]
+    assert "first 10 of 25 clients" in html[0] and "T9<" in html[0] and "T10<" not in html[0]
+    assert "first 10 of 25 clients" in html[1] and "T9<" in html[1] and "T10<" not in html[1]

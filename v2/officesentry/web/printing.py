@@ -98,7 +98,7 @@ def cap_rollup(rollup: Rollup, limit: int | None = None) -> Rollup:
     limit = limit or PDF_MAX_ROWS
     if len(rollup.rows) <= limit:
         return rollup
-    note = _cut_note(limit, len(rollup.rows), "tenants", "Download the spreadsheet (XLSX) for all of them.")
+    note = _cut_note(limit, len(rollup.rows), "clients", "Download the spreadsheet (XLSX) for all of them.")
     return dataclasses.replace(rollup, rows=rollup.rows[:limit], footnote=f"{rollup.footnote} {note}".strip())
 
 

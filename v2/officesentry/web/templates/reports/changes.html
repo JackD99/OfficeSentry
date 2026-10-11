@@ -9,30 +9,30 @@
 {%- endmacro %}
 
 {% block doc_title %}What changed{% endblock %}
-{% block client %}{{ group_scope.label if group_scope else 'All tenants' }}{% endblock %}
-{% block footer_note %}{{ brand.display_name }} internal: {{ ('tenants in ' ~ group_scope.group.name) if group_scope and group_scope.group else 'every tenant' }}{% endblock %}
+{% block client %}{{ group_scope.label if group_scope else 'All clients' }}{% endblock %}
+{% block footer_note %}{{ brand.display_name }} internal: {{ ('clients in ' ~ group_scope.group.name) if group_scope and group_scope.group else 'every client' }}{% endblock %}
 {% block cover_meta %}
   {{ ui.meta('Prepared by', brand.display_name) }}
   {{ ui.meta('Date', generated_at|day) }}
   {{ ui.meta('Period', 'Last ' ~ days ~ ' days') }}
-  {{ ui.meta('Tenants', summaries|length) }}
+  {{ ui.meta('Clients', summaries|length) }}
 {% endblock %}
 
 {% block body %}
-<p class="lede">Changes in every tenant over the last {{ days }} days, most important first.</p>
+<p class="lede">Changes in every client over the last {{ days }} days, most important first.</p>
 {% call ui.figures(4) %}
-  {{ ui.figure('Tenants with changes', totals.changed, 'of ' ~ summaries|length) }}
+  {{ ui.figure('Clients with changes', totals.changed, 'of ' ~ summaries|length) }}
   {{ ui.figure('New critical or high findings', totals.new_severe, totals.new ~ ' new findings in all', 'bad' if totals.new_severe else none) }}
-  {{ ui.figure('Findings fixed', totals.fixed, 'across all tenants', 'ok' if totals.fixed else none) }}
+  {{ ui.figure('Findings fixed', totals.fixed, 'across all clients', 'ok' if totals.fixed else none) }}
   {{ ui.figure('Average Secure Score change', ('%+g'|format(totals.score) ~ ' pts') if totals.score else ('No change' if totals.score is not none else '–'),
                (totals.no_baseline ~ ' without data from ' ~ days ~ ' days ago') if totals.no_baseline else '') }}
 {% endcall %}
 
 <section class="doc-section">
-  <h2>Tenants <span class="count">{{ summaries|length }}</span></h2>
+  <h2>Clients <span class="count">{{ summaries|length }}</span></h2>
   {% if summaries %}
   <div class="table-wrap"><table class="data">
-    <thead><tr><th>Tenant</th><th class="num">Changes</th><th class="num">New findings</th><th class="num">Fixed</th>
+    <thead><tr><th>Client</th><th class="num">Changes</th><th class="num">New findings</th><th class="num">Fixed</th>
       <th class="num">Secure Score</th><th class="num">Users with MFA</th><th>What changed</th></tr></thead>
     <tbody>
     {% for s in summaries %}{% set score = s.figures.get('secure_score.pct') %}{% set mfa = s.figures.get('mfa.registered_pct') %}
@@ -47,12 +47,12 @@
     {% endfor %}
     </tbody>
   </table></div>
-  {% if cut %}<p>This PDF shows the first {{ '{:,}'.format(summaries|length) }} of {{ '{:,}'.format(cut) }} tenants. Download the spreadsheet (XLSX) for all of them.</p>{% endif %}
-  {% else %}<p class="empty-note">No tenants to show.</p>{% endif %}
+  {% if cut %}<p>This PDF shows the first {{ '{:,}'.format(summaries|length) }} of {{ '{:,}'.format(cut) }} clients. Download the spreadsheet (XLSX) for all of them.</p>{% endif %}
+  {% else %}<p class="empty-note">No clients to show.</p>{% endif %}
 </section>
 
 <footer class="about keep">
-  <p>Changes compare each tenant's data from {{ days }} days ago with its latest collection. Figures in green or red show the change in points.
+  <p>Changes compare each client's data from {{ days }} days ago with its latest collection. Figures in green or red show the change in points.
   Prepared by {{ brand.display_name }}. Collected from Microsoft 365 with read-only access; nothing was changed.</p>
 </footer>
 {% endblock %}

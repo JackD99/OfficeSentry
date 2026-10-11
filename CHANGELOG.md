@@ -32,19 +32,26 @@ Yes: a table for the search index. It is applied on start, as usual.
 ### Changed
 
 - Pages that show every client at once stay quick as the number of clients grows. The insurance evidence
-  rollup, every report's All tenants rollup, the month-end queue, Recommended projects and the Clients home
+  rollup, every report's All clients rollup, the month-end queue, Recommended projects and the Accounts home
   page now read rows the worker keeps up to date after each collection, as What changed and the check
   matrix already did; a row is rebuilt the moment anything behind it changes, so nothing shown is older
-  than the live page would be. At 200 clients the Clients page went from 6 seconds to half a second, the
+  than the live page would be. At 200 clients the Accounts page went from 6 seconds to half a second, the
   month-end queue from 3.4 seconds to under a tenth, the insurance evidence rollup from 4 seconds to under
-  a tenth, and a report's All tenants rollup from about a second to under a tenth.
+  a tenth, and a report's All clients rollup from about a second to under a tenth.
 - The sidebar search reads an index the worker keeps, instead of scanning every client's data on each
   search. A client whose index is behind its latest collection is still scanned, so nothing is missed.
-- PDFs of an All tenants rollup, What changed and a client's change report keep the first 2,000 rows and
-  say so, as table reports already did, so a very large tenant can't run a download into the server's
+- PDFs of an All clients rollup, What changed and a client's change report keep the first 2,000 rows and
+  say so, as table reports already did, so a very large client can't run a download into the server's
   timeout. The spreadsheet downloads still have every row.
 - `DEPLOY.md` gives measured page, download and worker times at 200 clients ("How fast"), and
   `scripts/timings.py` measures them.
+- **"Clients" for the companies you look after.** Pages, menus, emails, PDFs, spreadsheets and the docs now
+  say client where they said tenant; "tenant" is kept only for the Microsoft 365 side (Tenant ID, consent in
+  the client's tenant). In the menu, Tenants is now **Clients**, All tenants is **All clients**, and under
+  Settings, Client tenants is **Client settings** and Tenant groups is **Client groups**. The account
+  manager's home page (was "Clients") is now **Accounts**. Columns headed "Tenant" are now "Client";
+  saved views and bookmarked links that filter or sort on that column keep working. The group digest is
+  now the "Client digest", and its spreadsheet is named `client-digest-...`.
 
 ### Fixed
 
@@ -132,6 +139,14 @@ Yes: a table for the search index. It is applied on start, as usual.
 - A database upgrade on a large database no longer fails the deploy: the portal's health check allows 15
   minutes to start, the start script waits that long and then starts the worker, and Docker keeps the
   containers running while it is itself updated (`live-restore`, on new servers).
+- A deploy no longer copies the portal's settings files, among them the off-site backup password, into
+  the public demo's folder on the server, and removes the copies earlier deploys left. The temporary SSH
+  rule it opens in the Hetzner firewall is removed by a second job too, in case GitHub loses the deploy
+  job's runner before it can close it.
+- A long write to the database (a restore, a backup, a large delete) no longer makes every page fail:
+  pages don't wait for it to note a sign-in was seen or to store a dashboard row, and a change that
+  still finds the database locked after five seconds is answered with "Office Sentry is busy right
+  now, try again in a moment" instead of an error page.
 
 ### Security
 

@@ -171,7 +171,7 @@ needing goes in those lists.
   `Rollup.total_row()` sums counts and money only (int or `Money` headlines,
   not scores or percentages). "Every row" (`/across/<key>/rows/<table slug>`,
   `rollups.all_rows`) stacks each visible tenant's rows from the same builders
-  under a Tenant column, as one `DataReport`, so `views` filters, sorts, saved
+  under a Client column, as one `DataReport`, so `views` filters, sorts, saved
   views and the CSV/XLSX/PDF downloads work unchanged; it keeps
   `rollups.MAX_ROWS` per table and says when it cut. `/across/checks`
   (`rollups.check_matrix`) is every check for every tenant, evaluated from
@@ -179,7 +179,7 @@ needing goes in those lists.
   `/across` pages are admin and analyst only, over `visible_tenants()`.
   Every page with one row per tenant (`/changes`, `/across/checks`,
   `/across/evidence`, `/across/<report key>`, the month-end queue, `/projects`
-  and the Clients home, and their downloads) reads each tenant's stored row
+  and the Accounts home, and their downloads) reads each tenant's stored row
   from `summary_cache` (`reports/precomputed.py`, kinds `changes:<days>`,
   `checks`, `evidence`, `rollup:<key>`, `review` and `projects`) while its
   fingerprint matches, and builds and stores it otherwise. The worker builds
@@ -245,7 +245,7 @@ needing goes in those lists.
 - PDF routes return `web/printing.pdf_response(template, filename, ...)`: a
   WeasyPrint PDF, or without WeasyPrint (Windows without Docker) the same
   template as a print-ready page that opens the browser's print window. Table
-  reports (detail, All tenants, What changed) use `reports/detail.html`,
+  reports (detail, All clients, What changed) use `reports/detail.html`,
   `rollup.html`, `changes.html` and `tenant_changes.html` with
   `document = true` (and `wide = true` for landscape).
 - `tests/test_live_fixture.py` replays `tests/fixtures/live_tenant.json`, real
@@ -314,12 +314,12 @@ person's page or the detail report filtered to the row.
 
 `home.py` (pages in `web/home.py`, staff only, `@group_aware` over `scoped_tenants()`): **Today**
 (`/today`, for technicians: critical and high findings new in the last day, failed or out-of-date
-collections, access not granted yet, and Coming up items due within a week) and **Clients** (`/clients`, for
+collections, access not granted yet, and Coming up items due within a week) and **Accounts** (`/clients`, for
 account managers: licence waste from the cached rollup rows, renewals in 30 days, this month's month-end
 reports to approve and projects to propose). Each opens with one sentence (`Today.sentence()`,
 `Clients.sentence()`), then the detail, from stored state only. A person's choice is `users.home` (Account
 settings, or "Make this my home page" on either page); `/home` (the sidebar's Home and the logo) opens it,
-and signing in without a page to go back to lands there. Clients keep the dashboard. A new reason on Today
+and signing in without a page to go back to lands there. Client users keep the dashboard. A new reason on Today
 is a `Reason` with a `kind` in `home.KINDS` and a `target` that `web/home._link` turns into a URL.
 
 ## Web UI conventions
@@ -412,7 +412,12 @@ it records a finished run tries again for a few minutes (`_while_locked`) rather
 failed as "worker stopped" once its lease runs out. `db.transaction` (and
 `store.atomic`) begin with `BEGIN IMMEDIATE`, so a write that reads first waits
 for other writers instead of failing at once; pass `immediate=False` only for
-a read. Don't add Celery or Redis.
+a read. The portal's connections wait `web.WEB_BUSY_TIMEOUT_MS` (5 seconds) for
+the lock rather than the worker's 30, and a write that still finds it held gets
+the "busy right now" page (503 with `Retry-After`), never a 500. Bookkeeping a
+page can do without once (noting a session was seen, storing a dashboard row it
+just built) goes through `db.try_write`, which waits a quarter of a second and
+skips. Don't add Celery or Redis.
 
 Office Sentry's own health is `system_health.assess()` (database, schema
 version, worker heartbeat, last collection and whether most tenants failed
@@ -468,7 +473,7 @@ PDFs keep the first `printing.PDF_MAX_ROWS` (2,000) rows per table and say
 so (`printing.cap_rows`, and `cap_rollup` and `cap_changes` for rollups and
 change reports); the XLSX and CSV have every row.
 
-The dashboard and the All tenants review read each tenant's row from
+The dashboard and the All clients review read each tenant's row from
 `rollup_cache` (`monthly_review.rollup_row(..., cached=True)`), rebuilt when
 its `_fingerprint` changes (latest run, findings, prices, currency, app
 connections, the code, the day). If the row comes to depend on something
@@ -614,7 +619,7 @@ change is audited; note text is never put in the audit log.
 - Anything the tenant granted the app beyond `entra.GRAPH_PERMISSIONS` and
   `EXCHANGE_PERMISSIONS` (the collector's `other`), and any directory role
   besides Global Reader, is a warning (`tenant_health.extra_permissions`,
-  `extra_roles`) on Manage and the Client tenants list.
+  `extra_roles`) on Manage and the Client settings list.
 - App certificates (`cert_lifecycle.py`): `expiring()` grades every
   certificate in use, each app connection's and the mail app's, at 60, 30
   and 7 days and expired, for the App connection page, the admin banner in
@@ -688,7 +693,7 @@ else.
 Staff pages that list tenants are `@group_aware` (under `@roles_required`)
 and read `scoped_tenants()` instead of `visible_tenants()`: the dashboard,
 `/across/*` (and their downloads), `/changes*`, the month-end queue and
-Client tenants. The choice is kept on the sign-in (`sessions.group_id`); a GET
+Client settings. The choice is kept on the sign-in (`sessions.group_id`); a GET
 with `?group=<id>` or `?group=all` picks and redirects to the plain URL. The
 picker (`_groups.html`, `group_picker()`) only offers groups holding a
 tenant the person sees, and downloads say which group they cover
