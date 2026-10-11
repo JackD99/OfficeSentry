@@ -51,6 +51,9 @@ each client's month. As ever, a copy of the database is made first.
 - In a report design, the headings of two half-width blocks side by side line up, on the page and in the PDF.
 - A report design previewed in dark mode drew its contact card dark on the light page; previews are light, as
   the PDF is.
+- On the public demo, picking a client group in the Group picker now shows that group, and the choice
+  follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
+  to every client, because demo visitors have no sign-in to keep the choice on.
 
 ## [2.2.0] - 2026-10-11
 
@@ -761,6 +764,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
+[2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0
