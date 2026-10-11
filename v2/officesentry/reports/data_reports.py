@@ -1228,11 +1228,10 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
     if managed:
         population, version_key = managed, "osVersion"
     else:
+        # A device that has never signed in hasn't signed in within the period.
+        ages = ((d, devices.days_since(d.get("approximateLastSignInDateTime"), now)) for d in entra)
         population = [
-            d
-            for d in entra
-            if d.get("accountEnabled")
-            and (devices.days_since(d.get("approximateLastSignInDateTime"), now) or 0) <= devices.STALE_DAYS
+            d for d, days in ages if d.get("accountEnabled") and days is not None and days <= devices.STALE_DAYS
         ]
         version_key = "operatingSystemVersion"
     counts: dict[tuple[str, str], int] = {}

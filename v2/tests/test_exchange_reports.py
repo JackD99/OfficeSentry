@@ -161,7 +161,7 @@ def test_mobile_devices_lead_with_what_needs_attention(db, tenant):
     assert tiles["Mobile devices"].foot == "2 synced in the last 30 days"
     assert (tiles["Leavers' devices"].value, tiles["Leavers' devices"].tone) == (1, "bad")
     assert tiles["Waiting for approval"].value == 1
-    assert tiles["Not synced in 90 days"].value == 1
+    assert tiles["Not synced in 90 days"].value == 1 and _opens(report, tiles["Not synced in 90 days"]) == ["ann@x.com"]
 
     attention = s["Devices that need attention"]
     assert attention.flags == ["high", "medium", "low"]
@@ -170,6 +170,18 @@ def test_mobile_devices_lead_with_what_needs_attention(db, tenant):
     assert str(bob[2]) == "Still syncing mail although the person's sign-in is blocked"
     assert info[0] == "info@x.com" and "Waiting for an admin" in str(info[2])
     assert android[1] == "SM-G991B" and str(android[2]).startswith("Not synced for 200 days")
+
+
+def test_not_synced_figure_counts_calendar_days_like_its_link(db, two_tenants):
+    """Ann's old phone last synced at midnight 90 days ago: over 90 days by the clock, but not "Older than 90
+    days" on the table, which counts calendar days. The figure counts what its link opens."""
+    alpha, _ = two_tenants
+    midnight = (datetime.now(UTC) - timedelta(days=90)).strftime("%Y-%m-%dT00:00:00.0000000Z")
+    stats = {**xd.DEVICE_STATS, "g-u1": [xd.DEVICE_STATS["g-u1"][0], xd._stats(xd.ANN_ANDROID, midnight)]}
+    seed_tenant(db, alpha, users=USERS, exchange={**gd.EXCHANGE, "Get-MobileDeviceStatistics": stats})
+    report, _ = _report(db, store.get_tenant(db, alpha), "mobile-devices")
+    stale = _tiles(report)["Not synced in 90 days"]
+    assert stale.value == 0 and _opens(report, stale) == []
 
 
 def test_every_device_row(db, tenant):
