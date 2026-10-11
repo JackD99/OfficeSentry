@@ -73,6 +73,30 @@ def test_workbook_sheets_are_styled_filterable_and_typed():
     assert ws.print_title_rows == "$1:$1"
 
 
+def test_changes_percentages_and_written_dates_are_numbers_and_dates_in_spreadsheets():
+    assert cells.xlsx_value("+4.6%") == 0.046 and cells.xlsx_value("-4.6%") == -0.046
+    assert cells.xlsx_value("+2.2") == 2.2 and cells.xlsx_value("-1.5") == -1.5 and cells.xlsx_value("+4") == 4
+    assert cells.xlsx_value("6 Feb 2026") == date(2026, 2, 6) and cells.display("6 Feb 2026") == "6 Feb 2026"
+    for text in ("31 Feb 2026", "6 Feb 2026, 14:00", "+1.2.3", "+1e5"):
+        assert cells.xlsx_value(text) == text
+    book = workbook.Book()
+    book.table(
+        "Month by month",
+        ["Month", "Score", "Change", "Share", "Last sign-in"],
+        [["Sep", "29%", "+2.2", "+4.6%", "6 Feb 2026"], ["Oct", "33.3%", "+4", "-4.6%", "12 Jan 2025"]],
+    )
+    data = book.save(workbook.Cover("Secure Score", facts=[("Score", "29%", ""), ("Change", "+2.2", "")]))
+    wb = load_workbook(io.BytesIO(data))
+    ws = wb["Month by month"]
+    assert [ws["B2"].number_format, ws["B3"].number_format] == ["0%", "0.0%"]  # 29%, not 29.0%
+    assert [ws["C2"].value, ws["C3"].value] == [2.2, 4] and ws["C2"].number_format == "+0.0;-0.0;0.0"
+    assert ws["C3"].number_format == "+0;-0;0"
+    assert [ws["D2"].value, ws["D3"].value] == [0.046, -0.046] and ws["D2"].number_format == "+0.0%;-0.0%;0.0%"
+    assert ws["E2"].value == datetime(2026, 2, 6) and ws["E2"].number_format == workbook.DATE_FORMAT
+    facts = {row[0].value: row[1] for row in wb["Summary"].iter_rows() if row[0].value in ("Score", "Change")}
+    assert [facts["Score"].number_format, facts["Change"].number_format] == ["0%", "+0.0;-0.0;0.0"]
+
+
 def test_tenant_text_with_control_characters_still_makes_a_workbook_and_a_document():
     rule = "Move\x0bto RSS"  # an inbox rule's name as Exchange returned it
     book = workbook.Book()

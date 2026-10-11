@@ -63,6 +63,27 @@ def _row(values: list) -> list:
     return [printable(v) if isinstance(v, str) else v for v in values]
 
 
+def _number_format(value, source) -> str | None:
+    """How a cell read from ``source`` shows: dates as dates, percentages as percentages, decimals to two
+    places, and a change ("+4", "-1.5", "+4.6%") with its sign."""
+    if isinstance(value, datetime):
+        return DATETIME_FORMAT
+    if isinstance(value, date):
+        return DATE_FORMAT
+    text = source if isinstance(source, str) else ""
+    signed = text[:1] in ("+", "-")
+    if isinstance(value, float) and text.endswith("%"):
+        shown = "0%" if round(value * 100, 6).is_integer() else "0.0%"  # 0.29 * 100 is 28.999...
+    elif isinstance(value, (int, float)) and signed:
+        decimals = len(text.partition(".")[2])
+        shown = "0." + "0" * decimals if decimals else "0"
+    elif isinstance(value, float):
+        return "#,##0.00"
+    else:
+        return None
+    return f"+{shown};-{shown};{shown}" if signed else shown
+
+
 def _width(value) -> int:
     if isinstance(value, datetime):
         return 17
@@ -138,16 +159,8 @@ class Book:
             r = ws.max_row
             for col, v in enumerate(values, 1):
                 cell = ws.cell(r, col)
-                if isinstance(v, datetime):
-                    cell.number_format = DATETIME_FORMAT
-                elif isinstance(v, date):
-                    cell.number_format = DATE_FORMAT
-                elif isinstance(v, float) and isinstance(row[col - 1], str) and row[col - 1].endswith("%"):
-                    cell.number_format = "0%" if v * 100 == int(v * 100) else "0.0%"
-                elif isinstance(v, int) and isinstance(row[col - 1], str) and row[col - 1][:1] in "+-":
-                    cell.number_format = "+0;-0;0"
-                elif isinstance(v, float):
-                    cell.number_format = "#,##0.00"
+                if number_format := _number_format(v, row[col - 1]):
+                    cell.number_format = number_format
                 w = _width(v)
                 if col <= len(widths):
                     widths[col - 1] = max(widths[col - 1], min(w, MAX_WIDTH))
@@ -234,12 +247,8 @@ class Book:
                 ws.append(_row([label, xlsx_value(value), note or None]))
                 cell = ws.cell(ws.max_row, 2)
                 cell.alignment = Alignment(horizontal="left")
-                if isinstance(cell.value, date):
-                    cell.number_format = DATETIME_FORMAT if isinstance(cell.value, datetime) else DATE_FORMAT
-                elif isinstance(cell.value, float) and isinstance(value, str) and value.endswith("%"):
-                    cell.number_format = "0.0%"
-                elif isinstance(cell.value, float):
-                    cell.number_format = "#,##0.00"
+                if number_format := _number_format(cell.value, value):
+                    cell.number_format = number_format
                 ws.cell(ws.max_row, 3).alignment = Alignment(wrap_text=True, vertical="top")
         for label, text in cover.notes:
             ws.append(_row([label, text]))
