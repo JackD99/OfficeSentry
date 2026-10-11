@@ -23,7 +23,7 @@ from ..reports import (
     tables,
     views,
 )
-from ..reports.monthly_review import build, setting
+from ..reports.monthly_review import SUMMARY_STEM, build, setting
 from ..reports.registry import DECLARED
 from . import as_of
 from .access import can, is_staff, login_required, needs, require, tenant_or_404, visible_tenants
@@ -138,10 +138,13 @@ def tenant_report(tenant_id: int):
 @bp.get("/tenants/<int:tenant_id>/report.pdf")
 @needs("reports.security", "export")
 def tenant_report_pdf(tenant_id: int):
+    """The monthly review PDF; ``?appendix=0`` is the two summary pages only."""
     t = tenant_or_404(tenant_id)
-    audit(g.db, g.user["username"], "report_downloaded", t["id"], "pdf")
+    appendix = request.args.get("appendix") != "0"
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], "pdf" if appendix else "pdf summary")
+    name = _filename(t, "pdf")[:-4] if appendix else _filename(t, "pdf")[:-4].replace("security-review", SUMMARY_STEM)
     return pdf_response(
-        "reports/monthly_review.html", _filename(t, "pdf")[:-4], report=build(g.db, t), **report_extras(t, page=False)
+        "reports/monthly_review.html", name, report=build(g.db, t), appendix=appendix, **report_extras(t, page=False)
     )
 
 

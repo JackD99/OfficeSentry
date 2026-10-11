@@ -4,14 +4,20 @@ Read-only Microsoft 365 reporting for MSPs: nightly snapshots of every
 client's Microsoft 365, cross-client rollups, month-over-month changes and
 branded client reports. The [root README](../README.md) is the product page
 with screenshots; this page lists every feature in detail and covers setup
-and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
+and development. Running it on a server is in [DEPLOY.md](DEPLOY.md), and on
+Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/README.md).
 
 ## Reports
 
-- **Monthly Security & Licensing Review** (`/tenants/<id>/report`): KPIs with
-  4-week change, Secure Score trend, failing checks with affected accounts and
+- **Monthly Security & Licensing Review** (`/tenants/<id>/report`): two summary
+  pages that lead with the answer (what was checked and what changed, key figures
+  with their 4-week change, findings found and fixed each month, what was done
+  this month and what to do next), then an appendix with the detail: what
+  changed, the Secure Score trend, failing checks with affected accounts and
   recommendations, licence waste in money, passing checks, checks that the
-  client's licences can't support, and data freshness.
+  client's licences can't support, and data freshness. The *Summary PDF* (and the
+  "Monthly review: summary only" option in plans and schedules) is the two
+  summary pages on their own.
 - **Reports** (`/reports`): every report in one searchable page, by area and by
   job ("Offboarding check", "Insurance renewal", "Storage cleanup"...), opened
   for one client or across all of them. The search also finds clients and
@@ -33,8 +39,9 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
   resolved and reopened dates. Analysts can accept a risk with a reason and an
   optional expiry; accepted risks leave the totals and get their own section.
 - **Since last month**: new and fixed findings, admin role changes, new,
-  disabled and deleted accounts, and Conditional Access policies added,
-  switched or edited, compared with the snapshot from 4+ weeks earlier.
+  disabled and deleted accounts, licences people were given or lost, and
+  Conditional Access policies added, switched or edited, compared with the
+  snapshot from 4+ weeks earlier.
 - **Emailed reports** (a client's *Emailed reports* tab, and *Email reports*
   for everything at once):
   - Send any mix of reports (the monthly review, the evidence pack, any detail
@@ -235,6 +242,14 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
     conflicting or missing base licences, usage location) in plain words with
     what to do; licensed accounts without a usage location; licences assigned
     both directly and by a group; and the groups that hand licences out.
+  - *Licence changes*: every paid licence given to or taken from an account,
+    from Office Sentry's own kept collections (to the day for the last month,
+    to the month before that), whether it came directly or from a group, and
+    who made the change and when where the directory audit log has been read
+    (Admin activity). Licences bought and assigned at the end of each month
+    for the last year, with the cost at your prices and a chart of assigned
+    against bought; headline figures say how bought licences and the monthly
+    cost moved since a month ago. Free licences are left out.
   - *Microsoft 365 usage*: who used email, Teams, OneDrive, SharePoint and
     the Office apps in the last 30 days (share of licensed people per
     service, and a trend from Office Sentry's own history), when each person
@@ -317,13 +332,15 @@ trend, recommended next steps, failing checks, what changed, licences, a table f
 the insurance questionnaire answers, this month's commentary, headings, your own text, a contact card, a
 page break), set it up in its panel (which severities, how many rows, the heading), put two blocks side
 by side, and watch the preview on a real client update as you go. Start from an executive summary, a
-full security review, a licensing review or a blank page.
+full security review, a licensing review, a quarterly review (three months of Secure Score and findings,
+what was fixed, the projects on the table and where each stands, licence spend, and what's coming up in
+the next 90 days) or a blank page.
 
 A design belongs to the MSP and works for every client: a block with nothing to show for a client (no
 accepted risks, no commentary yet) is left out of that client's report. Each client's **Reports →
 Custom reports** lists every design as a page and a PDF, and a report plan or a client's email schedule
 can send a design (as a PDF) alongside or instead of the monthly review. Text blocks take `{client}`,
-`{month}`, `{msp}` and `{date}`. Admins and analysts make and edit designs; removing one is an admin's
+`{month}`, `{quarter}`, `{msp}` and `{date}`. Admins and analysts make and edit designs; removing one is an admin's
 call, and it comes out of any plan or schedule that sent it.
 
 ### Exchange data
@@ -436,10 +453,12 @@ These areas have no real recording and are tested with simulated data only:
   MSP's own Conditional Access and MFA. *Settings → Staff sign-in* creates a
   small single-tenant app in the MSP's tenant with the same device-code wizard
   as the app connection (`sso.py`, `app_setup.py`); the read-only client app and
-  its permissions are untouched. Roles are the app's **Admin** and **Analyst**
-  app roles, assigned to people or groups in Entra and read from the ID token at
-  every sign-in; which clients an analyst sees is still granted here, so tenant
-  isolation doesn't change. Existing accounts link from the Account page or by a
+  its permissions are untouched. The app has an app role for each built-in role
+  (Admin, TeamLeader, Analyst for Second line, FirstLine, AccountManager,
+  Auditor), and a custom role can be given an app role value of its own; they're
+  assigned to people or groups in Entra and read from the ID token at every
+  sign-in ([docs/staff-sign-in.md](docs/staff-sign-in.md)). Which clients
+  someone sees is still granted here, so tenant isolation doesn't change. Existing accounts link from the Account page or by a
   matching username; new staff get an account at their first sign-in. Passwords
   stay as the break-glass route until an admin signed in with Microsoft turns
   them off (`python -m officesentry staff-sign-in --passwords on` turns them

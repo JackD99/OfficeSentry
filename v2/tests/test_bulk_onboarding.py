@@ -9,8 +9,8 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 import responses
 
-from officesentry import onboarding, store, tasks
-from officesentry.entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
+from officesentry import onboarding, permission_batch, store, tasks
+from officesentry.entra import PERMISSIONS
 from officesentry.graph import GRAPH_ROOT
 from officesentry.worker import execute_run
 from tests.conftest import login, make_user
@@ -195,8 +195,10 @@ def test_a_new_client_id_needs_every_tenant_to_approve_again(client, db, vault, 
     other = store.create_connection(db, vault, "Other app", generate_certificate("o"), client_id=GUID)
     charlie = store.create_tenant(db, "Charlie", "charlie.onmicrosoft.com", other)
     db.execute("UPDATE tenants SET consented_at = '2026-01-01T00:00:00Z' WHERE id = ?", (charlie,))
-    onboarding.mark_sent(db, [alpha, charlie], "admin")
+    onboarding.mark_sent(db, [alpha, charlie], "admin")  # for Charlie, consented, that's the new permissions
     db.execute("UPDATE onboarding SET approved_at = '2026-10-09T10:00:00Z'")
+    permission_batch.note_approved(db, alpha)
+    permission_batch.note_approved(db, charlie)
     _admin(client, db)
     url = f"/admin/connections/{connection_id}/client-id"
     page = client.post(url, data={"client_id": "11111111-2222-3333-4444-555555555555"}, follow_redirects=True)
@@ -210,9 +212,11 @@ def test_a_new_client_id_needs_every_tenant_to_approve_again(client, db, vault, 
         t = store.get_tenant(db, tenant_id)
         assert t["consented_at"] is None
         assert onboarding.state(t, onboarding.row_for(db, tenant_id), None).key == "not_sent"
+        assert permission_batch.request_for(db, tenant_id) is None
     # Another app's tenant keeps its consent and where its onboarding got to.
     assert store.get_tenant(db, charlie)["consented_at"]
-    assert onboarding.row_for(db, charlie)["approved_at"]
+    assert permission_batch.request_for(db, charlie)["sent_at"]
+    assert permission_batch.request_for(db, charlie)["approved_at"]
     reset = db.execute("SELECT tenant_id, detail FROM audit_log WHERE action = 'tenant_consent_reset'").fetchall()
     assert sorted(r["tenant_id"] for r in reset) == [alpha, bravo]
     assert "11111111-2222-3333-4444-555555555555" in reset[0]["detail"]
@@ -444,7 +448,7 @@ def test_send_page_email_and_mail_merge(client, db, two_tenants):
 
 def test_consent_pack_lists_every_permission(client, db, two_tenants):
     alpha, _ = two_tenants
-    assert set(onboarding.CLIENT_WORDS) == set(GRAPH_PERMISSIONS) | set(EXCHANGE_PERMISSIONS)
+    assert set(onboarding.CLIENT_WORDS) == set(PERMISSIONS)
     _admin(client, db)
     resp = client.get(f"/admin/onboarding/{alpha}/pack.pdf")
     assert resp.status_code == 200

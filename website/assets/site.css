@@ -258,7 +258,7 @@ section.faq { padding: 24px 0 96px; }
   .menu .site-nav a:not(.btn) { padding: 12px 0; border-bottom: 1px solid var(--border); }
   .menu .site-nav a[aria-current] { box-shadow: none; color: var(--accent); }
   .menu .site-nav .btn { margin-top: 16px; }
-  .docs-layout, .docs-layout.no-toc { grid-template-columns: 1fr; gap: 20px; padding-top: 20px; }
+  .docs-layout, .docs-layout.no-toc { grid-template-columns: minmax(0, 1fr); gap: 20px; padding-top: 20px; }
   .docs-nav { position: static; max-height: none; overflow: visible; }
   .docs-menu { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; margin-top: 12px; background: var(--bg-2); }
   .docs-menu > summary { display: list-item; cursor: pointer; font-weight: 600; }

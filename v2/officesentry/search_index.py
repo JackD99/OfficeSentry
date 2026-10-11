@@ -72,6 +72,12 @@ KINDS: tuple[Kind, ...] = (
         ),
     ),
     Kind("forwarding", "mailboxes", "mailbox", lambda m: (mailbox_forwarding(m),)),
+    Kind(
+        "site",
+        "sharepoint_usage",
+        "site",
+        lambda s: (s["url"],) if isinstance(s.get("url"), str) and s["url"] and not s.get("deleted") else (),
+    ),
     Kind("rule", "inbox_rules", "inbox_rule", _rule_targets),
     Kind("failure_ip", "sign_ins", "sign_in_failure_ip", lambda i: (i.get("ip"),), ip=True),
     Kind("risky", "sign_ins", "risky_sign_in", lambda r: (r.get("ip"),), ip=True),

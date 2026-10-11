@@ -10,9 +10,9 @@ What it is and isn't:
   doesn't change, and no new permissions are asked of any client.
 - It uses a small, separate app registration in **your own** tenant ("Office Sentry sign-in") with no API
   permissions at all. Office Sentry only asks Microsoft who signed in.
-- Roles come from Entra: you assign people (or a group) to the app's **Admin** or **Analyst** role in the
-  Entra admin centre. Which clients an analyst sees is still granted in Office Sentry, so tenant isolation
-  works exactly as before.
+- Roles come from Entra: the app has an app role for each Office Sentry role, and you assign people (or a
+  group) to one in the Entra admin centre. Which clients someone sees is still granted in Office Sentry, so
+  tenant isolation works exactly as before.
 - Client accounts keep signing in with a password and two-step code.
 - Passwords stay as the way in for staff if Microsoft is ever down, until you turn them off.
 
@@ -52,8 +52,9 @@ hand instead* at the bottom of the setup card:
    Supported account types: *Accounts in this organizational directory only*. Redirect URI (Web): the
    address shown on the page (`https://<your portal>/login/microsoft/callback`).
 3. *Certificates & secrets → Certificates → Upload certificate*: the `.cer` file.
-4. *App roles → Create app role*, twice: display name and value `Admin`, then display name and value
-   `Analyst`, both allowed for *Users/Groups*.
+4. *App roles → Create app role*, allowed for *Users/Groups*, once for each role in the table under
+   [Giving people access](#giving-people-access) you'll use (the value as shown, any display name). `Admin`
+   is the one you need now.
 5. *Enterprise applications → Office Sentry sign-in → Properties*: set *Assignment required* to **Yes**.
    Under *Users and groups*, assign yourself the Admin role.
 6. Copy the app's *Application (client) ID* and *Directory (tenant) ID* from its overview page into the
@@ -65,14 +66,23 @@ In the Entra admin centre, open *Enterprise applications → Office Sentry sign-
 **Assign people in Entra** button on the settings page takes you there) and add each person, or a group,
 with a role:
 
-| Role in Entra | In Office Sentry |
+| App role in Entra | Office Sentry role |
 |---|---|
-| Admin | **Administrator**: everything, including settings, clients and users. |
-| Analyst | **Second line** at first, with the clients an Office Sentry admin grants. On their user page an admin can pick another staff role (Team leader, First line, Account manager, Auditor or a custom one), which stays at later sign-ins. |
+| `Admin` | **Administrator**: everything, including settings, clients and users. |
+| `TeamLeader` | **Team leader** |
+| `Analyst` | **Second line** |
+| `FirstLine` | **First line** |
+| `AccountManager` | **Account manager** |
+| `Auditor` | **Auditor** |
 
-A role change applies at the person's next sign-in. Moving someone from Admin to Analyst in Entra makes them
-Second line again. Someone removed from the app can't sign in with
-Microsoft any more.
+What each role can do is under **Settings → Users → Roles**. Someone assigned more than one gets the first in
+this table. A role change applies at the person's next sign-in, and someone removed from the app can't sign
+in with Microsoft any more. The role on their user page follows Entra, so change it there.
+
+**Custom roles** (made under *Settings → Users → Roles*) are reached the same way: create an app role on the
+sign-in app (*App registrations → Office Sentry sign-in → App roles*) with a value such as `ServiceDesk`, then
+type that value next to the role under *Who can sign in → Custom roles from Entra* on the Staff sign-in page.
+They come after the built-in roles in the order above. Deleting a custom role removes its value too.
 
 New staff don't need an account made for them: their account appears on **Settings → Users** at their first
 sign-in. Then grant them clients on their user page as usual (or tick *All clients*, or a client group).
@@ -85,8 +95,8 @@ Existing accounts are linked to a Microsoft account in one of two ways:
   name (the user principal name, such as `jo@yourmsp.com`; never the mail address, which Microsoft doesn't
   verify), the two are linked automatically and their client grants are kept.
 
-A linked account shows its role as *partly set in Entra* on its user page: whether they're an Administrator or
-staff comes from Entra, and only the staff roles can be picked there. An admin can **Disconnect** it there,
+A linked account shows its role as *set in Entra* on its user page; capabilities added or taken away for the
+person there still apply on top. An admin can **Disconnect** it there,
 after which the person signs in with a password again; the person can do the same on their Account page.
 
 ## Turning passwords off for staff

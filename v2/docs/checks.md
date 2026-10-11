@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-54 checks, 34 data sources (collectors) and 41 detail reports.
+54 checks, 34 data sources (collectors) and 42 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -200,6 +200,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `inactive` | Inactive accounts | Members and guests who haven't signed in for a long time, and old invitations. | `admin_roles`, `tenant_profile`, `users` |
 | `inbox-rules` | Inbox rules | Rules that forward, delete or hide mail, and every rule in every mailbox. | `inbox_rules`, `mailboxes` |
 | `legacy-auth` | Legacy sign-ins | Sign-ins with SMTP AUTH, IMAP, POP and other protocols that can't do MFA, and which mailboxes still allow them. | `legacy_signins`, `mailboxes` |
+| `licence-changes` | Licence changes | Who was given or lost a licence and when, who made the change, and licences bought and assigned month by month, from Office Sentry's own history. | `tenant_profile`, `users` |
 | `licence-rightsizing` | Licence right-sizing | People who could move to a cheaper licence, and services people are licensed for but don't use. | `m365_usage`, `mailbox_usage`, `tenant_profile`, `users` |
 | `licences` | Licence waste | Paid licences nobody uses, in money, and the accounts holding them. | `tenant_profile`, `users` |
 | `mailbox-holds` | Mailbox holds and archiving | Which mailboxes are on litigation hold or have an archive, leavers' mailboxes that aren't held, and large mailboxes that need an archive. | `mailbox_usage`, `mailboxes`, `users` |
@@ -230,6 +231,11 @@ Every application permission the app requests (all read-only) and the collectors
 |---|---|---|---|
 | `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents`, `connection` |
 | `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `app_sign_ins`, `legacy_signins`, `mfa_registration`, `sign_ins`, `users` |
+| `BitLockerKey.ReadBasic.All` | Microsoft Graph | Whether a device's BitLocker recovery key is saved (never the key) | not used by a collector yet |
+| `Channel.ReadBasic.All` | Microsoft Graph | Teams channels: standard, private and shared | not used by a collector yet |
+| `ChannelMember.Read.All` | Microsoft Graph | Who is in each private and shared channel, guests included | not used by a collector yet |
+| `DeviceManagementApps.Read.All` | Microsoft Graph | Intune app protection policies and managed apps | not used by a collector yet |
+| `DeviceManagementConfiguration.Read.All` | Microsoft Graph | Intune configuration and compliance policies | not used by a collector yet |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
 | `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `admin_units`, `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `group_nesting`, `groups`, `tenant_profile` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `distribution_lists`, `mailbox_usage`, `mailboxes`, `mobile_devices` |
@@ -237,10 +243,14 @@ Every application permission the app requests (all read-only) and the collectors
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `auto_replies`, `inbox_rules` |
 | `Organization.Read.All` | Microsoft Graph | Tenant details and subscriptions | `directory_sync`, `tenant_profile` |
 | `Policy.Read.All` | Microsoft Graph | Conditional Access and authorization policies | `auth_methods_policy`, `conditional_access`, `per_user_mfa`, `tenant_policies` |
+| `PrivilegedEligibilitySchedule.Read.AzureADGroup` | Microsoft Graph | Who can activate membership of a privileged group (PIM) | not used by a collector yet |
+| `ReportSettings.Read.All` | Microsoft Graph | Whether usage reports hide people's names | not used by a collector yet |
 | `Reports.Read.All` | Microsoft Graph | Usage and MFA registration reports | `m365_usage`, `sharepoint_usage` |
 | `RoleManagement.Read.Directory` | Microsoft Graph | Admin role holders and PIM | `admin_roles`, `connection` |
 | `SecurityEvents.Read.All` | Microsoft Graph | Secure Score | `secure_score` |
+| `Sites.Read.All` | SharePoint Online | Who has access to each SharePoint site and list (SharePoint's own permission lists) | not used by a collector yet |
 | `SharePointTenantSettings.Read.All` | Microsoft Graph | SharePoint sharing settings | `tenant_policies` |
 | `Sites.Read.All` | Microsoft Graph | Which files are shared, and with whom (read-only) | `shared_files`, `sharepoint_storage` |
+| `TeamsAppInstallation.ReadForTeam.All` | Microsoft Graph | Apps added to each team | not used by a collector yet |
 | `User.Read.All` | Microsoft Graph | Users, licences, password age | `user_details`, `users` |
 | `UserAuthenticationMethod.Read.All` | Microsoft Graph | Registered MFA methods | `mfa_registration` |
