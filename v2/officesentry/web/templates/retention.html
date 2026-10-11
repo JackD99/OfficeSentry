@@ -9,7 +9,7 @@
 </div>
 {%- endmacro %}
 {% macro next_run(n, noun) -%}
-<p class="footnote">Next daily pass: {% if n %}<strong>about {{ n|plural(noun) }}</strong> would be deleted{% else %}nothing to delete{% endif %} at the saved settings.</p>
+<p class="footnote">{% if n %}The next pass would delete <strong>about {{ n|plural(noun) }}</strong>.{% else %}Nothing to delete at the saved settings.{% endif %}</p>
 {%- endmacro %}
 {% block content %}
 <div class="page-head"><div><h1>Data retention</h1><div class="sub">How long Office Sentry keeps personal data about your clients' staff and your own team. The worker applies these settings once a day, deleting in small batches. Deleted rows are overwritten in the database file where that costs nothing extra; backups keep them until they rotate.</div></div></div>

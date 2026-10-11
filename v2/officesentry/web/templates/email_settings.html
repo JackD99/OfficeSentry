@@ -3,7 +3,7 @@
 {% block title %}Email delivery · Office Sentry{% endblock %}
 {% block content %}
 <div class="page-head"><div><h1>Email delivery</h1><div class="sub">How Office Sentry sends scheduled reports, digests and alerts.</div></div>
-  {% if ready %}<span class="pill ok">{{ icon('check') }} Set up</span>{% else %}<span class="pill warn">Not set up</span>{% endif %}</div>
+  {% if ready %}<span class="pill ok">Set up</span>{% else %}<span class="pill warn">Not set up</span>{% endif %}</div>
 
 {% set app_id = s.graph_client_id or '<client ID>' %}{% set mailbox = s.graph_sender or 'reports@msp.com' %}
 {% if transport == 'graph' and ready and not scoped %}

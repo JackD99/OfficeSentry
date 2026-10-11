@@ -55,7 +55,7 @@
       <td data-label="Consent link">{% if t.consented_at %}<span class="faint">Not needed</span>
         {% elif link %}<button type="button" class="sm" data-copy-text="{{ link }}">Copy link</button>
         {% else %}<span class="small bad-text">{{ e.problem }}</span>{% endif %}</td>
-      <td class="num"><a class="btn sm ghost" href="{{ url_for('onboarding.send', tenant_id=t.id) }}">{{ 'Open' if t.consented_at else 'Send…' }}</a></td>
+      <td class="num"><a class="btn sm ghost" href="{{ url_for('onboarding.send', tenant_id=t.id) }}">{{ 'Open' if t.consented_at else 'Send link' }}</a></td>
     </tr>
     {% endfor %}
     </tbody>
