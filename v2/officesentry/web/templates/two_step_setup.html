@@ -6,7 +6,7 @@
   <li>Add an account and scan this QR code.</li>
   <li>Enter the 6-digit code the app shows.</li>
 </ol>
-<div class="qr" aria-label="QR code for your authenticator app">{{ qr|safe }}</div>
+<div class="qr" role="img" aria-label="QR code for your authenticator app">{{ qr|safe }}</div>
 <details class="help">
   <summary>Can't scan it? Type this key instead</summary>
   <p class="secret" aria-label="Setup key">{{ secret }}</p>

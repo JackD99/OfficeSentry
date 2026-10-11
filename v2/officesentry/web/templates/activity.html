@@ -7,7 +7,7 @@
 </div>
 <section class="card">
   <form method="get" action="{{ url_for('activity.index') }}">
-    <div class="form-row">
+    <div class="form-row filters">
       <label>User <input name="user" value="{{ filters.user }}" list="activity-users" maxlength="64" autocomplete="off"></label>
       <datalist id="activity-users">{% for u in users %}<option value="{{ u }}">{% endfor %}</datalist>
       <label>Action <select name="action"><option value="">Any</option>

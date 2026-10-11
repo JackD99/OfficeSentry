@@ -33,9 +33,10 @@ little as possible with that access. Details and code references are in
 ### Access to Microsoft 365
 
 - **Read-only by construction.** One multi-tenant Entra app requests only
-  read Graph permissions (`*.Read*`) plus `Exchange.ManageAsApp`. The Graph
-  client has no write methods, and the Exchange client only runs an
-  allow-list of `Get-` cmdlets.
+  read permissions: Graph's (`*.Read*`), `Exchange.ManageAsApp`, and
+  `Sites.Read.All` on SharePoint Online's own API. The Graph client has no
+  write methods, and the Exchange client only runs an allow-list of `Get-`
+  cmdlets.
 - **Certificate sign-in, no stored user passwords.** The app signs in with a
   certificate. Its private key is encrypted in the database and is never
   written to disk as a file or sent to the browser. Only the public `.cer`
@@ -48,11 +49,16 @@ little as possible with that access. Details and code references are in
   admin role besides Global Reader. Both are warnings on the client's Manage
   page and the Client settings list.
 - **Tested both ways.** `tests/test_no_writes.py` fails if an HTTP call
-  other than GET appears outside a short list of named exceptions (the mail
-  app, Exchange's `Get-` cmdlets, creating the app in the MSP's own tenant,
-  and alert webhooks), and runs a full collection to check every request is
-  a read. `tests/test_isolation_walk.py` opens every tenant-scoped route with
-  another client's IDs, as an analyst and as a client, and expects a refusal.
+  other than GET appears outside a short list of named exceptions, and runs
+  a full collection to check every request is a read. The exceptions are the
+  mail app, Exchange's `Get-` cmdlets, alert webhooks, the live test's
+  recording (which passes on a GET), and three that only touch the MSP's own
+  tenant: creating the app, adding a release's new permissions to it, and
+  staff sign-in with Microsoft (its token request, and creating its sign-in
+  app). `tests/test_isolation_walk.py` opens every tenant-scoped route with
+  another client's IDs, as staff and as a client, and expects a refusal.
+  `tests/test_roles.py` opens every route as every built-in role and expects
+  a refusal exactly where the role lacks what the page needs.
 - **The mail app is separate and can be fenced in.** Email through
   Microsoft 365 uses its own single-tenant app with `Mail.Send` in the MSP's
   tenant, signing in with a certificate (or a client secret). The settings
@@ -78,9 +84,9 @@ little as possible with that access. Details and code references are in
 | Sign-in limits | Wrong passwords never lock an account. They slow down the address they come from: 5 per username or 20 in all per 15 minutes, counted before the password is checked so parallel requests can't get past them. A spread-out attack on one account slows only addresses that haven't signed in to it before. Five wrong two-step codes lock that step for 15 minutes. The client address comes from `X-Forwarded-For` only behind `OFFICESENTRY_TRUSTED_PROXIES`. |
 | Sessions | Server-side: the cookie holds a random token, stored as a hash. 2 hours idle and 8 hours in total; ended on sign-out, disable, delete, role, password or two-step change. `__Host-` cookie, HttpOnly, SameSite=Lax, Secure over HTTPS. Same-site redirects only. |
 | CSRF | Flask-WTF on every form. |
-| Headers | Nonce-based CSP with no external assets, HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy, Cross-Origin-Opener-Policy and Cross-Origin-Resource-Policy `same-origin`, `Cache-Control: no-store`. The bundled Caddy drops the `Server` header. |
+| Headers | Nonce-based CSP with no external assets, HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy, Cross-Origin-Opener-Policy and Cross-Origin-Resource-Policy `same-origin`, `X-Permitted-Cross-Domain-Policies: none`, `Cache-Control: no-store`. The bundled Caddy drops the `Server` header. |
 | Activity log | Sign-ins, every change, and every refusal (a page or tenant someone wasn't allowed, a form sent with a stale token), with the client address; admins read, filter and export it under *Settings → Activity log*. Failed sign-ins with unknown usernames and refusals are counted per address and hour, without storing what was typed, and sign-in noise is removed after 90 days. |
-| Secrets | Session key and encryption key are separate. `python -m officesentry rotate-keys` re-encrypts every encrypted value (certificate keys, two-step secrets and the recovery code key, mail credentials, the alert webhook) and refuses if it finds one it doesn't know. Generated secrets are written with mode `0600`. |
+| Secrets | Session key and encryption key are separate. `python -m officesentry rotate-keys` re-encrypts every encrypted value (the app's certificate keys, the staff sign-in certificate key, two-step secrets and the recovery code key, mail credentials, the alert webhook and its signing secret, and the setup wizard's sign-in code while it waits) and refuses if it finds one it doesn't know. Generated secrets are written with mode `0600`. |
 | PDFs | Rendered by WeasyPrint with a URL fetcher that only loads the app's own static files and `data:` URIs: no other files, no network. |
 | Outbound requests | Webhooks and MTA-STS fetches are HTTPS only, refuse internal addresses and connect to the address that was checked (no DNS rebinding). The SMTP password is never sent without TLS, except to a relay on the same machine. |
 
@@ -102,9 +108,13 @@ Deleting a client removes everything stored for it in one transaction and
 checks nothing tenant-scoped is left. Activity log entries keep who did what
 and when, but details naming the client's people are removed, and client
 accounts deleted with it are anonymised. Deleted rows are overwritten in the
-database file (`secure_delete`), which is then compacted and its write-ahead
-log emptied. **Backups made before the delete keep the data until they rotate
-out** (the last 7 by default), as do copies taken off the server.
+database file (`secure_delete`). The worker then erases what's left on disk
+in the background: it removes the client's activity history, compacts the
+database file when there's enough free space for the copy that takes, and
+empties its write-ahead log. If that fails, *Settings → System status* shows
+it under *Deleted clients* (and system alerts tell the team, when they're
+on), and the worker tries again every hour. **Backups made before the delete keep the data until
+they rotate out** (the last 7 by default), as do copies taken off the server.
 
 ### What should never be committed
 
@@ -174,8 +184,12 @@ place, but nobody can sign in with the old one.
 ## Known limitations
 
 - SQLite suits one server; it isn't built for several web servers sharing a database.
-- Portal sign-in is username, password and two-step code. There's no SSO
-  (Entra ID sign-in) for the portal yet.
-- New users get a password from an admin, shared out of band. Whoever uses it
-  first must replace it, so a leaked one is noticed (the real user can't sign
-  in), but one-time invitation links would be better.
+- Staff can sign in with Microsoft once an admin sets it up
+  ([Staff sign-in with Microsoft](v2/docs/staff-sign-in.md)). Client accounts
+  always sign in with a username, password and two-step code; there's no
+  single sign-on for them.
+- An account that signs in with a password gets it from an admin, shared out
+  of band. Whoever uses it first must replace it, so a leaked one is noticed
+  (the real user can't sign in), but one-time invitation links would be
+  better. Staff who sign in with Microsoft don't need one: their account is
+  made at their first sign-in.
