@@ -214,6 +214,93 @@
 {% if item.data.more %}<p class="muted small">…and {{ item.data.more }} more in the insurance evidence pack.</p>{% endif %}
 {%- endmacro %}
 
+{% macro w_quarter_trend(item) -%}
+{{ head(item) }}
+{% set q = item.data.quarter %}
+<p class="section-intro">{% if q.score_from is not none and q.score_to is not none %}Secure Score {% if q.score_to > q.score_from %}rose from {{ '%g'|format(q.score_from) }}% to {{ '%g'|format(q.score_to) }}%{% elif q.score_to < q.score_from %}fell from {{ '%g'|format(q.score_from) }}% to {{ '%g'|format(q.score_to) }}%{% else %}stayed at {{ '%g'|format(q.score_to) }}%{% endif %} over the quarter. {% endif %}Found counts new findings and ones that came back; fixed counts findings resolved in the month.</p>
+{% if item.data.chart %}
+<div class="chart-card keep month-chart">
+  <div class="chart-head"><span class="chart-title">Findings found and fixed each month</span>
+    <span class="legend"><span class="k-found">Found</span><span class="k-fixed">Fixed</span></span></div>
+  {{ item.data.chart|safe }}
+</div>
+{% endif %}
+<div class="table-wrap"><table class="quarter">
+  <thead><tr><th>Month</th><th class="num">Secure Score</th><th class="num">Found</th><th class="num">Fixed</th></tr></thead>
+  <tbody>
+  {% for m in q.months %}<tr><td>{{ m.month.strftime('%B %Y') }}</td>
+    <td class="num">{% if m.score is not none %}{{ '%g'|format(m.score) }}%{% else %}<span class="muted">–</span>{% endif %}</td>
+    <td class="num">{% if m.found is not none %}{{ m.found }}{% else %}<span class="muted">–</span>{% endif %}</td>
+    <td class="num">{% if m.fixed is not none %}{{ m.fixed }}{% else %}<span class="muted">–</span>{% endif %}</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+{%- endmacro %}
+
+{% macro w_quarter_fixed(item) -%}
+{{ head(item) }}
+{% set d = item.data %}
+<p class="section-intro">{{ d.quarter.fixed_count|plural('finding') }} fixed between {{ d.quarter.label }}.</p>
+<ul class="did">
+  {% for g in d.groups %}<li>{{ ui.change_tag('fixed') }} <strong>{{ g.title }}</strong> <span class="muted">· {{ g.subjects|length|plural('item') }}{% if d.subjects and g.subjects|length <= d.subjects %}: {{ g.subjects|map('subject_label')|join(', ') }}{% endif %}</span></li>{% endfor %}
+  {% if d.more %}<li class="muted">…and {{ d.more|plural('more fix', 'more fixes') }}.</li>{% endif %}
+</ul>
+{%- endmacro %}
+
+{% macro w_projects(item) -%}
+{{ head(item) }}
+{% set d = item.data %}
+{% if d.projects %}
+<ol class="actions projects">
+  {% for r in d.projects %}<li>
+    <div class="act-title">{{ r.project.title }} <span class="proj-status st-{{ r.status }}">{{ r.status_label }}</span></div>
+    <p class="act-why">{{ r.project.pitch }}</p>
+    <div class="act-meta"><span>{{ r.reasons|length|plural('finding') }}{% if r.size %} · {{ r.size }}{% endif %}</span></div>
+  </li>{% endfor %}
+</ol>
+{% endif %}
+{% if d.quick_count %}
+<p class="section-intro">{{ d.quick_count|plural('quick fix', 'quick fixes') }} that don't need a project{% if d.quick_fixes %}:{% else %}.{% endif %}</p>
+{% if d.quick_fixes %}<ul class="passing">{% for r in d.quick_fixes %}<li>{{ r.summary }}</li>{% endfor %}{% if d.quick_count > d.quick_fixes|length %}<li class="muted">…and {{ d.quick_count - d.quick_fixes|length }} more</li>{% endif %}</ul>{% endif %}
+{% endif %}
+{%- endmacro %}
+
+{% macro w_licence_spend(item) -%}
+{{ head(item) }}
+{% set d = item.data %}{% set q = d.quarter %}
+{% macro money(v) %}{{ v|money(d.currency, 2) }}{% endmacro %}
+{% call ui.figures(3 if d.waste else 2) %}
+  {{ ui.figure('Licences a month', money(q.monthly_spend)) }}
+  {{ ui.figure('Licences a year', money(q.monthly_spend * 12)) }}
+  {% if d.waste %}{{ ui.figure('Wasted a month', money(q.monthly_waste), 'unassigned or on disabled or inactive accounts', 'warn' if q.monthly_waste else none) }}{% endif %}
+{% endcall %}
+<div class="table-wrap"><table class="licences">
+  <thead><tr><th>Licence</th><th class="num">Purchased</th><th class="num">Assigned</th><th class="num">Each / month</th><th class="num">Cost / month</th>{% if d.waste %}<th class="num">Waste / month</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for ln in d.lines %}
+  <tr><td>{{ ln.name }}</td><td class="num">{{ ln.purchased }}</td><td class="num">{{ ln.assigned }}</td>
+    <td class="num">{% if ln.monthly_price is not none %}{{ money(ln.monthly_price) }}{% else %}not priced{% endif %}</td>
+    <td class="num">{% if ln.monthly_cost is not none %}{{ money(ln.monthly_cost) }}{% else %}–{% endif %}</td>
+    {% if d.waste %}<td class="num">{% if ln.monthly_waste %}<span class="highlight">{{ money(ln.monthly_waste) }}</span>{% elif ln.monthly_waste is not none %}{{ money(0) }}{% else %}–{% endif %}</td>{% endif %}</tr>
+  {% endfor %}
+  </tbody>
+  <tfoot><tr><td>Total</td><td class="num">{{ d.lines|sum(attribute='purchased') }}</td><td class="num">{{ d.lines|sum(attribute='assigned') }}</td><td></td>
+    <td class="num">{{ money(q.monthly_spend) }}</td>{% if d.waste %}<td class="num">{{ money(q.monthly_waste) }}</td>{% endif %}</tr></tfoot>
+</table></div>
+{% if q.unpriced %}<p class="muted small">{{ q.unpriced|plural('licence has', 'licences have') }} no price entered, so the totals leave {{ 'it' if q.unpriced == 1 else 'them' }} out.</p>{% endif %}
+{%- endmacro %}
+
+{% macro w_upcoming(item) -%}
+{{ head(item) }}
+<div class="table-wrap"><table class="upcoming">
+  <thead><tr><th>When</th><th>What</th><th>Detail</th></tr></thead>
+  <tbody>
+  {% for i in item.data.rows %}<tr><td class="nowrap">{% if i.due %}{{ i.due|day }}<div class="muted small">{{ i.when }}</div>{% else %}{{ i.window }}{% endif %}</td>
+    <td><strong>{{ i.title }}</strong><div class="muted small">{{ i.type }}</div></td><td>{{ i.detail }}</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+{% if item.data.more %}<p class="muted small">…and {{ item.data.more }} more in the next 90 days.</p>{% endif %}
+{%- endmacro %}
+
 {% macro w_heading(item) -%}
 {{ head(item) }}
 {% if item.data.intro %}<p class="lede">{{ item.data.intro }}</p>{% endif %}
@@ -252,6 +339,8 @@
   'passing': w_passing, 'accepted': w_accepted, 'unavailable': w_unavailable, 'changes': w_changes,
   'licences': w_licences, 'data_table': w_data_table, 'evidence': w_evidence, 'heading': w_heading,
   'text': w_text, 'contact': w_contact, 'page_break': w_page_break, 'about': w_about,
+  'quarter_trend': w_quarter_trend, 'quarter_fixed': w_quarter_fixed, 'projects': w_projects,
+  'licence_spend': w_licence_spend, 'upcoming': w_upcoming,
 } %}
 
 {#- One block: its section, or in the preview a note on why it's empty or broken. -#}

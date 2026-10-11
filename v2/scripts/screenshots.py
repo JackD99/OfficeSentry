@@ -233,7 +233,7 @@ SHOTS = [
     Shot("dashboard", "/", height=640),
     Shot("tenant-overview", "/tenants/{t}", height=1000),
     Shot("review", "/tenants/{t}/report", height=1100),
-    Shot("review-attention", "/tenants/{t}/report", height=1000, scroll_to="h2:has-text('What we recommend next')"),
+    Shot("review-attention", "/tenants/{t}/report", height=1000, scroll_to="#month"),
     Shot("sharepoint-storage", "/tenants/{t}/data/sharepoint-storage", height=1100),
     Shot(
         "sharepoint-storage-files",
@@ -288,6 +288,15 @@ EXAMPLES = {
     "monthly-security-licensing-review.pdf": (
         "/tenants/{t}/report.pdf",
         "The Monthly Security & Licensing Review for one client, as sent to them.",
+    ),
+    "monthly-review-summary.pdf": (
+        "/tenants/{t}/report.pdf?appendix=0",
+        "The monthly review's two summary pages on their own, without the appendix.",
+    ),
+    "quarterly-review.pdf": (
+        "/tenants/{t}/designs/1.pdf",
+        "The Quarterly review design from the report designer: three months of score and findings, what was "
+        "fixed, projects, licence spend and what's coming up.",
     ),
     "insurance-evidence-pack.pdf": (
         "/tenants/{t}/evidence.pdf",
@@ -509,8 +518,10 @@ def capture(server: Server, passwords: dict, ids: list[int], shots: list[Shot], 
                 if shot.scroll_to:
                     target = page.locator(shot.scroll_to).first
                     if target.count():
-                        target.evaluate(
-                            "el => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 16)"
+                        target.evaluate(  # just under the sticky report toolbar, when the page has one
+                            "el => { const bar = document.querySelector('nav.toolbar');"
+                            " const top = el.getBoundingClientRect().top + window.scrollY;"
+                            " window.scrollTo(0, top - (bar ? bar.offsetHeight : 0) - 16); }"
                         )
                     else:
                         print(f"  {shot.name}: {shot.scroll_to!r} not found; capturing the top")
