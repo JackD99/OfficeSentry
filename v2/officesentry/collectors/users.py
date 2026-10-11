@@ -84,7 +84,7 @@ class Users(Collector):
     permissions = ("User.Read.All", "AuditLog.Read.All")
 
     def collect(self, ctx: RunContext) -> None:
-        want_activity = ctx.capabilities.get("entra_p1", True)
+        want_activity = ctx.capabilities.get("entra_p1") is not False
         users = None
         activity = False
         if want_activity:

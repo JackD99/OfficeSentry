@@ -93,6 +93,51 @@ def test_mfa_coverage_cross_checks_registration_against_policies(db, p1_tenant):
     assert not report.notes
 
 
+def test_mfa_coverage_counts_only_privileged_roles_as_admins(db, two_tenants, monkeypatch):
+    """A read-only role (Directory Readers) doesn't make Carl an admin: his gap is medium, as on the Findings tab."""
+    alpha, _ = two_tenants
+    carl = {"@odata.type": "#microsoft.graph.user", "id": "u6", "userPrincipalName": "carl@x.com"}
+    reader = {**gd.ROLE_ASSIGNMENTS[3], "id": "a-carl", "principalId": "u6", "principal": carl}
+    monkeypatch.setattr(gd, "ROLE_ASSIGNMENTS", [*gd.ROLE_ASSIGNMENTS, reader])
+    seed_tenant(db, alpha, users=USERS + [CARL, BREAKGLASS])
+    gaps = sections(build(db, store.get_tenant(db, alpha), "mfa", NOW))["Accounts with a gap"]
+    carl = next(i for i, r in enumerate(gaps.rows) if r[0] == "carl@x.com")
+    assert gaps.rows[carl][1] == "Directory Readers" and gaps.flags[carl] == "medium"
+
+
+def test_admins_report_names_the_group_a_role_comes_through(db, two_tenants, monkeypatch):
+    from tests import groupdata as grp
+
+    alpha, _ = two_tenants
+    group = {
+        "id": "a-grp",
+        "roleDefinitionId": gd.GA,
+        "principalId": "rg1",
+        "directoryScopeId": "/",
+        "principal": {"@odata.type": "#microsoft.graph.group", "id": "rg1", "displayName": "Tenant admins"},
+    }
+    monkeypatch.setattr(gd, "ROLE_ASSIGNMENTS", [*gd.ROLE_ASSIGNMENTS, group])
+    monkeypatch.setitem(
+        grp.MEMBERS,
+        "rg1",
+        [
+            {
+                "@odata.type": "#microsoft.graph.user",
+                "id": "u6",
+                "userPrincipalName": "carl@x.com",
+                "accountEnabled": True,
+            }
+        ],
+    )
+    seed_tenant(db, alpha, users=USERS + [CARL, BREAKGLASS])
+    report = build(db, store.get_tenant(db, alpha), "admins", NOW)
+    rows = {r[0]: r for r in sections(report)["Privileged role holders"].rows}
+    assert "Global Administrator" in rows["carl@x.com"][2]
+    assert "Through the group Tenant admins" in rows["carl@x.com"][8]
+    assert rows["Tenant admins"][1] == "Group"
+    assert figures(report)["Global Administrators"] == 3  # Ann, the break-glass account and Carl
+
+
 def test_mfa_coverage_without_p1_uses_per_user_mfa(db, free_tenant):
     report = build(db, free_tenant, "mfa", NOW)
     s = sections(report)
@@ -174,7 +219,9 @@ def test_admins_report_flags_problems_and_finds_break_glass(db, p1_tenant):
     assert f["Using PIM"] == "Not checked" and any("Entra ID P2" in n for n in report.notes)
 
 
-def test_admins_report_leaves_out_office_sentrys_own_app(db, p1_tenant):
+def test_admins_report_shows_office_sentrys_own_app_with_a_privileged_role(db, p1_tenant):
+    """Office Sentry needs only Global Reader. Holding a privileged role (here Exchange Administrator) is too
+    much access, and the check behind this report flags it, so the report lists it too."""
     sp = db.execute("SELECT client_id FROM app_connections").fetchone()["client_id"]
     run = store.latest_run(db, p1_tenant["id"], "admin_roles")
     unpack(db)
@@ -182,7 +229,7 @@ def test_admins_report_leaves_out_office_sentrys_own_app(db, p1_tenant):
         "UPDATE objects SET data = json_set(data, '$.appId', ?) WHERE run_id = ? AND object_id = 'a5'", (sp, run["id"])
     )
     rows = sections(build(db, p1_tenant, "admins", NOW))["Privileged role holders"].rows
-    assert "Some app" not in [r[0] for r in rows]
+    assert "Some app" in [r[0] for r in rows]
 
 
 # -- Licence waste --------------------------------------------------------------------------------

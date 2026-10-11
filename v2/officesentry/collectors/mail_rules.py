@@ -19,6 +19,8 @@ from . import mailbox_window
 from .base import Collector, RunContext, register
 
 MAILBOX_TYPES = {"UserMailbox", "SharedMailbox"}
+# What Graph answers for an account with no Exchange Online mailbox (or one hosted on-premises).
+NO_MAILBOX_CODES = {"MailboxNotEnabledForRESTAPI", "ResourceNotFound", "ErrorInvalidUser"}
 
 
 def _targets(ctx: RunContext) -> list[dict]:
@@ -60,7 +62,7 @@ class InboxRules(Collector):
         window = mailbox_window.plan(ctx, self.key, "inbox_rule", _targets(ctx), lambda t: t["id"], "inbox rules")
         targets = window.mailboxes
 
-        rows, failed, denied = [], 0, 0
+        rows, failed, denied, no_mailbox = [], 0, 0, 0
         exchange_ok = True  # until Exchange refuses the app, then no more folder names this run
         for t in targets:
             try:
@@ -68,8 +70,14 @@ class InboxRules(Collector):
             except PermissionMissing:
                 denied += 1
                 continue
-            except GraphError:  # e.g. no mailbox yet, or mailbox on-premises
-                failed += 1
+            except GraphError as exc:
+                # Without a mailbox snapshot (no Global Reader in Exchange) every licensed account is tried,
+                # and one with no Exchange Online mailbox (licensed for other apps, or on-premises) isn't a
+                # failure: it has no inbox rules to read. Counting it made those runs partial every night.
+                if exc.status == 404 or exc.code in NO_MAILBOX_CODES:
+                    no_mailbox += 1
+                else:
+                    failed += 1
                 continue
             folders = {}
             if exchange_ok and any((r.get("actions") or {}).get("moveToFolder") for r in rules):
@@ -102,12 +110,14 @@ class InboxRules(Collector):
             )
         if denied or failed:
             ctx.warn(f"Could not read inbox rules for {denied + failed} of {plural(len(targets), 'mailbox')}")
+        if no_mailbox:
+            ctx.log(f"{plural(no_mailbox, 'account')} had no Exchange Online mailbox to read")
         rows += window.carried
         ctx.objects("inbox_rule", rows)
         window.save(ctx)
         ctx.metric("mail.inbox_rules", len(rows))
         # Mailboxes the stored rules cover: read this run, or kept from an earlier run.
-        ctx.metric("mail.mailboxes_checked", len(targets) - denied - failed + window.carried_mailboxes)
+        ctx.metric("mail.mailboxes_checked", len(targets) - denied - failed - no_mailbox + window.carried_mailboxes)
 
 
 def _folder_names(ctx: RunContext, target: dict) -> tuple[dict[str, str], bool]:

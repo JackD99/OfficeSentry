@@ -9,6 +9,9 @@ from ..snapshot import TenantSnapshot
 from ..text import every, plural, verb
 from .base import Finding, _all_are, _unavailable, rule
 
+# Intune compliance states that aren't a verdict either way: Intune couldn't evaluate the device.
+UNCONFIRMED_STATES = ("error", "conflict", "unknown")
+
 
 def _managed_devices(snap: TenantSnapshot):
     """Intune devices, or the reason they can't be checked."""
@@ -49,10 +52,18 @@ def device_compliance(snap: TenantSnapshot, now: datetime):
             findings.append(Finding("medium", _device_label(d), "Not compliant", d["_id"]))
         elif d.get("complianceState") == "inGracePeriod":
             findings.append(Finding("low", _device_label(d), "Not compliant, in grace period", d["_id"]))
+        elif d.get("complianceState") in UNCONFIRMED_STATES:
+            # Conditional Access only accepts "compliant", so these devices are blocked like non-compliant ones.
+            findings.append(Finding("low", _device_label(d), f"Compliance state: {d['complianceState']}", d["_id"]))
+    if findings:
+        return ("fail", f"{len(findings)} of {plural(len(managed), 'managed device')} not compliant", findings)
+    compliant = sum(d.get("complianceState") == "compliant" for d in managed)
+    if compliant == len(managed):
+        return ("pass", _all_are(len(managed), "managed device") + " compliant", [])
     return (
-        ("fail", f"{len(findings)} of {plural(len(managed), 'managed device')} not compliant", findings)
-        if findings
-        else ("pass", _all_are(len(managed), "managed device") + " compliant", [])
+        "pass",
+        f"{compliant} of {plural(len(managed), 'managed device')} compliant; none reported as not compliant",
+        [],
     )
 
 
