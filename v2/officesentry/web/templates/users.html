@@ -35,7 +35,7 @@
 {% if microsoft_sign_in %}
 <section class="card">
   <h2>Staff who sign in with Microsoft</h2>
-  <p class="small">They appear here by themselves at their first sign-in: Admin in Entra makes them an Administrator, Analyst makes them Second line. On their page, pick another staff role if they need one and grant them clients. <a href="{{ url_for('sso.settings_page') }}">Staff sign-in settings</a>.</p>
+  <p class="small">They appear here by themselves at their first sign-in, with the role their app role in Entra gives them. Grant them clients on their page afterwards. <a href="{{ url_for('sso.settings_page') }}">Staff sign-in settings</a>.</p>
 </section>
 {% endif %}
 <section class="card">

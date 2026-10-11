@@ -10,6 +10,7 @@ import json
 from dataclasses import dataclass, field
 
 from . import permissions as p
+from . import sso
 from .db import audit, utcnow
 
 
@@ -201,6 +202,7 @@ def remove(conn, actor: str, role: Role) -> None:
         noun = "account holds" if holders == 1 else "accounts hold"
         raise ValueError(f"{holders} {noun} this role. Move them to another role first.")
     conn.execute("DELETE FROM roles WHERE id = ?", (role.id,))
+    sso.forget_role(conn, role.id)  # so an app role value in Entra never reaches a role made later with its id
     audit(conn, actor, "role_deleted", detail=role.name)
 
 
