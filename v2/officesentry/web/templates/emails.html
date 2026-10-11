@@ -17,9 +17,9 @@
 <div class="tiles">
   {{ next_tile(upcoming, (tenants[upcoming.tenant_id].name if upcoming.tenant_id else upcoming.titles[0]) if upcoming else '') }}
   <div class="tile"><div class="label">Scheduled emails</div><div class="value">{{ (schedules + digests + coming_up + view_emails)|selectattr('enabled')|list|length }}</div>
-    <div class="foot">{{ schedules|map(attribute='tenant_id')|unique|list|length }} of {{ tenants|length }} tenants covered</div></div>
+    <div class="foot">{{ schedules|map(attribute='tenant_id')|unique|list|length }} of {{ tenants|length }} clients covered</div></div>
   <div class="tile"><div class="label">Sent in the last 30 days</div><div class="value">{{ sent }}</div>
-    <div class="foot">{{ tenant_alerts }} tenant alert{{ 's' if tenant_alerts != 1 }} on</div></div>
+    <div class="foot">{{ tenant_alerts }} client alert{{ 's' if tenant_alerts != 1 }} on</div></div>
   <div class="tile"><div class="label">Failed in the last 30 days</div><div class="value {{ 'bad-text' if failed }}">{{ failed }}</div>
     <div class="foot">{% if failing %}<span class="bad-text">{{ failing|length }} schedule{{ 's' if failing|length != 1 }} need{{ 's' if failing|length == 1 }} a look</span>{% else %}Everything arrived{% endif %}</div></div>
 </div>
@@ -36,13 +36,13 @@
   {{ coverage_card(coverage, admin) }}
 
   <section class="card flush">
-    <div class="card-head toolbar"><h2>Client report emails</h2><span class="meta">Add one from a tenant's Emails tab</span></div>
+    <div class="card-head toolbar"><h2>Client report emails</h2><span class="meta">Add one from a client's Emails tab</span></div>
     {% if schedules %}
     <ul class="list sched-list">{% for s in schedules %}{{ schedule_item(s, True, tenants[s.tenant_id].name) }}{% endfor %}</ul>
     {% else %}
     <div class="empty"><h3>No client report emails yet</h3>
-      <p>Open a tenant and use its <strong>Emailed reports</strong> tab to send its reports every week, month or quarter.</p>
-      <a class="btn" href="{{ url_for('tenants.dashboard') }}">Go to tenants</a></div>
+      <p>Open a client and use its <strong>Emailed reports</strong> tab to send its reports every week, month or quarter.</p>
+      <a class="btn" href="{{ url_for('tenants.dashboard') }}">Go to Clients</a></div>
     {% endif %}
   </section>
 
@@ -56,12 +56,12 @@
 <div>
   {% if admin %}
   <section class="card">
-    <div class="card-head"><h2>{{ icon('send') }} Tenant digest</h2></div>
+    <div class="card-head"><h2>{{ icon('send') }} Client digest</h2></div>
     {% if digests %}
     <ul class="list sched-list compact-sched">{% for s in digests %}{{ schedule_item(s) }}{% endfor %}</ul>
     <a class="btn sm" href="{{ url_for('email.new_digest') }}">{{ icon('plus') }} Another digest</a>
     {% else %}
-    <p class="muted small">One email for your team with every tenant ranked worst first: what needs attention, what's new and what's fixed.</p>
+    <p class="muted small">One email for your team with every client ranked worst first: what needs attention, what's new and what's fixed.</p>
     <a class="btn primary sm" href="{{ url_for('email.new_digest') }}">{{ icon('plus') }} Set up a digest</a>
     {% endif %}
   </section>
@@ -83,22 +83,22 @@
     <ul class="list sched-list compact-sched">{% for s in view_emails %}{{ schedule_item(s) }}{% endfor %}</ul>
     <a class="btn sm" href="{{ url_for('email.new_views') }}">{{ icon('plus') }} Another one</a>
     {% else %}
-    <p class="muted small">Email your team a saved view of any report with every tenant's rows, or one group's: say, mailboxes forwarding outside, every Monday as a CSV. To send a view for one client, add it to that client's scheduled email.</p>
+    <p class="muted small">Email your team a saved view of any report with every client's rows, or one group's: say, mailboxes forwarding outside, every Monday as a CSV. To send a view for one client, add it to that client's scheduled email.</p>
     <a class="btn primary sm" href="{{ url_for('email.new_views') }}">{{ icon('plus') }} Email a saved view</a>
     {% endif %}
   </section>
 
   <section class="card">
-    <div class="card-head"><h2>{{ icon('bell') }} Alerts for every tenant</h2>{% if global_alert %}<span class="pill ok">On</span>{% endif %}</div>
+    <div class="card-head"><h2>{{ icon('bell') }} Alerts for every client</h2>{% if global_alert %}<span class="pill ok">On</span>{% endif %}</div>
     {% if global_alert %}
-    <p class="small">Emails {{ people(global_alert.recipients) }} when any tenant gets a new <strong>{{ 'critical' if global_alert.min_severity == 'critical' else 'critical or high' }}</strong> finding.</p>
+    <p class="small">Emails {{ people(global_alert.recipients) }} when any client gets a new <strong>{{ 'critical' if global_alert.min_severity == 'critical' else 'critical or high' }}</strong> finding.</p>
     <div class="form-actions">
       <a class="btn sm" href="{{ url_for('email.preview_alert', alert_id=global_alert.id) }}">{{ icon('eye') }} Preview</a>
       <form method="post" action="{{ url_for('email.delete_alert', alert_id=global_alert.id) }}">{{ csrf() }}<button class="sm danger">Turn off</button></form>
     </div>
     <details class="alert-edit"><summary class="small">Change who gets them</summary>
     {% else %}
-    <p class="muted small">Tell your team the moment a nightly scan finds something new and serious in any tenant. A tenant's first scan never triggers alerts.</p>
+    <p class="muted small">Tell your team the moment a nightly scan finds something new and serious in any client. A client's first scan never triggers alerts.</p>
     {% endif %}
     <form method="post" action="{{ url_for('email.save_global_alert') }}">
       {{ csrf() }}
@@ -111,12 +111,12 @@
       <div class="form-actions"><button class="{{ 'sm' if global_alert else 'primary sm' }}" {% if not team %}disabled{% endif %}>{{ 'Save' if global_alert else 'Turn on alerts' }}</button></div>
     </form>
     {% if global_alert %}</details>{% endif %}
-    <p class="footnote">One email per tenant per scan. To post the same alerts to Teams or Slack, use <a href="{{ url_for('alerts.settings') }}">Alerts</a>.</p>
+    <p class="footnote">One email per client per scan. To post the same alerts to Teams or Slack, use <a href="{{ url_for('alerts.settings') }}">Alerts</a>.</p>
   </section>
   {% endif %}
 
   <section class="card" id="team">
-    <div class="card-head"><h2>{{ icon('users') }} Your team</h2><span class="meta">Shared by every tenant</span></div>
+    <div class="card-head"><h2>{{ icon('users') }} Your team</h2><span class="meta">Shared by every client</span></div>
     {% if team %}
     <ul class="list compact contacts">
       {% for c in team %}

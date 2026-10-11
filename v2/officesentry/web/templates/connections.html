@@ -7,7 +7,7 @@
 {% set active = status in ('waiting', 'working') %}
 <div class="page-head"><div><h1>App connection</h1>
   <div class="sub">Office Sentry signs in to every client tenant as one multi-tenant, <strong>read-only</strong> Entra app. You set it up once (once per Microsoft cloud, if you have clients in GCC High, DoD or China).</div></div>
-  {% if ready and not sign_in %}<div class="actions"><a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add a tenant</a></div>{% endif %}</div>
+  {% if ready and not sign_in %}<div class="actions"><a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add a client</a></div>{% endif %}</div>
 
 {% if opened_at %}
 <div class="callout warn" role="status">{{ icon('alert') }}<div><strong>Office Sentry's address doesn't match this one.</strong>
@@ -110,10 +110,10 @@
       </div>
     </li>
     <li class="{{ 'current' if status == 'done' else '' }}">
-      <div class="step-title">Add your first tenant</div>
+      <div class="step-title">Add your first client</div>
       <div class="step-body">
       {% if status == 'done' %}
-        Its Global Administrator then approves the app with a consent link from the tenant's page. Microsoft can take a minute or two to make a new app available for consent.
+        Its Global Administrator then approves the app with a consent link from the client's page. Microsoft can take a minute or two to make a new app available for consent.
         <form method="post" action="{{ url_for('tenants.new_tenant') }}" class="step-form first-tenant">
           {{ csrf() }}
           <input type="hidden" name="connection_id" value="{{ sign_in.connection_id }}">
@@ -123,8 +123,8 @@
             <label>Tenant ID or domain <input name="tenant_ref" id="first-tenant-ref" required autocomplete="off" placeholder="contoso.onmicrosoft.com" class="mono"></label>
           </div>
           {% if sign_in.home_tenant %}<p class="hint m0">To start with your own tenant, its ID is <span class="mono">{{ sign_in.home_tenant }}</span>. <button type="button" class="link" data-fill="#first-tenant-ref" data-value="{{ sign_in.home_tenant }}">Use it</button></p>{% endif %}
-          <div class="form-actions"><button class="primary">{{ icon('plus') }} Add tenant</button>
-            <button class="ghost" form="setup-later" formnovalidate>I'll add tenants later</button></div>
+          <div class="form-actions"><button class="primary">{{ icon('plus') }} Add client</button>
+            <button class="ghost" form="setup-later" formnovalidate>I'll add clients later</button></div>
         </form>
         <form method="post" action="{{ url_for('admin.cancel_setup') }}" id="setup-later">{{ csrf() }}</form>
       {% else %}

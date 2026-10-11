@@ -17,7 +17,7 @@ from .data_reports import DataReport, Rows, Section, Tile, _type
 from .mail_reports import _no_exchange
 from .registry import report
 
-NOT_COLLECTED = "Automatic replies haven't been collected yet. Refresh Automatic replies on the tenant page."
+NOT_COLLECTED = "Automatic replies haven't been collected yet. Refresh Automatic replies on the client page."
 FORGOTTEN_DAYS = 30
 
 EVERY = "Mailboxes with an automatic reply"

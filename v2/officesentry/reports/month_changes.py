@@ -332,7 +332,7 @@ def build(
         new_findings = []
         if any(new_snap.runs.values()):
             notes.append(
-                "Collection for this tenant started during this period, so its findings are on the "
+                "Collection for this client started during this period, so its findings are on the "
                 "Findings tab rather than counted as new here."
             )
     order = lambda r: (SEV_RANK.get(r["severity"], 9), r["rule_key"], r["subject"])  # noqa: E731
@@ -424,7 +424,7 @@ def to_tables(tc: TenantChanges) -> list[Table]:
             "About",
             ["Item", "Value"],
             [
-                ["Tenant", tc.tenant["name"]],
+                ["Client", tc.tenant["name"]],
                 ["Tenant ID", tc.tenant["tenant_ref"]],
                 ["Period", period],
                 ["Starting data collected (UTC)", (tc.baseline or "none")[:16].replace("T", " ")],
@@ -551,7 +551,7 @@ def across_table(summaries: list[Summary], days: int) -> Table:
     return Table(
         f"Changes, last {days} days",
         [
-            "Tenant",
+            "Client",
             "Tenant ID",
             "Changes",
             "New findings",
