@@ -18,14 +18,14 @@ bp = Blueprint("roles", __name__, url_prefix="/admin/roles")
 
 # What the menu offers a staff role, by the capabilities each entry needs (base.html), for the preview.
 MENU = (
-    ("Today and Clients home pages", ("clients.compare",)),
-    ("All tenants, What changed and search", ("clients.compare",)),
+    ("Today and Accounts home pages", ("clients.compare",)),
+    ("All clients, What changed and search", ("clients.compare",)),
     ("Coming up", ("clients.compare", "reports.tenant")),
     ("Email reports", ("emails.view",)),
     ("Month-end", ("month_end.review",)),
     ("Projects", ("projects.view", "clients.compare")),
-    ("Client tenants and connection health", ()),
-    ("Tenant groups and onboarding", ("clients.manage",)),
+    ("Client settings and connection health", ()),
+    ("Client groups and onboarding", ("clients.manage",)),
     ("Users and roles", ("users.manage",)),
     ("App connection, email delivery, alerts, branding, licence prices, data retention", ("settings.manage",)),
     ("Activity log", ("activity_log.read",)),
