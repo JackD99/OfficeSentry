@@ -428,15 +428,22 @@ def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             controls.add(
                 [f"Remote domain: {d.get('Name')}", target, "Allowed" if d.get("AutoForwardEnabled") else "Blocked"]
             )
-        report.highlights.append(
-            Highlight(
+        if policies:
+            forwarding = Highlight(
                 "Automatic forwarding",
                 "Allowed" if allowed else "Blocked",
                 "By the outbound spam policy",
                 "warn" if allowed else "ok",
                 Rows("What stops forwarding"),
             )
-        )
+        else:  # every Exchange Online organisation has a default policy, so none means it wasn't read
+            forwarding = Highlight(
+                "Automatic forwarding",
+                "Unknown",
+                "Exchange returned no outbound spam policy",
+                rows=Rows("What stops forwarding"),
+            )
+        report.highlights.append(forwarding)
         sections.append(controls)
     report.sections = sections
 
