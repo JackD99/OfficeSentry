@@ -664,7 +664,7 @@ def files_part(m: Group) -> Part | None:
     sites = m.snap.objects("sharepoint_usage", "site")
     result = Part("files", "Files")
     if sites is None:
-        result.unavailable = "SharePoint usage hasn't been collected yet. Refresh SharePoint on the tenant page."
+        result.unavailable = "SharePoint usage hasn't been collected yet. Refresh SharePoint on the client's page."
         return result
     site = _team_site(m)
     if site is None:
