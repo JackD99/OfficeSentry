@@ -517,7 +517,10 @@ kept). It's made before the upgrade starts, while the portal is down (see
 go back to can always restore it. If it can't (a full disk, say), it doesn't
 upgrade and says why.
 
-**Deleted clients stay in backups.** Backups keep everything that was in the
+**Deleted clients stay in backups.** On the server itself, a deleted client's
+data is erased from the database and activity history files by the worker
+within minutes; *System status* shows **Deleted clients** as needing attention
+(and the team is alerted) if that fails. Backups keep everything that was in the
 database when they were made. After you delete a client, its data stays
 in older backups until they rotate out (nightly ones after `--keep` runs;
 `pre-upgrade-*` and `pre-restore-*` copies only when 3 newer ones replace
