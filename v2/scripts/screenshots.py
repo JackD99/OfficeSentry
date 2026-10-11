@@ -232,7 +232,7 @@ SHOTS = [
     Shot("dashboard", "/", height=640),
     Shot("tenant-overview", "/tenants/{t}", height=1000),
     Shot("review", "/tenants/{t}/report", height=1100),
-    Shot("review-attention", "/tenants/{t}/report", height=1000, scroll_to="h2:has-text('What we recommend next')"),
+    Shot("review-attention", "/tenants/{t}/report", height=1000, scroll_to="#month"),
     Shot("sharepoint-storage", "/tenants/{t}/data/sharepoint-storage", height=1100),
     Shot(
         "sharepoint-storage-files",
@@ -503,8 +503,10 @@ def capture(server: Server, passwords: dict, ids: list[int], shots: list[Shot], 
                 if shot.scroll_to:
                     target = page.locator(shot.scroll_to).first
                     if target.count():
-                        target.evaluate(
-                            "el => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 16)"
+                        target.evaluate(  # just under the sticky report toolbar, when the page has one
+                            "el => { const bar = document.querySelector('nav.toolbar');"
+                            " const top = el.getBoundingClientRect().top + window.scrollY;"
+                            " window.scrollTo(0, top - (bar ? bar.offsetHeight : 0) - 16); }"
                         )
                     else:
                         print(f"  {shot.name}: {shot.scroll_to!r} not found; capturing the top")

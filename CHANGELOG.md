@@ -29,6 +29,22 @@ None.
 
 No.
 
+### Added
+
+- **The monthly review leads with the answer.** The PDF and page now open with two summary pages: *At a
+  glance* (what was checked, what changed, key figures, the severity bar) and *This month* (findings
+  found and fixed each month as a chart, what was done, what to do next). Everything else (what changed
+  in detail, the Secure Score trend, each failing check with the accounts affected, licences, passing
+  checks, accepted risks, checks that couldn't run) follows as an appendix the summary links into.
+  A **Summary PDF** button, and a "Monthly review: summary only" option in report plans and email
+  schedules, give the two summary pages on their own.
+- **Quarterly review.** A new starting point in the report designer (Month-end → Custom reports): three
+  months of Secure Score and findings, what was fixed in the quarter, the projects on the table and
+  where each stands, licence spend a month and a year with the waste, and what's coming up in the next
+  90 days. Its five blocks (Three-month trend, Fixed this quarter, Projects, Licence spend, Coming up)
+  can go in any design, and text blocks take `{quarter}`. The demo data includes one under Custom
+  reports.
+
 ### Changed
 
 - **"Clients" for the companies you look after.** Pages, menus, emails, PDFs, spreadsheets and the docs now
