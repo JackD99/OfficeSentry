@@ -38,7 +38,9 @@ services:
       test: ["CMD", "python", "-m", "officesentry", "healthcheck", "web"]
       interval: 30s
       timeout: 10s
-      start_period: 30s
+      # Before a database upgrade the portal copies the whole database and only then answers, which takes
+      # minutes on a large one. A passing check ends this early.
+      start_period: 15m
 
   worker:
     <<: [*keys, *officesentry]

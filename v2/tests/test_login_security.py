@@ -97,6 +97,54 @@ def test_recovery_code_works_once(client, db, vault, staff_mfa):
     assert client.get("/").status_code == 302
 
 
+def test_recovery_codes_are_stored_under_a_key(client, db, vault, staff_mfa):
+    """A copy of the database alone can't be used to guess recovery codes: they're an HMAC under a key that
+    is itself encrypted with the vault."""
+    import hashlib
+
+    make_user(db, "admin")
+    _secret, codes = enrol(client, db, vault, "admin")
+    stored = {r[0] for r in db.execute("SELECT code_hash FROM user_recovery_codes")}
+    plain = {hashlib.sha256(c.replace("-", "").encode()).hexdigest() for c in codes}
+    assert len(stored) == 10 and all(h.startswith("hmac:") for h in stored) and not stored & plain
+    key = db.execute("SELECT value FROM settings WHERE key = 'totp.recovery_key_enc'").fetchone()[0]
+    assert stored == {totp.hash_recovery_code(c, vault.decrypt(key).encode()) for c in codes}
+
+
+def test_recovery_codes_stored_before_keyed_hashes_still_work(client, db, vault, staff_mfa):
+    import hashlib
+
+    uid = make_user(db, "admin")
+    enrol(client, db, vault, "admin")
+    client.post("/logout")
+    db.execute("DELETE FROM user_recovery_codes")
+    old = "abcde-fghjk"
+    db.execute(
+        "INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, ?)",
+        (uid, hashlib.sha256(b"abcdefghjk").hexdigest()),
+    )
+    login(client, "admin")
+    assert client.post("/login/code", data={"code": old}).status_code == 302
+    assert client.get("/").status_code == 200
+    client.post("/logout")
+    login(client, "admin")
+    client.post("/login/code", data={"code": old})  # once only, like any other code
+    assert client.get("/").status_code == 302
+
+
+def test_recovery_codes_survive_key_rotation(db, vault, cfg):
+    from cryptography.fernet import Fernet
+
+    from officesentry.__main__ import reencrypt_all
+    from officesentry.crypto import Vault
+
+    key = totp.recovery_key(db, vault)
+    assert totp.recovery_key(db, vault) == key  # made once
+    new = Fernet.generate_key().decode()
+    reencrypt_all(db, Vault([new, *cfg.encryption_keys]))  # what rotate-keys --new does, before it drops the old key
+    assert totp.recovery_key(db, Vault([new])) == key
+
+
 def test_wrong_codes_lock_the_account(client, db, vault, staff_mfa):
     make_user(db, "admin")
     secret, _codes = enrol(client, db, vault, "admin")
@@ -145,6 +193,27 @@ def test_turn_on_and_off_from_account_page(client, db, vault, staff_mfa):
     assert db.execute("SELECT totp_enabled_at FROM users").fetchone()[0] is None
 
 
+def test_every_visit_to_two_step_setup_makes_a_new_secret(app, db, vault, staff_mfa):
+    """Someone who opened the setup page earlier (with a stolen session, say) doesn't learn the secret the
+    person goes on to add: each visit makes a new one, and codes from an earlier one don't enrol."""
+    make_user(db, "client", role="client")
+    person, thief = app.test_client(), app.test_client()
+    login(person, "client")
+    login(thief, "client")
+    assert thief.get("/two-step/setup").status_code == 200
+    seen = pending_secret(db, vault, "client")
+    person.get("/two-step/setup")
+    secret = pending_secret(db, vault, "client")
+    assert secret != seen
+    # A wrong code shows the same secret again, so the person doesn't have to scan a new one.
+    page = person.post("/two-step/setup", data={"code": totp.code(seen), "password": PASSWORD})
+    assert "That code didn&#39;t match" in page.get_data(as_text=True)
+    assert pending_secret(db, vault, "client") == secret
+    assert db.execute("SELECT totp_enabled_at FROM users").fetchone()[0] is None
+    person.post("/two-step/setup", data={"code": totp.code(secret), "password": PASSWORD})
+    assert vault.decrypt(db.execute("SELECT totp_secret_enc FROM users").fetchone()[0]) == secret
+
+
 NEW_PASSWORD = "my own long passphrase"
 
 
@@ -189,9 +258,60 @@ def test_admin_can_reset_lost_phone(client, db, vault, staff_mfa):
     admin = client.application.test_client()
     make_user(db, "boss")
     enrol(admin, db, vault, "boss")
-    admin.post(f"/admin/users/{uid}/reset-two-step")
+    admin.post(f"/admin/users/{uid}/reset-two-step", data={"admin_password": PASSWORD})
     assert client.get("/").status_code == 302  # signed out
     assert login(client, "analyst").headers["Location"].endswith("/two-step/setup")
+
+
+def test_admin_resets_need_the_admins_own_password(app, db, vault, staff_mfa):
+    """A stolen admin session can't reset another account's password, two-step sign-in or sessions, just as
+    the account page asks for the password before the same changes."""
+    uid = make_user(db, "ana", role="analyst")
+    ana = app.test_client()
+    enrol(ana, db, vault, "ana")
+    make_user(db, "boss")
+    boss = app.test_client()
+    enrol(boss, db, vault, "boss")
+    before = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    page = boss.get(f"/admin/users/{uid}").get_data(as_text=True)
+    assert page.count('name="admin_password"') == 2
+
+    wrong = {"admin_password": "not my password"}
+    for path in ("reset-two-step", "sign-out"):
+        resp = boss.post(f"/admin/users/{uid}/{path}", data=wrong, follow_redirects=True)
+        assert "Your password isn&#39;t right, so nothing was changed." in resp.get_data(as_text=True)
+    resp = boss.post(f"/admin/users/{uid}", data={"role": "admin", "password": NEW_PASSWORD, **wrong})
+    assert resp.headers["Location"] == f"/admin/users/{uid}"
+    boss.post(f"/admin/users/{uid}", data={"role": "admin", "password": NEW_PASSWORD})  # none given at all
+    after = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    assert dict(after) == dict(before)  # not the password, the role, two-step or the version that signs out
+    assert ana.get("/").status_code == 200
+    assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'password_confirm_failed'").fetchone()[0] == 4
+
+    # With the admin's own password each one works.
+    boss.post(f"/admin/users/{uid}/sign-out", data={"admin_password": PASSWORD})
+    assert ana.get("/").status_code == 302
+    boss.post(f"/admin/users/{uid}/reset-two-step", data={"admin_password": PASSWORD})
+    assert db.execute("SELECT totp_enabled_at FROM users WHERE id = ?", (uid,)).fetchone()[0] is None
+    boss.post(f"/admin/users/{uid}", data={"role": "analyst", "password": NEW_PASSWORD, "admin_password": PASSWORD})
+    row = db.execute("SELECT password_hash, must_change_password FROM users WHERE id = ?", (uid,)).fetchone()
+    assert row["password_hash"] != before["password_hash"] and row["must_change_password"] == 1
+    assert boss.get("/").status_code == 200  # the admin's own right password undid nothing
+
+
+def test_wrong_admin_passwords_lock_the_admin(app, db):
+    from officesentry.web.auth import MAX_FAILURES
+
+    uid = make_user(db, "ana", role="analyst")
+    make_user(db, "boss")
+    boss = app.test_client()
+    login(boss, "boss")
+    for _ in range(MAX_FAILURES):
+        boss.post(f"/admin/users/{uid}/sign-out", data={"admin_password": "guess"})
+    resp = boss.post(f"/admin/users/{uid}/sign-out", data={"admin_password": PASSWORD}, follow_redirects=True)
+    assert "Too many wrong passwords" in resp.get_data(as_text=True)
+    assert db.execute("SELECT locked_until FROM users WHERE username = 'boss'").fetchone()[0]
+    assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'user_signed_out'").fetchone()[0] == 0
 
 
 # -- Sessions ------------------------------------------------------------------------

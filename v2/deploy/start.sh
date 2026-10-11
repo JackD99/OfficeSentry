@@ -9,6 +9,7 @@ cd "${OFFICESENTRY_DIR:-/opt/officesentry/v2}"
 only=${1:-}
 profiles=",${COMPOSE_PROFILES:-$(sed -n 's/^COMPOSE_PROFILES=//p' .env)},"
 
+started=yes
 if [ "$only" = demo ]; then
   if [[ $profiles != *,demo,* ]] || ! docker compose config --services 2>/dev/null | grep -qx demo; then
     echo "::warning::The server isn't set up for the public demo yet. Run Deploy once with the deploy action (v2/deploy/public/README.md)."
@@ -20,7 +21,9 @@ else
   # Build first so the portal is only down while the containers swap. A release
   # (no docker-compose.build.yml in COMPOSE_FILE) has nothing to build: it was pulled.
   docker compose build --pull
-  docker compose up -d --remove-orphans
+  # The worker waits for the portal to report healthy. If that fails (an upgrade slower than the health
+  # check allows), the worker is left created but not started: wait for the portal below, then try again.
+  docker compose up -d --remove-orphans || started=no
   # A part switched off (say the demo) isn't an orphan to compose: remove it.
   if [[ $profiles != *,demo,* ]] && docker compose --profile demo config --services 2>/dev/null | grep -qx demo; then
     docker compose --profile demo rm -sf demo
@@ -32,7 +35,7 @@ for service in "${services[@]}"; do
   id=$(docker compose ps -q "$service")
   [ -n "$id" ] || continue
   status=starting
-  for _ in $(seq 40); do
+  for _ in $(seq 200); do  # up to about 17 minutes: a database upgrade copies the whole database first
     status=$(docker inspect -f '{{.State.Health.Status}}' "$id")
     [ "$status" = healthy ] && break
     sleep 5
@@ -46,6 +49,10 @@ for service in "${services[@]}"; do
     exit 1
   fi
 done
+if [ "$only" != demo ] && [ "$started" = no ]; then
+  echo "The portal is healthy now; starting the rest."
+  docker compose up -d --remove-orphans
+fi
 # Nightly backups, the off-site copy, the restore drill and the uptime ping
 # (deploy/jobs.sh), in the deploy user's crontab.
 if [ "$only" != demo ] && ! bash deploy/jobs.sh schedule; then
