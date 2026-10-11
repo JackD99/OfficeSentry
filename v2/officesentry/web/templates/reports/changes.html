@@ -15,13 +15,13 @@
   {{ ui.meta('Prepared by', brand.display_name) }}
   {{ ui.meta('Date', generated_at|day) }}
   {{ ui.meta('Period', 'Last ' ~ days ~ ' days') }}
-  {{ ui.meta('Clients', summaries|length) }}
+  {{ ui.meta('Clients', cut or summaries|length) }}
 {% endblock %}
 
 {% block body %}
 <p class="lede">Changes in every client over the last {{ days }} days, most important first.</p>
 {% call ui.figures(4) %}
-  {{ ui.figure('Clients with changes', totals.changed, 'of ' ~ summaries|length) }}
+  {{ ui.figure('Clients with changes', totals.changed, 'of ' ~ (cut or summaries|length)) }}
   {{ ui.figure('New critical or high findings', totals.new_severe, totals.new ~ ' new findings in all', 'bad' if totals.new_severe else none) }}
   {{ ui.figure('Findings fixed', totals.fixed, 'across all clients', 'ok' if totals.fixed else none) }}
   {{ ui.figure('Average Secure Score change', ('%+g'|format(totals.score) ~ ' pts') if totals.score else ('No change' if totals.score is not none else '–'),
@@ -29,7 +29,7 @@
 {% endcall %}
 
 <section class="doc-section">
-  <h2>Clients <span class="count">{{ summaries|length }}</span></h2>
+  <h2>Clients <span class="count">{{ cut or summaries|length }}</span></h2>
   {% if summaries %}
   <div class="table-wrap"><table class="data">
     <thead><tr><th>Client</th><th class="num">Changes</th><th class="num">New findings</th><th class="num">Fixed</th>

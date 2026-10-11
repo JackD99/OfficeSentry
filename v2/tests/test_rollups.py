@@ -12,6 +12,7 @@ from openpyxl import load_workbook
 from officesentry import store
 from officesentry.reports import data_reports, month_changes, rollups, tables
 from officesentry.reports.data_reports import Section
+from officesentry.reports.identity_reports import Money
 from officesentry.snapshot import TenantSnapshot
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -49,6 +50,13 @@ def test_csv_neutralises_formulas_and_keeps_numbers():
     assert rows[5] == ["Yes", "a, b"]
 
 
+def test_csv_leaves_a_signed_number_alone_but_not_a_formula_that_starts_like_one():
+    for text in ("+2", "-1", "+4.6%", "-1.5", "+£23.00", "-$1,234.50"):
+        assert tables.csv_cell(text) == text
+    for text in ("-1+cmd|' /C calc'!A0", "+2\n", "-2+3", "+A$1", "-1e3", "+SUM(1)", "-", "+£"):
+        assert tables.csv_cell(text) == "'" + text
+
+
 def test_xlsx_never_contains_formulas_and_names_sheets_safely():
     body = tables.to_xlsx(
         [
@@ -61,6 +69,30 @@ def test_xlsx_never_contains_formulas_and_names_sheets_safely():
     assert all(len(n) <= 31 and not set(n) & set("[]:*?/\\") for n in wb.sheetnames)
     cell = wb.worksheets[0]["A2"]
     assert cell.value == "=1+1" and cell.data_type == "s"
+
+
+def test_review_download_says_which_figures_are_percentages_and_writes_counts_whole():
+    columns = [
+        rollups.Column("secure_score.pct", "Secure Score", "pct", "up"),
+        rollups.Column("admins", "Privileged accounts", "num", "down"),
+        rollups.Column("users", "Licensed users"),
+        rollups.Column("waste", "Licence waste / month", "money"),
+    ]
+    values = {"secure_score.pct": 50.9, "admins": 4.0, "users": 54.0, "waste": Money(120, "GBP")}
+    row = rollups.RollupRow({"name": "Alpha", "tenant_ref": "a"}, values, {"secure_score.pct": 2.0, "admins": 0.0})
+    table = rollups.Rollup("review", "Monthly review", "", columns, [row], datetime.now(UTC)).to_table()
+    assert table.columns[2:8] == [
+        "Secure Score %",
+        "Secure Score: change",
+        "Privileged accounts",
+        "Privileged accounts: change",
+        "Licensed users",
+        "Licence waste / month (GBP)",
+    ]
+    assert table.rows[0][2:8] == [50.9, 2, 4, 0, 54, 120] and [type(v) for v in table.rows[0][3:7]] == [int] * 4
+    assert _csv(tables.to_csv(table))[1][2:7] == ["50.9", "2", "4", "0", "54"]
+    ws = load_workbook(io.BytesIO(tables.to_xlsx([table]))).active
+    assert [(c.value, c.number_format) for c in ws[2][4:7]] == [(4, "General"), (0, "General"), (54, "General")]
 
 
 # -- Rollups ----------------------------------------------------------------------
@@ -112,7 +144,8 @@ def test_rollup_pages_and_downloads(client, db, two_tenants):
     assert client.get("/across/nope").status_code == 404
     assert client.get("/across?key=mailboxes").headers["Location"].endswith("/across/mailboxes")
     resp = client.get("/across/review.csv")
-    assert resp.mimetype == "text/csv" and "attachment" in resp.headers["Content-Disposition"]
+    assert resp.headers["Content-Type"] == "text/csv; charset=utf-8"  # the charset once
+    assert "attachment" in resp.headers["Content-Disposition"]
     rows = _csv(resp.data)
     assert rows[0][:2] == ["Client", "Tenant ID"] and {r[0] for r in rows[1:]} == {"Alpha Ltd", "Bravo Inc"}
     resp = client.get("/across/mailboxes.xlsx")

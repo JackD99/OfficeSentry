@@ -2,12 +2,14 @@
 
 import base64
 import io
+import zipfile
 from datetime import UTC, date, datetime
+from xml.etree import ElementTree
 
 from openpyxl import load_workbook
 
 from officesentry import delivery, mailer
-from officesentry.reports import branding, cells, data_reports, tables, workbook
+from officesentry.reports import branding, cells, data_reports, docx_writer, tables, workbook
 from officesentry.reports.export import to_xlsx as review_xlsx
 from officesentry.reports.monthly_review import build
 from tests.conftest import login, make_user
@@ -69,6 +71,61 @@ def test_workbook_sheets_are_styled_filterable_and_typed():
     assert ws["E1"].value == "Flag" and ws["E2"].value == "high" and ws["E3"].value is None
     assert ws["A3"].data_type == "s" and ws["A3"].value == "=HYPERLINK(1)"  # never a formula
     assert ws.print_title_rows == "$1:$1"
+
+
+def test_changes_percentages_and_written_dates_are_numbers_and_dates_in_spreadsheets():
+    assert cells.xlsx_value("+4.6%") == 0.046 and cells.xlsx_value("-4.6%") == -0.046
+    assert cells.xlsx_value("+2.2") == 2.2 and cells.xlsx_value("-1.5") == -1.5 and cells.xlsx_value("+4") == 4
+    assert cells.xlsx_value("6 Feb 2026") == date(2026, 2, 6) and cells.display("6 Feb 2026") == "6 Feb 2026"
+    for text in ("31 Feb 2026", "6 Feb 2026, 14:00", "+1.2.3", "+1e5"):
+        assert cells.xlsx_value(text) == text
+    book = workbook.Book()
+    book.table(
+        "Month by month",
+        ["Month", "Score", "Change", "Share", "Last sign-in"],
+        [["Sep", "29%", "+2.2", "+4.6%", "6 Feb 2026"], ["Oct", "33.3%", "+4", "-4.6%", "12 Jan 2025"]],
+    )
+    data = book.save(workbook.Cover("Secure Score", facts=[("Score", "29%", ""), ("Change", "+2.2", "")]))
+    wb = load_workbook(io.BytesIO(data))
+    ws = wb["Month by month"]
+    assert [ws["B2"].number_format, ws["B3"].number_format] == ["0%", "0.0%"]  # 29%, not 29.0%
+    assert [ws["C2"].value, ws["C3"].value] == [2.2, 4] and ws["C2"].number_format == "+0.0;-0.0;0.0"
+    assert ws["C3"].number_format == "+0;-0;0"
+    assert [ws["D2"].value, ws["D3"].value] == [0.046, -0.046] and ws["D2"].number_format == "+0.0%;-0.0%;0.0%"
+    assert ws["E2"].value == datetime(2026, 2, 6) and ws["E2"].number_format == workbook.DATE_FORMAT
+    facts = {row[0].value: row[1] for row in wb["Summary"].iter_rows() if row[0].value in ("Score", "Change")}
+    assert [facts["Score"].number_format, facts["Change"].number_format] == ["0%", "+0.0;-0.0;0.0"]
+
+
+def test_tenant_text_with_control_characters_still_makes_a_workbook_and_a_document():
+    rule = "Move\x0bto RSS"  # an inbox rule's name as Exchange returned it
+    book = workbook.Book()
+    book.table("Inbox\x07rules", ["Rule", "Mail\x01box"], [[rule, [rule, "Archive"]]], description=rule)
+    data = book.save(workbook.Cover(rule, rule, intro=rule, facts=[(rule, rule, rule)], notes=[(rule, rule)]))
+    wb = load_workbook(io.BytesIO(data))
+    assert wb.sheetnames == ["Summary", "Inbox rules"]
+    assert [c.value for c in wb["Inbox rules"][1]] == ["Rule", "Mailbox"]
+    assert [c.value for c in wb["Inbox rules"][2]] == ["Moveto RSS", "Moveto RSS, Archive"]
+    assert "Moveto RSS" in [c for row in wb["Summary"].iter_rows(values_only=True) for c in row]
+    doc = docx_writer.Document(rule, rule)
+    doc.heading(rule)
+    doc.paragraph(rule, lead=rule)
+    doc.table([(rule, rule)])
+    with zipfile.ZipFile(io.BytesIO(doc.save())) as z:
+        for part in ("word/document.xml", "docProps/core.xml"):  # well-formed XML, so Word opens it
+            assert "Moveto RSS" in ElementTree.fromstring(z.read(part)).itertext()  # noqa: S314 (our own file)
+
+
+def test_summary_links_open_sheets_with_quotes_and_no_sheet_takes_excels_history_name():
+    book = workbook.Book()
+    book.table("OneDrives of people who've left", ["Name"], [["Ann"]])
+    book.table("History", ["When"], [["2026-10-01"]])
+    wb = load_workbook(io.BytesIO(book.save(workbook.Cover("Ann's account"))))
+    assert wb.sheetnames == ["Summary", "OneDrives of people who've left", "History (2)"]
+    links = [c.hyperlink.target for c in wb["Summary"]["A"] if c.hyperlink]
+    assert links == ["#'OneDrives of people who''ve left'!A1", "#'History (2)'!A1"]
+    assert tables.sheet_name("HISTORY", set()) == "HISTORY (2)"
+    assert tables.sheet_name("History of sign-ins", set()) == "History of sign-ins"
 
 
 def test_plain_table_downloads_have_no_cover_unless_asked():

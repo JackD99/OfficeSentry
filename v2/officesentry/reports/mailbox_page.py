@@ -18,7 +18,7 @@ from ..devices import parse_ts
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
 from ..snapshot import TenantSnapshot
-from ..text import plural
+from ..text import fold, plural
 from .auto_replies import OUTSIDE, _at, first_seen, state
 from .data_reports import (
     PAGE_INDEXES,
@@ -746,7 +746,7 @@ def directory(conn, tenant, now: datetime | None = None) -> tuple[list[MailboxRo
                 counts.get(m["_id"], 0),
             )
         )
-    rows.sort(key=lambda r: (-r.findings, -r.flagged_rules, r.forwarding != "Outside", r.name.lower()))
+    rows.sort(key=lambda r: (-r.findings, -r.flagged_rules, r.forwarding != "Outside", fold(r.name)))
     by_type = {}
     for r in rows:
         by_type[r.type] = by_type.get(r.type, 0) + 1

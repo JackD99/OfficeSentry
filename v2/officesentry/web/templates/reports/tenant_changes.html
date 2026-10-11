@@ -3,6 +3,7 @@
 {% import "reports/_components.html" as ui with context %}
 {% set compact_cover = true %}
 {% set document = true %}
+{% set whole = report.uncut or report %}{#- the figures count every row, not just the ones the PDF keeps -#}
 
 {% block doc_title %}{{ title }}{% endblock %}
 {% block client %}{{ report.tenant.name }}{% endblock %}
@@ -20,9 +21,9 @@
 {% for note in report.notes %}<div class="callout warn">{{ note }}</div>{% endfor %}
 {% set score = (report.figures|selectattr('key', 'equalto', 'secure_score.pct')|list or [none])[0] %}
 {% call ui.figures(4) %}
-  {{ ui.figure('Changes', report.total, report.key_changes|length ~ ' key, ' ~ report.report_changes ~ ' in detail reports') }}
-  {{ ui.figure('New findings', report.new_findings|length, 'new or come back', 'warn' if report.new_findings else none) }}
-  {{ ui.figure('Fixed findings', report.fixed_findings|length, 'no longer found', 'ok' if report.fixed_findings else none) }}
+  {{ ui.figure('Changes', whole.total, whole.key_changes|length ~ ' key, ' ~ whole.report_changes ~ ' in detail reports') }}
+  {{ ui.figure('New findings', whole.new_findings|length, 'new or come back', 'warn' if whole.new_findings else none) }}
+  {{ ui.figure('Fixed findings', whole.fixed_findings|length, 'no longer found', 'ok' if whole.fixed_findings else none) }}
   {{ ui.figure('Secure Score', ('%g'|format(score.after) ~ '%') if score and score.after is not none else '–',
                ('%+g'|format(score.delta) ~ ' pts since ' ~ report.since|day) if score and score.delta else '') }}
 {% endcall %}
@@ -43,7 +44,7 @@
 {% endif %}
 
 <section class="doc-section">
-  <h2>Findings <span class="count">{{ report.new_findings|length + report.fixed_findings|length }}</span></h2>
+  <h2>Findings <span class="count">{{ whole.new_findings|length + whole.fixed_findings|length }}</span></h2>
   {% if report.new_findings or report.fixed_findings %}
   <div class="table-wrap"><table class="data">
     <thead><tr><th class="flag">Change</th><th class="flag">Severity</th><th>Check</th><th>Account or object</th></tr></thead>
