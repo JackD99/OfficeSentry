@@ -27,7 +27,7 @@ from . import as_of
 from .access import can, need_also, needs, require, tenant_or_404
 from .groups import group_aware, scope, scoped_tenants
 from .printing import pdf_response
-from .reports import report_capability, report_groups
+from .reports import report_capability
 from .saved_views import MAX_VIEWS
 from .saved_views import store as store_view
 
@@ -66,6 +66,8 @@ def index():
     key = request.args.get("key", "")
     if request.args.get("mode") == "rows" and key in data_reports.REPORTS:
         return redirect(url_for("across.rows_index", key=key))
+    if key == "checks" and can("reports.security"):  # the picker's select on phones
+        return redirect(url_for("across.checks"))
     available = _available()
     if key not in dict(available):
         if not available:
@@ -91,8 +93,8 @@ def _rollup_or_404(key: str):
 
 
 def _picker() -> dict:
-    """What the All tenants pages share: the summary tabs and the detail report picker."""
-    return {"main": _available()[:2] if can("reports.security") else [], "groups": report_groups()}
+    """What the All clients report picker needs beyond the catalogue: the summaries this person may open."""
+    return {"main": _available()[:2] if can("reports.security") else []}
 
 
 @bp.get("/across/<key>")
