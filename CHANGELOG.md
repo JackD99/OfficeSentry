@@ -49,6 +49,10 @@ No.
   and worker stopped when the restore fails, rather than starting them over an empty database.
 - A nightly backup whose activity history copy failed says the database was copied and what failed, rather
   than "No backup made", and still removes old copies.
+### Security
+
+- A new docs page, [Securing the portal](v2/docs/securing-the-portal.md), lists what the portal does by
+  itself, what the person running it has to do, and how to put it behind Caddy, nginx, Traefik or a CDN.
 
 ## 2.1.0 (2026-10-10)
 
