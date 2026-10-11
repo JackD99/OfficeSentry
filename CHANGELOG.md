@@ -11,6 +11,12 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.3.0] - Unreleased
 
+### New Microsoft permissions
+
+None. These use permissions added in 2.2 (`DeviceManagementConfiguration.Read.All`,
+`DeviceManagementApps.Read.All`, `BitLockerKey.ReadBasic.All` and
+`PrivilegedEligibilitySchedule.Read.AzureADGroup`), which nothing read until now.
+
 ### Added
 
 - **Intune policies report** (Devices menu). Which platforms have devices enrolled but no compliance policy,
@@ -29,11 +35,11 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - **PIM for groups in the Admins report**: people who can make themselves a member of a group that holds an
   admin role are listed with that role as eligible, marked "(eligible member)" beside the group.
 
-### New Microsoft permissions
+### Fixed
 
-None. These use permissions added in 2.2 (`DeviceManagementConfiguration.Read.All`,
-`DeviceManagementApps.Read.All`, `BitLockerKey.ReadBasic.All` and
-`PrivilegedEligibilitySchedule.Read.AzureADGroup`), which nothing read until now.
+- On the public demo, picking a client group in the Group picker now shows that group, and the choice
+  follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
+  to every client, because demo visitors have no sign-in to keep the choice on.
 
 ## [2.2.0] - 2026-10-11
 
