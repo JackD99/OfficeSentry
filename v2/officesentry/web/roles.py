@@ -164,7 +164,7 @@ def delete(role_id: int):
     role = _role_or_404(role_id)
     try:
         with transaction(g.db):
-            roles.delete(g.db, g.user["username"], role)
+            roles.remove(g.db, g.user["username"], role)
     except ValueError as exc:
         flash(str(exc), "error")
         return redirect(url_for("roles.edit", role_id=role_id))

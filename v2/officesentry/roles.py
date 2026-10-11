@@ -186,7 +186,7 @@ def reset(conn, actor: str, role: Role) -> bool:
     return update(conn, actor, role, t.name, t.description, t.scope, t.capabilities)
 
 
-def delete(conn, actor: str, role: Role) -> None:
+def remove(conn, actor: str, role: Role) -> None:
     """Remove a custom role nobody holds. Raises ``ValueError`` otherwise."""
     if role.built_in:
         raise ValueError("Built-in roles can't be deleted; change them instead.")
