@@ -142,6 +142,9 @@
     box.remove();
     return ok ? Promise.resolve() : Promise.reject(new Error('copy'));
   }
+  // Each button's own label (its icon and words) as nodes, put back as they were after "Copied", so nothing
+  // read from the page is ever parsed as HTML.
+  var labels = new WeakMap();
   document.addEventListener('click', function (e) {
     var button = e.target.closest && e.target.closest('[data-copy]');
     if (!button) return;
@@ -149,15 +152,15 @@
     if (!source) return;
     var text = source.value !== undefined ? source.value : source.textContent;
     var done = navigator.clipboard && window.isSecureContext ? navigator.clipboard.writeText(text) : fallback(text);
-    var label = button.getAttribute('data-label') || button.innerHTML;
-    button.setAttribute('data-label', label);
+    if (!labels.has(button)) labels.set(button, Array.prototype.slice.call(button.childNodes));
+    var label = labels.get(button);
     done.then(function () {
       button.classList.add('copied');
       button.textContent = button.getAttribute('data-copied') || 'Copied';
     }, function () {
       button.textContent = 'Select and copy';
     }).then(function () {
-      setTimeout(function () { button.innerHTML = label; button.classList.remove('copied'); }, 2000);
+      setTimeout(function () { button.replaceChildren.apply(button, label); button.classList.remove('copied'); }, 2000);
     });
   });
 })();

@@ -404,6 +404,10 @@ details.card[open] > summary { margin-bottom: var(--space-3); }
 .inline-label select { width: auto; margin: 0; padding: 5px 9px; }
 .sticky-actions { position: sticky; bottom: 0; z-index: 3; padding: var(--space-3) 0; margin-top: 0; background: var(--bg); border-top: 1px solid var(--border); box-shadow: 0 -8px 12px -10px rgba(16, 24, 40, .18); }
 .form-row > label.grow-2 { flex: 3 1 240px; }
+/* A filter row: every control the same height so the labels line up, and the buttons stay on the row. */
+.form-row.filters > label { flex: 1 1 140px; min-width: 0; }
+.form-row.filters > label > :is(input, select) { height: 40px; box-sizing: border-box; }
+.form-row.filters > .field { flex: 0 0 auto; display: flex; gap: var(--space-2); }
 .page-head > .pill { margin-top: var(--space-1-5); }
 .hero-form .form-row { align-items: flex-end; }
 .hero-form .footnote { margin: var(--space-3) 0 0; }
@@ -548,6 +552,10 @@ details.alert-edit { margin-top: var(--space-3); padding-top: var(--space-2-5); 
 
 /* Report branding settings */
 input[type=color] { height: 40px; padding: var(--space-1); cursor: pointer; }
+/* A file input: the browser's button drawn like a small button of ours, the chosen name beside it. */
+input:not([type=checkbox]):not([type=radio])[type=file] { padding: 5px 6px; cursor: pointer; }  /* as specific as the rule above */
+input[type=file]::file-selector-button { margin-right: var(--space-2-5); padding: 4px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font: inherit; font-size: var(--fs-sm); font-weight: 500; cursor: pointer; }
+input[type=file]:hover::file-selector-button { background: var(--sunken); }
 svg.brand-preview { display: block; width: 100%; height: auto; margin: var(--space-1) 0 var(--space-3); }
 
 /* MSP branding in the portal. /brand.css (loaded only once branding is set up, with body.branded)
