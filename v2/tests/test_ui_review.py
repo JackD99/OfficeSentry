@@ -20,7 +20,7 @@ def test_tenants_page_opens_and_downloads_each_monthly_review(client, db, two_te
     page = client.get("/").get_data(as_text=True)
     assert f'href="/tenants/{alpha}/report.pdf"' in page and f'href="/tenants/{alpha}/report"' in page
     assert f'href="/tenants/{bravo}/report.pdf"' not in page  # nothing to download before consent
-    assert "across 1 tenant with a score" in page and "1 up to date" in page
+    assert "across 1 client with a score" in page and "1 up to date" in page
     assert client.get(f"/tenants/{alpha}/report.pdf").status_code == 200
 
 
@@ -71,10 +71,10 @@ def test_missing_pages_explain_and_offer_a_way_on(client, db, two_tenants):
     login(client, "analyst")
     resp = client.get(f"/tenants/{two_tenants[0]}")  # not granted: indistinguishable from missing
     page = resp.get_data(as_text=True)
-    assert resp.status_code == 404 and "belongs to a tenant you haven" in page
+    assert resp.status_code == 404 and "belongs to a client you haven" in page
     assert 'href="/reports"' in page and 'href="/"' in page
     missing = client.get("/no-such-page")
-    assert missing.status_code == 404 and "belongs to a tenant you haven" in missing.get_data(as_text=True)
+    assert missing.status_code == 404 and "belongs to a client you haven" in missing.get_data(as_text=True)
     client.post("/logout")
     assert 'href="/login"' in client.get("/no-such-page").get_data(as_text=True)
 
