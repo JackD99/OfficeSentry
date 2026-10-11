@@ -23,7 +23,7 @@
 {% block contents %}
   <li><a href="#summary">Summary</a></li>
   {% if r.since %}<li><a href="#since">What changed</a></li>{% endif %}
-  {% if r.to_fix or r.to_review %}<li><a href="#fix">{{ 'Fix before you apply' if r.scheme.strict else 'Gaps to close' }}</a></li>{% endif %}
+  {% if r.to_fix or r.to_review %}<li><a href="#fix">{{ r.scheme.fix_heading }}</a></li>{% endif %}
   {% for t in r.themes %}<li><a href="#theme-{{ t.theme.key }}">{{ t.theme.title }}</a></li>{% endfor %}
   {% if r.scheme.audit %}<li><a href="#audit">What the assessor checks</a></li>{% endif %}
   {% if r.sheet %}<li><a href="#answers">Answers for the form</a></li>{% endif %}
@@ -57,7 +57,7 @@
 
 {% if r.to_fix or r.to_review %}
 <section id="fix" class="keep">
-  <h2>{{ 'Fix before you apply' if r.scheme.strict else 'Gaps to close' }}</h2>
+  <h2>{{ r.scheme.fix_heading }}</h2>
   <p class="section-intro">{% if r.scheme.strict %}An assessor won't accept a gap in these. Each one names the accounts or settings behind it and the fix.{% else %}The controls most likely to be queried, with the fix for each.{% endif %}</p>
   <ol class="actions">
     {% for c in r.to_fix + r.to_review %}<li>

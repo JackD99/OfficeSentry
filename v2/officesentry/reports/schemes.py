@@ -116,10 +116,19 @@ class Scheme:
     notes: tuple[str, ...] = ()  # what the engineer should know before using the pack
     renewal: str = ""  # how often it's renewed, for the "since" comparison ("12 months")
     numbered: bool = True  # controls cite the scheme's question numbers (False where they change between versions)
+    goal: str = ""  # what a strict scheme's gaps stand in the way of, when it isn't applied for ("reaching ...")
+    order: int = 100  # place within its group on the Evidence page (most asked for first), then as registered
 
     @property
     def controls(self) -> list[Control]:
         return [c for t in self.themes for c in t.controls]
+
+    @property
+    def fix_heading(self) -> str:
+        """The heading over the controls to fix: before applying for a certification, else the gaps."""
+        if not self.strict:
+            return "Gaps to close"
+        return "Fix these first" if self.goal else "Fix before you apply"
 
     @property
     def control(self) -> dict[str, Control]:
@@ -160,7 +169,7 @@ def grouped() -> list[tuple[str, list[Scheme]]]:
     """Every scheme by group, in GROUPS order, leaving out empty groups."""
     out = []
     for key, title in GROUPS:
-        found = [s for s in SCHEMES.values() if s.group == key]
+        found = sorted((s for s in SCHEMES.values() if s.group == key), key=lambda s: s.order)
         if found:
             out.append((title, found))
     return out
@@ -483,7 +492,8 @@ class SchemeResult:
         if n[FAIL]:
             what = plural(n[FAIL], "control")
             if self.scheme.strict:
-                return Verdict("critical", "Not ready", f"{name} has {what} to fix before applying for {short}.")
+                goal = self.scheme.goal or f"applying for {short}"
+                return Verdict("critical", "Not ready", f"{name} has {what} to fix before {goal}.")
             return Verdict("critical" if n[FAIL] > 2 else "high", "Gaps to close", f"{name} has {what} not in place.")
         if n[PARTLY]:
             label = "Nearly ready" if self.scheme.strict else "Mostly in place"

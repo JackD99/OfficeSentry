@@ -782,6 +782,31 @@ GAPS = (
         "Security alerts and sign-in logs are reviewed [daily or weekly] by [team or provider]. Logs are kept for "
         "[period] where users can't change them.",
     ),
+    # Hardening controls the Australian Essential Eight asks about.
+    gap(
+        "application_control",
+        "Is only approved software allowed to run on computers?",
+        f"{M365} Office Sentry doesn't read App Control for Business, AppLocker or other allow-lists.",
+        "Application control ([App Control for Business, AppLocker or product]) lets only approved programs, "
+        "scripts and installers run on [workstations and servers], including from user profile and temporary "
+        "folders. Blocked attempts are logged and reviewed by [team].",
+    ),
+    gap(
+        "office_macros",
+        "Are Microsoft Office macros blocked unless they're needed and trusted?",
+        f"{M365} Office Sentry doesn't read the Office policies that control macros.",
+        "Microsoft Office macros are [blocked for all users, or allowed only for (group) from trusted locations or "
+        "signed by a trusted publisher], macros in files from the internet are blocked, and users can't change "
+        "these settings. This is set by [Intune or Group Policy].",
+    ),
+    gap(
+        "app_hardening",
+        "Are web browsers and Office hardened (no Java or ads from the internet, no OLE packages, no PowerShell 2.0)?",
+        f"{M365} Office Sentry doesn't read browser or Office hardening policies.",
+        "Web browsers block Java and web advertisements from the internet and don't process them, Microsoft Office "
+        "blocks OLE packages, PowerShell 2.0 is removed, and users can't change these settings. This is set by "
+        "[Intune or Group Policy].",
+    ),
 )
 
 TOPICS = DATA + GAPS

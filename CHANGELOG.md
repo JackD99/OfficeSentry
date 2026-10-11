@@ -49,8 +49,11 @@ No.
   for the Statement of Applicability and the audit. **UK GDPR security and accountability**: the ICO's
   security outcomes (A to D) plus the records a client or the ICO asks for after a breach (record of
   processing, processor contracts, privacy notice, rights requests, DPIAs, retention, the ICO fee and
-  72-hour breach reporting). Eighteen new fill-in answers cover the governance and data protection
-  questions Microsoft 365 can't see, each written once and reused by every pack.
+  72-hour breach reporting). Beyond the UK: the **CIS Microsoft 365 Foundations Benchmark** (the
+  recommendations Office Sentry reads, all judged from the data), **NIST CSF 2.0** by category, **SOC 2**
+  Trust Services Criteria (Security and Availability) and Australia's **Essential Eight** at Maturity Level
+  One. Twenty-one new fill-in answers cover the governance, data protection and hardening questions
+  Microsoft 365 can't see, each written once and reused by every pack.
 
 ### Changed
 

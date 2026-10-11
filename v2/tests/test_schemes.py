@@ -206,24 +206,36 @@ def test_every_control_links_a_real_report():
             assert not c.report or c.report in REPORTS, (s.key, c.key, c.report)
 
 
-def test_iasme_iso_and_gdpr_judge_what_microsoft_365_shows_and_ask_for_the_rest(db, two_tenants):
+NEW = ("iasme-cyber-assurance", "iso-27001", "uk-gdpr", "cis-m365", "nist-csf", "soc2", "essential-eight")
+
+
+def test_frameworks_list_the_most_asked_for_first():
+    found = dict(schemes.grouped())["Frameworks and benchmarks"]
+    assert [s.key for s in found] == ["iso-27001", "cis-m365", "nist-csf", "soc2", "essential-eight"]
+
+
+def test_new_schemes_judge_what_microsoft_365_shows_and_ask_for_the_rest(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     assert iasme.CYBER_ASSURANCE.strict and not iasme.CYBER_ASSURANCE.numbered
     assert not iso.ISO_27001.strict and not gdpr.UK_GDPR.strict
-    for key in ("iasme-cyber-assurance", "iso-27001", "uk-gdpr"):
+    for key in NEW:
         r = _assess(db, alpha, key)
-        by = r.by_key
         assert all(c.verdict in schemes.VERDICTS for c in r.controls)
         judged = [c for c in r.controls if c.control.rules]
         assert judged and all(c.verdict in (PASS, FAIL, PARTLY, UNKNOWN) for c in judged), key
         # the processes Microsoft 365 can't see are left for the engineer, with text to complete
         outside = [c for c in r.controls if not c.control.rules and c.answer and c.answer.topic.outside]
-        assert outside and all(c.verdict == MANUAL and "[" in c.text for c in outside), key
+        assert all(c.verdict == MANUAL and "[" in c.text for c in outside), key
+        assert outside or key == "cis-m365", key
     iso_r = _assess(db, alpha, "iso-27001")
     assert iso_r.by_key["8_5"].figures  # MFA figures to quote
     assert _assess(db, alpha, "uk-gdpr").by_key["d1_breaches"].text.count("72 hours") == 1
-    assert by["dpia"].verdict == MANUAL  # the last one assessed: UK GDPR
+    assert _assess(db, alpha, "uk-gdpr").by_key["dpia"].verdict == MANUAL
+    cis = _assess(db, alpha, "cis-m365")
+    assert all(c.control.rules for c in cis.controls)  # a benchmark of settings: all judged from the data
+    e8 = _assess(db, alpha, "essential-eight")
+    assert e8.scheme.strict and [c.control.ref for c in e8.controls] == [str(n) for n in range(1, 9)]
 
 
 def test_new_scheme_pages_and_downloads(client, db, two_tenants):
@@ -232,9 +244,9 @@ def test_new_scheme_pages_and_downloads(client, db, two_tenants):
     make_user(db, "analyst", role="analyst", tenants=[alpha])
     login(client, "analyst")
     overview = client.get(f"/tenants/{alpha}/evidence").get_data(as_text=True)
-    for title in ("IASME Cyber Assurance", "ISO/IEC 27001 Annex A", "UK GDPR security and accountability"):
-        assert title in overview
-    for key in ("iasme-cyber-assurance", "iso-27001", "uk-gdpr"):
+    for key in NEW:
+        assert schemes.SCHEMES[key].title in overview
+    for key in NEW:
         page = client.get(f"/tenants/{alpha}/evidence/{key}")
         assert page.status_code == 200, key
         assert client.get(f"/tenants/{bravo}/evidence/{key}").status_code == 404

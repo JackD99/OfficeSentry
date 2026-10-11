@@ -18,10 +18,14 @@ from ..reports import (
     questionnaires,
     scheme_export,
     schemes,
-    schemes_cyber_essentials,  # noqa: F401  (registers the schemes)
+    schemes_cis,  # noqa: F401  (registers the schemes)
+    schemes_cyber_essentials,  # noqa: F401
+    schemes_essential_eight,  # noqa: F401
     schemes_forms,  # noqa: F401
     schemes_iasme,  # noqa: F401
     schemes_iso27001,  # noqa: F401
+    schemes_nist_csf,  # noqa: F401
+    schemes_soc2,  # noqa: F401
     schemes_uk_gdpr,  # noqa: F401
     tables,
 )

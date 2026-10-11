@@ -464,6 +464,7 @@ ISO_27001 = register(
                 ("8_5", "8_2", "8_1", "8_15", "8_12"),
             ),
         ),
+        order=10,
         notes=(
             "Use the controls marked Pass as evidence in the Statement of Applicability, with this pack's date. A "
             "Partly is a likely minor nonconformity; a Fail is a likely major one.",

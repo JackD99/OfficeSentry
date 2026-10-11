@@ -163,10 +163,11 @@ def evidence_pack(tenant_id: int):
             url_for("evidence.scheme_page", tenant_id=t["id"], scheme=_scheme_for(request.args["set"]), show=_show())
         )
     results = schemes.assess_all(g.db, t)
+    by_key = {r.scheme.key: r for r in results}
     return render_template(
         "evidence_index.html",
         tenant=t,
-        groups=[(title, [r for r in results if r.scheme in found]) for title, found in schemes.grouped()],
+        groups=[(title, [by_key[s.key] for s in found]) for title, found in schemes.grouped()],
         oldest_data=results[0].oldest_data if results else None,
         V=schemes,
     )

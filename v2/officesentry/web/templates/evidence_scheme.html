@@ -68,7 +68,7 @@
 
 {% if r.to_fix or r.to_review %}
 <section class="card fix-first" id="fix" aria-labelledby="fix-h">
-  <div class="card-head"><h2 id="fix-h">{{ 'Fix before you apply' if scheme.strict else 'Gaps to close' }}</h2><span class="muted small">{{ (r.to_fix|length + r.to_review|length)|plural('control') }}</span></div>
+  <div class="card-head"><h2 id="fix-h">{{ scheme.fix_heading }}</h2><span class="muted small">{{ (r.to_fix|length + r.to_review|length)|plural('control') }}</span></div>
   <ol class="fix-list">
     {% for c in r.to_fix + r.to_review %}
     <li>

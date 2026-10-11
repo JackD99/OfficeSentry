@@ -258,7 +258,9 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
   every form and scheme. **IASME Cyber Assurance**, **ISO/IEC 27001 Annex
   A** (by control number) and **UK GDPR** (the ICO's security outcomes and
   the accountability records) are packs on the same page, with the
-  governance and data protection answers to complete.
+  governance and data protection answers to complete, as are the **CIS
+  Microsoft 365 benchmark**, **NIST CSF 2.0**, **SOC 2** and the
+  **Essential Eight**.
 - **Recommended projects** (`/projects` and `/tenants/<id>/projects`, admins
   and analysts): each client's failing checks and missing licences grouped
   into the projects that fix them (Identity and Conditional Access, Device

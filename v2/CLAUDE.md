@@ -245,7 +245,9 @@ needing goes in those lists.
   (`schemes_cyber_essentials.py`: Cyber Essentials and CE Plus, with the
   assessor's tests as `Audit`s; `schemes_forms.py`: the cyber insurance
   proposal and the supplier questionnaire, never strict; `schemes_iasme.py`,
-  `schemes_iso27001.py`, `schemes_uk_gdpr.py`; a new module is imported in
+  `schemes_iso27001.py`, `schemes_uk_gdpr.py`, `schemes_cis.py`,
+  `schemes_nist_csf.py`, `schemes_soc2.py`, `schemes_essential_eight.py`;
+  `Scheme.order` places it in its group; a new module is imported in
   `web/evidence.py` and `delivery.py`) registered with
   `schemes.register()`, which
   refuses unknown rules, topics, question sets and groups, and names its
