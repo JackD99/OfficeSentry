@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -178,8 +179,21 @@ def check_destination(url: str) -> str | None:
         ) from None
 
 
-def sign(secret: str, body: bytes) -> str:
-    return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+def key_id(secret: str) -> str:
+    """Which signing secret signed a request (the start of its SHA-256), so a receiver can hold the old and
+    the new secret while it changes."""
+    return hashlib.sha256(secret.encode()).hexdigest()[:8]
+
+
+def sign(secret: str, body: bytes, timestamp: int) -> dict[str, str]:
+    """The signature headers: an HMAC-SHA256 of "<timestamp>.<body>", so a receiver that refuses old
+    timestamps can't be sent a captured request again (DEPLOY.md, "Signed webhooks")."""
+    mac = hmac.new(secret.encode(), f"{timestamp}.".encode() + body, hashlib.sha256).hexdigest()
+    return {
+        "X-OfficeSentry-Timestamp": str(timestamp),
+        "X-OfficeSentry-Key-Id": key_id(secret),
+        "X-OfficeSentry-Signature": f"v1={mac}",
+    }
 
 
 def post(url: str, payload: dict, secret: str | None = None) -> None:
@@ -187,7 +201,7 @@ def post(url: str, payload: dict, secret: str | None = None) -> None:
     body = json.dumps(payload, separators=(",", ":")).encode()
     headers = {"Content-Type": "application/json", "User-Agent": "OfficeSentry-Alerts"}
     if secret:
-        headers["X-OfficeSentry-Signature"] = sign(secret, body)
+        headers |= sign(secret, body, int(time.time()))
     http, host_header = outbound.pinned_session(url, address)
     try:
         with http:

@@ -107,8 +107,34 @@ def normalise_recovery_code(value: str) -> str:
     return "".join(ch for ch in (value or "").lower() if ch.isalnum())
 
 
-def hash_recovery_code(value: str) -> str:
-    return hashlib.sha256(normalise_recovery_code(value).encode()).hexdigest()
+# Recovery codes are stored as an HMAC under a random key, so a copy of the database can't be used to
+# try every possible code offline. The key is made on first use and kept in ``settings`` encrypted with the
+# vault (whose keys are in secrets.json, never in the database or its backups); rotate-keys re-encrypts it
+# like any other secret (``__main__.ENCRYPTED_SETTINGS``), so codes keep working across a rotation.
+KEY_SETTING = "totp.recovery_key_enc"
+ENCRYPTED_KEYS = (KEY_SETTING,)
+_KEYED = "hmac:"  # how a keyed hash starts; codes stored before it are a bare SHA-256
+
+
+def recovery_key(conn, vault) -> bytes:
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (KEY_SETTING,)).fetchone()
+    if row is None:
+        # Two processes may make one at once: the first to write wins, and both read it back.
+        conn.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+            (KEY_SETTING, vault.encrypt(secrets.token_urlsafe(32))),
+        )
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (KEY_SETTING,)).fetchone()
+    return vault.decrypt(row[0]).encode()
+
+
+def hash_recovery_code(value: str, key: bytes) -> str:
+    return _KEYED + hmac.new(key, normalise_recovery_code(value).encode(), hashlib.sha256).hexdigest()
+
+
+def recovery_code_hashes(value: str, key: bytes) -> tuple[str, str]:
+    """Every form a stored code can take: keyed, or the unsalted SHA-256 of codes made before keyed hashes."""
+    return hash_recovery_code(value, key), hashlib.sha256(normalise_recovery_code(value).encode()).hexdigest()
 
 
 def looks_like_recovery_code(value: str) -> bool:

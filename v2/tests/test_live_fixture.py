@@ -282,7 +282,7 @@ def test_subscriptions_on_real_data(db, live):
     # Business Premium (no Teams), Power Automate Free and a suspended Business Standard trial.
     report = data_reports.build(db, live, "subscriptions", RECORDED)
     renewals = next(s for s in report.sections if s.title == "Renewals and expiry")
-    assert (str(renewals.rows[0][0]), renewals.rows[0][1]) == ("Microsoft 365 Business Standard", "Suspended")
+    assert (str(renewals.rows[0][0]), renewals.rows[0][2]) == ("Microsoft 365 Business Standard", "Suspended")
     who = next(s for s in report.sections if s.title == "Who has which licence")
     assert who.rows and {r[2] for r in who.rows} == {"Directly"}
     results = _results(db, live)

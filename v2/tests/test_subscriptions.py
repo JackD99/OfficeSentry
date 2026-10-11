@@ -72,7 +72,7 @@ def test_products_with_cost_and_what_needs_action_first(db, two_tenants):
     assert bp[2:5] == ["10", "10", "0"] and "181" in bp[8]  # 10 x 18.10 a month
     assert by_name["Power Automate Free"][0][7] == "Free"
     figures = {h.label: h for h in report.highlights}
-    assert float(figures["Monthly cost"].value) == round(10 * 18.10 + 5 * 25.0, 2)
+    assert float(figures["Monthly cost"].value) == round(10 * 18.10, 2)  # the Copilot trial costs nothing yet
     assert figures["Monthly cost"].foot == "Licences bought, at your prices"  # lapsed Visio isn't bought any more
     assert figures["Licences in use"].value == "15 of 18"  # suspended Exchange licences aren't in use
 
@@ -81,7 +81,7 @@ def test_renewals_list_trials_grace_and_suspended_first(db, two_tenants):
     alpha, _ = two_tenants
     report = _report(db, _licensing(db, alpha))
     rows, flags = _table(report, "Renewals and expiry")
-    assert [(r[0], r[1], r[5]) for r in rows] == [
+    assert [(r[0], r[2], r[6]) for r in rows] == [
         ("Microsoft 365 Copilot", "Trial", "30 days"),
         ("Visio Plan 2", "Grace period", "30 days"),
         ("Exchange Online (Plan 1)", "Suspended", "90 days"),
@@ -89,8 +89,8 @@ def test_renewals_list_trials_grace_and_suspended_first(db, two_tenants):
         ("Power Automate Free", "Active", ""),
     ]
     assert flags[:4] == ["medium", "high", "high", None]
-    assert rows[0][7] == "c-s-copilot" and "trial ends" in rows[0][6]
-    assert rows[4][6] == "Free: nothing to renew."
+    assert rows[0][1] == "c-s-copilot" and "trial ends" in rows[0][7]
+    assert rows[4][7] == "Free: nothing to renew."
     figures = {h.label: h for h in report.highlights}
     assert figures["Lapsing within 30 days"].value == 2 and figures["Lapsing within 30 days"].tone == "bad"
     assert figures["Trials"].value == 1
@@ -202,7 +202,7 @@ def test_paid_subscriptions_and_unused_trials_are_not_flagged(db, two_tenants):
     result = _results(db, tenant)["subscriptions_lapsing"]
     assert result.status == "pass" and result.summary == "2 subscriptions checked; none is lapsing"
     rows, flags = _table(_report(db, tenant), "Renewals and expiry")
-    assert (rows[0][1], flags[0]) == ("Trial", "low")  # listed first, but nobody relies on it
+    assert (rows[0][2], flags[0]) == ("Trial", "low")  # listed first, but nobody relies on it
 
 
 def _old_snapshot(db):
@@ -289,7 +289,7 @@ def test_subscription_dates_count_from_now(db, two_tenants):
     tenant = _licensing(db, alpha)
     later = datetime.now(UTC) + timedelta(days=20)  # the Copilot trial has ended by then
     rows, _ = _table(data_reports.build(db, tenant, "subscriptions", now=later), "Renewals and expiry")
-    assert rows[0][:2] == ["Microsoft 365 Copilot", "Trial"] and rows[0][5] == "Passed"
+    assert (rows[0][0], rows[0][2], rows[0][6]) == ("Microsoft 365 Copilot", "Trial", "Passed")
 
 
 def test_an_active_state_for_a_licence_no_longer_assigned_is_left_out():

@@ -28,7 +28,7 @@ write_files:
       AllowUsers deploy
   - path: /etc/docker/daemon.json
     content: |
-      {"log-driver": "local", "log-opts": {"max-size": "20m", "max-file": "5"}}
+      {"log-driver": "local", "log-opts": {"max-size": "20m", "max-file": "5"}, "live-restore": true}
 
 runcmd:
   # Docker's group only exists once its package is installed.
