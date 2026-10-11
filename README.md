@@ -103,10 +103,11 @@ the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline f
 </table>
 
 The full list (mailboxes, inbox rules, shared mailboxes, mailbox size, legacy sign-ins, passwords and sign-in
-methods, admins and roles, apps and consents, guests and sharing, groups and Teams, email domains with SPF, DKIM,
-DMARC and MTA-STS, hybrid identity, admin activity, tenant settings, Microsoft 365 usage, Secure Score and more) is
-in the [technical reference](v2/README.md#reports). The **Reports** page finds any of them by name or by the job
-you're doing ("Offboarding check", "Insurance renewal", "Storage cleanup").
+methods, admins and roles, apps and consents, guests and sharing, groups and Teams with their private and shared
+channels, mail flow per domain, email domains with SPF, DKIM, DMARC and MTA-STS, hybrid identity, admin activity,
+tenant settings, Microsoft 365 usage, Secure Score and more) is in the [technical reference](v2/README.md#reports).
+The **Reports** page finds any of them by name or by the job you're doing ("Offboarding check", "Insurance
+renewal", "Storage cleanup").
 
 ![The Reports page: every report, searchable, grouped by job](docs/screenshots/reports-library.png)
 
