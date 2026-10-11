@@ -165,6 +165,25 @@
   });
 })();
 
+/* Account page parts (<details class="part">): open on laptops, folded to their heading and summary
+ * on phones so the page reads as a list of what's there; a link to a part opens it. */
+(function () {
+  var parts = document.querySelectorAll('details.part[id]');
+  if (!parts.length) return;
+  function reveal(hash) {
+    var target = hash && hash.length > 1 && document.getElementById(hash.slice(1));
+    if (target && target.tagName === 'DETAILS') target.open = true;
+  }
+  if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) {
+    parts.forEach(function (d) { if ('#' + d.id !== window.location.hash) d.open = false; });
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (a) reveal(a.getAttribute('href'));
+  });
+  window.addEventListener('hashchange', function () { reveal(window.location.hash); });
+})();
+
 /* The setup wizards (App connection, Staff sign-in). Copy the sign-in code; fill a field from a button
  * ([data-fill]); and while Office Sentry waits for the Microsoft sign-in ([data-setup-wait]), check with it
  * every few seconds (it asks Microsoft) and move on by itself once the app is created or something went wrong. */

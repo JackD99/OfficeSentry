@@ -236,6 +236,16 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
     quota with their largest files. Sizes come from SharePoint's own storage
     figures (`SMTotalSize`), which include every version. Needs
     `Sites.Read.All`.
+  - *Site access*: who can reach each SharePoint site and how. Sites with
+    no enabled owner or a single one (the Microsoft 365 group's owners, or
+    the site administrators of a site with no group), each site's owners,
+    administrators, members and guests, what the default library grants
+    and to whom (site groups, groups, people, "Everyone"), every guest and
+    the sites they can reach, and the people who administer many sites.
+    Read from each site's hidden user list and default library with
+    `Sites.Read.All`; SharePoint group members on sites with no group need
+    a SharePoint permission that comes with the next consent batch, and
+    the report says so.
   - *Licences and subscriptions*: for renewals and fixing licence problems.
     Every product with licences purchased, in a grace period, suspended,
     assigned and available, and its monthly cost at your prices; every
@@ -325,7 +335,7 @@ licences, external forwarding, inbox rules that hide mail, automatic forwarding
 policy, shared mailbox sign-in, mailbox auditing, SMTP AUTH, risky third-party
 app access, user consent, app credential expiry, users creating tenants, users
 registering apps, guest directory access, joining by email verification, admin
-consent requests, SharePoint anonymous links, guest invitations, stale guest
+consent requests, SharePoint anonymous links, sites without two owners, guest invitations, stale guest
 invitations, teams and groups without an owner, who can create teams and
 groups, group expiration, device compliance, disk encryption, Windows releases
 out of support, joined computers not in Intune, devices not checking in, stale

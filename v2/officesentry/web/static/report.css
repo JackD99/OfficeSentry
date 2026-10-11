@@ -299,7 +299,11 @@ td .sub { display: block; color: var(--muted); font-size: .86em; }
   table.findings thead { display: none; }
   table.findings tr { display: block; padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
   table.findings tbody tr:last-child { border-bottom: 0; }
-  table.findings td { display: block; border: 0; padding: var(--space-0-5) var(--space-3); width: auto; }
+  table.findings td, table.findings td:first-child { display: block; border: 0; padding: var(--space-0-5) var(--space-3); width: auto; }
+  /* Item, detail, severity: the severity sits beside the item instead of on a line of its own. */
+  table.findings tr:has(> td:nth-child(3):last-child) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+  table.findings tr:has(> td:nth-child(3):last-child) > td:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+  table.findings tr:has(> td:nth-child(3):last-child) > td:nth-child(3) { grid-column: 2; grid-row: 1; }
   .cover h1 { font-size: 1.55rem; }
   article { border-radius: 0; border-left: 0; border-right: 0; }
   .kpis, .kpis[class*=cols-] { grid-template-columns: repeat(2, 1fr); }

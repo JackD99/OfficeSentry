@@ -573,7 +573,7 @@ def _reports(s: Site) -> list[tuple[str, str]]:
         links.append(("Shared files", s.report("shared-files")))
     for key in PERMISSION_REPORTS:
         if key in REPORTS:
-            links.append((REPORTS[key].title, s.report(key)))
+            links.append((REPORTS[key][0], s.report(key)))
     if s.group is not None:
         links.append(
             ("Groups and Teams", s.report("groups", "Teams and groups", "Name", _text(s.group.get("displayName"))))
