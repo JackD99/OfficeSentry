@@ -244,7 +244,9 @@ class SiteAccess(Collector):
                 if isinstance(u.get(key), str) and u[key]:
                     users.setdefault(u[key].lower(), u)
         usage = {
-            (s.get("url") or "").lower(): s for s in snap.objects("sharepoint_usage", "site") or [] if s.get("url")
+            s["url"].lower(): s
+            for s in snap.objects("sharepoint_usage", "site") or []
+            if isinstance(s.get("url"), str) and s["url"]
         }
 
         team_sites = [
@@ -290,7 +292,8 @@ class SiteAccess(Collector):
                 ctx.log(f"Couldn't read the default library's permissions on {url}: {exc.message}", "warning")
             use = usage.get(url.lower(), {})
             if found.group_id is None:
-                found.group_id = group_by_mail.get((use.get("ownerPrincipalName") or "").lower())
+                owner = use.get("ownerPrincipalName")
+                found.group_id = group_by_mail.get(owner.lower()) if isinstance(owner, str) else None
             group = groups.get(found.group_id or "")
             owners, source = owners_of(found, groups, users)
             guests = list(found.guests)

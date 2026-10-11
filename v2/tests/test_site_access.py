@@ -150,7 +150,7 @@ def test_site_owners_check(db, two_tenants):
     result = {r.key: r for r in evaluate(_snap(db, alpha))}["site_owners"]
     assert result.status == "fail" and result.summary == "1 site with no owner"
     assert [(f.severity, f.subject, f.detail) for f in result.findings] == [
-        ("high", "Old projects", "No enabled owner (site administrators)")
+        ("high", "Old Projects", "No enabled owner (site administrators)")
     ]
     assert {r.key: r for r in evaluate(_snap(db, bravo))}["site_owners"].status == "unavailable"
 
@@ -163,11 +163,11 @@ def test_report(db, two_tenants):
     assert tiles["Sites with no owner"].value == 1 and tiles["Sites with no owner"].tone == "bad"
     assert tiles["One owner only"].value == 0 and tiles["Guests with access"].value == 1
     assert tiles["Open to everyone in the organisation"].value == 1 and tiles["Sites"].value == 2
-    assert any("Site permissions report" in n for n in report.notes)  # Old projects has no group
+    assert any("Site permissions report" in n for n in report.notes)  # Old Projects has no group
 
     needing = _section(report, "Sites needing an owner")
     assert [str(c) for c in needing.rows[0]] == [
-        "Old projects",
+        "Old Projects",
         "Communication site",
         "No owner",
         "Bob (disabled)",
@@ -177,7 +177,7 @@ def test_report(db, two_tenants):
     assert needing.rows[0][0].safe_href == sd.OLD and needing.flags == ["high"]
 
     every = _section(report, "Who can access each site")
-    assert [str(r[0]) for r in every.rows] == ["Finance", "Old projects"]  # most guests first
+    assert [str(r[0]) for r in every.rows] == ["Finance", "Old Projects"]  # most guests first
     assert list(map(str, every.rows[0][2:8])) == ["Ann, Eve", "Ann", "3", "1", "No", "Yes"]
     assert list(map(str, every.rows[1][2:8])) == ["Bob (disabled)", "Bob", "1 person recorded", "0", "Yes", "No"]
 
@@ -186,7 +186,7 @@ def test_report(db, two_tenants):
     assert fin[0] == ["Owners of Sales: Ann, Eve", "Microsoft 365 group", "Full control", "No"]
     assert fin[1] == ["Members of Sales: 3 people, 1 guest", "Microsoft 365 group", "Edit", "Yes"]
     assert fin[-1] == ["pat@supplier.com", "Guest", "View", "Yes"]
-    old = [r[1:] for r in access.rows if str(r[0]) == "Old projects"]
+    old = [r[1:] for r in access.rows if str(r[0]) == "Old Projects"]
     assert old == [
         ["Old Projects Owners", "Site owners group", "Full control", "No"],
         ["Everyone in the organisation", "Everyone", "View", "No"],
@@ -211,7 +211,7 @@ def test_page_and_exports(client, db, two_tenants):
     page = client.get(f"/tenants/{alpha}/data/site-access")
     assert page.status_code == 200
     text = page.get_data(as_text=True)
-    assert 'class="tiles"' in text and "Sites needing an owner" in text and "Old projects" in text
+    assert 'class="tiles"' in text and "Sites needing an owner" in text and "Old Projects" in text
     wb = load_workbook(io.BytesIO(client.get(f"/tenants/{alpha}/data/site-access.xlsx").data))
     assert "Access by site" in wb.sheetnames
     assert client.get(f"/tenants/{bravo}/data/site-access").status_code == 200  # the empty state renders

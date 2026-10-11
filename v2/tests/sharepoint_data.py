@@ -115,7 +115,7 @@ SITES = [
         "webUrl": "https://x-my.sharepoint.com/personal/ann_x_com",
         "isPersonalSite": True,
     },
-    {"id": "site-old", "displayName": "Old projects", "webUrl": OLD},  # no group, one disabled administrator
+    {"id": "site-old", "displayName": "Old Projects", "webUrl": OLD},  # no group, one disabled administrator
 ]
 DRIVES = {
     "site-fin": [
@@ -230,7 +230,7 @@ USER_INFO = {
         _uil("Old Guest", "i:0#.f|membership|old_gone.com#ext#@x.onmicrosoft.com", email="old@gone.com", deleted=True),
         _uil("Office Sentry", "i:0i.t|00000003-0000-0ff1-ce00-000000000000|app@sharepoint"),
     ],
-    # Old projects has no group: its only administrator is Bob, whose account is disabled.
+    # Old Projects has no group: its only administrator is Bob, whose account is disabled.
     "site-old": [
         _uil("Old Projects Owners", "Old Projects Owners", group=True),
         _uil("Old Projects Members", "Old Projects Members", group=True),
@@ -602,7 +602,7 @@ SP_REST = {
     OLD: {
         "/web": {
             "Id": "w-old",
-            "Title": "Old projects",
+            "Title": "Old Projects",
             "Url": OLD,
             "AssociatedOwnerGroup": {"Id": 3},
             "AssociatedMemberGroup": {"Id": 5},

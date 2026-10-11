@@ -222,7 +222,7 @@ def test_without_a_certificate_or_graph_permission(db, two_tenants):
 def test_a_site_that_refuses_is_counted_not_fatal(db, two_tenants):
     alpha, _ = two_tenants
     rest = json.loads(json.dumps(sd.SP_REST))
-    del rest[sd.OLD]  # 404 everywhere on Old projects
+    del rest[sd.OLD]  # 404 everywhere on Old Projects
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
         mock_tenant(rsps, sharepoint_kw={"rest": False})
         sd.mock_sharepoint_rest(rsps, rest=rest)
@@ -325,7 +325,7 @@ def test_report(db, two_tenants):
         ["dan@contractor.com", "Yes", "1", "Full Control", "Finance"],
         ["pat@supplier.com", "Yes", "1", "Edit", "Finance"],
     ]  # guests first
-    assert ["bob@x.com", "No", "2", "Full Control", "Finance, Old projects"] in rows
+    assert ["bob@x.com", "No", "2", "Full Control", "Finance, Old Projects"] in rows
     assert people.flags[:2] == ["high", "low"]
 
 
