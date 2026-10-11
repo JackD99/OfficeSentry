@@ -215,6 +215,7 @@ def _run_collector(
             ctx.warn(why)  # Microsoft doesn't offer it in this national cloud: partial, not failed
         else:
             collector_cls().collect(ctx)
+            ctx.note_exchange_cuts()
     except (NotConnected, PermissionMissing, LicenseRequired, GraphError, ExchangeError) as exc:
         store.log_event(conn, run_id, "error", str(exc))
         # Sign-in failures get the plain explanation; the raw message stays in the run log.

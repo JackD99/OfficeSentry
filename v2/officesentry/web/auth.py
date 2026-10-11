@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from flask import Blueprint, current_app, flash, g, make_response, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .. import home, passwords, throttle, totp
+from .. import home, passwords, sso, throttle, totp
 from ..config import clear_setup_token, setup_token
 from ..db import audit, audit_counted, transaction, utcnow
 from ..text import plural
@@ -256,6 +256,11 @@ def login():
     ok = ok and user is not None and not user["disabled"]
     throttle.finish(g.db, reserved, ok)
 
+    if ok and not sso.passwords_allowed(sso.settings(g.db), user["role"]):
+        # Staff sign in with Microsoft here; the password was right, but it isn't a way in any more.
+        audit(g.db, user["username"], "login_failed", detail="password sign-in is off for staff")
+        flash("Passwords are off for staff accounts here. Use Sign in with Microsoft.", "error")
+        return render_template("login.html", username=username), 200
     if ok and _locked(user):
         # Right password, but two-step codes are locked: someone who has the password is guessing codes.
         audit(g.db, user["username"], "login_failed", detail="two-step codes locked")
@@ -520,6 +525,8 @@ def account():
         two_step_required=_cfg().mfa_required(g.user["role"], g.db),
         homes=home.HOMES,
         home_choice=home.home_of(g.user),
+        has_password=sso.has_password(g.user),
+        microsoft=sso.enabled(sso.settings(g.db)) and g.user["role"] != "client",
     )
 
 

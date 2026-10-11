@@ -20,14 +20,17 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   `X-OfficeSentry-Key-Id` says which secret signed it. Change your receiver to check the new signature when you
   upgrade (it can accept either while you switch); until then it refuses every alert ([v2/DEPLOY.md, "Signed
   webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
+- **Staff sign-in with Microsoft** needs nothing on upgrade: it's off until an admin sets it up.
 
 ### New Microsoft permissions
 
-None.
+None for client tenants. Setting up staff sign-in creates a separate app in your own tenant with no API
+permissions.
 
 ### Database upgrade
 
-Yes: a table for the search index. It is applied on start, as usual.
+Yes, applied on start as usual: migration 37 adds a table for the search index, and migration 38 adds
+Microsoft account links on users and how each session was started.
 
 ### Added
 
@@ -40,6 +43,13 @@ Yes: a table for the search index. It is applied on start, as usual.
 - The portal and the worker keep a short rolling log in `<data dir>/logs/` (three files of 2 MB each), and
   every line says which request, user, client, run or task it belongs to. A page that fails shows a
   reference to quote; the same reference is on the error's line in the log and in the `X-Request-ID` header.
+- **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
+  Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with Admin and Analyst
+  roles to assign people or groups to in Entra. Staff then press *Sign in with Microsoft* and use their
+  work account, under the MSP's own Conditional Access and MFA; new staff get an account at their first
+  sign-in, existing accounts link from their Account page. Passwords stay as the break-glass route until
+  turned off, and `python -m officesentry staff-sign-in --passwords on` turns them back on from the
+  server. Client accounts keep passwords. See [docs/staff-sign-in.md](v2/docs/staff-sign-in.md).
 - **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
   and whether the rule is paused), restricted management units, how many users, groups and devices are in
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
@@ -166,6 +176,10 @@ Yes: a table for the search index. It is applied on start, as usual.
   now, try again in a moment" instead of an error page.
 - On Windows without Docker, an account's page no longer fails once its sign-in history is kept: the
   dates on it are written the same way on every platform.
+- A tenant whose consent is missing the AuditLog.Read.All permission still gets its users collected each
+  night, with the run partial and the permission named, instead of the Users collection failing.
+- An Exchange list longer than 200 pages (200,000 results) is cut there with a warning naming the
+  cmdlet, instead of failing the whole collection.
 
 ### Security
 
