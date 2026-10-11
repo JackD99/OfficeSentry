@@ -551,6 +551,7 @@ def test_an_erase_that_fails_is_shown_alerted_and_tried_again(app, db, cfg, two_
     person = "busy@alpha-client.example"
     staff = _delete_person(app, db, cfg, person)
     monkeypatch.setattr(lifecycle, "CHECKPOINT_WAIT", 0)
+    db.execute("PRAGMA busy_timeout = 200")  # each checkpoint try waits for the reader this long, not 30 s
     reader = sqlite3.connect(cfg.db_path)  # a portal request reading mid-way keeps the log from being emptied
     reader.execute("BEGIN")
     reader.execute("SELECT COUNT(*) FROM settings").fetchone()
