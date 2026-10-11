@@ -119,14 +119,33 @@
         <p>Cyber Essentials and CE Plus are judged from the data control by control, with what to fix before applying and the answers for the IASME portal ready to paste. The insurance evidence pack answers the controls cyber-insurance questionnaires ask about, such as MFA, admin accounts, legacy sign-in, email authentication, forwarding, leavers and devices, with the gaps listed, and so does the supplier security questionnaire. IASME Cyber Assurance, ISO 27001 Annex A, UK GDPR, the CIS Microsoft 365 benchmark, NIST CSF 2.0, SOC 2 and the Essential Eight are judged the same way, with the governance answers left for you to complete.</p>
         <a class="more" href="/examples/cyber-essentials-evidence.pdf">Open the Cyber Essentials example</a>
       </div>
-      <div class="feature-media">{{ window('cyber-essentials', "Cyber Essentials: what to fix, each control's verdict and the text to paste") }}</div>
+      <div class="feature-media">{{ window('evidence', "The Evidence page: each pack's verdict, from Cyber Essentials to the supplier questionnaire") }}</div>
+    </article>
+
+    <article class="feature flip">
+      <div class="feature-copy">
+        <h3>Who can open what in SharePoint and OneDrive</h3>
+        <p>Three reports answer it, from the site down to the file, with guests and people outside first.</p>
+        <ul class="ticks">
+          <li>{{ check() }}Site access: owners, administrators, members and guests of every site</li>
+          <li>{{ check() }}Site permissions: SharePoint groups, permission levels, and lists and subsites with their own</li>
+          <li>{{ check() }}File and folder permissions: who shared what and when, and links past their expiry</li>
+          <li>{{ check() }}A check for guests with full control, and for people outside who can edit</li>
+        </ul>
+      </div>
+      <div class="feature-media">{{ window('site-permissions', 'Site permissions: guests with full control, access given directly, and who holds which permission level') }}</div>
     </article>
 
     <div class="cards">
       <article class="card">
         {{ shot('person', 'An account page: needs attention, MFA, admin roles, licences and devices') }}
-        <h3>A page for every person, mailbox, group and site</h3>
-        <p>Sign-in, MFA, admin roles, licences, forwarding, devices and sharing for one account, with how it changed. Mailboxes, teams and groups, and SharePoint sites get a page each too.</p>
+        <h3>A page for every person</h3>
+        <p>Sign-in, MFA, admin roles, licences, forwarding, devices and sharing for one account, with how it changed.</p>
+      </article>
+      <article class="card">
+        {{ shot('site-page', "A SharePoint site's page: storage, sharing, the team behind it and its findings") }}
+        <h3>And every mailbox, group and site</h3>
+        <p>A shared mailbox's size, rules and who can open it; a team's owners, members and what membership gives; a site's storage, sharing and findings.</p>
       </article>
       <article class="card">
         {{ shot('projects', 'Recommended projects for every client, worst first') }}
@@ -164,9 +183,9 @@
         <p>The worker, collections, backups, disk space and certificates are checked all the time, with an email or webhook when something goes wrong and an address for your uptime monitor.</p>
       </article>
       <article class="card">
-        {{ shot('site-access', 'Site access: sites with no owner or one, guests, and sites open to everyone') }}
-        <h3>Who can reach each site and team</h3>
-        <p>Owners, administrators, members and guests of every SharePoint site, who is in its SharePoint groups and with which permission level, who can open each shared file and folder, and each team's private and shared channels with the guests and apps in them.</p>
+        {{ shot('teams', 'Teams: private and shared channels, the guests in them and the apps added') }}
+        <h3>Teams channels, guests and apps</h3>
+        <p>Each team's private and shared channels with their members, the guests and people from other organisations in them, the apps added to each team and teams nobody uses.</p>
       </article>
       <article class="card">
         {{ shot('reports-library', 'The Reports page: every report, searchable, grouped by job') }}
@@ -179,18 +198,31 @@
         <p>Connection health for every client, worst first. When a release adds permissions, update your app with one sign-in and send each client its What's new page with the approval link.</p>
       </article>
       <article class="card">
-        {{ shot('subscriptions', 'Licences and subscriptions: cost, renewals, trials and assignment errors') }}
+        {{ shot('licence-changes', 'Licence changes: who was given or lost a licence, and licences bought and assigned by month') }}
         <h3>Licences, renewals and changes</h3>
         <p>What each subscription costs and when it renews, who was given or lost a licence and who made the change, and licences bought and assigned month by month.</p>
+      </article>
+      <article class="card">
+        {{ shot('design-editor', 'The report designer with the Quarterly review and a preview on a real client') }}
+        <h3>Quarterly reviews and your own designs</h3>
+        <p>Build a client report from blocks without code, or start from the Quarterly review: three months of score and findings, what was fixed, projects, licence spend and what's coming up. <a href="/examples/quarterly-review.pdf">Open the example</a>.</p>
+      </article>
+      <article class="card">
+        {{ shot('roles', 'Roles: what each kind of person can see and do') }}
+        <h3>Roles for your team</h3>
+        <p>Seven built-in roles, from Administrator to First line and Auditor, your own roles, and single capabilities given or taken away per person and per client.</p>
+      </article>
+      <article class="card">
+        {{ shot('staff-sign-in', 'Staff sign-in: one button sets up sign-in with Microsoft') }}
+        <h3>Staff sign in with Microsoft</h3>
+        <p>Your team uses their work account under your own Conditional Access and MFA, with their role assigned in Entra. Passwords stay as the way in if Microsoft sign-in breaks.</p>
       </article>
     </div>
 
     <div class="extras">
       <h3>Also included</h3>
       <ul class="security-list">
-        <li><strong>Quarterly reviews and your own designs</strong> Build a client report from blocks without code, or start from the Quarterly review: three months of score and findings, what was fixed, projects, licence spend and what's coming up. <a href="/examples/quarterly-review.pdf">Open the example</a>.</li>
-        <li><strong>Roles for your team</strong> Seven built-in roles, from Administrator to First line and Auditor, your own roles, and single capabilities given or taken away per person and per client.</li>
-        <li><strong>Staff sign in with Microsoft</strong> Your team uses their work account under your own Conditional Access and MFA, with their role assigned in Entra. Passwords stay as the way in if Microsoft sign-in breaks.</li>
+        <li><strong>Mail flow by domain</strong> Mail received and sent per domain, quarantined and failed mail, and who gets the most spam and phishing.</li>
         <li><strong>A support package</strong> One zip of versions, settings, health checks and logs to attach to a bug report, with keys, tokens, addresses and client names taken out.</li>
       </ul>
     </div>
