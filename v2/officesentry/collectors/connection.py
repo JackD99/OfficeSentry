@@ -62,7 +62,7 @@ class ConnectionHealth(Collector):
 
     def _check(self, ctx: RunContext, result: dict) -> None:
         if not ctx.client_id:
-            ctx.warn("This tenant has no app connection, so its permissions weren't checked")
+            ctx.warn("This client has no app connection, so its permissions weren't checked")
             return
         sps = (
             ctx.graph.get(

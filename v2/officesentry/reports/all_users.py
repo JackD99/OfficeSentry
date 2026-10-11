@@ -22,10 +22,10 @@ NO_DEPARTMENT = "No department"
 ALLOWED, BLOCKED = "Allowed", "Blocked"
 REPORTS_SHOWN = 50  # names listed per manager; the count is always complete
 
-NOT_COLLECTED = "User data hasn't been collected yet. Refresh Users on the tenant page."
+NOT_COLLECTED = "User data hasn't been collected yet. Refresh Users on the client page."
 NO_DETAILS = (
     "Departments, job titles and managers haven't been collected yet. Refresh Departments and managers "
-    "on the tenant page."
+    "on the client page."
 )
 
 

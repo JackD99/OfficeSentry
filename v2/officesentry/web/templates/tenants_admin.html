@@ -2,17 +2,17 @@
 {% from "_macros.html" import icon, ts, csrf %}
 {% from "_tenant_health.html" import status_pill with context %}
 {% from "_groups.html" import group_picker, group_chips with context %}
-{% block title %}Client tenants · Office Sentry{% endblock %}
+{% block title %}Client settings · Office Sentry{% endblock %}
 {% block content %}
 {% set admin = current_user.role == 'admin' %}
 <div class="page-head">
   <div>
-    <h1>Client tenants</h1>
+    <h1>Client settings</h1>
     <div class="sub">Connection, permissions, Global Reader and collection for every client, the ones that need fixing first.</div>
   </div>
   <div class="actions">{{ group_picker() }}
     {% if admin %}<a class="btn" href="{{ url_for('onboarding.index') }}">{{ icon('send') }} Onboarding</a>
-      <a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add tenant</a>{% endif %}</div>
+      <a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add client</a>{% endif %}</div>
 </div>
 
 {% if not show_archived %}
@@ -25,7 +25,7 @@
 {% endif %}
 
 {% if admin and (archived_count or show_archived) %}
-<nav class="subtabs" aria-label="Which tenants">
+<nav class="subtabs" aria-label="Which clients">
   <a href="{{ url_for('tenant_admin.clients') }}"{% if not show_archived %} class="active" aria-current="page"{% endif %}>Active</a>
   <a href="{{ url_for('tenant_admin.clients', show='archived') }}"{% if show_archived %} class="active" aria-current="page"{% endif %}>Archived <span class="count">{{ archived_count }}</span></a>
 </nav>
@@ -33,15 +33,15 @@
 
 {% if not rows %}
 <div class="card empty">
-  {% if show_archived %}<h3>No archived tenants</h3><p>Archive a tenant from its Manage page (under Settings) to hide it without deleting its data.</p>
-  {% elif admin %}<h3>No tenants yet</h3><p>Set up the app connection once, then add each client tenant.</p>
-  <a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add tenant</a>
-  {% else %}<h3>No tenants to show</h3><p>You haven't been given access to any tenants yet.</p>{% endif %}
+  {% if show_archived %}<h3>No archived clients</h3><p>Archive a client from its Manage page (under Settings) to hide it without deleting its data.</p>
+  {% elif admin %}<h3>No clients yet</h3><p>Set up the app connection once, then add each client.</p>
+  <a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add client</a>
+  {% else %}<h3>No clients to show</h3><p>You haven't been given access to any clients yet.</p>{% endif %}
 </div>
 {% elif show_archived %}
 <div class="card flush">
   <table class="stack-sm">
-    <thead><tr><th>Tenant</th><th>Archived</th><th>Last collected</th><th></th></tr></thead>
+    <thead><tr><th>Client</th><th>Archived</th><th>Last collected</th><th></th></tr></thead>
     <tbody>
     {% for h in rows %}{% set t = h.tenant %}
     <tr>
@@ -59,10 +59,10 @@
 {% else %}
 <div class="card flush">
   <div class="card-head toolbar"><h2>All clients</h2>
-    {% if rows|length > 5 %}<input class="search" type="search" id="tenant-filter" placeholder="Filter tenants…" aria-label="Filter tenants">{% endif %}</div>
+    {% if rows|length > 5 %}<input class="search" type="search" id="tenant-filter" placeholder="Filter clients…" aria-label="Filter clients">{% endif %}</div>
   <div class="scroll-x">
   <table class="stack-sm clients-table" id="tenant-table">
-    <thead><tr><th>Tenant</th><th>Status</th><th>Consent</th><th>Permissions</th><th>Global Reader</th><th>Last good collection</th><th>Failing</th></tr></thead>
+    <thead><tr><th>Client</th><th>Status</th><th>Consent</th><th>Permissions</th><th>Global Reader</th><th>Last good collection</th><th>Failing</th></tr></thead>
     <tbody>
     {% for h in rows %}{% set t = h.tenant %}{% set c = cells(h) %}
     <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }} {{ groups_of[t.id]|map(attribute='name')|join(' ')|lower }}">
@@ -86,7 +86,7 @@
   </table>
   </div>
 </div>
-<p class="footnote">Permissions and Global Reader are checked with every collection; open a tenant and press <em>Check connection now</em> to check again straight away. <em>Extra</em> means the tenant gave Office Sentry's app more than the read-only access it needs; the tenant's page says how to remove it.</p>
+<p class="footnote">Permissions and Global Reader are checked with every collection; open a client and press <em>Check connection now</em> to check again straight away. <em>Extra</em> means the client gave Office Sentry's app more than the read-only access it needs; the client's page says how to remove it.</p>
 {% endif %}
 {% endblock %}
 {% block scripts %}

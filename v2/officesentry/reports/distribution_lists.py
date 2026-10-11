@@ -18,7 +18,7 @@ from .data_reports import DataReport, Rows, Section, Tile
 from .mail_reports import _no_exchange
 from .registry import report
 
-NOT_COLLECTED = "Distribution lists haven't been collected yet. Refresh Distribution lists on the tenant page."
+NOT_COLLECTED = "Distribution lists haven't been collected yet. Refresh Distribution lists on the client page."
 RECENT_DAYS = 30
 UNUSED_DAYS = 90
 MIN_WATCHED = 30  # days a list is watched before "no mail" counts as unused
