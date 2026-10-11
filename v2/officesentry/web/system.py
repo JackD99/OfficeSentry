@@ -13,7 +13,7 @@ bp = Blueprint("system", __name__, url_prefix="/admin")
 # Where each problem is fixed in the portal, when it is.
 FIX_LINKS = {
     "certificates": ("admin.connections", "Open App connection"),
-    "collection": ("tenants.dashboard", "Open Tenants"),
+    "collection": ("tenants.dashboard", "Open Clients"),
 }
 
 

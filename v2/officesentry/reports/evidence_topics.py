@@ -93,7 +93,7 @@ def _admin_count(snap: TenantSnapshot, results):
     return (YES if answer == NOT_KNOWN else answer), f"{listed}. {why}".strip()
 
 
-NOT_COLLECTED = "The tenant hasn't been collected yet."
+NOT_COLLECTED = "Nothing has been collected from Microsoft 365 yet."
 
 
 def _password_policy(snap: TenantSnapshot, results):

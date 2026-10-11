@@ -171,7 +171,7 @@ def _signed(n: int) -> str:
 def size_part(m: Mailbox) -> Part:
     result = Part("size", "Size and growth")
     if not m.sizes_collected:
-        result.unavailable = "Mailbox sizes haven't been collected yet. Refresh Mailbox size on the tenant page."
+        result.unavailable = "Mailbox sizes haven't been collected yet. Refresh Mailbox size on the client's page."
         return result
     s = m.size
     if s is None or m.total is None:
@@ -244,7 +244,7 @@ def forwarding_part(m: Mailbox) -> Part:
         result.facts.append(("Forwarding set by an admin", "None"))
     rules = m.snap.objects("inbox_rules", "inbox_rule")
     if rules is None:
-        result.note = "Inbox rules haven't been collected yet. Refresh Inbox rules on the tenant page."
+        result.note = "Inbox rules haven't been collected yet. Refresh Inbox rules on the client's page."
         result.summary = result.summary or "No forwarding"
         return result
     mine = [r for r in rules if r.get("mailboxId") == m.id or m.named(r.get("mailbox"))]

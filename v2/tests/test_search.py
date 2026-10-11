@@ -153,7 +153,7 @@ def test_empty_and_short_queries(client, db, two_tenants):
     make_user(db, "analyst", role="analyst", all_tenants=True)
     login(client, "analyst")
     assert 'class="nav-search"' in client.get("/").get_data(as_text=True)
-    assert "Find something in any tenant" in _page(client, "")
+    assert "Find something in any client" in _page(client, "")
     assert "Type at least 2 characters" in _page(client, "a")
     assert "Nothing found" in _page(client, "nobody-here")  # tenants without data are skipped
 

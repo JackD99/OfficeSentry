@@ -337,7 +337,7 @@ def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     rules = snap.objects("inbox_rules", "inbox_rule")
     if boxes is None and rules is None:
         report.unavailable = (
-            "Mailbox data hasn't been collected yet. Refresh Mailboxes and Inbox rules on the tenant page."
+            "Mailbox data hasn't been collected yet. Refresh Mailboxes and Inbox rules on the client page."
         )
         return
     status = snap.objects("mailboxes", "exchange_status")
@@ -496,7 +496,7 @@ def _describe_actions(r: dict) -> str:
 def apps(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     risks = app_risks(snap)
     if risks is None:
-        report.unavailable = "App data hasn't been collected yet. Refresh Apps and consents on the tenant page."
+        report.unavailable = "App data hasn't been collected yet. Refresh Apps and consents on the client page."
         return
     third = Section(
         "Third-party apps with access",
@@ -584,7 +584,7 @@ def admin_activity(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
     events = snap.objects("admin_activity", "admin_event")
     window = (snap.objects("admin_activity", "audit_window") or [None])[0]
     if events is None:
-        report.unavailable = "Admin activity hasn't been collected yet. Refresh Admin activity on the tenant page."
+        report.unavailable = "Admin activity hasn't been collected yet. Refresh Admin activity on the client page."
         return
     if window and not window.get("available", True):
         report.unavailable = f"The tenant's directory audit log couldn't be read: {window.get('reason') or ''}"
@@ -855,7 +855,7 @@ def tenant_settings(snap: TenantSnapshot, now: datetime, report: DataReport) -> 
     policy = (snap.objects("tenant_policies", "authorization_policy") or [None])[0]
     if policy is None:
         report.unavailable = (
-            "Tenant settings haven't been collected yet. Refresh Sharing and consent settings on the tenant page."
+            "Tenant settings haven't been collected yet. Refresh Sharing and consent settings on the client page."
         )
         return
 
@@ -1050,7 +1050,7 @@ def _group_settings_section(snap: TenantSnapshot) -> Section:
 def group_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     rows = snap.objects("groups", "group")
     if rows is None:
-        report.unavailable = "Group data hasn't been collected yet. Refresh Groups and Teams on the tenant page."
+        report.unavailable = "Group data hasn't been collected yet. Refresh Groups and Teams on the client page."
         return
     groups = sorted(m365_groups(snap) or [], key=lambda g: (g.get("displayName") or "").lower())
     checked = [g for g in groups if g.get("examined")]
@@ -1210,7 +1210,7 @@ def _seen(value: str | None, now: datetime) -> str:
 def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     entra = devices.objects(snap, "entra_device")
     if entra is None:
-        report.unavailable = "Device data hasn't been collected yet. Refresh Devices on the tenant page."
+        report.unavailable = "Device data hasn't been collected yet. Refresh Devices on the client page."
         return
     status = devices.objects(snap, "intune_status") or []
     intune = bool(status and status[0].get("available"))
@@ -1350,7 +1350,7 @@ def _synced_at(value: str | None, now: datetime) -> str:
 def hybrid_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = hybrid.sync_status(snap)
     if status is None:
-        report.unavailable = "Directory sync data hasn't been collected yet. Refresh Directory sync on the tenant page."
+        report.unavailable = "Directory sync data hasn't been collected yet. Refresh Directory sync on the client page."
         return
     users = snap.objects("users", "user")
     enabled = bool(status.get("enabled"))
