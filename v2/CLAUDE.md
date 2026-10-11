@@ -444,6 +444,14 @@ turning each step's `target` into a link.
   and dark, against baselines, fails any page wider than the window, and runs axe-core. CI runs it
   (`.github/workflows/ui.yml`) on PRs that touch templates or CSS; refresh the
   baselines with `--update` when a change is meant, and look at them.
+- `tests/layout` (`pytest tests/layout --layout -n 4`; see its README) opens
+  every page at 1366, 1440 and 1920 px and on a phone, with a stress client
+  (long names, policies naming sixteen roles), a client with no data and a new
+  install, and fails a page that scrolls sideways, cuts text off, overlaps or
+  puts a control off the screen, or has a table that scrolls sideways on a
+  laptop. Pages come from the routes, so a new page is checked by itself; a
+  new kind of URL argument needs a resolver in its `conftest.py`. CI's Layout
+  job reports only for now (summary page and screenshots).
 - Admin settings are one sidebar entry. A new settings page goes in `SETTINGS`
   at the top of `base.html` (endpoint, label, other endpoints of the page),
   which gives it the row of settings links at the top of the page.
