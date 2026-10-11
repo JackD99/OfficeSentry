@@ -101,6 +101,19 @@ client's approval.
   sign-in, existing accounts link from their Account page. Passwords stay as the break-glass route until
   turned off, and `python -m officesentry staff-sign-in --passwords on` turns them back on from the
   server. Client accounts keep passwords. See [docs/staff-sign-in.md](v2/docs/staff-sign-in.md).
+- **The monthly review leads with the answer.** The PDF and page now open with two summary pages: *At a
+  glance* (what was checked, what changed, key figures, the severity bar) and *This month* (findings
+  found and fixed each month as a chart, what was done, what to do next). Everything else (what changed
+  in detail, the Secure Score trend, each failing check with the accounts affected, licences, passing
+  checks, accepted risks, checks that couldn't run) follows as an appendix the summary links into.
+  A **Summary PDF** button, and a "Monthly review: summary only" option in report plans and email
+  schedules, give the two summary pages on their own.
+- **Quarterly review.** A new starting point in the report designer (Month-end → Custom reports): three
+  months of Secure Score and findings, what was fixed in the quarter, the projects on the table and
+  where each stands, licence spend a month and a year with the waste, and what's coming up in the next
+  90 days. Its five blocks (Three-month trend, Fixed this quarter, Projects, Licence spend, Coming up)
+  can go in any design, and text blocks take `{quarter}`. The demo data includes one under Custom
+  reports.
 - **What's new, for permissions.** When a release adds permissions, the Onboarding tracker lists the clients
   still to approve them ("New permissions to approve", then sent, then approved), and each client's **What's
   new** page says what every new permission reads and adds, with the email to send, the approval link and a
@@ -144,6 +157,12 @@ client's approval.
   come a one-file stack for container managers and NAS systems (`v2/deploy/stack/compose.yaml`), Kubernetes
   manifests (`v2/deploy/kubernetes/`) and a start-up file for a new cloud server
   (`v2/deploy/cloud-init-server.yaml`). Each guide says which of its steps have been tested.
+- One page per SharePoint site: Users > Sites lists every site with its storage, files, sharing links, last
+  activity and open findings, and each opens a page with what needs attention first, then its storage over the
+  retained months with the libraries and largest files that fill it, its sharing settings and the files shared
+  from it, the team or Microsoft 365 group behind it (or its owner), its activity, open findings and what
+  changed, with links to the site access and file permission reports for the detail. Site addresses in
+  reports, the group page and search results open the page, and it downloads as PDF and XLSX.
 
 ### Changed
 

@@ -479,3 +479,38 @@ body.pdf .block-note { display: none; }
 .pack-steps { margin: var(--space-2) 0 var(--space-3); padding-left: var(--space-5); display: grid; gap: var(--space-2); }
 .pack-list { margin: var(--space-2) 0 var(--space-3); padding-left: var(--space-5); }
 .pack-link { margin: var(--space-1-5) 0 0; font-family: var(--mono); font-size: var(--fs-xs); word-break: break-all; }
+
+/* -- Monthly review: two summary pages, then the appendix ----------------------------------------------- */
+.sub-head { font-size: var(--fs-lg); margin: var(--space-6) 0 var(--space-2-5); }
+.exec .summary-text + .sub-head { margin-top: var(--space-5); }
+.chart-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-4); margin-bottom: var(--space-1); }
+.chart-head .legend { margin-top: 0; flex-wrap: nowrap; white-space: nowrap; }
+.legend .k-found::before { background: var(--chart-2); } .legend .k-fixed::before { background: var(--chart-series); }
+svg.chart .part.tone-1 { fill: var(--chart-series); } svg.chart .part.tone-2 { fill: var(--chart-2); }
+svg.chart .count { fill: var(--muted); font-size: 9px; }
+svg.chart .nodata { fill: var(--chart-track); }
+.chart-foot { margin: var(--space-1) 0 var(--space-1); color: var(--muted); font-size: .8rem; }
+ul.did { list-style: none; padding: 0; margin: 0; }
+ul.did li { padding: 6px 0; border-bottom: 1px solid var(--border); }
+ul.did li:last-child { border-bottom: 0; }
+.appendix-start { margin-top: 48px; padding-top: var(--space-5); border-top: 4px solid var(--brand); }
+.appendix-start .eyebrow { color: var(--brand-ink); opacity: 1; }
+.appendix-start h2 { border: 0; padding: 0; margin: var(--space-1) 0 var(--space-1-5); font-size: 1.5rem; }
+body.pdf .toc li.toc-group { border-bottom: 0; padding: 3mm 0 0.6mm; font-size: 7pt; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+body.pdf .toc li.toc-group:first-child { padding-top: 0; }
+body.pdf .sub-head { font-size: 10.5pt; margin: 5mm 0 2mm; break-after: avoid; }
+body.pdf .exec .summary-text + .sub-head { margin-top: 4mm; }
+body.pdf .month-chart svg.chart { height: 46mm; }
+body.pdf .chart-foot { font-size: 7.5pt; }
+body.pdf ul.did li { padding: 1.3mm 0; break-inside: avoid; }
+/* The appendix opens on its own page with a title band, like a divider. */
+body.pdf .appendix-start { margin-top: 0; padding-top: 5mm; border-top-width: 1.2mm; }
+body.pdf .appendix-start h2 { font-size: 18pt; margin: 1mm 0 2mm; }
+body.pdf .appendix-start + section > h2:first-child { margin-top: 6mm; }
+/* -- Quarterly review blocks ---------------------------------------------------------------------------- */
+table.quarter td:first-child { width: 40%; }
+table.upcoming td:first-child { width: 22%; white-space: nowrap; }
+.proj-status { display: inline-block; vertical-align: middle; margin-left: var(--space-2); font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border-radius: 4px; padding: 1px 6px; background: var(--sev-low-soft); color: var(--sev-low); }
+.proj-status.st-proposed { background: var(--brand-soft); color: var(--brand-ink); }
+.proj-status.st-agreed { background: var(--ok-soft); color: var(--ok); }
+.proj-status.st-declined { background: var(--surface-2); color: var(--muted); }

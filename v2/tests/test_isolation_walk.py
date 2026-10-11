@@ -26,6 +26,7 @@ from officesentry.projects import CATALOG
 from officesentry.reports import designs
 from officesentry.reports.data_reports import REPORTS
 from officesentry.reports.evidence_answers import QUESTIONS
+from tests import sharepoint_data as sd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_collectors import USERS
@@ -57,6 +58,7 @@ OTHER_ARGS = {
     "user_id",
     "mailbox_id",
     "gid",
+    "site_id",
     "conn_id",
     "plan_id",
     "session_id",
@@ -154,6 +156,7 @@ def _url(rule, ids: dict) -> str:
         "user_id": USERS[0]["id"],
         "mailbox_id": USERS[0]["id"],  # Ann's mailbox has her account's object ID
         "gid": "g1",  # the Sales team
+        "site_id": sd.SITE_USAGE[0]["siteId"],  # Finance
     }
 
     def value(m):
