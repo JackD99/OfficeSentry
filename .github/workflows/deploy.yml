@@ -345,9 +345,12 @@ jobs:
       - name: Build the public demo
         if: env.DEMO == 'true'
         run: |
-          rsync -az --delete --exclude .env --exclude data/ --exclude .coverage --exclude '__pycache__/' \
+          # The settings files written above (.env, and .env.backup with the off-site password) belong to the
+          # portal's folder only; the demo runs with none of them. Copies an earlier deploy left are removed,
+          # since rsync's --delete keeps what it was told to exclude.
+          rsync -az --delete --exclude '.env*' --exclude data/ --exclude .coverage --exclude '__pycache__/' \
             v2/ server:/opt/officesentry/demo-src/
-          ssh server 'bash /opt/officesentry/demo-src/deploy/public/build-demo.sh'
+          ssh server 'rm -f /opt/officesentry/demo-src/.env /opt/officesentry/demo-src/.env.* && bash /opt/officesentry/demo-src/deploy/public/build-demo.sh'
 
       # The run's own token, good for this job only, pulls the private image; the server forgets it again
       # straight after.
@@ -443,3 +446,35 @@ jobs:
           curl -fsS -X POST -H "Authorization: Bearer $HCLOUD_TOKEN" -H "Content-Type: application/json" \
             --data @rules.json "$API/firewalls/$FIREWALL_ID/actions/set_rules" > /dev/null
           rm -f ~/.ssh/id_deploy
+
+  # The step above closes SSH when the job ends, however it ends, but not when the runner itself is lost
+  # (GitHub then runs none of the job's remaining steps). This job runs on a fresh runner afterwards and
+  # removes the temporary rule if it's still there, so the server's port 22 is never left open to an
+  # address GitHub may hand to someone else. Runs of this workflow never overlap (the concurrency group), so
+  # the rule it finds is always this run's.
+  close-ssh:
+    needs: server
+    if: always() && needs.server.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      FIREWALL: ${{ vars.HCLOUD_FIREWALL || 'officesentry' }}
+      HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+      API: https://api.hetzner.cloud/v1
+      RULE: github-actions-deploy (temporary)
+    steps:
+      - name: Remove the temporary SSH rule if the deploy job couldn't
+        run: |
+          [ -n "$HCLOUD_TOKEN" ] || exit 0
+          fw=$(curl -fsS -H "Authorization: Bearer $HCLOUD_TOKEN" "$API/firewalls?name=$FIREWALL" | jq '.firewalls[0]')
+          [ "$fw" != null ] || exit 0
+          if ! jq -e --arg rule "$RULE" 'any(.rules[]; .description == $rule)' <<<"$fw" > /dev/null; then
+            echo "SSH is closed."
+            exit 0
+          fi
+          jq --arg rule "$RULE" '{rules: [.rules[] | select(.description != $rule)]
+              | map(with_entries(select(.value != null and .value != []))
+                    | if .direction == "in" then del(.destination_ips) else del(.source_ips) end)}' <<<"$fw" > rules.json
+          curl -fsS -X POST -H "Authorization: Bearer $HCLOUD_TOKEN" -H "Content-Type: application/json" \
+            --data @rules.json "$API/firewalls/$(jq -r .id <<<"$fw")/actions/set_rules" > /dev/null
+          echo "Closed SSH again: the deploy job's runner was lost before it could."
