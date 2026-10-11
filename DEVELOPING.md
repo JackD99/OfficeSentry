@@ -79,7 +79,7 @@ v2/
     migrations/   numbered SQL files, applied in order, never edited once applied
   tests/          pytest suite; graphdata.py and friends are simulated Microsoft responses
   tests/browser/  screenshot and accessibility tests (their README says how to run them)
-  scripts/        demo data, screenshots, the check catalogue generator, scale data
+  scripts/        demo data, screenshots, the check catalogue generator, scale data, the month-end dry run
   docs/           guides for MSPs (onboarding, troubleshooting, checks.md)
 website/          officesentry.co.uk, built from these Markdown files
 ```
