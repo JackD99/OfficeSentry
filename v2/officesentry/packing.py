@@ -101,9 +101,7 @@ def compact(conn, report: Callable[[str], None] = print) -> None:
     db_file = database_file(conn)
     if db_file is None:
         return
-    pages = conn.execute("PRAGMA page_count").fetchone()[0] - conn.execute("PRAGMA freelist_count").fetchone()[0]
-    needed = 2 * pages * conn.execute("PRAGMA page_size").fetchone()[0]
-    free = shutil.disk_usage(db_file.parent).free
+    needed, free = vacuum_room(conn, db_file)
     if free < needed:
         raise RuntimeError(
             f"The data is compressed, but shrinking the file needs about {needed // 2**20:,} MB "
@@ -111,15 +109,28 @@ def compact(conn, report: Callable[[str], None] = print) -> None:
             "compact again."
         )
     before = db_file.stat().st_size
-    conn.execute("PRAGMA temp_store_directory = " + _quote(str(db_file.parent)))
     try:
-        conn.execute("VACUUM")
+        vacuum(conn, db_file)
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except sqlite3.OperationalError as exc:
         raise RuntimeError(f"The data is compressed, but the file couldn't be shrunk: {exc}.") from exc
+    report(f"Shrank the database file from {before // 2**20:,} MB to {db_file.stat().st_size // 2**20:,} MB.")
+
+
+def vacuum_room(conn, db_file) -> tuple[int, int]:
+    """(bytes ``vacuum`` needs free next to the database, bytes free there): about twice the data in use."""
+    pages = conn.execute("PRAGMA page_count").fetchone()[0] - conn.execute("PRAGMA freelist_count").fetchone()[0]
+    return 2 * pages * conn.execute("PRAGMA page_size").fetchone()[0], shutil.disk_usage(db_file.parent).free
+
+
+def vacuum(conn, db_file) -> None:
+    """VACUUM with its temporary copy beside the database rather than in /tmp (memory, in Docker). Check
+    ``vacuum_room`` first. Raises sqlite3.OperationalError when it can't finish."""
+    conn.execute("PRAGMA temp_store_directory = " + _quote(str(db_file.parent)))
+    try:
+        conn.execute("VACUUM")
     finally:
         conn.execute("PRAGMA temp_store_directory = ''")
-    report(f"Shrank the database file from {before // 2**20:,} MB to {db_file.stat().st_size // 2**20:,} MB.")
 
 
 def _quote(text: str) -> str:

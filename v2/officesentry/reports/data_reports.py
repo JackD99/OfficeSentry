@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 
 from .. import adminactivity, coverage, devices, dnscheck, hybrid
-from ..checks.apps import app_risks, user_consent_level
+from ..checks.apps import app_risks, custom_consent_policies, user_consent_level
 from ..checks.groups import group_owner_problem, group_type, m365_groups
 from ..checks.sharing import SHARING_LEVELS
 from ..checks.tenant_settings import GUEST_ROLES, admin_consent_missing
@@ -60,6 +60,9 @@ class Section:
     empty: str = "Nothing to show."
     # False for event logs (e.g. admin activity), which the change report shouldn't diff like state.
     compare: bool = True
+    # Columns that drift every night with use (sizes, file and item counts), which What changed ignores like
+    # day counts: a row that only grew isn't a change. A row crossing into or out of the table still is.
+    drifts: tuple[str, ...] = ()
     # Page-only extras, used by the Findings page: what the flag column is called, a column whose
     # value groups rows under collapsible headings (with an anchor id per value), columns that always
     # get a value filter however many values they have, and an id per row for row actions.
@@ -761,12 +764,15 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             "low" if policy.get("allowInvitesFrom") == "everyone" else None,
         )
         consent = user_consent_level(policy)
+        custom = consent == "limited" and custom_consent_policies(policy)
         settings.add(
             [
                 "User consent to apps",
-                {"any": "Any app", "limited": "Verified publishers, low-risk permissions", "off": "Off"}[consent],
+                "Custom policy: " + ", ".join(custom)
+                if custom
+                else {"any": "Any app", "limited": "Verified publishers, low-risk permissions", "off": "Off"}[consent],
             ],
-            "medium" if consent == "any" else None,
+            "medium" if consent == "any" else "low" if custom else None,
         )
         settings.add(["Users can register apps", policy.get("allowedToCreateApps")])
     if sharepoint:
@@ -1173,7 +1179,8 @@ def _seen(value: str | None, now: datetime) -> str:
     days = devices.days_since(value, now)
     if days is None:
         return "Never"
-    return "Today" if days == 0 else f"{_date(value)} ({days}d)"
+    # Always a date first, so the last-30-days filter and date sorting read "today" too.
+    return f"{_date(value)} (today)" if days == 0 else f"{_date(value)} ({days}d)"
 
 
 @report(
