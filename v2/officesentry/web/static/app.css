@@ -1388,3 +1388,11 @@ details.part > summary.card-head h2::before { content: ""; width: 7px; height: 7
 details.part[open] > summary.card-head h2::before { transform: rotate(45deg); }
 details.part:not([open]) > summary.card-head { margin-bottom: 0; }
 @media (prefers-reduced-motion: reduce) { details.part > summary.card-head h2::before { transition: none; } }
+/* The section links repeat the folded parts' headings on a phone, so they stay off there. */
+@media (max-width: 640px) { .jump.hide-sm { display: none; } }
+/* The summary's facts card beside "Needs attention": label and value on one line on a laptop, so it
+   isn't twice the height of the column beside it. */
+@media (min-width: 1100px) {
+  .grid-main > aside .kv.stacked { grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-2) var(--space-4); }
+  .grid-main > aside .kv.stacked dt { font-size: inherit; margin-top: 0; }
+}

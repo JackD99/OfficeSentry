@@ -53,13 +53,6 @@
       <div class="empty compact">{{ icon('check', 'big ok') }}<h3>Nothing needs attention</h3><p>Nothing stands out for this account in the data collected.</p></div>
       {% endif %}
     </section>
-  </div>
-
-  <aside aria-label="Account summary">
-    <section class="card">
-      <div class="card-head"><h2>Account</h2></div>
-      <dl class="kv stacked">{% for label, value in profile.account %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
-    </section>
 
     <section class="card">
       <div class="card-head"><h2>Open findings</h2>
@@ -74,6 +67,13 @@
       {% else %}
       <p class="muted small m0">No open findings name this account.</p>
       {% endif %}
+    </section>
+  </div>
+
+  <aside aria-label="Account summary">
+    <section class="card">
+      <div class="card-head"><h2>Account</h2></div>
+      <dl class="kv stacked">{% for label, value in profile.account %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
     </section>
   </aside>
 </div>
