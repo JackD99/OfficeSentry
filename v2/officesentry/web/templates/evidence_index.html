@@ -29,23 +29,6 @@
 </section>
 {% endfor %}
 
-{% if sets %}
-<section class="card flush scheme-group" aria-labelledby="group-sets">
-  <div class="card-head"><h2 id="group-sets">Questionnaires</h2></div>
-  <div class="scheme-cards">
-    {% for s in sets %}
-    <a class="scheme-card" href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id, set=s.key) }}">
-      <div class="scheme-title"><strong>{{ s.title }}</strong> {{ icon('arrow') }}</div>
-      <p class="small muted m0">{{ s.intro }}</p>
-    </a>
-    {% endfor %}
-    <a class="scheme-card" href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id, set='controls') }}">
-      <div class="scheme-title"><strong>Insurer controls</strong> {{ icon('arrow') }}</div>
-      <p class="small muted m0">The controls cyber insurers ask about, with what Microsoft 365 shows for each.</p>
-    </a>
-  </div>
-</section>
-{% endif %}
 <p class="footnote">Verdicts come from Microsoft 365 settings and accounts read with read-only access. Oldest data used: {{ ts(oldest_data, 'not collected yet') }}.</p>
 </div>
 </div>

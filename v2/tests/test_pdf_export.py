@@ -29,7 +29,8 @@ def _pdf_urls(alpha: int) -> list[str]:
             "/changes.pdf?days=7",
             f"/tenants/{alpha}/changes.pdf?days=30",
             f"/tenants/{alpha}/report.pdf",
-            f"/tenants/{alpha}/evidence.pdf",
+            f"/tenants/{alpha}/evidence/insurance.pdf",
+            f"/tenants/{alpha}/evidence/cyber-essentials.pdf",
         ]
     )
 

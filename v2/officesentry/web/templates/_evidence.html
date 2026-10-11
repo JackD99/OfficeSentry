@@ -47,7 +47,7 @@
       {%- elif r.based_on -%}
         {{ 'Why: ' if a.needs_input else 'Based on: ' }}{{ r.based_on }}
       {%- endif -%}
-      {%- if a.source and not a.needs_input %} <a href="{% if a.source.report %}{{ url_for('reports.data_report', tenant_id=tenant.id, key=a.source.report) }}{% if a.source.anchor %}#{{ a.source.anchor }}{% endif %}{% else %}{{ url_for('reports.evidence_pack', tenant_id=tenant.id, set='controls') }}#control-{{ a.source.control }}{% endif %}">{{ a.source.label }} &rarr;</a>{% endif %}
+      {%- if a.source and not a.needs_input %} <a href="{% if a.source.report %}{{ url_for('reports.data_report', tenant_id=tenant.id, key=a.source.report) }}{% if a.source.anchor %}#{{ a.source.anchor }}{% endif %}{% else %}{{ url_for('evidence.scheme_page', tenant_id=tenant.id, scheme='insurance') }}#control-{{ a.source.control }}{% endif %}">{{ a.source.label }} &rarr;</a>{% endif %}
       {%- if a.as_of and not a.needs_input and not a.override %} <span class="as-of">Microsoft 365 data from {{ a.as_of|day }}.</span>{% endif %}
     </p>
     {% if r.beyond %}<p class="small m0 still">{{ icon('alert') }} <span><strong>Still to check:</strong> {{ r.beyond }}</span></p>{% endif %}

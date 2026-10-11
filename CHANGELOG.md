@@ -189,8 +189,12 @@ client's approval.
   Pass, Fail (any gap fails, auto-fail questions marked), Partly, or Your evidence where Microsoft 365 can't
   show it, with the figures, the fix and a text to paste. The page leads with what to fix before applying,
   compares with last month, three months or a year ago, lists what the CE Plus assessor tests, and carries
-  the answers for the IASME portal with one-tap copy. Downloads: PDF, Word, plain text, XLSX and CSV. The
-  insurance and supplier questionnaires and the insurer controls stay where they were.
+  the answers for the IASME portal with one-tap copy. Downloads: PDF, Word, plain text, XLSX and CSV.
+- The cyber insurance proposal and the supplier security questionnaire are judged the same way, as two more
+  packs on the Evidence page: each control Pass, Fail, Partly or Your evidence (a gap on a few accounts is
+  Partly, since insurers price the risk rather than refuse it), with the figures, the fix and the form's
+  answers to paste. The emailed
+  "Cyber insurance evidence pack" is now this pack; the old controls view and its links open it.
 
 ### Changed
 

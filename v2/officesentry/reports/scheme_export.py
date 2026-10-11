@@ -180,6 +180,8 @@ def _lines(r: SchemeResult, brand_name: str) -> list[tuple[str, str]]:
                 out.append(("h3", row.label + (" (auto-fail)" if row.item.autofail else "")))
                 out.append(("label", f"Answer: {row.state}"))
                 out.append(("p", a.text))
+                if a.override:
+                    out.append(("muted", f"Answered by {a.override.set_by} on {_day(a.override.set_at)}"))
                 if row.based_on and not a.override:
                     out.append(("muted", f"Based on: {row.based_on}"))
                 if row.beyond:

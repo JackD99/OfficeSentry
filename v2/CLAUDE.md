@@ -241,10 +241,11 @@ collector starts needing goes in those lists.
   codes); show `usage.label(row)` and `usage.CONCEALED_NOTICE`.
 - `tests/seed.py` runs every collector against `tests/graphdata.py`; use it
   for rule and report tests.
-- The insurance evidence pack (`reports/evidence.py`) suggests answers to
-  questionnaire questions in `reports/evidence_answers.QUESTIONS` (Yes, Partly,
-  No, Not known, a one-line justification and a source link), built from the
-  snapshot and check results. Enforcement comes first: MFA required by
+- Questionnaire answers (`reports/evidence.py`, `build()`, kept for the
+  cross-tenant evidence rollup and the design widget) are suggested per topic
+  in `reports/evidence_answers.QUESTIONS` (Yes, Partly, No, Not known, a
+  one-line justification and a source link), built from the snapshot and
+  check results. Enforcement comes first: MFA required by
   Conditional Access with only a named break-glass exclusion is "Yes" listing
   it. Admins and analysts can override an answer with a note
   (`evidence_answer_overrides`, audited, note text never logged); the page,
@@ -256,9 +257,9 @@ collector starts needing goes in those lists.
   (`evidence_topics.py`, `gap()`; shared parts in `evidence_base.py`) carry a
   fill-in text with `[brackets]`.
   An override is per topic, so one written answer fills every set. A new set
-  (or a framework pack) is a `QuestionSet` passed to `questionnaires.register()`,
-  which refuses unknown topics; the page (`?set=`), PDF answer sheet, XLSX,
-  CSV and text download pick it up.
+  is a `QuestionSet` passed to `questionnaires.register()`, which refuses
+  unknown topics, and is shown by the scheme that names it in `questions`
+  (every set has one; a set without a scheme has no page).
 - Schemes (`reports/schemes.py`) judge a tenant against a certification or
   framework: a `Scheme` is themes of `Control`s, each judged from check
   results (`rules`, with `support` checks adding "Supporting:"/"But:" lines)
@@ -270,13 +271,17 @@ collector starts needing goes in those lists.
   the day's data and, with `since`, the same controls from that day's
   `TenantSnapshot` for the "what changed" view. Each scheme is its own module
   (`schemes_cyber_essentials.py`: Cyber Essentials and CE Plus, with the
-  assessor's tests as `Audit`s) registered with `schemes.register()`, which
+  assessor's tests as `Audit`s; `schemes_forms.py`: the cyber insurance
+  proposal and the supplier questionnaire, never strict) registered with
+  `schemes.register()`, which
   refuses unknown rules, topics, question sets and groups, and names its
   question set so the form's answers sit on the same page. Pages and
   downloads are `web/evidence.py` (`/tenants/<id>/evidence/<scheme>`, `.pdf`,
   `.docx` from `reports/docx_writer.py`, `.txt`, `.xlsx`, `.csv`, all from
   `reports/scheme_export.py`); the client's Evidence page lists every scheme
-  with its verdict. Paraphrase scheme documents, never copy them, and name
+  with its verdict, and the old `?set=` and `evidence.<ext>` links redirect
+  to the scheme that carries the set (the emailed "evidence" report is the
+  insurance scheme's PDF and XLSX). Paraphrase scheme documents, never copy them, and name
   the version and source in the scheme.
 - Client-facing reports (page + PDF) extend `templates/reports/_layout.html`
   (cover, MSP branding, running headers and page numbers) and build from the

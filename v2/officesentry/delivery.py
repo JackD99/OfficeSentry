@@ -44,11 +44,14 @@ from .reports import (
     branding,
     data_reports,
     designs,
-    evidence,
     export,
     findings_report,
     monthly_review,
     rollups,
+    scheme_export,
+    schemes,
+    schemes_cyber_essentials,  # noqa: F401  (registers the schemes)
+    schemes_forms,  # noqa: F401
     summary,
     tables,
     views,
@@ -141,8 +144,8 @@ def catalog(conn=None) -> list[ReportOption]:
         ),
         ReportOption(
             "evidence",
-            "Insurance evidence pack",
-            "The controls cyber-insurance questionnaires ask about, answered from the data.",
+            "Cyber insurance evidence pack",
+            "The controls cyber insurers ask about, judged from the data, with the answers for the form.",
             True,
             True,
         ),
@@ -584,11 +587,11 @@ def _attachments(
             report = built.setdefault("review", review or monthly_review.build(conn, tenant, now))
             data = _pdf(app, "reports/monthly_review.html", report=report, appendix=False, **(review_context or {}))
         elif key == "evidence":
-            pack = built.setdefault(key, evidence.build(conn, tenant, now))
+            result = built.setdefault(key, schemes.assess(conn, tenant, "insurance", now))
             data = (
-                _pdf(app, "reports/evidence.html", pack=pack)
+                _pdf(app, "reports/scheme_pack.html", r=result, V=schemes)
                 if filename.endswith(".pdf")
-                else evidence.to_xlsx(pack, brand=brand)
+                else scheme_export.to_xlsx(result, brand=brand)
             )
         elif (design_id := designs.id_of(key)) is not None:
             row = designs.get(conn, design_id)
