@@ -45,11 +45,11 @@ KNOWN = {
     ),
     "65001": (
         "Admin consent hasn't been granted in this tenant.",
-        "Send the tenant's Global Administrator the consent link from Data collection.",
+        "Send the client's Global Administrator the consent link from Data collection.",
     ),
     "7000229": (
         "Admin consent hasn't been granted in this tenant.",
-        "Send the tenant's Global Administrator the consent link from Data collection.",
+        "Send the client's Global Administrator the consent link from Data collection.",
     ),
     "500113": (
         "The app registration is missing Office Sentry's redirect URI.",
@@ -63,13 +63,13 @@ KNOWN = {
     ),
     "90002": (
         "Microsoft can't find this tenant.",
-        "Check the tenant ID or domain on the tenant, and its Microsoft cloud: a GCC High, DoD or China "
+        "Check the tenant ID or domain on the client, and its Microsoft cloud: a GCC High, DoD or China "
         "tenant can only be reached through that cloud, with an app registered there.",
     ),
-    "900023": ("Microsoft can't find this tenant.", "Check the tenant ID or domain on the tenant."),
+    "900023": ("Microsoft can't find this tenant.", "Check the tenant ID or domain on the client."),
     "53003": (
         "A Conditional Access policy in this tenant blocks the app.",
-        "Ask the tenant's admin to exclude Office Sentry's app from the blocking policy (Conditional Access "
+        "Ask the client's admin to exclude Office Sentry's app from the blocking policy (Conditional Access "
         "for workload identities), or allow the server's location.",
     ),
     "7000112": (
@@ -126,7 +126,7 @@ def check(tenant_ref: str, client_id: str, key_pem: str, thumbprint: str, cloud:
             return CheckResult(
                 False,
                 "Signed in, but the app can't read the tenant.",
-                "Admin consent is missing or incomplete. Send the tenant's Global Administrator the "
+                "Admin consent is missing or incomplete. Send the client's Global Administrator the "
                 "consent link again (it covers every permission).",
             )
         return CheckResult(False, "The connection test failed.", exc.message[:300])

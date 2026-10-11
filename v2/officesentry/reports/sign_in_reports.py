@@ -18,7 +18,7 @@ from ..text import plural
 from .data_reports import Chart, DataReport, Rows, Section, Tile, metric_trend
 from .registry import report
 
-NOT_COLLECTED = 'Sign-in activity hasn\'t been collected yet. Refresh "Sign-in activity" on the tenant page.'
+NOT_COLLECTED = 'Sign-in activity hasn\'t been collected yet. Refresh "Sign-in activity" on the client page.'
 NO_P1 = (
     "Sign-in activity comes from the Entra ID sign-in log, which needs Entra ID P1 (included in Microsoft 365 "
     "Business Premium, E3 and E5). This tenant doesn't have it. The Inactive accounts report still lists "
@@ -26,7 +26,7 @@ NO_P1 = (
 )
 NO_PERMISSION = (
     "Office Sentry can't read this tenant's sign-in log. It needs the AuditLog.Read.All permission: "
-    "open the tenant page, send the consent link to the client's Global Admin again and ask them to "
+    "open the client page, send the consent link to the client's Global Admin again and ask them to "
     "accept."
 )
 NO_P2 = (
