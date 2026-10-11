@@ -38,7 +38,7 @@ version = {attr = "officesentry.__version__"}
 include = ["officesentry*"]
 
 [tool.setuptools.package-data]
-officesentry = ["migrations/*.sql", "web/templates/*.html", "web/templates/reports/*.html", "web/templates/emails/*.html", "web/static/*", "web/static/fonts/*"]
+officesentry = ["common_passwords.txt", "migrations/*.sql", "web/templates/*.html", "web/templates/reports/*.html", "web/templates/emails/*.html", "web/static/*", "web/static/fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

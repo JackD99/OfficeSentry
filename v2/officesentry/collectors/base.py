@@ -71,6 +71,16 @@ class RunContext:
             self.warn("Result was truncated by the page limit")
         return result.items
 
+    def note_exchange_cuts(self) -> None:
+        """After the collector ran: a warning for each cmdlet whose answer the Exchange client cut at its
+        page cap (``ExchangeClient.truncated``), so the run is partial and says what's missing."""
+        if self._exchange is None:
+            return
+        for cmdlet, pages in self._exchange.truncated.items():
+            self.truncated = True
+            self.warn(f"{cmdlet} returned more than {pages} pages of results; the rest were left out")
+        self._exchange.truncated.clear()
+
 
 class Collector:
     key: ClassVar[str]
