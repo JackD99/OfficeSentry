@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import sys
+from contextlib import closing
 
 from werkzeug.security import generate_password_hash
 
@@ -41,41 +42,41 @@ def cmd_migrate(args, cfg):
     """Apply database upgrades now. The portal and worker also do this when they start."""
     from .db import schema_version
 
-    conn = connect(cfg.db_path)
-    before = schema_version(conn)
-    after = migrate(conn)
-    print(f"Database schema is at version {after}" + (f" (upgraded from {before})." if after != before else "."))
+    with closing(connect(cfg.db_path)) as conn:
+        before = schema_version(conn)
+        after = migrate(conn)
+        print(f"Database schema is at version {after}" + (f" (upgraded from {before})." if after != before else "."))
 
 
 def cmd_create_admin(args, cfg):
     from .web.auth import password_problem
 
-    conn = connect(cfg.db_path)
-    migrate(conn)
-    password = getpass.getpass("Password: ")
-    if problem := password_problem(password, getpass.getpass("Confirm: ")):
-        sys.exit(problem)
-    conn.execute(
-        "INSERT INTO users (username, password_hash, role, all_tenants, created_at) VALUES (?, ?, 'admin', 1, ?)",
-        (args.username, generate_password_hash(password), utcnow()),
-    )
-    audit(conn, "cli", "user_created", detail=f"{args.username} (admin)")
-    clear_setup_token(cfg.data_dir)
-    print(f"Created admin {args.username}")
+    with closing(connect(cfg.db_path)) as conn:
+        migrate(conn)
+        password = getpass.getpass("Password: ")
+        if problem := password_problem(password, getpass.getpass("Confirm: ")):
+            sys.exit(problem)
+        conn.execute(
+            "INSERT INTO users (username, password_hash, role, all_tenants, created_at) VALUES (?, ?, 'admin', 1, ?)",
+            (args.username, generate_password_hash(password), utcnow()),
+        )
+        audit(conn, "cli", "user_created", detail=f"{args.username} (admin)")
+        clear_setup_token(cfg.data_dir)
+        print(f"Created admin {args.username}")
 
 
 def cmd_staff_sign_in(args, cfg):
     """The break-glass switches for Microsoft sign-in, from the server (no sign-in needed)."""
-    conn = connect(cfg.db_path)
-    migrate(conn)
-    with transaction(conn):
-        if args.passwords:
-            sso.save(conn, {"sso_passwords": args.passwords})
-            audit(conn, "cli", "staff_sign_in_changed", detail=f"passwords={args.passwords}")
-        if args.off:
-            sso.save(conn, {"sso_enabled": "", "sso_passwords": "on"})
-            audit(conn, "cli", "staff_sign_in_changed", detail="microsoft=off passwords=on")
-    s = sso.settings(conn)
+    with closing(connect(cfg.db_path)) as conn:
+        migrate(conn)
+        with transaction(conn):
+            if args.passwords:
+                sso.save(conn, {"sso_passwords": args.passwords})
+                audit(conn, "cli", "staff_sign_in_changed", detail=f"passwords={args.passwords}")
+            if args.off:
+                sso.save(conn, {"sso_enabled": "", "sso_passwords": "on"})
+                audit(conn, "cli", "staff_sign_in_changed", detail="microsoft=off passwords=on")
+        s = sso.settings(conn)
     state = "on" if sso.enabled(s) else ("set up but off" if sso.is_configured(s) else "not set up")
     break_glass = "allowed" if sso.break_glass(s) else "off"
     print(f"Microsoft sign-in: {state}. Staff signing in with a password: {break_glass}.")
@@ -83,11 +84,11 @@ def cmd_staff_sign_in(args, cfg):
 
 def cmd_setup_link(args, cfg):
     """Print the one-time link for creating the first admin in the browser."""
-    conn = connect(cfg.db_path)
-    migrate(conn)
-    if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone():
-        sys.exit("An admin already exists, so first-run setup is closed. Sign in instead.")
-    print(f"{cfg.base_url}/setup?token={setup_token(cfg.data_dir)}")
+    with closing(connect(cfg.db_path)) as conn:
+        migrate(conn)
+        if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+            sys.exit("An admin already exists, so first-run setup is closed. Sign in instead.")
+        print(f"{cfg.base_url}/setup?token={setup_token(cfg.data_dir)}")
 
 
 def cmd_create_app(args, cfg):
@@ -96,20 +97,20 @@ def cmd_create_app(args, cfg):
     from .app_setup import register_app
     from .entra import SignInError, device_code_token
 
-    conn = connect(cfg.db_path)
-    migrate(conn)
-    vault = Vault(cfg.encryption_keys)
-    cloud = clouds.get(args.cloud)
-    print(f"Sign in as an admin of YOUR (the MSP's) {cloud.label} tenant who can create app registrations.")
-    token = device_code_token(args.tenant, print, cloud.key)
-    redirect_uri = f"{cfg.base_url}/consent/callback"
-    try:
-        conn_id, app = register_app(conn, vault, token, redirect_uri, args.name, cloud.key)
-    except SignInError as exc:
-        sys.exit(str(exc))
-    audit(conn, "cli", "connection_created", detail=f"{args.name} {app['appId']}")
-    print(f"Created app {app['appId']} and app connection #{conn_id}.")
-    print("Next: add clients in the portal and send each client's admin its consent link.")
+    with closing(connect(cfg.db_path)) as conn:
+        migrate(conn)
+        vault = Vault(cfg.encryption_keys)
+        cloud = clouds.get(args.cloud)
+        print(f"Sign in as an admin of YOUR (the MSP's) {cloud.label} tenant who can create app registrations.")
+        token = device_code_token(args.tenant, print, cloud.key)
+        redirect_uri = f"{cfg.base_url}/consent/callback"
+        try:
+            conn_id, app = register_app(conn, vault, token, redirect_uri, args.name, cloud.key)
+        except SignInError as exc:
+            sys.exit(str(exc))
+        audit(conn, "cli", "connection_created", detail=f"{args.name} {app['appId']}")
+        print(f"Created app {app['appId']} and app connection #{conn_id}.")
+        print("Next: add clients in the portal and send each client's admin its consent link.")
 
 
 def cmd_update_app(args, cfg):
@@ -119,23 +120,25 @@ def cmd_update_app(args, cfg):
     from .app_setup import update_app
     from .entra import SignInError, device_code_token
 
-    conn = connect(cfg.db_path)
-    migrate(conn)
-    ready = [c for c in store.list_connections(conn) if c["client_id"]]
-    picked = [c for c in ready if args.connection is None or c["id"] == args.connection]
-    if not picked:
-        sys.exit("No app connection with a client ID" + (f" numbered {args.connection}." if args.connection else "."))
-    if len(picked) > 1:
-        listed = ", ".join(f"#{c['id']} {c['name']} ({clouds.of(c).label})" for c in picked)
-        sys.exit(f"There are several app connections ({listed}). Choose one with --connection.")
-    connection = picked[0]
-    cloud = clouds.of(connection)
-    print(f"Sign in as an admin of YOUR (the MSP's) {cloud.label} tenant who can change app registrations.")
-    token = device_code_token(args.tenant, print, cloud.key)
-    try:
-        added = update_app(conn, token, connection, "cli", "update-app command")
-    except SignInError as exc:
-        sys.exit(str(exc))
+    with closing(connect(cfg.db_path)) as conn:
+        migrate(conn)
+        ready = [c for c in store.list_connections(conn) if c["client_id"]]
+        picked = [c for c in ready if args.connection is None or c["id"] == args.connection]
+        if not picked:
+            sys.exit(
+                "No app connection with a client ID" + (f" numbered {args.connection}." if args.connection else ".")
+            )
+        if len(picked) > 1:
+            listed = ", ".join(f"#{c['id']} {c['name']} ({clouds.of(c).label})" for c in picked)
+            sys.exit(f"There are several app connections ({listed}). Choose one with --connection.")
+        connection = picked[0]
+        cloud = clouds.of(connection)
+        print(f"Sign in as an admin of YOUR (the MSP's) {cloud.label} tenant who can change app registrations.")
+        token = device_code_token(args.tenant, print, cloud.key)
+        try:
+            added = update_app(conn, token, connection, "cli", "update-app command")
+        except SignInError as exc:
+            sys.exit(str(exc))
     print(f"{connection['name']}: added {added} permission{'s' if added != 1 else ''}; it now asks for every one.")
     print("Next: send each client the approval link from Onboarding in the portal.")
 
@@ -210,41 +213,41 @@ def cmd_rotate_keys(args, cfg):
     encryption key, re-encrypt everything, then drop the old encryption key.
     Everyone has to sign in again.
     """
-    conn = connect(cfg.db_path)
-    migrate(conn)
-    keys = list(cfg.encryption_keys)
-    if args.new:
-        from_env = bool(os.environ.get("OFFICESENTRY_SECRET_KEY") or os.environ.get("OFFICESENTRY_ENCRYPTION_KEYS"))
-        if from_env:
-            sys.exit(
-                "Your keys come from environment variables, so change them there: put a new key first in "
-                "OFFICESENTRY_ENCRYPTION_KEYS (keep the old one after it), run rotate-keys, then remove the "
-                "old key. Set a new OFFICESENTRY_SECRET_KEY to sign everyone out."
+    with closing(connect(cfg.db_path)) as conn:
+        migrate(conn)
+        keys = list(cfg.encryption_keys)
+        if args.new:
+            from_env = bool(os.environ.get("OFFICESENTRY_SECRET_KEY") or os.environ.get("OFFICESENTRY_ENCRYPTION_KEYS"))
+            if from_env:
+                sys.exit(
+                    "Your keys come from environment variables, so change them there: put a new key first in "
+                    "OFFICESENTRY_ENCRYPTION_KEYS (keep the old one after it), run rotate-keys, then remove the "
+                    "old key. Set a new OFFICESENTRY_SECRET_KEY to sign everyone out."
+                )
+            fresh = new_secrets()
+            keys = fresh["encryption_keys"] + keys
+            # Saved next to the old keys before anything is re-encrypted, so a crash or a failed write part way
+            # never leaves data under a key that only existed in memory.
+            write_private(cfg.secrets_path, json.dumps({"secret_key": cfg.secret_key, "encryption_keys": keys}))
+        try:
+            count = reencrypt_all(conn, Vault(keys))
+        except RuntimeError as exc:
+            sys.exit(str(exc))
+        if args.new:
+            # Only now the data is readable with the new key alone is the old one dropped.
+            write_private(
+                cfg.secrets_path,
+                json.dumps({"secret_key": fresh["secret_key"], "encryption_keys": fresh["encryption_keys"]}),
             )
-        fresh = new_secrets()
-        keys = fresh["encryption_keys"] + keys
-        # Saved next to the old keys before anything is re-encrypted, so a crash or a failed write part way
-        # never leaves data under a key that only existed in memory.
-        write_private(cfg.secrets_path, json.dumps({"secret_key": cfg.secret_key, "encryption_keys": keys}))
-    try:
-        count = reencrypt_all(conn, Vault(keys))
-    except RuntimeError as exc:
-        sys.exit(str(exc))
-    if args.new:
-        # Only now the data is readable with the new key alone is the old one dropped.
-        write_private(
-            cfg.secrets_path,
-            json.dumps({"secret_key": fresh["secret_key"], "encryption_keys": fresh["encryption_keys"]}),
-        )
-        conn.execute("DELETE FROM sessions")
-        audit(conn, "cli", "keys_rotated", detail=f"{plural(count, 'value')} re-encrypted")
-        print(
-            f"New keys written to {cfg.secrets_path} and {plural(count, 'value')} re-encrypted. "
-            "Restart the web and worker processes; everyone will need to sign in again."
-        )
-        return
-    audit(conn, "cli", "keys_reencrypted", detail=plural(count, "value"))
-    print(f"Re-encrypted {plural(count, 'value')}. Old keys can now be removed from the configuration.")
+            conn.execute("DELETE FROM sessions")
+            audit(conn, "cli", "keys_rotated", detail=f"{plural(count, 'value')} re-encrypted")
+            print(
+                f"New keys written to {cfg.secrets_path} and {plural(count, 'value')} re-encrypted. "
+                "Restart the web and worker processes; everyone will need to sign in again."
+            )
+            return
+        audit(conn, "cli", "keys_reencrypted", detail=plural(count, "value"))
+        print(f"Re-encrypted {plural(count, 'value')}. Old keys can now be removed from the configuration.")
 
 
 def cmd_healthcheck(args, cfg):
@@ -259,9 +262,9 @@ def cmd_healthcheck(args, cfg):
             sys.exit(f"web: {exc}")
     from .worker import is_alive, last_seen
 
-    conn = connect(cfg.db_path)
-    if not is_alive(conn):
-        sys.exit(f"worker: last seen {last_seen(conn) or 'never'}")
+    with closing(connect(cfg.db_path)) as conn:
+        if not is_alive(conn):
+            sys.exit(f"worker: last seen {last_seen(conn) or 'never'}")
 
 
 def cmd_backup(args, cfg):
@@ -495,44 +498,47 @@ def cmd_delete_tenant(args, cfg):
     """Delete a tenant and everything stored for it: the portal's Offboard → Delete permanently."""
     from . import lifecycle
 
-    conn = connect(cfg.db_path)
-    migrate(conn)
-    tenant = store.get_tenant(conn, args.tenant_id)
-    if tenant is None:
-        sys.exit(f"No client with id {args.tenant_id}. The id is the number in the client's address (/tenants/<id>).")
-    stored = lifecycle.stored(conn, tenant["id"])
-    clients = lifecycle.client_only_users(conn, tenant["id"])
-    print(
-        f"{tenant['name']} ({tenant['tenant_ref']}): {plural(stored['runs'], 'collection run')}, "
-        f"{plural(stored['objects'], 'stored item')}, {plural(stored['findings'], 'finding')}, "
-        f"{plural(stored['schedules'], 'emailed report')}, {plural(stored['contacts'], 'contact')}, "
-        f"access for {plural(stored['access'], 'user')}."
-    )
-    if clients:
-        names = ", ".join(u["username"] for u in clients)
+    with closing(connect(cfg.db_path)) as conn:
+        migrate(conn)
+        tenant = store.get_tenant(conn, args.tenant_id)
+        if tenant is None:
+            sys.exit(
+                f"No client with id {args.tenant_id}. The id is the number in the client's address (/tenants/<id>)."
+            )
+        stored = lifecycle.stored(conn, tenant["id"])
+        clients = lifecycle.client_only_users(conn, tenant["id"])
         print(
-            f"Client accounts with no other client: {names}"
-            + (" (deleted too)" if args.delete_client_users else " (kept; add --delete-client-users to delete)")
+            f"{tenant['name']} ({tenant['tenant_ref']}): {plural(stored['runs'], 'collection run')}, "
+            f"{plural(stored['objects'], 'stored item')}, {plural(stored['findings'], 'finding')}, "
+            f"{plural(stored['schedules'], 'emailed report')}, {plural(stored['contacts'], 'contact')}, "
+            f"access for {plural(stored['access'], 'user')}."
         )
-    print("This can't be undone. Back up first with: python -m officesentry backup")
-    if not args.yes:
-        answer = input(f"Type the client's name ({tenant['name']}) to delete it: ")
-        if answer.strip() != tenant["name"].strip():
-            sys.exit("Not deleted.")
-    users = [u["id"] for u in clients] if args.delete_client_users else []
-    try:
-        removed = lifecycle.delete_tenant(conn, tenant, "cli", users)
-    except lifecycle.DeleteError as exc:
-        sys.exit(f"Nothing was deleted: {exc}")
-    print(
-        f"Deleted {tenant['name']}: {plural(removed['runs'], 'run')}, {plural(removed['objects'], 'stored item')}"
-        + (f" and {plural(removed['users'], 'client account')}" if removed["users"] else "")
-        + "."
-    )
-    print(
-        "The worker erases its last copies from the files on disk in the background; System status says if that fails."
-    )
-    print("Remember the client's side: they delete the Office Sentry enterprise app and its Global Reader role.")
+        if clients:
+            names = ", ".join(u["username"] for u in clients)
+            print(
+                f"Client accounts with no other client: {names}"
+                + (" (deleted too)" if args.delete_client_users else " (kept; add --delete-client-users to delete)")
+            )
+        print("This can't be undone. Back up first with: python -m officesentry backup")
+        if not args.yes:
+            answer = input(f"Type the client's name ({tenant['name']}) to delete it: ")
+            if answer.strip() != tenant["name"].strip():
+                sys.exit("Not deleted.")
+        users = [u["id"] for u in clients] if args.delete_client_users else []
+        try:
+            removed = lifecycle.delete_tenant(conn, tenant, "cli", users)
+        except lifecycle.DeleteError as exc:
+            sys.exit(f"Nothing was deleted: {exc}")
+        print(
+            f"Deleted {tenant['name']}: {plural(removed['runs'], 'run')}, {plural(removed['objects'], 'stored item')}"
+            + (f" and {plural(removed['users'], 'client account')}" if removed["users"] else "")
+            + "."
+        )
+        print(
+            "The worker erases its last copies from the files on disk in the background; "
+            "System status says if that fails."
+        )
+        print("Remember the client's side: they delete the Office Sentry enterprise app and its Global Reader role.")
 
 
 def cmd_support_package(args, cfg, config_error: str | None = None):
@@ -550,6 +556,8 @@ def cmd_support_package(args, cfg, config_error: str | None = None):
             conn.execute("SELECT 1 FROM sqlite_master").fetchone()
         except Exception as exc:  # noqa: BLE001 (a broken database is exactly when this command is needed)
             print(f"The database couldn't be opened ({type(exc).__name__}); the package says so.", file=sys.stderr)
+            if conn is not None:
+                conn.close()
             conn = None
     pkg = support.build(conn, cfg, include_identifiers=args.include_identifiers, config_error=config_error)
     if conn is not None:

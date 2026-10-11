@@ -12,10 +12,10 @@
 {{ report_picker(tenant, 'evidence') }}
 <div class="report-main" id="report" tabindex="-1">
 
-<nav class="seg evidence-sets" aria-label="Scheme">
+<nav class="subtabs evidence-sets" aria-label="Scheme">
   <a href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}">{{ icon('arrow', 'back') }} All packs</a>
   {# the packs in this one's group; All packs lists the rest #}
-  {% for title, found in groups if scheme in found %}{% for s in found %}<a href="{{ url_for('evidence.scheme_page', tenant_id=tenant.id, scheme=s.key) }}"{% if s.key == scheme.key %} aria-current="page"{% endif %}>{{ s.short }}</a>{% endfor %}{% endfor %}
+  {% for title, found in groups if scheme in found %}{% for s in found %}<a href="{{ url_for('evidence.scheme_page', tenant_id=tenant.id, scheme=s.key) }}"{% if s.key == scheme.key %} class="active" aria-current="page"{% endif %}>{{ s.short }}</a>{% endfor %}{% endfor %}
 </nav>
 
 <div class="toolbar">
@@ -44,8 +44,8 @@
 
 <section class="card since" id="since">
   <div class="card-head"><h2>What changed</h2>
-    <nav class="seg show-filter" aria-label="Compare with">
-      {% for key, (label, days) in since_options.items() %}<a href="{{ url_for('evidence.scheme_page', since=key, **here) }}"{% if since == key %} aria-current="page"{% endif %}>{{ label|capitalize }}</a>{% endfor %}
+    <nav class="subtabs show-filter" aria-label="Compare with">
+      {% for key, (label, days) in since_options.items() %}<a href="{{ url_for('evidence.scheme_page', since=key, **here) }}"{% if since == key %} class="active" aria-current="page"{% endif %}>{{ label|capitalize }}</a>{% endfor %}
     </nav>
   </div>
   {% if not r.since %}
@@ -146,10 +146,10 @@
     <button type="button" class="primary" data-copy="#copy-all" data-copied="Copied all answers">{{ icon('copy') }} Copy all answers</button>
     <textarea id="copy-all" hidden aria-hidden="true" readonly>{{ copy_all }}</textarea>
   </div>
-  <nav class="seg show-filter" aria-label="Show">
-    <a href="{{ url_for('evidence.scheme_page', **here_since) }}#answers"{% if not show %} aria-current="page"{% endif %}>All<span class="count">{{ total }}</span></a>
-    <a href="{{ url_for('evidence.scheme_page', show='input', **here_since) }}#answers"{% if show == 'input' %} aria-current="page"{% endif %}>Your input<span class="count">{{ sn.input }}</span></a>
-    <a href="{{ url_for('evidence.scheme_page', show='attention', **here_since) }}#answers"{% if show == 'attention' %} aria-current="page"{% endif %}>Partly or No<span class="count">{{ sn.attention }}</span></a>
+  <nav class="subtabs show-filter" aria-label="Show">
+    <a href="{{ url_for('evidence.scheme_page', **here_since) }}#answers"{% if not show %} class="active" aria-current="page"{% endif %}>All<span class="n">{{ total }}</span></a>
+    <a href="{{ url_for('evidence.scheme_page', show='input', **here_since) }}#answers"{% if show == 'input' %} class="active" aria-current="page"{% endif %}>Your input<span class="n">{{ sn.input }}</span></a>
+    <a href="{{ url_for('evidence.scheme_page', show='attention', **here_since) }}#answers"{% if show == 'attention' %} class="active" aria-current="page"{% endif %}>Partly or No<span class="n">{{ sn.attention }}</span></a>
   </nav>
   {% set seen = [] %}
   {% for part, rows in sheet.showing(show) %}

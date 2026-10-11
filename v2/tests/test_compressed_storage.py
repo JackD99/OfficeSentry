@@ -214,6 +214,7 @@ def test_the_upgrade_itself_is_instant_and_changes_no_rows(cfg, monkeypatch):
     row = conn.execute("SELECT data, items FROM objects").fetchone()
     assert (row["data"], row["items"]) == ('{"n": 1}', 1)  # left as it was, and counted as one object
     assert store.run_objects(conn, rid) == [{"n": 1, "_kind": "user", "_id": "u1"}]
+    conn.close()
 
 
 def test_converter_runs_from_the_worker_every_minute(db, two_tenants):
