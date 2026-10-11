@@ -305,6 +305,7 @@ out ([Getting help](v2/docs/getting-help.md)).
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
 - [Getting help](v2/docs/getting-help.md): where to look first, the support package and what it leaves out
+- [Securing the portal](v2/docs/securing-the-portal.md): hardening defaults, what you have to do, reverse proxies
 - [Example reports](examples/)
 - [Roadmap](ROADMAP.md): what's planned next, and what never will be
 
