@@ -1010,16 +1010,21 @@ backups](#off-site-backups)).
 
 Runs before this change printed the portal's log in `status` and `restart`
 runs, and the first-admin link. GitHub keeps run logs for 90 days, and they
-become public with the repository. Before making it public, open
-*Actions → Deploy*, and for each run older than this change press **⋯** and
-**Delete workflow run** (or wait until they are 90 days old).
+become public with the repository. Before making it public, delete their
+logs (below), or wait until they are 90 days old.
 
 Every run also shows the values of the variables it reads at the top of each
 step. If `DEPLOY_HOST` or `OFFICESENTRY_DOMAIN` (or `OFFICESENTRY_SETTINGS`,
 `BACKUP_REPOSITORY`) were variables, add each as a secret of the same name
 ([step 5](#5-tell-github-where-to-deploy)); from then on runs show `***`
-there. Runs from before still show them, so delete those runs too if the
+there. Runs from before still show them, so delete their logs too if the
 server's address and the portal's name shouldn't be public.
+
+To delete the logs of many runs at once, open *Actions → Delete run logs →
+Run workflow*, pick the workflow (`deploy.yml`) and enter the number of the
+last run to clear (the `#` beside it in the list). The runs stay listed,
+without their logs; this can't be undone. One run at a time: open it, press
+**⋯** and **Delete workflow run**.
 
 Once it is public, GitHub Free also allows a **`production` environment that
 needs your approval** before any deploy reaches the server, holding the deploy
