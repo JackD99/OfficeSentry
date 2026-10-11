@@ -138,8 +138,8 @@ def names_to_hide(conn) -> dict[str, str]:
     """What identifies a client or a person in this install, and the label that stands in for it."""
     names: dict[str, str] = {}
     for row in conn.execute("SELECT id, name, tenant_ref FROM tenants").fetchall():
-        names[row["name"]] = f"[tenant {row['id']}]"
-        names[row["tenant_ref"]] = f"[tenant {row['id']}]"
+        names[row["name"]] = f"[client {row['id']}]"
+        names[row["tenant_ref"]] = f"[client {row['id']}]"
     for (username,) in conn.execute("SELECT username FROM users").fetchall():
         names[username] = "[user]"
     for key in ("brand_name", "brand_contact", "brand_support_name", "brand_support_email", "brand_support_phone"):
@@ -256,10 +256,10 @@ def build(
     )
     part(
         "clients.json",
-        "Client tenants",
-        "Each tenant as a number: cloud, state, consent, and the last run of each data source",
+        "Clients",
+        "Each client as a number: cloud, state, consent, and the last run of each data source",
         lambda: _clients(conn, redact, include_identifiers),
-        lambda d: f"{len(d)} tenants",
+        lambda d: f"{len(d)} clients",
     )
     part(
         "failures.json",
@@ -665,7 +665,7 @@ def _readme(pkg: Package) -> str:
         ]
     else:
         lines += [
-            "Clients appear as numbers ([tenant 3]), people as [user] and [email], and anything that looked like a",
+            "Clients appear as numbers ([client 3]), people as [user] and [email], and anything that looked like a",
             "token, key, GUID or IP address was replaced before the file was written.",
             "",
         ]
@@ -716,7 +716,7 @@ PARTS = [
     ("Configuration", "every OFFICESENTRY_* setting, secrets shown as set or not set"),
     ("Health checks", "the System status checks, their results and suggested fixes"),
     ("Database", "tables with row counts, applied migrations, settings by name"),
-    ("Client tenants", "each tenant as a number: cloud, state, consent, last run of each data source"),
+    ("Clients", "each client as a number: cloud, state, consent, last run of each data source"),
     ("Recent failures", f"failed runs and background tasks of the last {FAILURE_DAYS} days, with their error text"),
     ("Worker and queue", "the worker's last heartbeat, what's queued and running"),
     ("App connections", "each connection's cloud and certificate dates, never the certificate or key"),

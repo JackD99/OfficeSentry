@@ -21,7 +21,7 @@ the package attached is the one that gets fixed fastest.
    when data was last collected, whether backups are recent and how full the
    disk is. Whatever isn't right is at the top, with the fix.
 2. **The run's own page.** A failed collection says in plain words what
-   Microsoft answered and what to do about it; the tenant's **Manage** page
+   Microsoft answered and what to do about it; the client's **Manage** page
    says what's wrong with its connection and where in the Microsoft admin
    centres to fix it.
 3. **[Troubleshooting](troubleshooting.md).** The setup and sign-in errors
@@ -69,7 +69,7 @@ JSON, and the README inside explains each one.
 | `environment.json` | every `OFFICESENTRY_*` variable (secrets shown only as set or not set) and the configuration in force |
 | `health.json` | the System status checks, their results and suggested fixes |
 | `database.json` | tables with row counts, applied and pending migrations, settings by name (values only for plain ones such as retention periods) |
-| `clients.json` | each client tenant as a number: cloud, state, consent, capabilities, and the last run of each data source |
+| `clients.json` | each client as a number: cloud, state, consent, capabilities, and the last run of each data source |
 | `failures.json` | failed collection runs and background tasks of the last 14 days, with their error text and the run log's error lines |
 | `worker.json` | the worker's last heartbeat, what's queued and running |
 | `connections.json` | each app connection's cloud and certificate dates |
@@ -85,7 +85,7 @@ devices, sign-ins, findings' detail).
 
 Before any free text goes in (an error message, a traceback, a log line),
 it is swept: client names and their Microsoft tenant references become
-`[tenant 3]`, your team's user names `[user]`, addresses `[email]` and
+`[client 3]`, your team's user names `[user]`, addresses `[email]` and
 `[ip]`, and anything that looks like a token, a key, a GUID or a long opaque
 value is replaced. Microsoft's error codes (`AADSTS…`,
 `Authorization_RequestDenied`) stay, because they help and identify nobody.
@@ -101,7 +101,7 @@ private channel, never a public issue.
 When a page fails, Office Sentry shows *Something went wrong on our side*
 with a reference such as `3f9a1c2b4d5e`. The same reference is on the
 error's line in the portal log (`req=3f9a1c2b4d5e`), with who was signed in
-and which tenant the page was about, so quoting it in a report points
+and which client the page was about, so quoting it in a report points
 straight at the traceback. Every response also carries it as the
 `X-Request-ID` header, which a reverse proxy can log.
 
@@ -116,8 +116,8 @@ asks for help, the container's log has usually scrolled past the moment that
 mattered.
 
 Lines carry the context they happened in: the request's id and user for the
-portal; the tenant, run and data source, or the task, for the worker. A
-tenant is named by its number in the portal's address (`/tenants/<id>`).
+portal; the client, run and data source, or the task, for the worker. A
+client is named by its number in the portal's address (`/tenants/<id>`).
 
 ## Reporting a problem
 

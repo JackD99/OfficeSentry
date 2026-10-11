@@ -9,7 +9,7 @@
 
 {% if not page.collected %}
 <div class="card empty"><h3>No activity history yet</h3>
-  <p>From the next Sign-ins and Admin activity collections, Office Sentry keeps every sign-in and directory audit event it reads from this tenant, beyond the 30 days Microsoft keeps them. Sign-ins need Entra ID P1.</p>
+  <p>From the next Sign-ins and Admin activity collections, Office Sentry keeps every sign-in and directory audit event it reads from this client, beyond the 30 days Microsoft keeps them. Sign-ins need Entra ID P1.</p>
   <a class="btn" href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">{{ icon('refresh') }} Data collection</a></div>
 {% else %}
 <div class="callout lead-answer{{ '' if page.up_to_date else ' warn' }}">{{ icon('clock') }}

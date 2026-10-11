@@ -60,9 +60,9 @@
 <section class="card">
   <div class="card-head"><h2>{{ icon('search') }} Looking yourself</h2></div>
   <dl class="kv">
-    <dt>Error page reference</dt><dd>Every "something went wrong" page shows a reference such as <span class="mono">3f9a1c2b4d5e</span>. The same reference is on the error's line in the portal log (<span class="mono">req=3f9a1c2b4d5e</span>), with who was signed in and which tenant the page was about.</dd>
-    <dt>Logs</dt><dd>The portal and worker each keep a short rolling log in <span class="mono">{{ log_dir }}</span>{% if docker %} (inside the data volume; <span class="mono">docker compose logs web</span> has the same lines){% endif %}. Lines name the tenant, run or task they happened in.</dd>
-    <dt>A failed collection</dt><dd>The run's own page explains Microsoft's answer in plain words; a tenant's <strong>Manage</strong> page says what's wrong with its connection.</dd>
+    <dt>Error page reference</dt><dd>Every "something went wrong" page shows a reference such as <span class="mono">3f9a1c2b4d5e</span>. The same reference is on the error's line in the portal log (<span class="mono">req=3f9a1c2b4d5e</span>), with who was signed in and which client the page was about.</dd>
+    <dt>Logs</dt><dd>The portal and worker each keep a short rolling log in <span class="mono">{{ log_dir }}</span>{% if docker %} (inside the data volume; <span class="mono">docker compose logs web</span> has the same lines){% endif %}. Lines name the client, run or task they happened in.</dd>
+    <dt>A failed collection</dt><dd>The run's own page explains Microsoft's answer in plain words; a client's <strong>Manage</strong> page says what's wrong with its connection.</dd>
     <dt>Who did what</dt><dd>The <a href="{{ url_for('activity.index') }}">Activity log</a> records every change and sign-in.</dd>
   </dl>
 </section>

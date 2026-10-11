@@ -56,10 +56,10 @@ def membership(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     groups = m365_groups(snap)
     users = snap.objects("users", "user")
     if groups is None:
-        report.unavailable = "Group data hasn't been collected yet. Refresh Groups and Teams on the tenant page."
+        report.unavailable = "Group data hasn't been collected yet. Refresh Groups and Teams on the client page."
         return
     if users is None:
-        report.unavailable = "User data hasn't been collected yet. Refresh Users on the tenant page."
+        report.unavailable = "User data hasn't been collected yet. Refresh Users on the client page."
         return
 
     people: dict[str, _Person] = {}

@@ -37,7 +37,7 @@ class Cover:
     """What the summary sheet says about the workbook."""
 
     title: str
-    client: str = ""  # tenant name, or "All tenants"
+    client: str = ""  # client name, or "All clients"
     generated_at: datetime | None = None
     prepared_by: str = ""
     tenant_ref: str = ""

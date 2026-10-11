@@ -80,7 +80,7 @@
 {% macro tenant_header(tenant, active, title=None, counts=None, pin=true) -%}
 {% set staff = current_user.role in ('admin', 'analyst') %}
 <header class="tenant-head"{% if pin %} data-pin{% endif %}>
-<div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">{{ 'Tenants' if staff else 'Your reports' }}</a><span>/</span><span>{{ tenant.name }}</span></div>
+<div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">{{ 'Clients' if staff else 'Your reports' }}</a><span>/</span><span>{{ tenant.name }}</span></div>
 <div class="page-head">
   <div class="head-title">
     <h1>{{ title or tenant.name }}</h1>

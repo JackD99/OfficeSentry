@@ -81,7 +81,7 @@ def test_redactor_replaces_client_and_user_names_unless_asked_to_keep_them(db, t
     text = "Alpha Ltd (alpha.onmicrosoft.com) failed; jack retried; Bravo Inc was fine; ALPHA LTD again"
     out = support.Redactor(names)(text)
     want = (
-        f"[tenant {alpha}] ([tenant domain]) failed; [user] retried; [tenant {bravo}] was fine; [tenant {alpha}] again"
+        f"[client {alpha}] ([tenant domain]) failed; [user] retried; [client {bravo}] was fine; [client {alpha}] again"
     )
     assert out == want
     kept = support.Redactor(names, keep_identifiers=True)(text)
@@ -178,25 +178,25 @@ def test_package_carries_the_facts_and_none_of_the_secrets(cfg, db, two_tenants,
     assert "name" not in clients[alpha] and clients[alpha]["consented"] is True
     failures = json.loads(pkg.files["failures.json"])
     assert failures["runs"][0]["run"] == world["run"] and failures["runs"][0]["tenant"] == alpha
-    assert failures["runs"][0]["error"] == f"Sign-in failed: [tenant {alpha}] refused the app (tenant [guid])"
+    assert failures["runs"][0]["error"] == f"Sign-in failed: [client {alpha}] refused the app (tenant [guid])"
     assert "Traceback" in failures["runs"][0]["events"][0]["message"] and failures["failed_runs_by_collector"] == {
         "users": 1
     }
     assert (
         failures["tasks"][0]["task"] == world["task"]
-        and failures["tasks"][0]["error"] == f"Nobody to email at [tenant {bravo}]: [email] bounced"
+        and failures["tasks"][0]["error"] == f"Nobody to email at [client {bravo}]: [email] bounced"
     )
     activity = json.loads(pkg.files["activity.json"])
     assert (
         activity[0]["action"] == "tenant_created"
-        and activity[0]["detail"] == f"[tenant {alpha}] by [user] from [ip]"
+        and activity[0]["detail"] == f"[client {alpha}] by [user] from [ip]"
         and "user" not in activity[0]
     )
     connections = json.loads(pkg.files["connections.json"])
     assert (
         connections[0]["has_client_id"] is True and "client_id" not in connections[0] and connections[0]["tenants"] == 2
     )
-    assert f"[tenant {alpha}] page failed for [user] <[email]>" in pkg.files["logs/web.log"].decode()
+    assert f"[client {alpha}] page failed for [user] <[email]>" in pkg.files["logs/web.log"].decode()
     assert "Flask==" in pkg.files["packages.txt"].decode()
     assert json.loads(pkg.files["health.json"])["checks"]["worker"]["fix"]
 
@@ -282,7 +282,7 @@ def test_one_part_failing_never_loses_the_rest(cfg, db, two_tenants, monkeypatch
     pkg = support.build(db, cfg, now=NOW)
     (problem,) = pkg.problems
     assert (
-        problem.name == "failures.json" and problem.note == f"Couldn't be made: no room for [tenant {two_tenants[0]}]"
+        problem.name == "failures.json" and problem.note == f"Couldn't be made: no room for [client {two_tenants[0]}]"
     )
     assert "failures.json" not in pkg.files and "clients.json" in pkg.files
 

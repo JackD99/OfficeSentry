@@ -7,7 +7,7 @@ same `python -m officesentry ...` part in the virtual environment.
 
 For a failed collection, the run's own error message is usually the quickest
 guide: [Onboarding a client](onboarding-a-client.md#errors-on-failed-runs)
-explains each one. A tenant's **Manage** page (under **Settings**) also says
+explains each one. A client's **Manage** page (under **Settings**) also says
 in plain words what's wrong with its connection and where to fix it.
 
 **Where to look first**
@@ -100,7 +100,7 @@ certificate** and then also ran `create-app`. Now *Sign in to Microsoft* and
 `create-app` both use a certificate you already generated for that cloud, so
 this only happens if you generate two certificates by hand.
 
-It does no harm. When you add a tenant and Office Sentry asks which app
+It does no harm. When you add a client and Office Sentry asks which app
 connection to use, choose the one marked **Ready**. Picking the other one
 makes consent fail.
 
@@ -115,7 +115,7 @@ one of the app registration's redirect URIs, exactly.
    (the Office Sentry app) → Authentication*. Under the **Web** platform, add
    that redirect URI exactly (https, same host name, no trailing slash) and
    save.
-3. Open a fresh consent link (reload the tenant's page first).
+3. Open a fresh consent link (reload the client's page first).
 
 It usually means `OFFICESENTRY_BASE_URL` was different when the app was
 created (*Sign in to Microsoft* and `create-app` use it for the redirect URI;
@@ -130,7 +130,7 @@ fresh link, signed in as the same admin, in the same browser that opened it.
 A link sent to the client, or opened over an hour later, is approved at
 Microsoft but not recorded.
 
-Press **Check connection now** on the tenant's checklist or Manage page. When
+Press **Check connection now** on the client's checklist or Manage page. When
 Office Sentry can sign in and read the tenant, it records the consent itself
 and starts the first collection. [Onboarding a client](onboarding-a-client.md#2-get-admin-consent)
 explains each message you can see on the way back.
@@ -147,7 +147,7 @@ In the **client's** tenant:
 
 1. *Microsoft Entra admin centre → Roles and admins → Global Reader → Add
    assignments*.
-2. Select the Office Sentry app by name (the tenant's Manage page shows the
+2. Select the Office Sentry app by name (the client's Manage page shows the
    name it has in that tenant).
 3. Wait a few minutes: Microsoft takes a while to apply a new role
    assignment. Then press **Check again** on the checklist, and **Refresh**
