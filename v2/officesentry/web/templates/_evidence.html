@@ -1,0 +1,59 @@
+{#- Shared pieces of the evidence pages. Import with
+    {% from "_evidence.html" import answer_row, verdict_pill with context %} -#}
+{% from "_macros.html" import icon, csrf with context %}
+
+{% set ANSWER_TONE = {'ok': 'ok', 'warn': 'warn', 'bad': 'bad', 'input': 'accent'} %}
+{% set VERDICT_TONE = {'Pass': 'ok', 'Fail': 'bad', 'Partly': 'warn', 'Your evidence': 'accent', 'Not collected': ''} %}
+
+{#- The staff form that writes or changes a topic's answer for this client. -#}
+{% macro answer_form(a, tenant, back, answers, max_note) -%}
+<details class="answer-edit"><summary class="small">{{ 'Write this answer for ' ~ tenant.name if a.needs_input else ('Change or clear this answer' if a.override else 'Change this answer') }}</summary>
+  <form method="post" action="{{ url_for('reports.evidence_answer', tenant_id=tenant.id, key=a.key) }}">
+    {{ csrf() }}{% for name, value in back.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+    {% if a.topic and a.topic.kind == 'text' %}<input type="hidden" name="answer" value="Yes">
+    {% else %}
+    <div class="form-row">
+      <label>Answer <select name="answer">{% for v in answers %}<option value="{{ v }}"{% if v == a.answer %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    </div>
+    {% endif %}
+    <label>Text to paste <textarea name="note" rows="4" maxlength="{{ max_note }}">{{ a.text }}</textarea></label>
+    <p class="small muted m0">Saved for {{ tenant.name }} only. It replaces the text in every scheme and question set that asks this.</p>
+    <button class="sm">Save answer</button>
+    {% if a.override %}<button class="sm ghost" name="action" value="clear">Use the suggested answer</button>{% endif %}
+  </form>
+</details>
+{%- endmacro %}
+
+{% macro verdict_pill(verdict, cls='') -%}
+<span class="pill {{ VERDICT_TONE.get(verdict, '') }} answer {{ cls }}">{{ verdict }}</span>
+{%- endmacro %}
+
+{#- One questionnaire answer (questionnaires.Row): the answer, the text to paste with its Copy button, what
+    it's based on, what's still to check, and the staff form to write or change it. ``back`` is the hidden
+    fields that bring the form back here: a question set (set, show) or a scheme (scheme, show, anchor). -#}
+{% macro answer_row(r, tenant, staff, answers, max_note, back, rid, anchor_id='') -%}
+{% set a = r.answer %}
+<div class="answer-row qa{% if r.state == 'Your input' %} needs-input{% endif %}"{% if anchor_id %} id="{{ anchor_id }}"{% endif %}>
+  <span class="pill {{ ANSWER_TONE.get(r.tone, '') }} answer">{{ r.state }}</span>
+  <div class="answer-main">
+    <div class="q">{% if r.item.ref %}<span class="ref">{{ r.item.ref }}</span> {% endif %}{{ r.item.question }}{% if r.item.autofail %} <span class="pill bad autofail" title="A No here fails the whole assessment">Auto-fail</span>{% endif %}</div>
+    <div class="paste">
+      <p class="paste-text" id="{{ rid }}">{% for text, blank in r.segments %}{% if blank %}<mark class="blank">{{ text }}</mark>{% else %}{{ text }}{% endif %}{% endfor %}</p>
+      <button type="button" class="sm ghost copy" data-copy="#{{ rid }}" aria-label="Copy the answer to: {{ r.item.question }}">{{ icon('copy') }} Copy</button>
+    </div>
+    <p class="small muted m0 based-on">
+      {%- if a.override -%}
+        Answer set by {{ a.override.set_by }} on {{ a.override.set_at|day }}.
+      {%- elif r.based_on -%}
+        {{ 'Why: ' if a.needs_input else 'Based on: ' }}{{ r.based_on }}
+      {%- endif -%}
+      {%- if a.source and not a.needs_input %} <a href="{% if a.source.report %}{{ url_for('reports.data_report', tenant_id=tenant.id, key=a.source.report) }}{% if a.source.anchor %}#{{ a.source.anchor }}{% endif %}{% else %}{{ url_for('reports.evidence_pack', tenant_id=tenant.id, set='controls') }}#control-{{ a.source.control }}{% endif %}">{{ a.source.label }} &rarr;</a>{% endif %}
+      {%- if a.as_of and not a.needs_input and not a.override %} <span class="as-of">Microsoft 365 data from {{ a.as_of|day }}.</span>{% endif %}
+    </p>
+    {% if r.beyond %}<p class="small m0 still">{{ icon('alert') }} <span><strong>Still to check:</strong> {{ r.beyond }}</span></p>{% endif %}
+    {% if staff and a.override %}<p class="small muted m0">Suggested from the data: <strong>{{ a.suggested }}</strong>. {{ a.why }}</p>{% endif %}
+    {% if staff and a.data_changed %}<p class="small m0 data-changed">{{ icon('alert') }} Data changed since this was set: the suggestion was {{ a.override.suggested }} then and is {{ a.suggested }} now.</p>{% endif %}
+    {% if staff %}{{ answer_form(a, tenant, back, answers, max_note) }}{% endif %}
+  </div>
+</div>
+{%- endmacro %}
