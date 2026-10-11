@@ -12,20 +12,33 @@ from flask import Blueprint, abort, current_app, flash, g, redirect, render_temp
 from .. import first_run, home, month_end
 from ..issued import period_label
 from ..reports.monthly_review import setting
-from .access import login_required, roles_required, safe_next
+from .access import access_of, can, current, is_staff, login_required, needs, safe_next
 from .filters import money
 from .groups import group_aware, scoped_tenants
 
 bp = Blueprint("home", __name__)
 
-STAFF = ("admin", "analyst")
+# What each home page needs besides a staff role; Today also shows only the reasons its reader may open.
+NEEDS = {home.TODAY: ("clients.compare",), home.CLIENTS: ("clients.compare", "reports.tenant")}
+REASON_NEEDS = {"findings": "reports.security", "collection": "collect", "access": "collect", "due": "reports.tenant"}
+
+
+def open_to(user) -> list[str]:
+    """The home pages this person may open, in menu order."""
+    if user is None or user["role"] == "client":
+        return []
+    a = access_of(user)
+    return [key for key, caps in NEEDS.items() if a.can_all(caps)]
 
 
 def home_url(user) -> str:
-    """Where this person's home page is: their chosen Today or Clients, or the client dashboard."""
-    if user is None or user["role"] not in STAFF:
+    """Where this person's home page is: their chosen Today or Clients (or the other one, when their choice
+    is closed to them), or the client dashboard."""
+    pages = open_to(user)
+    if not pages:
         return url_for("tenants.dashboard")
-    return url_for(f"home.{home.home_of(user)}")
+    chosen = home.home_of(user)
+    return url_for(f"home.{chosen if chosen in pages else pages[0]}")
 
 
 def _link(reason: home.Reason) -> str:
@@ -43,7 +56,7 @@ def _link(reason: home.Reason) -> str:
 
 def get_started() -> list[first_run.Step] | None:
     """The Get started checklist for an admin until the first collection has run (first_run.py), with links."""
-    if g.user["role"] != "admin":
+    if not can("settings.manage"):
         return None
     steps = first_run.pending(g.db)
     for step in steps or ():
@@ -65,21 +78,28 @@ def index():
     return redirect(home_url(g.user))
 
 
+def _homes() -> dict:
+    return {k: v for k, v in home.HOMES.items() if k in open_to(g.user)}
+
+
 @bp.get("/today")
-@roles_required(*STAFF)
+@needs("clients.compare", kind="staff")
 @group_aware
 def today():
     data = home.today(g.db, scoped_tenants())
+    a = current()
     for row in data.rows:
+        row.reasons = [r for r in row.reasons if a.can(REASON_NEEDS[r.kind], row.tenant["id"])]
         for reason in row.reasons:
             reason.href = _link(reason)
+    data.rows = [row for row in data.rows if row.reasons]
     return render_template(
-        "home_today.html", data=data, homes=home.HOMES, mine=home.home_of(g.user), get_started=get_started()
+        "home_today.html", data=data, homes=_homes(), mine=home.home_of(g.user), get_started=get_started()
     )
 
 
 @bp.get("/clients")
-@roles_required(*STAFF)
+@needs("clients.compare", "reports.tenant", kind="staff")
 @group_aware
 def clients():
     cfg = current_app.extensions["officesentry.config"]
@@ -89,7 +109,7 @@ def clients():
     return render_template(
         "home_clients.html",
         data=data,
-        homes=home.HOMES,
+        homes=_homes(),
         mine=home.home_of(g.user),
         sentence=data.sentence(lambda v: money(v, currency)),
         states=month_end.STATES,
@@ -101,10 +121,10 @@ def clients():
 @login_required
 def choose():
     """Make Today or Clients this person's home page (staff only; nothing else changes)."""
-    if g.user["role"] not in STAFF:
+    if not is_staff():
         abort(403)
     choice = request.form.get("home", "")
-    if choice not in home.HOMES:
+    if choice not in open_to(g.user):
         abort(400)
     g.db.execute("UPDATE users SET home = ? WHERE id = ?", (choice, g.user["id"]))
     flash(f"{home.HOMES[choice][0]} is now your home page. It opens when you sign in and from the logo.", "success")

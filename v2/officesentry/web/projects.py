@@ -10,7 +10,7 @@ from .. import projects
 from ..db import audit
 from ..reports import tables
 from ..snapshot import TenantSnapshot
-from .access import roles_required, tenant_or_404, visible_tenants
+from .access import needs, tenant_or_404, visible_tenants
 from .across import _cover, _download
 from .printing import pdf_response
 
@@ -24,7 +24,7 @@ def _filters():
 
 
 @bp.get("/projects")
-@roles_required("admin", "analyst")
+@needs("projects.view", "clients.compare")
 def index():
     project, declined = _filters()
     data = projects.pipeline(g.db, visible_tenants(g.db, g.user))
@@ -41,7 +41,7 @@ def index():
 
 @bp.get("/projects.csv", defaults={"ext": "csv"})
 @bp.get("/projects.xlsx", defaults={"ext": "xlsx"})
-@roles_required("admin", "analyst")
+@needs("projects.view", "clients.compare", "export")
 def download(ext: str):
     project, declined = _filters()
     data = projects.pipeline(g.db, visible_tenants(g.db, g.user))
@@ -64,7 +64,7 @@ def download(ext: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/projects")
-@roles_required("admin", "analyst")
+@needs("projects.view")
 def tenant(tenant_id: int):
     t = tenant_or_404(tenant_id)
     snap = TenantSnapshot(g.db, t)
@@ -82,7 +82,7 @@ def tenant(tenant_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/projects.pdf")
-@roles_required("admin", "analyst")
+@needs("projects.view", "export")
 def pdf(tenant_id: int):
     """The client-facing proposal: every recommendation they haven't declined, without staff notes."""
     t = tenant_or_404(tenant_id)
@@ -98,7 +98,7 @@ def pdf(tenant_id: int):
 
 
 @bp.post("/tenants/<int:tenant_id>/projects/<key>")
-@roles_required("admin", "analyst")
+@needs("projects.manage")
 def set_status(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
     status = request.form.get("status", "")

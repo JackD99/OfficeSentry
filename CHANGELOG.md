@@ -38,11 +38,29 @@ permissions.
 
 ### Database upgrade
 
-Yes, applied on start as usual: migration 37 adds a table for the search index, and migration 38 adds
-Microsoft account links on users and how each session was started.
+Yes, applied on start as usual: migration 37 adds a table for the search index, migration 38 adds
+Microsoft account links on users and how each session was started, and migration 39 adds roles. Nobody's
+access changes: today's admins become **Administrators**, analysts become **Second line** and client accounts
+**Client viewers**, each holding exactly what the old role could do. As ever, a copy of the database is made
+first.
 
 ### Added
 
+- **Roles and capabilities.** What someone may do is now a role made of capabilities (which report areas
+  open for them, downloads, refreshing data, accepting risks, setting up emailed reports, reviewing and
+  approving month-end reports, projects, custom reports, managing clients, users or settings) and a scope
+  (every client, or the clients and groups granted to them). Seven built-in roles: **Administrator**,
+  **Team leader** (every client and every report, manages clients and approves month-end reports, not users
+  or settings), **Second line** (what an analyst could do), **First line** (looks things up: people,
+  identity, email and device reports, nothing to change), **Account manager** (licences, renewals,
+  month-end reports and projects for their clients), **Auditor** (every report, read-only) and **Client
+  viewer** (a client's own people). The user page picks a role and shows what the person can do, and an
+  admin can give or take away single capabilities for one person, everywhere or on one client (taking away
+  always wins; a client account only ever holds report capabilities). The menu, a client's tabs and the
+  report picker show only what the person may open, every page and download checks on the server, and the
+  cross-client pages leave out a client where a capability was taken away. There is always at least one
+  Administrator: the last one can't be demoted, disabled or deleted. Editing roles and adding custom ones
+  come in the next release.
 - **Settings → Support** and a support package: one zip of the version, settings, health checks, recent
   failures and the portal's and worker's logs to attach to a bug report, with keys, certificates, tokens,
   addresses and client names taken out (clients appear as numbers unless you tick *Include client
@@ -116,6 +134,8 @@ Microsoft account links on users and how each session was started.
 
 ### Fixed
 
+- An Admin activity collection could be marked partial, with a warning that Microsoft timed out, when a
+  second ticked over between two readings of the clock during the run; nothing was actually missing.
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
   invisible to the admin checks and the Admins report. The group's members are now read each night and
   checked like any other admin; the Admins report says which group a role comes through.
@@ -247,6 +267,11 @@ Microsoft account links on users and how each session was started.
   which carried search terms, filter values and the one-time setup link.
 - The containers get a process limit, and the bundled Caddy runs with every capability but binding its
   ports dropped, like the portal and worker.
+- The Deploy workflow reads the server's address and the portal's name from the secrets `DEPLOY_HOST` and
+  `OFFICESENTRY_DOMAIN` (and `OFFICESENTRY_SETTINGS` and `BACKUP_REPOSITORY` when they're secrets), since a
+  public repository's run logs show every variable a step reads. Variables of those names still work; add
+  each as a secret to hide it ([v2/DEPLOY.md, step 5](v2/DEPLOY.md#5-tell-github-where-to-deploy)). The
+  live canary takes the test tenant's ID from the secret `CANARY_TENANT_ID` for the same reason.
 - The activity log now records pages people weren't allowed to open (another client's tenant, a staff-only
   page) and forms sent with a stale token, counted per person, address and hour with the latest page named,
   so a client account probing for other clients' data is visible under *Settings → Activity log*.

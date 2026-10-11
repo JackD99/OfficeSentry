@@ -485,11 +485,12 @@ come to about 40 GB, well under a dollar a month at B2's published price.
    `secrets.json`.** Without it the off-site copies can't be read by anyone,
    you included.
 4. In GitHub: the repository's *Settings → Secrets and variables → Actions*.
-   Add a variable and three secrets:
+   Add a variable (or a secret, to keep the bucket's name out of the public
+   run logs) and three secrets:
 
    | | Name | Value |
    |---|---|---|
-   | Variable | `BACKUP_REPOSITORY` | `s3:https://` + the endpoint + `/` + the bucket name + `/officesentry`, e.g. `s3:https://s3.eu-central-003.backblazeb2.com/yourmsp-officesentry-backups/officesentry` |
+   | Variable or secret | `BACKUP_REPOSITORY` | `s3:https://` + the endpoint + `/` + the bucket name + `/officesentry`, e.g. `s3:https://s3.eu-central-003.backblazeb2.com/yourmsp-officesentry-backups/officesentry` |
    | Secret | `BACKUP_PASSWORD` | the password from step 3 |
    | Secret | `BACKUP_KEY_ID` | the keyID |
    | Secret | `BACKUP_SECRET_KEY` | the applicationKey |
@@ -837,17 +838,23 @@ In GitHub: the repository's *Settings → Secrets and variables → Actions*.
 | `HCLOUD_TOKEN` | the Hetzner API token |
 | `DEPLOY_SSH_KEY` | the deploy key's **private** key, all of it, including the BEGIN and END lines |
 | `DEPLOY_HOST_KEY` | the server's own SSH key, one line starting `ssh-ed25519 AAAA` (below). Required: the workflow only talks to the server that has this key |
+| `DEPLOY_HOST` | the server's IPv4 address |
+| `OFFICESENTRY_DOMAIN` | the domain alone, e.g. `sentry.yourmsp.com` |
 | `PORTAL_ALLOWED_IPS` | only when the server also runs a public site (below): the addresses that may open the portal, separated by commas |
 | `SETUP_CODE` | only while there is no admin yet: a long random password (20 characters or more) to use as the first-admin code in step 6. Delete it afterwards |
 
+A public repository's run logs are public, and every step's log opens with
+its settings, where only secrets are hidden. So the server's address and the
+portal's name go in secrets; a variable of the same name still works, but
+shows in every run. `OFFICESENTRY_SETTINGS` and `BACKUP_REPOSITORY` below can
+be secrets too, for the same reason.
+
 | Variables | |
 |---|---|
-| `DEPLOY_HOST` | the server's IPv4 address |
-| `OFFICESENTRY_DOMAIN` | the domain alone, e.g. `sentry.yourmsp.com` |
 | `OFFICESENTRY_TIMEZONE` | e.g. `Europe/London` (default UTC) |
 | `HCLOUD_FIREWALL` | only if the firewall isn't called `officesentry` |
 | `OFFICESENTRY_WEBSITE_DOMAIN`, `OFFICESENTRY_WEBSITE_CONTACT`, `OFFICESENTRY_DEMO_DOMAIN`, `DEMO_ENABLED` | only for the project's own website and public demo (below) |
-| `OFFICESENTRY_SETTINGS` | optional: more `.env` lines, one per line, e.g. `OFFICESENTRY_COLLECT_CRON=0 1 * * *`. Variables show in run logs, so never put a password or key here |
+| `OFFICESENTRY_SETTINGS` | optional: more `.env` lines, one per line, e.g. `OFFICESENTRY_COLLECT_CRON=0 1 * * *`. As a variable it shows in run logs, so never put a password or key in one; make it a secret instead |
 | `AUTO_DEPLOY` | `true` to deploy every merge to main once its tests pass (only main's newest commit; a re-run of an older test run doesn't redeploy it). Anything else, or no variable, means you deploy by hand ([below](#automatic-deploys-off-and-on)) |
 | `PRODUCTION_FROM_TAGS` | `true` makes the portal take release tags only, and merges never deploy it ([below](#production-from-releases)). Unset or anything else: a deploy builds the chosen code, as today |
 | `BACKUP_REPOSITORY` | optional: where the off-site copies go ([Off-site backups](#off-site-backups)), with the secrets `BACKUP_PASSWORD`, `BACKUP_KEY_ID`, `BACKUP_SECRET_KEY`, and optionally `BACKUP_PING_URL` and `UPTIME_PING_URL` |
@@ -866,7 +873,7 @@ that address the run stops before sending it anything. If you rebuild or
 replace the server, it gets a new key: the run stops with a message showing
 the new one, and you update the secret the same way. If you haven't touched
 the server and see that message, don't change the secret; check the
-`DEPLOY_HOST` variable and the server in the Hetzner console first.
+`DEPLOY_HOST` secret and the server in the Hetzner console first.
 
 ### 6. Deploy and create the admin
 
@@ -881,8 +888,8 @@ the server and see that message, don't change the secret; check the
    works until the first admin exists.
 5. Delete the `SETUP_CODE` secret. Then carry on from step 6 of *First start*.
 
-The run logs never show the setup link or code: they will be public once the
-repository is, and whoever has the link can create the first admin.
+The run logs never show the setup link or code: they're public, and whoever
+has the link can create the first admin.
 
 ### Everyday jobs
 
@@ -903,7 +910,7 @@ the database was upgraded since, restore the `pre-upgrade-*` copy as in
 *Rolling back an update* (that needs a shell, below).
 
 The runs never print the portal's own log, because it names clients, users
-and addresses and the run logs will be public once the repository is. When
+and addresses and the run logs are public. When
 `status` counts errors, or a deploy says the portal didn't become healthy,
 read the log in a shell (below) with `docker compose logs --tail 200 web`
 (or `worker`), or make a support package with the log's tail and the health
@@ -1003,9 +1010,21 @@ backups](#off-site-backups)).
 
 Runs before this change printed the portal's log in `status` and `restart`
 runs, and the first-admin link. GitHub keeps run logs for 90 days, and they
-become public with the repository. Before making it public, open
-*Actions → Deploy*, and for each run older than this change press **⋯** and
-**Delete workflow run** (or wait until they are 90 days old).
+become public with the repository. Before making it public, delete their
+logs (below), or wait until they are 90 days old.
+
+Every run also shows the values of the variables it reads at the top of each
+step. If `DEPLOY_HOST` or `OFFICESENTRY_DOMAIN` (or `OFFICESENTRY_SETTINGS`,
+`BACKUP_REPOSITORY`) were variables, add each as a secret of the same name
+([step 5](#5-tell-github-where-to-deploy)); from then on runs show `***`
+there. Runs from before still show them, so delete their logs too if the
+server's address and the portal's name shouldn't be public.
+
+To delete the logs of many runs at once, open *Actions → Delete run logs →
+Run workflow*, pick the workflow (`deploy.yml`) and enter the number of the
+last run to clear (the `#` beside it in the list). The runs stay listed,
+without their logs; this can't be undone. One run at a time: open it, press
+**⋯** and **Delete workflow run**.
 
 Once it is public, GitHub Free also allows a **`production` environment that
 needs your approval** before any deploy reaches the server, holding the deploy

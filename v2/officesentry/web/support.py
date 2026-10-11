@@ -8,7 +8,7 @@ from flask import Blueprint, Response, current_app, g, render_template, request
 
 from .. import __version__, support, system_health
 from ..db import audit, transaction
-from .access import roles_required
+from .access import needs
 
 bp = Blueprint("support", __name__, url_prefix="/admin")
 
@@ -19,7 +19,7 @@ HELP_URL = "https://officesentry.co.uk/docs/getting-help/"
 
 
 @bp.get("/support")
-@roles_required("admin")
+@needs("system.manage")
 def index():
     cfg = current_app.extensions["officesentry.config"]
     health = system_health.assess(g.db, cfg)
@@ -40,7 +40,7 @@ def index():
 
 
 @bp.post("/support/package")
-@roles_required("admin")
+@needs("system.manage")
 def package():
     """Build the package now and send it; nothing is kept on the server."""
     cfg = current_app.extensions["officesentry.config"]
