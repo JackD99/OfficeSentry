@@ -10,7 +10,8 @@ answers a new Graph request (a path, where ``{id}`` stands for any one segment;
 ``<path>?$skiptoken`` for the later pages of a recorded call whose next link
 the collector didn't follow when the recording was made)
 or a new Exchange cmdlet (``"Get-..."``, any parameters) with a body of the
-documented shape, and
+documented shape; ``"Get-...(Name,Name)"`` answers a recorded cmdlet called
+with a new set of parameter names (sorted, exactly those), and
 ``new_fields`` lets a request whose ``$select`` asks for more fields than were
 recorded get the recorded response (the new fields are simply absent, as for a
 tenant that doesn't set them). Anything else unrecorded is still a 404 and is
@@ -117,8 +118,11 @@ def mock(
     def exchange_cb(request):
         cmdlet = json.loads(request.body)["CmdletInput"]
         key = _cmdlet_key(request.url, cmdlet)
-        if key not in exchange and cmdlet.get("CmdletName") in stand_ins:
-            return 200, {}, json.dumps(stand_ins[cmdlet["CmdletName"]])
+        if key not in exchange:
+            name = cmdlet.get("CmdletName")
+            for stand_in in (name, f"{name}({','.join(sorted(cmdlet.get('Parameters') or {}))})"):
+                if stand_in in stand_ins:
+                    return 200, {}, json.dumps(stand_ins[stand_in])
         return serve(exchange, key, cmdlet.get("CmdletName"))
 
     rsps.add_callback(

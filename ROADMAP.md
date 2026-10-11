@@ -12,9 +12,6 @@ Discussions.
 
 ## Next
 
-- Teams: private and shared channels and their guests, inactive teams, installed apps.
-- Mail flow: delivered, quarantined and failed mail per domain, top spam and phishing
-  recipients. Comes with one approval request per client.
 - Audit log add-on (optional, separate app): who deleted, downloaded or shared files, and
   who opened someone else's mailbox.
 
