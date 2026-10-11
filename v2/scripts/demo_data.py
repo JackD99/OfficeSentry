@@ -713,18 +713,21 @@ def mail_extras(t: dict, users: list[dict], now: datetime, rng: random.Random) -
         ("Website enquiries", "enquiries", "ann", rng.sample(staff, min(4, len(staff))), True, 25),
         ("Christmas party 2023", "xmas2023", None, rng.sample(staff, min(9, len(staff))), False, 0),
         ("Old projects", "oldprojects", None, [], False, 0),
+        # Also an Entra group (m1 in the fixtures), so its page joins Exchange's list to the directory's group.
+        ("Finance alerts", "finance-alerts", "ann", rng.sample(staff, min(4, len(staff))), False, 6),
     ]
     groups, members, trace = [], {}, []
     for n, (name, alias, owner, who, outside, per_10_days) in enumerate(lists):
         address = f"{alias}@{domain}"
+        security = name == "Finance alerts"
         groups.append(
             {
                 "Name": name,
                 "DisplayName": name,
                 "PrimarySmtpAddress": address,
                 "Guid": f"dl-{n}",
-                "ExternalDirectoryObjectId": f"dl-{n}",
-                "RecipientTypeDetails": "MailUniversalDistributionGroup",
+                "ExternalDirectoryObjectId": "m1" if security else f"dl-{n}",
+                "RecipientTypeDetails": "MailUniversalSecurityGroup" if security else "MailUniversalDistributionGroup",
                 "ManagedBy": [{"ann": "u1", "bob": "u2"}[owner]] if owner else [],
                 "RequireSenderAuthenticationEnabled": not outside,
                 "IsDirSynced": False,
@@ -1123,6 +1126,23 @@ class Swapped:
             setattr(module, name, value)
 
 
+def directory_groups(now: datetime) -> dict:
+    """The group fixtures plus what the group clean-up report and Coming up show: a team expiring soon that
+    its owner can renew, one nobody can renew, and a role-assignable group with a guest in it."""
+    expiry = {"g4": 24, "g2": 47}
+    rows = [
+        {**g, "expirationDateTime": (now + timedelta(days=expiry[g["id"]])).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        if g["id"] in expiry
+        else g
+        for g in groupdata.GROUPS
+    ]
+    rows.append(
+        groupdata._group("s4", "Helpdesk admins", unified=False, mail=False, security=True, isAssignableToRole=True)
+    )
+    members = {**groupdata.MEMBERS, "s4": [groupdata._member("u1"), groupdata._member("u3")]}
+    return {"GROUPS": rows, "MEMBERS": members}
+
+
 def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
     from tests.seed import seed_tenant
 
@@ -1147,6 +1167,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
             },
             devicedata: {"ENTRA_DEVICES": entra, "MANAGED_DEVICES": managed},
             sharepoint_data: sharepoint(t, everyone, tenant_skus, now, first, rng),
+            groupdata: directory_groups(now),
         }
         with Swapped(extras):
             seed_tenant(

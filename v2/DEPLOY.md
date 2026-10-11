@@ -10,7 +10,8 @@ keys that decrypt its stored certificates and passwords in a second one
 
 - A Linux server or VM with [Docker](https://docs.docker.com/engine/install/)
   installed, with at least 2 CPUs and 4 GB of RAM. Disk use grows with the
-  number of clients and users (see [How much disk](#how-much-disk)).
+  number of clients and users (see [How much disk](#how-much-disk)); page
+  times hardly do ([How fast](#how-fast)).
 - A domain name for the portal, such as `sentry.yourmsp.com`, with its DNS
   pointing at the server, if you want the built-in HTTPS.
 
@@ -46,6 +47,45 @@ docker compose run --rm --no-deps worker python -m officesentry compact
 docker compose start worker
 ```
 
+### How fast
+
+Measured with `scripts/timings.py` on the same 200-client database (90 nights of history, 1.5 GB,
+every client with open findings and on a month-end plan), on 4 cores with nothing else running.
+"Normal" is what people get on an ordinary day, after the worker's nightly work; "first" is a page
+nobody has opened since an upgrade or a restore, when the portal builds what the worker hasn't yet.
+
+| Page, at 200 clients | Normal | First |
+|---|---|---|
+| Dashboard | 0.6 s | 3.9 s |
+| Today | 0.5 s | 0.4 s |
+| Accounts | 0.5 s | 6 s |
+| All clients: monthly review | 0.1 s | 0.1 s |
+| All clients: checks | 0.3 s | 2 s |
+| All clients: insurance evidence | 0.05 s | 4 s |
+| All clients: a report's rollup | 0.05 s | 0.6 to 1 s |
+| All clients: every row of a report | 0.9 s | 0.7 s |
+| What changed, every client | 0.2 s | 25 s |
+| Projects | 0.1 s | 0.2 s |
+| Coming up | 0.3 s | 0.5 s |
+| Month-end queue | 0.05 s | 0.1 s |
+| Search for a name | 0.15 s | 0.9 s |
+| Search for an IP address | 0.35 s | 0.8 s |
+| A client's own pages (overview, findings, changes, reports, a person) | 0.01 to 0.2 s | 0.03 to 0.3 s |
+| PDF downloads (a client's review, every client's changes, a rollup) | 1.7 to 4.6 s | |
+| XLSX and CSV downloads | 0.05 to 0.9 s | |
+
+| Worker job, at 200 clients | Time |
+|---|---|
+| Rebuild of every precomputed row (after each night's collection, and once a day) | 91 s in all, about half a second a client |
+| Findings sync, every client | 3 s |
+| Retention pass | 2 s |
+| Compressed backup (1.5 GB database, 0.77 GB on disk) | 47 s |
+
+Pages that show every client read rows the worker keeps up to date, so their time hardly grows with
+the number of clients; a PDF's time is the rendering, which is why PDFs keep the first 2,000 rows of
+a table. How long the night's collection takes depends on Microsoft's rate limits and each tenant's
+size, not on the server: see `OFFICESENTRY_WORKER_CONCURRENCY` below.
+
 ## First start
 
 On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone).
@@ -53,9 +93,9 @@ On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone)
 1. Make a folder on the server (say `/opt/officesentry`) and open a terminal in it.
    From the newest [release](https://github.com/JackD99/OfficeSentry/releases),
    download `docker-compose.yml`, `Caddyfile` and `env.example` into it.
-   They run that release: the image `ghcr.io/jackd99/officesentry`, built and
-   tested by GitHub, for amd64 (Intel and AMD) servers; arm64 builds follow
-   once the repository is public.
+   They run that release: the image `ghcr.io/jackd99/officesentry`, built,
+   tested and scanned by GitHub Actions, for amd64 (Intel and AMD) servers and, from the first
+   release after 2.1.0, arm64 (such as Ampere and Raspberry Pi 4 or 5).
 2. Create your settings file: `cp env.example .env`
 3. Open `.env` in an editor (`nano .env`) and set at least:
    - `OFFICESENTRY_BASE_URL` to the address people will use, e.g. `https://sentry.yourmsp.com`
@@ -69,19 +109,17 @@ On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone)
    docker compose --profile https up -d
    ```
 
-   Until the repository is public its image is private: pulling it needs
-   `docker login ghcr.io` with a GitHub token that can read packages. The
-   Hetzner deploy below doesn't pull, it builds.
-
    Already have a reverse proxy (nginx, Traefik)? Leave out `--profile https`
    and point the proxy at `http://127.0.0.1:8000`.
 5. Create the first admin account. Run `docker compose logs web`, find the line
    starting **No admin account yet** and open the link on it (`docker compose exec
    web python -m officesentry setup-link` prints it again). Choose a username and
    password, scan the QR code with an authenticator app and save the recovery codes.
-6. Open **Settings → App connection** and press **Sign in to Microsoft**. Enter the code it shows on
-   Microsoft's page and sign in as an admin of your own tenant who can create app registrations. Office
-   Sentry creates its read-only app and then offers to add your first client. No command needed.
+6. Your home page now shows a **Get started** checklist: the app connection, your first client, its
+   consent and its first collection, each ticking itself off as it happens. Press **Set up the app
+   connection** (or open **Settings → App connection**) and press **Sign in to Microsoft**. Enter the code it
+   shows on Microsoft's page and sign in as an admin of your own tenant who can create app registrations.
+   Office Sentry creates its read-only app and then offers to add your first client. No command needed.
 
 ## Is it working?
 
@@ -192,6 +230,12 @@ Before 2.1.0 the signature was `sha256=` and the HMAC of the body alone, with
 no timestamp, so a copied request could be sent again.
 
 ## Sign-in protection
+
+**Staff can sign in with their Microsoft account** instead of a password and authenticator code: an admin
+sets it up under *Settings → Staff sign-in* in about two minutes, and
+[docs/staff-sign-in.md](docs/staff-sign-in.md) walks through it, including turning passwords off for staff
+and turning them back on from the server (`python -m officesentry staff-sign-in --passwords on`) if
+Microsoft sign-in ever breaks. The rest of this section is about password sign-ins.
 
 Wrong passwords never lock an account, so nobody can keep you out just by
 knowing your username. Instead, Office Sentry slows down **where** the
@@ -862,7 +906,11 @@ The runs never print the portal's own log, because it names clients, users
 and addresses and the run logs will be public once the repository is. When
 `status` counts errors, or a deploy says the portal didn't become healthy,
 read the log in a shell (below) with `docker compose logs --tail 200 web`
-(or `worker`).
+(or `worker`), or make a support package with the log's tail and the health
+checks, secrets and client names taken out: **Settings → Support** in the
+portal, or `docker compose run --rm -T web python -m officesentry
+support-package --out - > support.zip` in a shell
+([Getting help](docs/getting-help.md)).
 
 ### Automatic deploys: off and on
 

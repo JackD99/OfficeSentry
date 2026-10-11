@@ -11,7 +11,7 @@ import sys
 
 from werkzeug.security import generate_password_hash
 
-from . import alerts, mailer, store, totp
+from . import alerts, logs, mailer, sso, store, totp
 from .config import clear_setup_token, load_config, new_secrets, setup_token, write_private
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
@@ -33,6 +33,7 @@ def cmd_serve(args, cfg):
 def cmd_worker(args, cfg):
     from .worker import run_worker
 
+    logs.setup(cfg.data_dir, "worker")
     run_worker(cfg, once=args.once)
 
 
@@ -61,6 +62,23 @@ def cmd_create_admin(args, cfg):
     audit(conn, "cli", "user_created", detail=f"{args.username} (admin)")
     clear_setup_token(cfg.data_dir)
     print(f"Created admin {args.username}")
+
+
+def cmd_staff_sign_in(args, cfg):
+    """The break-glass switches for Microsoft sign-in, from the server (no sign-in needed)."""
+    conn = connect(cfg.db_path)
+    migrate(conn)
+    with transaction(conn):
+        if args.passwords:
+            sso.save(conn, {"sso_passwords": args.passwords})
+            audit(conn, "cli", "staff_sign_in_changed", detail=f"passwords={args.passwords}")
+        if args.off:
+            sso.save(conn, {"sso_enabled": "", "sso_passwords": "on"})
+            audit(conn, "cli", "staff_sign_in_changed", detail="microsoft=off passwords=on")
+    s = sso.settings(conn)
+    state = "on" if sso.enabled(s) else ("set up but off" if sso.is_configured(s) else "not set up")
+    break_glass = "allowed" if sso.break_glass(s) else "off"
+    print(f"Microsoft sign-in: {state}. Staff signing in with a password: {break_glass}.")
 
 
 def cmd_setup_link(args, cfg):
@@ -104,7 +122,7 @@ ENCRYPTED_COLUMNS = (
 )
 # ...and every encrypted key in the settings table. Encrypted names end in "_enc";
 # tests/test_key_rotation.py fails if one isn't listed here.
-ENCRYPTED_SETTINGS = (*mailer.ENCRYPTED_KEYS, *alerts.ENCRYPTED_KEYS, *totp.ENCRYPTED_KEYS)
+ENCRYPTED_SETTINGS = (*mailer.ENCRYPTED_KEYS, *alerts.ENCRYPTED_KEYS, *sso.ENCRYPTED_KEYS, *totp.ENCRYPTED_KEYS)
 
 
 def unregistered_encrypted(conn) -> list[str]:
@@ -489,6 +507,38 @@ def cmd_delete_tenant(args, cfg):
     print("Remember the client's side: they delete the Office Sentry enterprise app and its Global Reader role.")
 
 
+def cmd_support_package(args, cfg, config_error: str | None = None):
+    """Write the support package (support.py): a zip of versions, settings, health, failures and logs with
+    secrets and client data taken out, to attach to a bug report. Works when the portal won't start: a
+    database that won't open or a configuration that won't load leaves a note in the zip, not an error."""
+    from pathlib import Path
+
+    from . import support
+
+    conn = None
+    if cfg is not None:
+        try:
+            conn = connect(cfg.db_path)
+            conn.execute("SELECT 1 FROM sqlite_master").fetchone()
+        except Exception as exc:  # noqa: BLE001 (a broken database is exactly when this command is needed)
+            print(f"The database couldn't be opened ({type(exc).__name__}); the package says so.", file=sys.stderr)
+            conn = None
+    pkg = support.build(conn, cfg, include_identifiers=args.include_identifiers, config_error=config_error)
+    if conn is not None:
+        conn.close()
+    out = None if args.out == "-" else Path(args.out or pkg.filename)
+    written = support.write(pkg, out)
+    say = sys.stderr if out is None else sys.stdout
+    print(f"Wrote {written or 'the package to standard output'} ({plural(len(pkg.files), 'file')}).", file=say)
+    if pkg.include_identifiers:
+        print("It includes client names, tenant IDs and domains: share it through a private channel only.", file=say)
+    else:
+        print("Clients appear as numbers; secrets, addresses and names were taken out.", file=say)
+    for part in pkg.problems:
+        print(f"  {part.name}: {part.note}", file=say)
+    print("Attach it to a bug report: https://github.com/JackD99/OfficeSentry/issues/new?template=bug.yml", file=say)
+
+
 def cmd_live_test(args, cfg):
     """Collect from a real test tenant with a client secret (development only)."""
     from pathlib import Path
@@ -558,6 +608,13 @@ def main(argv=None):
     link = sub.add_parser("setup-link", help="print the one-time link for creating the first admin")
     link.set_defaults(func=cmd_setup_link)
 
+    staff = sub.add_parser(
+        "staff-sign-in", help="show, or switch from the server, how staff sign in (Microsoft or passwords)"
+    )
+    staff.add_argument("--passwords", choices=("on", "off"), help="let staff sign in with passwords again (on), or not")
+    staff.add_argument("--off", action="store_true", help="turn Microsoft sign-in off (passwords come back on)")
+    staff.set_defaults(func=cmd_staff_sign_in)
+
     health = sub.add_parser("healthcheck", help="exit 0 if the web portal or worker is healthy (for Docker)")
     health.add_argument("service", choices=["web", "worker"])
     health.add_argument("--port", type=int, default=8000)
@@ -622,6 +679,21 @@ def main(argv=None):
     delete.add_argument("--yes", action="store_true", help="don't ask for the client's name (for scripts)")
     delete.set_defaults(func=cmd_delete_tenant)
 
+    pkg = sub.add_parser(
+        "support-package",
+        help="write a zip of versions, settings, health checks, recent failures and logs, with secrets and client "
+        "data taken out, to attach to a bug report",
+    )
+    pkg.add_argument(
+        "--out", help="the file to write (default: officesentry-support-<date>.zip here; - for standard output)"
+    )
+    pkg.add_argument(
+        "--include-identifiers",
+        action="store_true",
+        help="keep client names, Microsoft tenant IDs, domains and user names (for a private channel only)",
+    )
+    pkg.set_defaults(func=cmd_support_package)
+
     live = sub.add_parser("live-test", help="collect from a test tenant using OFFICESENTRY_TEST_* variables")
     live.add_argument("--collector", action="append", help="only run this collector (repeatable)")
     live.add_argument("--out", help="also write XLSX exports to this folder")
@@ -644,6 +716,16 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    if args.command == "support-package":
+        # The one command that must work when the configuration doesn't load: the package then says why.
+        try:
+            cfg = load_config()
+        except ValueError as exc:
+            print(f"The configuration didn't load ({exc}); the package says so.", file=sys.stderr)
+            cmd_support_package(args, None, config_error=str(exc))
+            return
+        cmd_support_package(args, cfg)
+        return
     args.func(args, load_config())
 
 

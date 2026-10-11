@@ -36,9 +36,15 @@
   'library': '<path d="M4 19.5V5a2 2 0 012-2h14v15H6a2 2 0 00-2 2zm0 0A1.5 1.5 0 005.5 21H20"/><path d="M8 7h8M8 11h5"/>',
   'search': '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
   'settings': '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  'external': '<path d="M14 4h6v6M20 4l-9 9"/><path d="M19 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1h5"/>',
 } %}
 {% macro icon(name, cls='') -%}
 <svg class="icon {{ cls }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ ICONS[name]|safe }}</svg>
+{%- endmacro %}
+
+{#- The Microsoft logo on the "Sign in with Microsoft" button, as Microsoft's branding guidelines draw it. -#}
+{% macro microsoft_logo() -%}
+<svg class="ms-logo" viewBox="0 0 21 21" width="18" height="18" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
 {%- endmacro %}
 
 {% macro ts(value, empty='never') -%}
@@ -72,7 +78,7 @@
 {% set TAB_OF = {
   'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports', 'designs': 'reports',
   'schedules': 'emails', 'projects': 'findings', 'collection': 'settings', 'manage': 'settings',
-  'activity': 'changes',
+  'activity': 'changes', 'mailboxes': 'users', 'group_pages': 'users',
 } %}
 
 {# Header shared by every tenant page: breadcrumb, name, actions and the tab bar. On laptops the tab bar
@@ -110,7 +116,11 @@
 </header>
 {#- The Reports tab's pages are in its report picker (report_picker) rather than a second row. -#}
 {% set pages = [] %}
-{% if tab == 'changes' and staff %}
+{% if tab == 'users' %}
+  {% set _ = pages.append(('users', 'People', url_for('people.people', tenant_id=tenant.id))) %}
+  {% set _ = pages.append(('mailboxes', 'Mailboxes', url_for('mailboxes.mailboxes', tenant_id=tenant.id))) %}
+  {% set _ = pages.append(('group_pages', 'Groups and teams', url_for('group_pages.groups', tenant_id=tenant.id))) %}
+{% elif tab == 'changes' and staff %}
   {% set _ = pages.append(('changes', 'What changed', url_for('across.tenant_changes', tenant_id=tenant.id))) %}
   {% set _ = pages.append(('activity', 'Activity history', url_for('history.activity', tenant_id=tenant.id))) %}
 {% elif tab == 'settings' and staff %}
@@ -118,7 +128,7 @@
   {% set _ = pages.append(('manage', 'Manage', url_for('tenant_admin.manage', tenant_id=tenant.id))) %}
 {% endif %}
 {% if pages %}
-<nav class="tab-pages" aria-label="{{ 'Changes' if tab == 'changes' else 'Settings' }}">
+<nav class="tab-pages" aria-label="{{ {'changes': 'Changes', 'users': 'Users'}.get(tab, 'Settings') }}">
   {% for key, label, href in pages %}<a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
 </nav>
 {% endif %}

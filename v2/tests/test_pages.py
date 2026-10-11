@@ -47,7 +47,8 @@ def test_friendly_times_and_labels():
 
 
 def test_no_platform_specific_date_formats():
-    """'%-d' crashes strftime on Windows; dates go through filters._strftime instead."""
+    """'%-d' crashes strftime on Windows, in an f-string's format spec (``f"{dt:%-d %b}"``) as much as in a
+    strftime call; dates go through filters._strftime (formatting.strftime) or formatting.day instead."""
     import pathlib
     import re
     from datetime import datetime
@@ -55,11 +56,14 @@ def test_no_platform_specific_date_formats():
     from officesentry.web.filters import _strftime
 
     assert _strftime(datetime(2026, 10, 2, 9, 5), "%-d %b %Y, %H:%M") == "2 Oct 2026, 09:05"
+    unsafe = re.compile(r"strftime\([^)]*%-|\{[^{}]*:[^{}]*%-[^{}]*\}")
+    assert unsafe.search('f"{kept:%-d %b %Y}"') and unsafe.search("dt.strftime('%-d %b')")
+    assert not unsafe.search("datefmt(nxt, '%a %-d %b, %H:%M')") and not unsafe.search('f"{start:%Y-%m-%d}"')
     root = pathlib.Path(__file__).parent.parent / "officesentry"
     for path in [*root.rglob("*.py"), *root.rglob("*.html")]:
         if path.name == "filters.py":
             continue
-        assert not re.search(r"strftime\([^)]*%-", path.read_text(encoding="utf-8")), path
+        assert not unsafe.search(path.read_text(encoding="utf-8")), path
 
 
 def test_refresh_on_unconnected_tenant_explains_once(client, db, two_tenants):

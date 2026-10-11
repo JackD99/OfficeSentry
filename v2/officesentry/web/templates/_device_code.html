@@ -1,0 +1,25 @@
+{#- The setup wizard's device sign-in, shared by App connection (the read-only app) and Staff sign-in (the sign-in
+    app): the code to enter on Microsoft's page, and the waiting line the page's script keeps up to date
+    (app.js, [data-setup-wait]). -#}
+{% from "_macros.html" import icon, csrf %}
+{% macro device_code(sign_in, check_url, cancel_url, seconds_left, who) -%}
+<div class="device-code" data-setup-wait="{{ sign_in.poll_seconds }}" data-check="{{ check_url }}">
+  <p class="m0">Open Microsoft's sign-in page and enter this code:</p>
+  <div class="code-row">
+    <output class="user-code mono" id="user-code" aria-label="Sign-in code">{{ sign_in.user_code }}</output>
+    <button type="button" class="sm" data-copy="#user-code">Copy code</button>
+  </div>
+  <div class="step-action">
+    <a class="btn primary" href="{{ sign_in.verification_uri }}" target="_blank" rel="noopener noreferrer">Open Microsoft's sign-in page {{ icon('arrow') }}</a>
+    <span class="muted small">{{ sign_in.verification_uri.split('//', 1)[-1] }}</span>
+  </div>
+  <p class="small">{{ who }}</p>
+  <p class="wait-line" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span>
+    <span data-setup-text>{% if sign_in.status == 'working' %}Signed in. Creating the app…{% elif sign_in.error %}{{ sign_in.error }}{% else %}Waiting for you to sign in. This page moves on by itself.{% endif %}</span></p>
+  <p class="muted small m0">The code works for {% set m = (seconds_left / 60)|round(0, 'ceil')|int %}<span data-setup-left>{{ 'less than a minute' if m <= 1 else m ~ ' more minutes' }}</span>.</p>
+</div>
+<div class="step-action">
+  <form method="post" action="{{ check_url }}" class="inline">{{ csrf() }}<button class="sm">I've signed in</button></form>
+  <form method="post" action="{{ cancel_url }}" class="inline">{{ csrf() }}<button class="ghost sm">Cancel</button></form>
+</div>
+{%- endmacro %}
