@@ -175,9 +175,11 @@ fails; the auto-fail questions are marked), *Partly*, or *Your evidence* where M
 (firewalls, patching, anti-malware), with the figures, the fix and a text to paste. The page leads with what to
 fix before applying, compares with last month or last year, says what the CE Plus assessor will test, and
 carries the answers for the IASME portal with one-tap copy; downloads come as PDF, Word, text, XLSX and CSV.
-The **insurance evidence pack** answers the controls cyber-insurance questionnaires ask about, and
-**questionnaires** turn the same data into answers for cyber insurance proposal forms and supplier security
-questionnaires in each form's wording, with a text to complete where Microsoft 365 can't answer.
+**IASME Cyber Assurance**, **ISO/IEC 27001 Annex A** and **UK GDPR** (the ICO's security outcomes and the
+accountability records) are judged the same way, and so are the **CIS Microsoft 365 benchmark**, **NIST CSF
+2.0**, **SOC 2** and Australia's **Essential Eight** for clients asked to map to them. The **cyber insurance proposal** and **supplier security
+questionnaire** packs turn the same data into answers in each form's wording, with a text to complete where
+Microsoft 365 can't answer; one written answer fills every pack.
 
 <table>
   <tr>
