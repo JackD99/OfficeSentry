@@ -16,11 +16,11 @@ The defaults are the secure ones. Nothing below needs switching on.
 
 | | What |
 |---|---|
-| Sign-in | Passwords hashed with scrypt; 12 characters at least, and the 20,000 most common long passwords, the username and the product name are refused. Two-step codes from an authenticator app, required for everyone on a new install. Wrong passwords slow down the address they come from, never lock the account ([Sign-in protection](../DEPLOY.md#sign-in-protection)). |
+| Sign-in | Passwords hashed with scrypt; 12 characters at least, and the 20,000 most common long passwords, the username and the product name are refused. Two-step codes from an authenticator app, required for everyone on a new install. Wrong passwords slow down the address they come from, never lock the account ([Sign-in protection](../DEPLOY.md#sign-in-protection)). Once an admin sets it up, staff can sign in with Microsoft instead, under your own Conditional Access and MFA ([Staff sign-in with Microsoft](staff-sign-in.md)). |
 | Sessions | Kept on the server: the cookie holds a random token. Two hours idle and eight in total, ended on sign-out and on any change to the account. `__Host-` cookie, HttpOnly, SameSite, Secure over HTTPS. |
-| Who sees what | Every page and download checks the signed-in person's role and tenants on the server. Clients see their own tenants only. Certificates, private keys and the encryption key can't be downloaded by anyone. |
+| Who sees what | Every page and download checks on the server what the signed-in person's role and capabilities allow, and on which clients. Clients see their own organisation only. Certificates, private keys and the encryption key can't be downloaded by anyone. |
 | Forms | Every form and autosave carries an anti-forgery token. A missing or stale one is refused, explained, and counted in the activity log. |
-| Browser headers | A nonce-based Content-Security-Policy with no external scripts, styles or fonts, HSTS, `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: same-origin`, a Permissions-Policy, cross-origin opener and resource policies of `same-origin`, and `Cache-Control: no-store` on every page. |
+| Browser headers | A nonce-based Content-Security-Policy with no external scripts, styles or fonts, HSTS, `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: same-origin`, a Permissions-Policy, cross-origin opener and resource policies of `same-origin`, `X-Permitted-Cross-Domain-Policies: none`, and `Cache-Control: no-store` on every page. |
 | Uploads | Requests over 1 MB are refused, which covers the only uploads: a logo and a tenant list to import. |
 | Activity log | Every sign-in, refused page, change and download, with the address it came from. Admins read and export it under *Settings → Activity log*. |
 | Secrets | The session key and the encryption key for stored certificates, two-step secrets and mail credentials are generated into `secrets.json` (mode `0600`) in a volume of its own, apart from the data and its backups. |
@@ -57,10 +57,16 @@ The defaults are the secure ones. Nothing below needs switching on.
   webhook ([Hear about problems without signing in](../DEPLOY.md#hear-about-problems-without-signing-in)).
   Refused pages (someone opening a tenant they haven't been granted) and
   stale form tokens are counted per person and hour.
-- **Give out the least.** Analysts see every tenant; clients see theirs. Make a
-  tenant group when a client has several tenants rather than giving the analyst
-  role. Remove accounts the day someone leaves: disabling one ends their
-  sessions at once.
+- **Give out the least.** A role is a set of capabilities and a scope.
+  Administrator and Team leader see every client. Second line, First line,
+  Account manager and Auditor see only the clients and client groups granted
+  to them, unless *Every client* is ticked on their user page. A Client viewer
+  sees their own organisation only. Pick the smallest role that does the job
+  (they're described under *Settings → Users → Roles*). For one person, add or
+  take away single capabilities with *Customise* on their user page rather than
+  giving them a bigger role; taking away always wins. Grant a client group to
+  someone who looks after several clients rather than all of them. Remove
+  accounts the day someone leaves: disabling one ends their sessions at once.
 
 ## Behind a reverse proxy
 

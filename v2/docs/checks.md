@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-58 checks, 34 data sources (collectors) and 42 detail reports.
+58 checks, 35 data sources (collectors) and 43 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -161,7 +161,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `groups` | Groups and Teams | Every group, the owners, members and guests of each team and Microsoft 365 group, who can create them and whether unused ones expire. | `Directory.Read.All` |
 | `inbox_rules` | Inbox rules | Every mailbox's inbox rules, to spot forwarding and rules that hide mail. | `MailboxSettings.Read` |
 | `legacy_signins` | Legacy sign-ins | Sign-ins over SMTP AUTH, IMAP, POP and other basic-auth clients in the last 30 days (needs Entra ID P1). | `AuditLog.Read.All` |
-| `m365_usage` | Microsoft 365 usage | Who used email, Teams, OneDrive, SharePoint and the Office apps in the last 30 days, from Microsoft's usage reports. | `Reports.Read.All` |
+| `m365_usage` | Microsoft 365 usage | Who used email, Teams, OneDrive, SharePoint and the Office apps in the last 30 days, from Microsoft's usage reports. | `Reports.Read.All`, `ReportSettings.Read.All` |
 | `mailbox_usage` | Mailbox size | Size and item count of every mailbox, against its quota (needs Global Reader). | `Exchange.ManageAsApp` |
 | `mailboxes` | Mailboxes | Mailboxes, forwarding, delegated access and organisation mail settings (needs Global Reader). | `Exchange.ManageAsApp` |
 | `mfa_registration` | MFA registration | Which users have registered a second factor. | `AuditLog.Read.All`, `UserAuthenticationMethod.Read.All` |
@@ -173,6 +173,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `sharepoint_storage` | SharePoint storage | What fills each site's storage: libraries, folders, large and old files, version history and recycle bins. Needs the Sites.Read.All permission. | `Sites.Read.All` |
 | `sharepoint_usage` | SharePoint and OneDrive usage | Every site and OneDrive with storage, activity and sharing link counts, from Microsoft's usage reports. | `Reports.Read.All` |
 | `sign_ins` | Sign-in activity | Interactive sign-ins in the last 7 days, summarised by account, country, app and failure reason (needs Entra ID P1; sign-in risk needs P2). | `AuditLog.Read.All` |
+| `teams` | Teams | Each team's channels, the guests and people from other organisations in private and shared channels, the apps added to each team, and when each team was last used. | `Directory.Read.All`, `Reports.Read.All`, `Channel.ReadBasic.All`, `ChannelMember.Read.All`, `TeamsAppInstallation.ReadForTeam.All` |
 | `tenant_policies` | Sharing and consent settings | Guest invitations, user consent to apps, default user permissions, admin consent requests, and SharePoint external sharing. | `Policy.Read.All`, `SharePointTenantSettings.Read.All` |
 | `tenant_profile` | Tenant profile and licences | Organization details, verified domains, subscriptions with renewal dates and licence capabilities. | `Organization.Read.All`, `Directory.Read.All` |
 | `user_details` | Departments and managers | Each account's department, job title, office, company and manager. | `User.Read.All` |
@@ -223,6 +224,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `sharepoint-storage` | SharePoint storage | What fills the tenant's SharePoint storage and what to clean up: sites, folders, large and old files, version history and recycle bins. | `sharepoint_storage`, `sharepoint_usage`, `tenant_profile` |
 | `sign-ins` | Sign-in activity | Failed and successful sign-ins over the last week by account, country and app: password guessing, unusual countries, sign-ins without MFA and risky sign-ins. | `sign_ins`, `tenant_profile` |
 | `subscriptions` | Licences and subscriptions | Every subscription with licences bought, assigned and available, its cost and renewal date, trials and lapsing subscriptions, and who has which licence, directly or by group. | `groups`, `tenant_profile`, `users` |
+| `teams` | Teams channels, guests and apps | Each team's private and shared channels and who is in them, guests and people from other organisations, the apps added to each team, and teams nobody has used lately. | `teams` |
 | `tenant-settings` | Tenant settings | What users and guests can do by default, and whether users can ask an admin to approve apps. | `tenant_policies` |
 | `unused-apps` | Unused apps | Every app from outside Microsoft with when it last signed in, and those unused for 90 days that still hold permissions. | `app_consents`, `app_sign_ins` |
 | `usage` | Microsoft 365 usage | Who actually uses email, Teams, OneDrive, SharePoint and the Office apps, and when each person was last active. | `m365_usage` |
@@ -236,25 +238,25 @@ Every application permission the app requests (all read-only) and the collectors
 | `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents`, `connection` |
 | `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `app_sign_ins`, `legacy_signins`, `mfa_registration`, `sign_ins`, `users` |
 | `BitLockerKey.ReadBasic.All` | Microsoft Graph | Whether a device's BitLocker recovery key is saved (never the key) | not used by a collector yet |
-| `Channel.ReadBasic.All` | Microsoft Graph | Teams channels: standard, private and shared | not used by a collector yet |
-| `ChannelMember.Read.All` | Microsoft Graph | Who is in each private and shared channel, guests included | not used by a collector yet |
+| `Channel.ReadBasic.All` | Microsoft Graph | Teams channels: standard, private and shared | `teams` |
+| `ChannelMember.Read.All` | Microsoft Graph | Who is in each private and shared channel, guests included | `teams` |
 | `DeviceManagementApps.Read.All` | Microsoft Graph | Intune app protection policies and managed apps | not used by a collector yet |
 | `DeviceManagementConfiguration.Read.All` | Microsoft Graph | Intune configuration and compliance policies | not used by a collector yet |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
-| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `admin_units`, `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `group_nesting`, `groups`, `tenant_profile` |
+| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `admin_units`, `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `group_nesting`, `groups`, `teams`, `tenant_profile` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `distribution_lists`, `mailbox_usage`, `mailboxes`, `mobile_devices` |
 | `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | `risky_users` |
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `auto_replies`, `inbox_rules` |
 | `Organization.Read.All` | Microsoft Graph | Tenant details and subscriptions | `directory_sync`, `tenant_profile` |
 | `Policy.Read.All` | Microsoft Graph | Conditional Access and authorization policies | `auth_methods_policy`, `conditional_access`, `per_user_mfa`, `tenant_policies` |
 | `PrivilegedEligibilitySchedule.Read.AzureADGroup` | Microsoft Graph | Who can activate membership of a privileged group (PIM) | not used by a collector yet |
-| `ReportSettings.Read.All` | Microsoft Graph | Whether usage reports hide people's names | not used by a collector yet |
-| `Reports.Read.All` | Microsoft Graph | Usage and MFA registration reports | `m365_usage`, `sharepoint_usage` |
+| `ReportSettings.Read.All` | Microsoft Graph | Whether usage reports hide people's names | `m365_usage` |
+| `Reports.Read.All` | Microsoft Graph | Usage and MFA registration reports | `m365_usage`, `sharepoint_usage`, `teams` |
 | `RoleManagement.Read.Directory` | Microsoft Graph | Admin role holders and PIM | `admin_roles`, `connection` |
 | `SecurityEvents.Read.All` | Microsoft Graph | Secure Score | `secure_score` |
 | `Sites.Read.All` | SharePoint Online | Who has access to each SharePoint site and list (SharePoint's own permission lists) | not used by a collector yet |
 | `SharePointTenantSettings.Read.All` | Microsoft Graph | SharePoint sharing settings | `tenant_policies` |
 | `Sites.Read.All` | Microsoft Graph | Which files are shared, and with whom (read-only) | `shared_files`, `sharepoint_storage` |
-| `TeamsAppInstallation.ReadForTeam.All` | Microsoft Graph | Apps added to each team | not used by a collector yet |
+| `TeamsAppInstallation.ReadForTeam.All` | Microsoft Graph | Apps added to each team | `teams` |
 | `User.Read.All` | Microsoft Graph | Users, licences, password age | `user_details`, `users` |
 | `UserAuthenticationMethod.Read.All` | Microsoft Graph | Registered MFA methods | `mfa_registration` |

@@ -35,15 +35,18 @@ body:
     attributes:
       label: Version
       description: >-
-        The version at the foot of the portal's menu, or in `/health` (`2.1.0`). If you run your own build of a
+        The version at the foot of the portal's menu, or in `/health` (`2.2.0`). If you run your own build of a
         branch, add its commit (`git rev-parse --short HEAD`).
-      placeholder: 2.1.0
+      placeholder: 2.2.0
   - type: dropdown
     id: install
     attributes:
       label: How you run it
       options:
-        - Docker (docker compose)
+        - Docker (docker compose), on a server or a cloud VM
+        - Portainer, Dockge, Komodo, Coolify or Dokploy
+        - Unraid, Synology or TrueNAS
+        - Kubernetes
         - Windows without Docker
         - Linux without Docker
         - Development (python -m officesentry web)
