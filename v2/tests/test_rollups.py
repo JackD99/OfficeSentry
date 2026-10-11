@@ -233,6 +233,21 @@ def test_reasons_and_buckets_that_only_move_with_the_clock_are_not_changes():
     assert [(c.subject, c.detail) for c in diff.changes] == [("Dropbox", "Activity: Over 90 days ago → Last 30 days")]
 
 
+def test_a_shared_name_only_compares_the_rows_that_share_it_whole():
+    # Two groups called Marketing: Clients is still matched on its name, so its member count is a change.
+    old, new = Section("Groups", ["Group", "Teams", "Members"]), Section("Groups", ["Group", "Teams", "Members"])
+    for row in (["Clients", "Yes", 11], ["Marketing", "No", 5], ["Marketing", "No", 7]):
+        old.add(row)
+    for row in (["Clients", "Yes", 10], ["Marketing", "No", 5], ["Marketing", "No", 8]):
+        new.add(row)
+    diff = month_changes.compare_sections(old, new)
+    assert [(c.kind, c.subject, c.detail) for c in diff.changes] == [
+        ("changed", "Clients", "Members: 11 → 10"),
+        ("added", "Marketing", "Teams: No; Members: 8"),
+        ("removed", "Marketing", "Teams: No; Members: 7"),
+    ]
+
+
 def test_compare_sections_without_a_unique_key_reports_added_and_removed():
     old, new = Section("Access", ["Mailbox", "Who"]), Section("Access", ["Mailbox", "Who"])
     for row in (["box", "ann"], ["box", "bob"]):

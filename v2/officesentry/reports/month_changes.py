@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -173,22 +174,30 @@ def _same(value) -> str:
     return DAY_COUNT_TEXT.sub(r"\1N\2", str(value))
 
 
-def _keyed(section: data_reports.Section, width: int):
-    out = {}
-    for row in section.rows:
-        key = tuple(str(v) for v in row[:width])
-        if key in out:
-            return None
-        out[key] = row
-    return out
+def _key(row: list, width: int) -> tuple:
+    return tuple(str(v) for v in row[:width])
+
+
+def _key_width(old_rows: list, new_rows: list) -> tuple[int, set]:
+    """How many leading columns match rows then and now (the first, or the first two when that leaves fewer
+    rows sharing a key), and the keys more than one row has on either side."""
+    best = None
+    for width in (1, 2):
+        counts = [Counter(_key(r, width) for r in rows) for rows in (old_rows, new_rows)]
+        shared = {k for c in counts for k, n in c.items() if n > 1}
+        loose = sum(c[k] for c in counts for k in shared)
+        if best is None or loose < best[2]:
+            best = (width, shared, loose)
+    return best[0], best[1]
 
 
 def compare_sections(old: data_reports.Section | None, new: data_reports.Section | None) -> SectionChanges | None:
     """Row-level differences between one table then and now.
 
     Rows are matched on their first column, or the first two when the first
-    isn't unique. Tables without a unique key fall back to whole rows, which
-    only produces added and removed rows.
+    isn't unique. Rows whose key isn't unique then or now fall back to whole
+    rows, which only produces added and removed rows; the rest of the table is
+    still matched on its key.
     """
     ref = new or old
     if ref is None or not ref.compare:
@@ -206,44 +215,40 @@ def compare_sections(old: data_reports.Section | None, new: data_reports.Section
 
     old_rows, new_rows = (old.rows if old else []), (new.rows if new else [])
     out = SectionChanges(ref.title, columns)
-    for width in (1, 2):
-        before = _keyed(old or data_reports.Section("", columns), width)
-        after = _keyed(new or data_reports.Section("", columns), width)
-        if before is not None and after is not None:
-            break
-    else:
-        before = after = None
-    if before is None:
-        # No unique key: compare whole rows (ignoring volatile columns), as multisets.
-        remaining = [stable(r) for r in old_rows]
-        for row in new_rows:
-            s = stable(row)
-            if s in remaining:
-                remaining.remove(s)
-            else:
-                out.changes.append(RowChange("added", row))
-        leftover = [stable(r) for r in new_rows]
-        for row in old_rows:
-            s = stable(row)
-            if s in leftover:
-                leftover.remove(s)
-            else:
-                out.changes.append(RowChange("removed", row))
-    else:
-        for key, row in after.items():
-            if key not in before:
-                out.changes.append(RowChange("added", row))
-                continue
-            was = before[key]
-            diffs = [
-                (columns[i], cell(was, i), cell(row, i))
-                for i in keep
-                if _same(cell(was, i)) != _same(cell(row, i))
-                and (i not in dated or str(cell(was, dated[i])) != str(cell(row, dated[i])))
-            ]
-            if diffs:
-                out.changes.append(RowChange("changed", row, diffs))
-        out.changes += [RowChange("removed", row) for key, row in before.items() if key not in after]
+    width, shared = _key_width(old_rows, new_rows)
+    before = {k: r for r in old_rows if (k := _key(r, width)) not in shared}
+    after = {k: r for r in new_rows if (k := _key(r, width)) not in shared}
+    for key, row in after.items():
+        if key not in before:
+            out.changes.append(RowChange("added", row))
+            continue
+        was = before[key]
+        diffs = [
+            (columns[i], cell(was, i), cell(row, i))
+            for i in keep
+            if _same(cell(was, i)) != _same(cell(row, i))
+            and (i not in dated or str(cell(was, dated[i])) != str(cell(row, dated[i])))
+        ]
+        if diffs:
+            out.changes.append(RowChange("changed", row, diffs))
+    # Rows whose key another row shares: compared whole (ignoring volatile columns), as multisets.
+    old_loose = [r for r in old_rows if _key(r, width) in shared]
+    new_loose = [r for r in new_rows if _key(r, width) in shared]
+    remaining = [stable(r) for r in old_loose]
+    for row in new_loose:
+        s = stable(row)
+        if s in remaining:
+            remaining.remove(s)
+        else:
+            out.changes.append(RowChange("added", row))
+    leftover = [stable(r) for r in new_loose]
+    for row in old_loose:
+        s = stable(row)
+        if s in leftover:
+            leftover.remove(s)
+        else:
+            out.changes.append(RowChange("removed", row))
+    out.changes += [RowChange("removed", row) for key, row in before.items() if key not in after]
     for change in out.changes:
         change.columns = columns
     return out
