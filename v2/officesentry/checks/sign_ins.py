@@ -60,4 +60,7 @@ def risky_sign_ins(snap: TenantSnapshot, now: datetime):
             f"{plural(len(findings), 'account')} signed in despite medium or high sign-in risk in the last {days} days",
             findings,
         )
+    if status.get("truncated"):
+        # The log stopped at the page cap, so a risky sign-in may be in the part that wasn't read.
+        return _unavailable("The sign-in log was cut short, so this can't confirm no risky sign-in succeeded")
     return ("pass", f"No risky sign-ins succeeded in the last {days} days", [])

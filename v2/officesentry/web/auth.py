@@ -332,8 +332,8 @@ def login_code():
             ok = used_recovery = (
                 g.db.execute(
                     "UPDATE user_recovery_codes SET used_at = ?"
-                    " WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
-                    (utcnow(), user["id"], totp.hash_recovery_code(value)),
+                    " WHERE user_id = ? AND code_hash IN (?, ?) AND used_at IS NULL",
+                    (utcnow(), user["id"], *totp.recovery_code_hashes(value, totp.recovery_key(g.db, _vault()))),
                 ).rowcount
                 > 0
             )
@@ -375,9 +375,9 @@ def two_step_setup():
         return redirect(url_for("auth.account"))
     vault = _vault()
 
-    if request.method == "POST" and user["totp_pending_enc"] and signed_in and not _confirm_password():
+    if request.method == "POST" and user["totp_pending_enc"] and signed_in and not confirm_password():
         # From the account page, adding an authenticator needs the password: a stolen session isn't enough.
-        return _setup_page(user, signed_in)
+        return _setup_page(user, signed_in, fresh=False)
     if request.method == "POST" and user["totp_pending_enc"]:
         attempt = None
         if not signed_in and (attempt := _reserve_attempt(user)) is None:
@@ -419,12 +419,14 @@ def two_step_setup():
         flash(
             "That code didn't match. Check your phone's clock is set automatically, then try the newest code.", "error"
         )
-    return _setup_page(user, signed_in)
+    return _setup_page(user, signed_in, fresh=request.method != "POST")
 
 
-def _setup_page(user, signed_in: bool):
+def _setup_page(user, signed_in: bool, fresh: bool):
+    """The QR code to scan. Every visit (``fresh``) makes a new secret, so whoever saw the page before (with a
+    stolen session, say) doesn't know the one the person goes on to add; a wrong code shows the same one."""
     vault = _vault()
-    if user["totp_pending_enc"]:
+    if user["totp_pending_enc"] and not fresh:
         secret = vault.decrypt(user["totp_pending_enc"])
     else:
         secret = totp.new_secret()
@@ -439,10 +441,11 @@ def _setup_page(user, signed_in: bool):
 
 
 def _store_recovery_codes(user_id: int, codes: list[str]) -> None:
+    key = totp.recovery_key(g.db, _vault())
     g.db.execute("DELETE FROM user_recovery_codes WHERE user_id = ?", (user_id,))
     g.db.executemany(
         "INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, ?)",
-        [(user_id, totp.hash_recovery_code(c)) for c in codes],
+        [(user_id, totp.hash_recovery_code(c, key)) for c in codes],
     )
 
 
@@ -526,7 +529,7 @@ def change_password():
     if request.method == "GET":
         return redirect(url_for("auth.account"))
     # Wrong guesses count towards the lock, like any other password check on a signed-in session.
-    if not _confirm_password("current", "Current password is wrong."):
+    if not confirm_password("current", "Current password is wrong."):
         return redirect(url_for("auth.account"))
     if problem := password_problem(
         request.form.get("password", ""), request.form.get("confirm", ""), g.user["username"]
@@ -543,7 +546,7 @@ def change_password():
     return redirect(url_for("auth.account"))
 
 
-def _confirm_password(field: str = "password", wrong: str = "That password isn't right.") -> bool:
+def confirm_password(field: str = "password", wrong: str = "That password isn't right.") -> bool:
     """The signed-in person's password, asked again before a security change.
 
     Wrong answers count towards the two-step lock (MAX_FAILURES), so a stolen
@@ -567,7 +570,7 @@ def _confirm_password(field: str = "password", wrong: str = "That password isn't
 def two_step_off():
     if _cfg().mfa_required(g.user["role"], g.db):
         flash("Two-step sign-in is required for your account, so it can't be turned off.", "error")
-    elif _confirm_password():
+    elif confirm_password():
         with transaction(g.db):
             g.db.execute(
                 "UPDATE users SET totp_secret_enc = NULL, totp_pending_enc = NULL, totp_enabled_at = NULL,"
@@ -586,7 +589,7 @@ def two_step_off():
 def new_recovery_codes():
     if not g.user["totp_enabled_at"]:
         return redirect(url_for("auth.account"))
-    if not _confirm_password():
+    if not confirm_password():
         return redirect(url_for("auth.account"))
     codes = totp.new_recovery_codes()
     with transaction(g.db):
