@@ -608,7 +608,7 @@ def legacy_auth(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
                 len(succeeded),
                 "Accounts, last 30 days",
                 "bad" if succeeded else "ok",
-                LEGACY_ROWS,
+                Rows(LEGACY_ROWS.table, flagged=True),  # rows with a success; failed-only ones are flagged low
             )
         )
         report.highlights.append(Highlight("Blocked attempts", attempts, "Usually password guessing", rows=LEGACY_ROWS))
