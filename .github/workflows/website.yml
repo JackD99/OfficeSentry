@@ -1,4 +1,4 @@
-name: website
+name: Website
 # Builds the website (website/README.md) from the docs, so a pull request that breaks it (a doc listed in
 # website/build.py renamed or removed, a template error) shows here rather than in the next deploy. The
 # Deploy workflow builds it again and copies it to the server.
