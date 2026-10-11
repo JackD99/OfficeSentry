@@ -22,6 +22,12 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
 - **Staff sign-in with Microsoft** needs nothing on upgrade: it's off until an admin sets it up.
 
+### Added
+
+- **A Get started checklist for new installs.** After creating the first admin, the home page lists the
+  four steps to the first report (the app connection, the first client, its consent and its first
+  collection), ticks each off as Office Sentry sees it done and goes away after the first collection.
+
 ### New Microsoft permissions
 
 None for client tenants. Setting up staff sign-in creates a separate app in your own tenant with no API
