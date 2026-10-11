@@ -55,6 +55,7 @@ OTHER_ARGS = {
     "period",
     "user_id",
     "mailbox_id",
+    "gid",
     "conn_id",
     "plan_id",
     "session_id",
@@ -150,6 +151,7 @@ def _url(rule, ids: dict) -> str:
         "table": "x",
         "user_id": USERS[0]["id"],
         "mailbox_id": USERS[0]["id"],  # Ann's mailbox has her account's object ID
+        "gid": "g1",  # the Sales team
     }
 
     def value(m):
