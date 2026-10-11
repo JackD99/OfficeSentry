@@ -494,7 +494,7 @@ body.report:not(.pdf) .cover.compact .cover-meta { grid-template-columns: repeat
 body.pdf .block-note { display: none; }
 body.pdf .block-row { margin: 8mm 0 4mm; }
 body.pdf .doc-compact .block-row { margin-top: 5mm; }
-body.pdf .cover.compact .cover-status { padding: 0 0 3mm; }
+body.pdf .cover.compact .cover-status:not(:empty) { padding: 0 0 3mm; }
 @media (max-width: 700px) { .block-row { grid-template-columns: 1fr; } }
 
 /* Consent pack (reports/consent_pack.html): numbered steps and the link, readable on paper. */
