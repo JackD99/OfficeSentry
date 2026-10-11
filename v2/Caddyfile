@@ -3,6 +3,8 @@
 # website and the public demo with deploy/public/compose.yml, which uses its own Caddyfile.)
 {$SITE_ADDRESS} {
 	encode gzip
+	# Neither Caddy's nor gunicorn's name reaches the browser.
+	header -Server
 	reverse_proxy web:8000
 }
 
