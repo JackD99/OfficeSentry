@@ -563,7 +563,9 @@ def test_every_password_form_refuses_a_common_password(client, db, cfg):
     assert b"commonly used" in resp.data and db.execute("SELECT 1 FROM users WHERE username = 'bob'").fetchone() is None
     bob = make_user(db, "robert", role="analyst")
     resp = client.post(
-        f"/admin/users/{bob}", data={"role": "analyst", "password": "robert-the-builder"}, follow_redirects=True
+        f"/admin/users/{bob}",
+        data={"role": "analyst", "password": "robert-the-builder", "admin_password": PASSWORD},
+        follow_redirects=True,
     )
     assert b"username" in resp.data
     # The forced change after an admin's reset: the person can't pick a common one either.
