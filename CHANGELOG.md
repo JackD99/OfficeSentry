@@ -115,6 +115,12 @@ No.
 - A database upgrade on a large database no longer fails the deploy: the portal's health check allows 15
   minutes to start, the start script waits that long and then starts the worker, and Docker keeps the
   containers running while it is itself updated (`live-restore`, on new servers).
+- A session or proxy setting that can't work (`OFFICESENTRY_SESSION_HOURS=0`, which signed everyone out
+  on their next request) stops the portal at start with a plain message, like the other settings.
+- A form sent after the session had ended comes back, after signing in, to the page the form was on
+  rather than to an address that only takes forms ("Method not allowed").
+- The daily rebuild of the What changed and check matrix rows is no longer lost for a client whose
+  rows were being refreshed at that moment.
 
 ### Security
 

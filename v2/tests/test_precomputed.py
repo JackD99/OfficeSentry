@@ -245,6 +245,27 @@ def test_the_daily_pass_queues_every_tenant_and_rebuilds_after_pruning(cfg, db, 
     assert len(rows) == 2 and all(json.loads(r["payload"])["rebuild"] for r in rows)
 
 
+def test_a_rebuild_asked_for_while_the_tenants_refresh_runs_isnt_lost(cfg, db, history):
+    """The daily pass asks for every row again after retention pruned something. A tenant whose refresh a task
+    thread is running at that moment read its payload when it started, so the rebuild is queued behind it."""
+    alpha, bravo = history
+    running = tasks.claim_next(db)
+    assert running["kind"] == "precompute"
+    precomputed.queue_all(db, rebuild=True)
+    queued = db.execute(
+        "SELECT tenant_id, key, payload FROM tasks WHERE kind = 'precompute' AND status = 'queued'"
+    ).fetchall()
+    assert {r["tenant_id"] for r in queued} == {alpha, bravo}
+    assert all(json.loads(r["payload"])["rebuild"] for r in queued)
+    assert sum(r["key"].endswith(":again") for r in queued) == 1  # behind the running one; the other was waiting
+    precomputed.queue_all(db, rebuild=True)  # asked twice: still one each
+    assert db.execute("SELECT COUNT(*) FROM tasks WHERE kind = 'precompute' AND status = 'queued'").fetchone()[0] == 2
+    tasks.finish(db, running["id"], "succeeded")
+    assert tasks.drain(None, db, None, cfg) == 2
+    for kind in ("changes:7", "changes:30", "changes:90", "checks"):
+        assert set(_stored(db, kind)) == {alpha, bravo}, kind
+
+
 def test_new_lookups_use_an_index(db, two_tenants):
     db.execute("ANALYZE")
     for sql, args in [

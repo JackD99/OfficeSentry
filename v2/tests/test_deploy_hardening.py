@@ -28,6 +28,16 @@ def clean_env(monkeypatch):
     return monkeypatch
 
 
+@pytest.mark.parametrize(
+    ("name", "value"), [("SESSION_HOURS", "0"), ("SESSION_IDLE_MINUTES", "0"), ("TRUSTED_PROXIES", "-1")]
+)
+def test_session_and_proxy_settings_are_checked_at_start(clean_env, tmp_path, name, value):
+    """SESSION_HOURS=0 used to start fine and sign everyone out on their next request."""
+    clean_env.setenv("OFFICESENTRY_" + name, value)
+    with pytest.raises(ValueError, match=name):
+        load_config(data_dir=tmp_path / "data")
+
+
 def test_without_a_keys_file_setting_the_keys_stay_in_the_data_folder(clean_env, tmp_path):
     cfg = load_config(data_dir=tmp_path / "data")
     assert cfg.secrets_path == tmp_path / "data" / "secrets.json"

@@ -130,11 +130,16 @@ def refresh(conn, tenant, rebuild: bool = False) -> None:
 
 
 def queue(conn, tenant_id: int, rebuild: bool = False) -> int:
-    """Queue a refresh of one tenant's rows (once: a refresh already queued is reused)."""
+    """Queue a refresh of one tenant's rows (once: a refresh already queued is reused, and made a rebuild if
+    this one is). A rebuild asked for while the tenant's refresh is already running is queued behind it under
+    its own key, since the running one read its payload when it started and would finish without rebuilding."""
+    key = f"{KIND}:{tenant_id}"
+    if rebuild and (running := tasks.pending(conn, key)) and running["status"] == "running":
+        key = f"{key}:again"
     task_id = tasks.enqueue(
         conn,
         KIND,
-        key=f"{KIND}:{tenant_id}",
+        key=key,
         tenant_id=tenant_id,
         priority=PRIORITY,
         payload={"rebuild": True} if rebuild else None,
