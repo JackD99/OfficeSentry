@@ -601,22 +601,28 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     # Matches the check: enabled people only, not apps, groups or disabled accounts.
     gas = sum(p["global_admin"] for p in roles.values() if p["type"] == "user" and p["enabled"] is not False)
     eligible = {p["id"] for p in roles.values() if p["eligible"]}
+    person = ["User", "Guest"]
     report.highlights = [
         Highlight(
             "Privileged accounts",
             len(people),
             "People with a permanent admin role",
-            rows=Rows(
-                privileged.title,
-                {"Kind": ["User", "Guest"], "How assigned": ["Permanent", "Permanent and Eligible (PIM)"]},
-            ),
+            rows=Rows(privileged.title, {"Kind": person, "Roles": _privileged_names(people)}),
         ),
         Highlight(
             "Global Administrators",
             gas,
             "Keep between 2 and 4",
             None if 2 <= gas <= 4 else "warn",
-            Rows(privileged.title, {"Roles": "Global Administrator"}),
+            # A disabled holder is the only person flagged low: leave them out, as the figure does.
+            Rows(
+                privileged.title,
+                {
+                    "Kind": person,
+                    "Roles": "Global Administrator",
+                    privileged.flag_name: ["critical", "high", "medium", "none"],
+                },
+            ),
             metric_trend(snap, "admins.global_admins", now),
         ),
         Highlight(
@@ -624,7 +630,7 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             no_mfa if not reg.note else "Not checked",
             "Not set up at all",
             "bad" if no_mfa else None,
-            Rows(privileged.title, {"MFA set up": "No"}),
+            Rows(privileged.title, {"MFA set up": "No"}, flagged=True),  # not disabled holders, flagged low
         ),
         Highlight(
             "Break-glass accounts",

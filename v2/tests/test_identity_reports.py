@@ -230,6 +230,25 @@ def test_admins_report_flags_problems_and_finds_break_glass(db, p1_tenant):
     assert f["Using PIM"] == "Not checked" and any("Entra ID P2" in n for n in report.notes)
 
 
+def test_admins_report_figures_open_the_people_they_count(db, two_tenants, monkeypatch):
+    """Bob, whose sign-in is blocked and who has no MFA, holds Global Administrator; Eve, eligible for it through
+    PIM, also holds Directory Readers permanently. Neither is a Global Administrator who can sign in, Eve has no
+    active privileged role and Bob can't sign in without MFA, so neither is behind a figure that doesn't count
+    them."""
+    alpha, _ = two_tenants
+    bob = {**gd.ROLE_ASSIGNMENTS[3], "id": "a-bob", "roleDefinitionId": gd.GA}
+    eve = {**gd.ROLE_ELIGIBILITY[0], "id": "a-eve", "roleDefinitionId": gd.READER}
+    monkeypatch.setattr(gd, "ROLE_ASSIGNMENTS", [*gd.ROLE_ASSIGNMENTS, bob, eve])
+    unregistered = {**gd.REGISTRATION_DETAILS[1], "id": "u2", "userPrincipalName": "bob@x.com", "isAdmin": False}
+    seed_tenant(db, alpha, users=USERS + [CARL, BREAKGLASS], registration=[*gd.REGISTRATION_DETAILS, unregistered])
+    report = build(db, store.get_tenant(db, alpha), "admins", NOW)
+    f = figures(report)
+    assert f["Global Administrators"] == 2 and set(opened(report, "Global Administrators")) == {"ann@x.com", "bg@x.com"}
+    people = {"ann@x.com", "bg@x.com", "bob@x.com", "g#EXT#@x.com"}
+    assert f["Privileged accounts"] == 4 and set(opened(report, "Privileged accounts")) == people
+    assert f["Admins without MFA"] == 1 and opened(report, "Admins without MFA") == ["bg@x.com"]
+
+
 def test_admins_report_shows_office_sentrys_own_app_with_a_privileged_role(db, p1_tenant):
     """Office Sentry needs only Global Reader. Holding a privileged role (here Exchange Administrator) is too
     much access, and the check behind this report flags it, so the report lists it too."""
