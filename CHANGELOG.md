@@ -189,6 +189,10 @@ Yes: a table for the search index. It is applied on start, as usual.
   so a client account probing for other clients' data is visible under *Settings → Activity log*.
 - Form-token, wrong-method, oversized-upload and server-error responses use the portal's own error page with
   plain wording, instead of the web server's.
+- Passwords on lists of commonly used passwords (`password1234`, `qwerty123456` and 20,000 more of 12
+  characters or longer), or containing the person's username or "officesentry", are refused wherever a
+  password is chosen: first-run setup, the account page, the forced change after an admin's reset, and the
+  admin's user forms. Existing passwords aren't checked until they're changed.
 - A new docs page, [Securing the portal](v2/docs/securing-the-portal.md), lists what the portal does by
   itself, what the person running it has to do, and how to put it behind Caddy, nginx, Traefik or a CDN.
 
