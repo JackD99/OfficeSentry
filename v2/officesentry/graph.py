@@ -263,8 +263,13 @@ class GraphClient:
         headers: dict | None = None,
         max_pages: int = 1000,
         transient_retries: int | None = None,
+        stop: Callable[[], bool] | None = None,
     ) -> PagedResult:
-        """Follow ``@odata.nextLink`` and return every item of ``value``."""
+        """Follow ``@odata.nextLink`` and return every item of ``value``.
+
+        ``stop`` is asked before each page; when it says so, the result is cut there and marked truncated (a
+        collector's time budget).
+        """
         result = PagedResult()
         url: str | None = self.build_url(path, version, self.root)
         first = True
@@ -272,6 +277,9 @@ class GraphClient:
             if result.pages >= max_pages:
                 result.truncated = True
                 log.warning("Stopped paging %s after %s pages", path, max_pages)
+                break
+            if stop is not None and stop():
+                result.truncated = True
                 break
             data = self._get(
                 self.build_url(url, version, self.root), params if first else None, headers, transient_retries

@@ -326,7 +326,7 @@ def delete(tenant_id: int):
         f"Deleted {t['name']} and everything stored for it: {plural(removed['runs'], 'run')}, "
         f"{plural(removed['objects'], 'stored object')} and {plural(removed['findings'], 'finding')}"
         + (f", and {plural(removed['users'], 'client account')}" if removed["users"] else "")
-        + ".",
+        + ". Its last copies are erased from the server in the background; System status says if that fails.",
         "success",
     )
     return redirect(url_for("tenant_admin.clients"))

@@ -12,9 +12,10 @@ for these problems found by ``system_health``:
 * **disk**: the data folder's disk is over 85% full (cleared under 80%, so it doesn't
   flap around the line);
 * **collection**: most tenants failed the last scheduled collection, or nothing has
-  been collected for longer than the schedule allows while the worker runs.
+  been collected for longer than the schedule allows while the worker runs;
+* **erase**: what a deleted tenant left on disk couldn't be erased (``lifecycle.erase``).
 
-The worker checks the last three once a minute (the ``system_alerts`` periodic job).
+The worker checks the last four once a minute (the ``system_alerts`` periodic job).
 Certificate expiry has its own warnings at 60, 30 and 7 days (``cert_lifecycle``).
 
 Each problem alerts once when it starts, again every ``REMIND`` while it lasts, and once
@@ -48,7 +49,7 @@ REMIND = timedelta(hours=24)
 RETRY = timedelta(minutes=15)  # after an alert no channel took
 DISK_CLEAR = 80  # percent: a disk alert clears below this
 STATE_PREFIX = "system_alert."
-WORKER_KEYS = ("backup", "disk", "collection")  # checked by the worker
+WORKER_KEYS = ("backup", "disk", "collection", "erase")  # checked by the worker
 WEB_KEYS = ("worker",)  # checked by the portal
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 STATUS_PATH = "/admin/status"
@@ -69,12 +70,14 @@ RESOLVED = {
     "backup": "Office Sentry's backups are working again",
     "disk": f"Office Sentry's disk is under {DISK_CLEAR}% full again",
     "collection": "Collection is working again",
+    "erase": "Deleted client data is now erased from the server",
 }
 LABELS = {
     "worker": "Worker stopped",
     "backup": "Backup failed",
     "disk": f"Disk over {system_health.DISK_WARN}% full",
     "collection": "Most tenants failed to collect",
+    "erase": "Deleted client data not erased",
 }
 
 
@@ -121,6 +124,16 @@ def detect(key: str, health: system_health.Health, state: dict | None, now: date
             key,
             "Office Sentry's backup needs attention: " + check.summary[0].lower() + check.summary[1:],
             "Without a recent backup, a failed disk or a bad update loses data.",
+            check.fix,
+            data=check.data,
+        )
+    if key == "erase":
+        if check.status == system_health.OK:
+            return None
+        return Problem(
+            key,
+            check.summary,
+            "Until it is, the deleted client's data can still be read from the database files on the server.",
             check.fix,
             data=check.data,
         )

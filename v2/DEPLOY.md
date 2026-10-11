@@ -517,7 +517,10 @@ kept). It's made before the upgrade starts, while the portal is down (see
 go back to can always restore it. If it can't (a full disk, say), it doesn't
 upgrade and says why.
 
-**Deleted tenants stay in backups.** Backups keep everything that was in the
+**Deleted tenants stay in backups.** On the server itself, a deleted client's
+data is erased from the database and activity history files by the worker
+within minutes; *System status* shows **Deleted clients** as needing attention
+(and the team is alerted) if that fails. Backups keep everything that was in the
 database when they were made. After you delete a client tenant, its data stays
 in older backups until they rotate out (nightly ones after `--keep` runs;
 `pre-upgrade-*` and `pre-restore-*` copies only when 3 newer ones replace
@@ -653,7 +656,9 @@ docker compose up -d
 The portal upgrades the database on start, before the worker starts, after
 saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept. The
 portal is down from `up -d` until the copy and the upgrade finish: seconds
-for a small database, minutes for a large one, so update at a quiet time. The version now
+for a small database, minutes for a large one, so update at a quiet time. The portal's health check
+allows it 15 minutes to come up before Docker calls it unhealthy, and the Deploy workflow waits as long
+and then starts the worker if `up -d` gave up on it. The version now
 running shows at the foot of the menu and at `/health`.
 
 If the release notes change `docker-compose.yml` or `Caddyfile`, download

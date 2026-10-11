@@ -406,9 +406,13 @@ being gone (see `changes._baseline_run`). A new store of personal data gets
 a period there, with a dry-run count for the page, and deletes in batches. A side thread records the heartbeat that the portal banner and
 `healthcheck worker` read, but only while the worker makes progress
 (`worker.Liveness`: the main loop came round in the last 10 minutes, no run
-has gone for 4 hours and no task for 1), so a wedged loop or thread shows as down. A failing
+or the daily pass has gone for 4 hours and no task for 1), so a wedged loop or thread shows as down. The
+daily pass (`worker._daily`: retention, every dashboard row, the precompute tasks) runs in its own thread
+(`_daily_thread`), since on a large install it takes longer than the main loop may be away. A failing
 housekeeping pass (say "database is locked") is logged, rolled back and
-retried the next minute; it never ends the worker. `db.transaction` (and
+retried the next minute; it never ends the worker. A collector thread that finds the database locked when
+it records a finished run tries again for a few minutes (`_while_locked`) rather than leave the run to be
+failed as "worker stopped" once its lease runs out. `db.transaction` (and
 `store.atomic`) begin with `BEGIN IMMEDIATE`, so a write that reads first waits
 for other writers instead of failing at once; pass `immediate=False` only for
 a read. Don't add Celery or Redis.
@@ -451,7 +455,7 @@ never a web request or the main loop: `worker.TASK_THREADS` task threads
 claim tasks (highest priority first) and run the function registered for
 their kind with `@tasks.handler(kind)` (add its module to
 `worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`),
-`send_schedule` (`delivery.py`), `consent_check` (`onboarding.py`) and
+`send_schedule` (`delivery.py`), `consent_check` (`onboarding.py`), `erase` (`lifecycle.py`) and
 `precompute` (`reports/precomputed.py`, below other work). Queue with `tasks.enqueue(conn, kind,
 key=..., payload=...)`: at most one task per `key` is queued or running, so
 use a key that names the thing done once ("approve:<tenant>:<period>").
@@ -599,7 +603,11 @@ change is audited; note text is never put in the audit log.
 - A new table with a `tenant_id` gets `REFERENCES tenants(id) ON DELETE
   CASCADE`. `lifecycle.delete_tenant` deletes with foreign keys on and refuses
   (rolls back) if any table with a `tenant_id` still has rows for the tenant;
-  only `audit_log` is kept on purpose (`lifecycle.KEPT`).
+  only `audit_log` is kept on purpose (`lifecycle.KEPT`). The request only
+  deletes (with `secure_delete` on); the `erase` task (`lifecycle.erase`) then
+  removes the tenant's activity history, writes the WAL back and VACUUMs when
+  there's room. `erase.state` in `settings` tracks a delete still to erase; a
+  failure is the `erase` health check and system alert, and is retried hourly.
 - Connection health (`tenant_health.assess`) is built from stored state only:
   the `connection` collector reads the app's own service principal, granted
   app roles and directory roles (GET only). Pages never call Graph for it;
