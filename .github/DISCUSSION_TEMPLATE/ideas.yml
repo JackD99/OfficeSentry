@@ -1,0 +1,36 @@
+title: ""
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search Ideas first and add a 👍 if it's already here: votes decide what's built first.
+        Office Sentry is read-only reporting. Changes in tenants, remediation, reading mail or chat content, an on-premises agent and GDAP management are out of scope ([roadmap](https://github.com/JackD99/OfficeSentry/blob/main/ROADMAP.md)).
+  - type: textarea
+    id: question
+    attributes:
+      label: The question you need answered
+      description: In the words a client or your team would use.
+      placeholder: Which shared mailboxes have no owner, and who can still open them?
+    validations:
+      required: true
+  - type: dropdown
+    id: reader
+    attributes:
+      label: Who reads the answer
+      options:
+        - Me or my technicians
+        - The client, in a report
+        - Both
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How you get it today
+      description: PowerShell, an admin centre export, a paid tool… and how often.
+  - type: textarea
+    id: source
+    attributes:
+      label: Where the data lives (if you know)
+      description: An admin centre page, a Microsoft Graph endpoint or an Exchange cmdlet.
