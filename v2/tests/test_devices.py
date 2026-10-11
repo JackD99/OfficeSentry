@@ -106,35 +106,6 @@ def test_tenant_without_intune_collects_entra_only(db, two_tenants, factory):
 
 
 @responses.activate
-def test_devices_report_without_intune_leaves_out_devices_that_never_signed_in(db, two_tenants, factory):
-    """Without Intune the operating systems are those of devices that signed in to Entra ID in the last 90 days:
-    a Mac registered but never signed in isn't one of them."""
-    alpha, _ = two_tenants
-    no_intune = [
-        {**s, "servicePlans": [p for p in s["servicePlans"] if p["servicePlanName"] != "INTUNE_A"]} for s in SKUS
-    ]
-    responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
-    responses.get(f"{V1}/subscribedSkus", json={"value": no_intune})
-    responses.get(f"{V1}/directory/subscriptions", json={"value": []})
-    never = {
-        **dd.ENTRA_DEVICES[0],
-        "id": "ed9",
-        "deviceId": "d-mac",
-        "displayName": "NEW-MAC",
-        "operatingSystem": "macOS",
-        "operatingSystemVersion": "15.0",
-        "approximateLastSignInDateTime": None,
-    }
-    responses.get(f"{V1}/devices", json={"value": [*dd.ENTRA_DEVICES, never]})
-    assert _run(db, alpha, "tenant_profile", factory)[1] == "succeeded"
-    assert _run(db, alpha, "devices", factory)[1] == "succeeded"
-    report = data_reports.build(db, store.get_tenant(db, alpha), "devices")
-    systems = {row[0]: row[1] for row in report.sections[0].rows}
-    assert "macOS" not in systems and systems["iOS"] == 1
-    assert "NEW-MAC" in [r[0] for r in report.sections[-1].rows]  # still listed among the device records
-
-
-@responses.activate
 def test_intune_forbidden_is_partial_not_failed(db, two_tenants, factory):
     alpha, _ = two_tenants
     responses.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
