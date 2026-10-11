@@ -1,12 +1,23 @@
 {% extends "base.html" %}
+{% from "_macros.html" import microsoft_logo %}
 {% block title %}Sign in · Office Sentry{% endblock %}
 {% block auth %}
 <h1>Sign in</h1>
 <p class="sub">Microsoft 365 security and licensing reports{% if brand.name %} from {{ brand.name }}{% endif %}.</p>
-<form method="post">
+{% if microsoft_sign_in %}
+<a class="btn wide microsoft" href="{{ url_for('sso.start', next=request.args.get('next')) }}">{{ microsoft_logo() }} Sign in with Microsoft</a>
+{% if staff_passwords_off %}
+<details class="help password-fallback">
+  <summary>Client account? Sign in with a password</summary>
+{% else %}
+<div class="or-line" aria-hidden="true"><span>or with a password</span></div>
+{% endif %}
+{% endif %}
+<form method="post" action="{{ url_for('auth.login', next=request.args.get('next')) }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <label>Username <input name="username" value="{{ username or '' }}" autocomplete="username" required {% if not username %}autofocus{% endif %}></label>
+  <label>Username <input name="username" value="{{ username or '' }}" autocomplete="username" required {% if not username and not microsoft_sign_in %}autofocus{% endif %}></label>
   <label>Password <input type="password" name="password" autocomplete="current-password" required {% if username %}autofocus{% endif %}></label>
-  <button class="primary">Sign in</button>
+  <button class="{{ 'secondary' if microsoft_sign_in else 'primary' }}">Sign in</button>
 </form>
+{% if microsoft_sign_in and staff_passwords_off %}</details>{% endif %}
 {% endblock %}

@@ -74,6 +74,7 @@ def seed(db, vault) -> list[int]:
     ids = [first] + [i for i in ids if i != first]
     add_email(db, first)
     add_project_statuses(db, ids)
+    demo_data.team(db, ids)  # the MSP's people, one per role, for the Users page
     # A client part-way through onboarding (consent not given yet), for the Client tenants page and checklist.
     connection = db.execute("SELECT id FROM app_connections ORDER BY id LIMIT 1").fetchone()[0]
     onboarding = store.create_tenant(db, ONBOARDING, "kingsleyoptometry.onmicrosoft.com", connection)
@@ -218,7 +219,7 @@ def add_project_statuses(db, ids: list[int]) -> None:
 @dataclass
 class Shot:
     name: str
-    path: str  # "{t}" is the showcase tenant's id, "{o}" the one being onboarded
+    path: str  # "{t}" is the showcase tenant's id, "{o}" the one being onboarded, "{u}" a first-line technician
     height: int = 900  # viewport height: the picture is what fits in it
     width: int = 1440
     scroll_to: str | None = None  # CSS selector (or text=...) to bring to the top first
@@ -256,6 +257,10 @@ SHOTS = [
     Shot("upcoming", "/upcoming", height=900),
     Shot("activity-history", "/tenants/{t}/activity", height=1000),
     Shot("tenant-groups", "/admin/groups", height=640),
+    Shot("users", "/admin/users", height=760),
+    Shot("user-role", "/admin/users/{u}", height=1000),
+    Shot("roles", "/admin/roles", height=760),
+    Shot("role-edit", "/admin/roles/4", height=1000),  # First line, a built-in role (ids are seeded)
     Shot("system-status", "/admin/status", height=900),
     Shot("evidence", "/tenants/{t}/evidence", height=1000),
     Shot("emailed-reports", "/tenants/{t}/schedules", height=900),
@@ -418,6 +423,15 @@ class Server:
         finally:
             db.close()
 
+    def user_id(self, username: str) -> int:
+        from officesentry.db import connect
+
+        db = connect(self.cfg.db_path)
+        try:
+            return db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()[0]
+        finally:
+            db.close()
+
 
 # -- Browser -----------------------------------------------------------------------------------
 
@@ -464,6 +478,7 @@ def capture(server: Server, passwords: dict, ids: list[int], shots: list[Shot], 
 
     saved = []
     executable = chromium_path()
+    technician = server.user_id("jordan.desk")
     with sync_playwright() as p:
         browser = p.chromium.launch(executable_path=executable)
         contexts = {}
@@ -483,7 +498,7 @@ def capture(server: Server, passwords: dict, ids: list[int], shots: list[Shot], 
                 server.beat()
                 page = contexts[key].new_page()
                 page.set_viewport_size({"width": shot.width, "height": shot.height})
-                response = page.goto(server.url + shot.path.format(t=ids[0], o=ids[-1]))
+                response = page.goto(server.url + shot.path.format(t=ids[0], o=ids[-1], u=technician))
                 page.wait_for_load_state("networkidle")
                 if response is None or response.status != 200:
                     print(f"  {shot.name}: {shot.path} returned {response.status if response else 'nothing'}")

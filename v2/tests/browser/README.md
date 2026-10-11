@@ -38,9 +38,9 @@ Without `--ui` (as in `pytest -n auto`) this folder isn't collected.
 1. Open `output/<page>-<width>-<theme>.diff.png`. If the change is a mistake, fix it.
 2. If you meant it, refresh the baselines: add the label **refresh-baselines** to the pull request (the
    pinned browser retakes them, commits them to the branch, takes the label off and starts the checks
-   again), run with `--update` locally as above, or in GitHub go to **Actions > ui > Run workflow**, pick
-   your branch and tick **Save new baselines**; it commits them to the branch (that commit doesn't start
-   CI by itself; your next push does). Look at the new images in the pull request before merging.
+   again), run with `--update` locally as above, or in GitHub go to **Actions > Browser tests > Run
+   workflow**, pick your branch and tick **Save new baselines**; it commits them to the branch (that commit
+   doesn't start CI by itself; your next push does). Look at the new images in the pull request before merging.
 
 A new page in `pages.py` needs `--update -k <name>` once; a page you remove needs its four baselines
 deleted (a test lists them).

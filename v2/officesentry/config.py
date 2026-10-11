@@ -261,5 +261,10 @@ def _check(cfg: Config) -> None:
         problems.append(f"{ENV_PREFIX}MAX_AGE_HOURS, KEEP_DAILY and KEEP_MONTHLY must be positive")
     if not 1 <= cfg.worker_concurrency <= 32:
         problems.append(f"{ENV_PREFIX}WORKER_CONCURRENCY must be between 1 and 32")
+    # 0 here would sign everyone out on their next request, with nothing in the log to say why.
+    if cfg.session_idle_minutes < 1 or cfg.session_hours < 1:
+        problems.append(f"{ENV_PREFIX}SESSION_IDLE_MINUTES and {ENV_PREFIX}SESSION_HOURS must be at least 1")
+    if cfg.trusted_proxies < 0:
+        problems.append(f"{ENV_PREFIX}TRUSTED_PROXIES must be 0 or the number of proxies in front of the portal")
     if problems:
         raise ValueError("Configuration problem: " + "; ".join(problems))

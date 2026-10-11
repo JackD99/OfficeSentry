@@ -4,7 +4,8 @@ Read-only Microsoft 365 reporting for MSPs: nightly snapshots of every
 client's Microsoft 365, cross-client rollups, month-over-month changes and
 branded client reports. The [root README](../README.md) is the product page
 with screenshots; this page lists every feature in detail and covers setup
-and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
+and development. Running it on a server is in [DEPLOY.md](DEPLOY.md), and on
+Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/README.md).
 
 ## Reports
 
@@ -33,8 +34,9 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
   resolved and reopened dates. Analysts can accept a risk with a reason and an
   optional expiry; accepted risks leave the totals and get their own section.
 - **Since last month**: new and fixed findings, admin role changes, new,
-  disabled and deleted accounts, and Conditional Access policies added,
-  switched or edited, compared with the snapshot from 4+ weeks earlier.
+  disabled and deleted accounts, licences people were given or lost, and
+  Conditional Access policies added, switched or edited, compared with the
+  snapshot from 4+ weeks earlier.
 - **Emailed reports** (a client's *Emailed reports* tab, and *Email reports*
   for everything at once):
   - Send any mix of reports (the monthly review, the evidence pack, any detail
@@ -46,7 +48,8 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
     hidden copy. Optional note at the top of the email.
   - A cross-client **digest** for your team, worst clients first.
   - A weekly **Coming up** email (and page) for your team: renewals and trials, expiring app secrets and
-    certificates, mailboxes filling up, DMARC still at p=none and accepted risks due in the next 90 days.
+    certificates, teams and groups about to expire, mailboxes filling up, DMARC still at p=none and accepted
+    risks due in the next 90 days.
   - **Alert emails** when a scan finds something new and critical (or high), for
     one client or all of them. They come from the same alert event as the
     Teams/Slack alerts below. A client's first scan never emails.
@@ -191,7 +194,9 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
     groups and distribution lists.
   - *Empty, nested and dynamic groups*: groups with no members, security
     groups and distribution lists that contain other groups (and how many
-    levels deep), and dynamic groups with their rule, flagging paused ones.
+    levels deep), dynamic groups with their rule, flagging paused ones, teams
+    and groups about to expire (and whether an owner can renew them),
+    role-assignable groups, and blocked accounts still in groups.
   - *Email domains*: SPF (with DNS lookup count), DMARC and DKIM for every
     verified domain, from public DNS. SPF checks also catch multiple records,
     +all/?all, the ptr mechanism and includes that publish no SPF record;
@@ -232,6 +237,14 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
     conflicting or missing base licences, usage location) in plain words with
     what to do; licensed accounts without a usage location; licences assigned
     both directly and by a group; and the groups that hand licences out.
+  - *Licence changes*: every paid licence given to or taken from an account,
+    from Office Sentry's own kept collections (to the day for the last month,
+    to the month before that), whether it came directly or from a group, and
+    who made the change and when where the directory audit log has been read
+    (Admin activity). Licences bought and assigned at the end of each month
+    for the last year, with the cost at your prices and a chart of assigned
+    against bought; headline figures say how bought licences and the monthly
+    cost moved since a month ago. Free licences are left out.
   - *Microsoft 365 usage*: who used email, Teams, OneDrive, SharePoint and
     the Office apps in the last 30 days (share of licensed people per
     service, and a trend from Office Sentry's own history), when each person
@@ -379,6 +392,12 @@ These areas have no real recording and are tested with simulated data only:
 - [Troubleshooting](docs/troubleshooting.md): the common setup errors
   (`AADSTS50011`, `create-app`, Global Reader, the worker not running) and
   their fixes.
+- [Getting help](docs/getting-help.md): where to look first, the support
+  package (one zip of versions, settings, health, failures and logs with
+  secrets and client names taken out) and how to report a problem.
+- [Securing the portal](docs/securing-the-portal.md): what the portal does
+  by itself, what the person running it has to do, and reverse proxy setups
+  for Caddy, nginx, Traefik and a CDN.
 
 ## What it does differently from v1
 
@@ -397,8 +416,16 @@ These areas have no real recording and are tested with simulated data only:
 - **Extra access is flagged.** A client whose tenant gave the app more than the
   read-only permissions, or any admin role besides Global Reader, shows as
   needing attention on its Manage page and on Client settings.
-- **Deny-by-default access.** Users see only clients granted to them (admins
-  and "all clients" analysts excepted). Hidden clients return 404.
+- **Deny-by-default access.** A person has a role (a set of capabilities:
+  which report areas open for them, downloads, refreshing data, accepting
+  risks, emailed reports, month-end review and approval, projects, custom
+  reports, managing clients, users or settings) and a scope (every client, or
+  the clients and groups granted to them). Seven built-in roles (Administrator,
+  Team leader, Second line, First line, Account manager, Auditor, Client
+  viewer); an admin can also give or take away single capabilities for one
+  person, everywhere or on one client, and taking away always wins. Every
+  page and download checks on the server; hidden clients return 404 and a
+  capability taken away on one client answers 403 there.
 - **Every run is a snapshot** (`runs` → `objects` + `metrics`), so reports
   can show history and changes. Metrics and findings are kept forever; full
   snapshots for the last 30 days plus one per month for 12 months. The daily
@@ -414,6 +441,22 @@ These areas have no real recording and are tested with simulated data only:
 
 ## Sign-in security
 
+- **Sign in with Microsoft** (optional, off until an admin sets it up): staff sign
+  in with their own Microsoft Entra ID account through OpenID Connect, under the
+  MSP's own Conditional Access and MFA. *Settings → Staff sign-in* creates a
+  small single-tenant app in the MSP's tenant with the same device-code wizard
+  as the app connection (`sso.py`, `app_setup.py`); the read-only client app and
+  its permissions are untouched. The app has an app role for each built-in role
+  (Admin, TeamLeader, Analyst for Second line, FirstLine, AccountManager,
+  Auditor), and a custom role can be given an app role value of its own; they're
+  assigned to people or groups in Entra and read from the ID token at every
+  sign-in ([docs/staff-sign-in.md](docs/staff-sign-in.md)). Which clients
+  someone sees is still granted here, so tenant isolation doesn't change. Existing accounts link from the Account page or by a
+  matching username; new staff get an account at their first sign-in. Passwords
+  stay as the break-glass route until an admin signed in with Microsoft turns
+  them off (`python -m officesentry staff-sign-in --passwords on` turns them
+  back on from the server). Client accounts always use passwords.
+  [docs/staff-sign-in.md](docs/staff-sign-in.md) has the steps.
 - **Two-step sign-in** (a 6-digit code from an authenticator app) is required
   for everyone on new installs, client accounts included. Installs set up
   before October 2026 keep requiring it for admins and analysts only, so
@@ -474,7 +517,10 @@ Create the first admin:
 2. Choose a username and password, then scan the QR code with an authenticator
    app (Microsoft Authenticator works) and save the recovery codes.
 
-Then:
+Your home page then shows a **Get started** checklist (`first_run.py`): the app
+connection, your first client, its consent and its first collection, each read
+from what Office Sentry has stored, so it ticks itself off as you go and
+disappears after the first collection. Then:
 
 1. Create the app: **Settings → App connection → Sign in to Microsoft**. The
    page shows a code and Microsoft's link; sign in there as an admin of *your*

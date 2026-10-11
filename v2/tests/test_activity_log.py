@@ -1,9 +1,10 @@
 """The audit log: source addresses, no flooding by strangers, retention, and the admin Activity log page."""
 
+import re
 from datetime import UTC, datetime, timedelta
 
 from officesentry import store
-from officesentry.db import AUDIT_NOISE_DAYS, audit, prune_audit
+from officesentry.db import AUDIT_NOISE, AUDIT_NOISE_DAYS, audit, audit_counted, prune_audit
 from tests.conftest import PASSWORD, login, make_user
 
 ATTACKER = "198.51.100.7"
@@ -108,3 +109,62 @@ def test_activity_log_filters_pages_and_exports(client, db, connection_id):
     assert lines[0].lstrip("﻿") == "Time (UTC),User,Action,Client,Address,Detail"
     assert len(lines) == 3 and "'=HYPERLINK" in csv  # formulas are defused
     assert db.execute("SELECT 1 FROM audit_log WHERE action = 'activity_log_downloaded'").fetchone()
+
+
+def test_refused_pages_are_counted_per_person_and_hour(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    make_user(db, "someone", role="client", tenants=[alpha])
+    login(client, "someone")
+    assert client.get(f"/tenants/{bravo}").status_code == 404  # another client's tenant
+    assert client.get(f"/tenants/{bravo}/report").status_code == 404
+    assert client.get("/admin/users").status_code == 403  # an admin page
+    assert client.get("/across").status_code == 403  # a staff page
+    assert client.get(f"/tenants/{alpha}").status_code in (200, 302)  # their own: not a refusal
+    rows = db.execute("SELECT * FROM audit_log WHERE action = 'access_refused'").fetchall()
+    assert len(rows) == 1
+    assert rows[0]["username"] == "someone" and rows[0]["ip"] == "127.0.0.1"
+    assert rows[0]["detail"] == "4 attempts, last GET /across"
+    assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'access_refused'").fetchone()[0] == 1
+    # The first refusal names what was refused.
+    db.execute("DELETE FROM audit_log")
+    client.get(f"/tenants/{bravo}/findings")
+    assert db.execute("SELECT detail FROM audit_log WHERE action = 'access_refused'").fetchone()[0] == (
+        f"1 attempt, last GET /tenants/{bravo}/findings (tenant {bravo})"
+    )
+
+
+def test_refusals_show_in_the_activity_log(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    make_user(db, "admin")
+    audit_counted(db, "access_refused", "10.0.0.9", "someone", f"GET /tenants/{bravo} (tenant {bravo})")
+    login(client, "admin")
+    page = client.get("/admin/activity?action=access_refused").data.decode()
+    assert "Access refused" in page and "someone" in page and f"GET /tenants/{bravo}" in page
+
+
+def test_a_stale_form_token_is_counted_and_explained(cfg, db, two_tenants):
+    from officesentry.web import create_app
+
+    cfg.extra = {}  # CSRF on, as in production
+    app = create_app(cfg)
+    make_user(db, "someone", role="admin")
+    anonymous = app.test_client()
+    resp = anonymous.post("/login", data={"username": "someone", "password": PASSWORD})
+    assert resp.status_code == 400
+    page = resp.data.decode()
+    assert "That form couldn" in page and "reload the page" in page and "CSRF" not in page
+    rows = db.execute("SELECT * FROM audit_log WHERE action = 'csrf_failed'").fetchall()
+    assert len(rows) == 1 and rows[0]["username"] is None and rows[0]["detail"] == "1 attempt, last /login"
+    # Signed in (through the real form), a stale token on a later form is counted against the person.
+    browser = app.test_client()
+    html = browser.get("/login").data.decode()
+    token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+    assert (
+        browser.post("/login", data={"username": "someone", "password": PASSWORD, "csrf_token": token}).status_code
+        == 302
+    )
+    assert browser.post("/account/password", data={"current": PASSWORD}).status_code == 400
+    row = db.execute("SELECT * FROM audit_log WHERE action = 'csrf_failed' ORDER BY id DESC LIMIT 1").fetchone()
+    assert row["username"] == "someone" and row["detail"] == "1 attempt, last /account/password"
+    # It's sign-in noise: pruned with the rest after AUDIT_NOISE_DAYS.
+    assert "csrf_failed" in AUDIT_NOISE

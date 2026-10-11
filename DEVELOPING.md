@@ -74,6 +74,7 @@ v2/
     endpoints.py  every Microsoft call, its permission and limits
     store.py      runs, snapshots and metrics                 db.py         SQLite and migrations
     worker.py     the background process                      delivery.py   scheduled emails
+    logs.py       the rolling log files and line context       support.py    the support package (redacted diagnostics)
     migrations/   numbered SQL files, applied in order, never edited once applied
   tests/          pytest suite; graphdata.py and friends are simulated Microsoft responses
   tests/browser/  screenshot and accessibility tests (their README says how to run them)
@@ -120,8 +121,11 @@ def test_unreadable_subscriptions_leave_the_rest_of_the_profile(db, two_tenants,
     alpha, _ = two_tenants
     responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
     responses.get(f"{V1}/subscribedSkus", json={"value": SKUS})
-    responses.get(f"{V1}/directory/subscriptions", status=403,
-                  json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}})
+    responses.get(
+        f"{V1}/directory/subscriptions",
+        status=403,
+        json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}},
+    )
     run_id, status = _run(db, alpha, "tenant_profile", factory)
     assert status == "partial"
 ```

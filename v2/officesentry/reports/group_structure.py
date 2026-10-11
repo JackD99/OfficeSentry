@@ -1,10 +1,11 @@
 """Empty, nested and dynamic groups: the group clean-up report.
 
 For a technician tidying a directory: groups with no members (left over, or a dynamic rule that matches
-nobody), groups inside other groups (who really has access is hidden a level or more down), and dynamic
-groups with their rules and whether Microsoft is still processing them. Built from what Group nesting stores
-for security groups and distribution lists, and the member counts Groups and Teams stores for teams and
-Microsoft 365 groups. Nothing here calls Microsoft.
+nobody), groups inside other groups (who really has access is hidden a level or more down), dynamic
+groups with their rules and whether Microsoft is still processing them, teams and groups about to expire,
+role-assignable groups (whose members hold admin roles) and blocked accounts still in groups. Built from
+what Group nesting stores for security groups and distribution lists, what Groups and Teams stores for
+teams and Microsoft 365 groups, and the Users list for who is blocked. Nothing here calls Microsoft.
 """
 
 from __future__ import annotations
@@ -21,7 +22,12 @@ from .registry import report
 EMPTY = "Empty groups"
 NESTED = "Groups inside groups"
 DYNAMIC = "Dynamic groups"
+EXPIRING = "Expiring soon"
+ROLE = "Role-assignable groups"
+BLOCKED = "Blocked members"
 EVERY = "Every group"
+EXPIRY_DAYS = 90  # teams and groups expiring within this many days are listed
+SOON_DAYS = 30  # and flagged within this many
 DEEP = 3  # levels of groups below a group that make it hard to see who is in it
 NEW_DAYS = 30  # an empty group this new may still be being set up
 KINDS = {
@@ -47,13 +53,14 @@ def _membership(g: dict) -> str:
 @report(
     "group-structure",
     "Empty, nested and dynamic groups",
-    "Groups with no members, groups inside other groups, and dynamic groups with their rules and "
-    "whether they're paused.",
-    ("group_nesting", "groups"),
+    "Groups with no members, groups inside other groups, dynamic groups with their rules and whether "
+    "they're paused, teams and groups about to expire, role-assignable groups, and blocked accounts still "
+    "in groups.",
+    ("group_nesting", "groups", "users"),
     group="files",
     order=70,
     keywords="empty groups nested groups dynamic membership rule paused distribution lists security groups "
-    "clean up cleanup",
+    "clean up cleanup expiring expiry expiration renew role-assignable privileged blocked disabled leavers",
 )
 def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     groups = snap.objects("group_nesting", "group")
@@ -63,8 +70,28 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     teams = snap.objects("groups", "group")
     if teams is None:
         report.notes.append("Member counts of teams and Microsoft 365 groups show after Groups and Teams is collected.")
+    people = snap.objects("users", "user")
+    if people is None:
+        report.notes.append("Blocked accounts still in groups show after Users is collected.")
     m365 = {g["_id"]: g for g in teams or [] if isinstance(g.get("_id"), str)}
     by_id = {g["_id"]: g for g in groups if isinstance(g.get("_id"), str)}
+    accounts = {u["_id"]: u for u in people or [] if isinstance(u.get("_id"), str)}
+    blocked_ids = {uid for uid, u in accounts.items() if u.get("accountEnabled") is False}
+    guest_ids = {uid for uid, u in accounts.items() if u.get("userType") == "Guest"}
+
+    def person(uid: str) -> str:
+        u = accounts.get(uid) or {}
+        return u.get("displayName") or u.get("userPrincipalName") or uid
+
+    def member_ids(gid: str) -> list[str]:
+        g = by_id.get(gid) or {}
+        source = m365.get(gid) if g.get("kind") == "microsoft365" else g
+        ids = (source or {}).get("memberIds" if g.get("kind") == "microsoft365" else "userIds")
+        return [i for i in ids if isinstance(i, str)] if isinstance(ids, list) else []
+
+    def owner_names(gid: str) -> list[str]:
+        owners = (m365.get(gid) or {}).get("owners")
+        return [o.get("name") or o.get("upn") or "?" for o in owners if isinstance(o, dict)] if owners else []
 
     def members(gid: str) -> int | None:
         g = by_id.get(gid) or {}
@@ -136,12 +163,38 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         "stops adding joiners and removing leavers, so it's flagged.",
         empty="No dynamic groups.",
     )
+    expiring = Section(
+        EXPIRING,
+        ["Group", "Kind", "Expires", "Days left", "Owners", "Members"],
+        intro=f"Teams and Microsoft 365 groups the expiration policy will delete within {EXPIRY_DAYS} days. One "
+        "that's used renews itself; otherwise its owners are emailed to renew it, so a group with no owner who "
+        f"can sign in is flagged, as is one due within {SOON_DAYS} days. A deleted group can be restored for "
+        "30 days.",
+        empty=f"No team or group expires in the next {EXPIRY_DAYS} days.",
+    )
+    role = Section(
+        ROLE,
+        ["Group", "Kind", "Members", "Guests", "Owners", "Created"],
+        intro="Groups that can be given admin roles, so being a member of one is being an admin. Their owners "
+        "can add anyone; a guest in one is flagged.",
+        empty="No group can be assigned admin roles.",
+    )
+    blocked = Section(
+        BLOCKED,
+        ["Group", "Kind", "Blocked accounts", "Blocked", "Members"],
+        intro="Groups that still hold accounts whose sign-in is blocked, usually leavers. Access the group "
+        "gives is handed back the moment the account is unblocked, and the member counts others see are "
+        "wrong; blocked accounts in a role-assignable group are flagged higher.",
+        empty="No blocked account is in a group.",
+    )
     every = Section(
         EVERY,
-        ["Group", "Kind", "Membership", "Members", "Groups inside", "Inside of", "Created"],
+        ["Group", "Kind", "Membership", "Members", "Groups inside", "Inside of", "Created", "Expires"],
         intro="Every group in the tenant, with its direct members (people, devices, apps and groups).",
         empty="The tenant has no groups.",
     )
+    nobody_to_renew = 0
+    blocked_total = 0
     for gid in order:
         g = by_id[gid]
         kind, count = _kind(g), members(gid)
@@ -174,8 +227,40 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             dynamic.add(
                 [name(gid), kind, g.get("rule"), processing, shown], "medium" if processing == "Paused" else None
             )
-        every.add([name(gid), kind, _membership(g), shown, inner_count or "", outer, _date(g.get("createdDateTime"))])
-    report.sections = [empty, nested, dynamic, every]
+        m = m365.get(gid) or {}
+        expires = parse_ts(m.get("expirationDateTime"))
+        if expires is not None and (days := (expires.date() - now.date()).days) <= EXPIRY_DAYS:
+            renewers = m.get("enabledOwnerCount")
+            nobody = m.get("examined") is True and isinstance(renewers, int) and renewers == 0
+            nobody_to_renew += nobody
+            expiring.add(
+                [name(gid), kind, _date(m.get("expirationDateTime")), days, owner_names(gid), shown],
+                "medium" if nobody or days < 0 else ("low" if days <= SOON_DAYS else None),
+            )
+        ids = member_ids(gid)
+        if g.get("roleAssignable"):
+            guests = sum(1 for i in ids if i in guest_ids)
+            role.add(
+                [name(gid), kind, shown, guests, owner_names(gid), _date(g.get("createdDateTime"))],
+                "medium" if guests else None,
+            )
+        gone = sorted((person(i) for i in ids if i in blocked_ids), key=str.lower)
+        if gone:
+            blocked_total += len(gone)
+            blocked.add([name(gid), kind, gone, len(gone), shown], "medium" if g.get("roleAssignable") else "low")
+        every.add(
+            [
+                name(gid),
+                kind,
+                _membership(g),
+                shown,
+                inner_count or "",
+                outer,
+                _date(g.get("createdDateTime")),
+                _date(m.get("expirationDateTime")),
+            ]
+        )
+    report.sections = [empty, nested, dynamic, expiring, role, blocked, every]
 
     paused = sum(1 for r in dynamic.rows if r[3] == "Paused")
     deepest = max((r[4] for r in nested.rows if isinstance(r[4], int)), default=0)
@@ -195,17 +280,34 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             Rows(NESTED),
         ),
         Tile(
-            DYNAMIC,
-            len(dynamic.rows),
-            f"{paused} paused" if dynamic.rows else "Members set by a rule",
-            rows=Rows(DYNAMIC),
-        ),
-        Tile(
             "Paused dynamic rules",
             paused,
             "Not adding joiners or removing leavers",
             "bad" if paused else "ok",
             Rows(DYNAMIC, {"Processing": "Paused"}),
+        ),
+        Tile(
+            EXPIRING,
+            len(expiring.rows),
+            f"{nobody_to_renew} with nobody to renew"
+            if nobody_to_renew
+            else ("Owners can renew them" if expiring.rows else f"Within {EXPIRY_DAYS} days"),
+            "warn" if nobody_to_renew else None,
+            Rows(EXPIRING),
+        ),
+        Tile(
+            ROLE,
+            len(role.rows),
+            f"{sum(1 for f in role.flags if f)} with a guest" if any(role.flags) else "Members hold admin roles",
+            "bad" if any(role.flags) else None,
+            Rows(ROLE),
+        ),
+        Tile(
+            BLOCKED,
+            len(blocked.rows),
+            f"{plural(blocked_total, 'blocked account')} still in groups" if blocked.rows else "None in any group",
+            "warn" if blocked.rows else "ok",
+            Rows(BLOCKED),
         ),
     ]
     report.footnote = (

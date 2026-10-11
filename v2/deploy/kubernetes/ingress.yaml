@@ -1,0 +1,25 @@
+# HTTPS in front of the portal, through your cluster's ingress controller (Traefik, HAProxy, a cloud load
+# balancer's controller...). Set your domain in both places and your controller's class. The certificate comes
+# from cert-manager when the annotation names one of your issuers, or put your own in the officesentry-tls Secret.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: officesentry
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  # ingressClassName: traefik
+  tls:
+    - hosts: [sentry.example.com]
+      secretName: officesentry-tls
+  rules:
+    - host: sentry.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: officesentry
+                port:
+                  name: http

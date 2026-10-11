@@ -1,4 +1,4 @@
-name: refresh baselines
+name: Refresh baselines
 # A pull request that changes what a page or a PDF looks like fails the ui or nightly check until its
 # baselines are refreshed, and Run workflow needs someone at the Actions page. Adding the label
 # "refresh-baselines" to the pull request does it from the pull request itself: the pinned browser retakes
