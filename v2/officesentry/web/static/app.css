@@ -78,9 +78,6 @@ main { max-width: 1600px; margin: 0 auto; padding: 28px 32px 64px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
 .stack > * + * { margin-top: var(--space-3); }
 .scroll-x { overflow-x: auto; }
-/* A scroll box is positioned so it also clips visually hidden text (.sr-only, position: absolute) in what
-   it scrolls: otherwise that text stays where the table put it and widens the whole page. */
-:is(.scroll-x, .table-scroll, .chart-scroll) { position: relative; }
 
 /* -- Stat tiles ------------------------------------------------------------ */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
@@ -1072,7 +1069,9 @@ textarea.copy-text { font-size: var(--fs-sm); resize: vertical; margin: var(--sp
 .jump a.active { color: var(--text); font-weight: 600; }
 tfoot .total-row th, tfoot .total-row td { border-top: 2px solid var(--border-strong); background: var(--surface-2); font-weight: 600; }
 tfoot .total-row th { text-align: left; }
-.chk { display: inline-block; width: 14px; height: 14px; border-radius: 3px; background: var(--sunken); border: 1px solid var(--border-strong); vertical-align: -1px; flex: none; }
+/* Positioned so the square's hidden label (.sr-only) stays inside it: otherwise the label sits where the
+   table put it, past the matrix's scroll box, and the whole page scrolls sideways. */
+.chk { position: relative; display: inline-block; width: 14px; height: 14px; border-radius: 3px; background: var(--sunken); border: 1px solid var(--border-strong); vertical-align: -1px; flex: none; }
 .chk.pass { background: var(--ok); border-color: var(--ok); }
 .chk.fail { background: var(--bad); border-color: var(--bad); }
 .chk.fail.critical { background: var(--sev-critical); border-color: var(--sev-critical); }
@@ -1138,6 +1137,8 @@ textarea.commentary { width: 100%; min-height: 9em; }
 .project-status { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
 .project-status .grow { flex: 1; min-width: 180px; margin: 0; }
 .project-status input, .project-status select { margin: 0; }
+/* Each label holds its hidden text (.sr-only), which would otherwise sit past the table's scroll box. */
+.project-status label { position: relative; }
 @media (max-width: 640px) { .project-cols { grid-template-columns: 1fr; } }
 .project-cols .list .desc { display: block; }
 td .project-status { flex-wrap: nowrap; }
