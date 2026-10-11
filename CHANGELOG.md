@@ -361,6 +361,11 @@ client's approval.
   admin's user forms. Existing passwords aren't checked until they're changed.
 - A new docs page, [Securing the portal](v2/docs/securing-the-portal.md), lists what the portal does by
   itself, what the person running it has to do, and how to put it behind Caddy, nginx, Traefik or a CDN.
+- The Deploy workflow gives the `HCLOUD_TOKEN` secret only to the two steps that open and close SSH, passes
+  the firewall's ID between them as a checked number instead of through the environment of every later step,
+  and writes the backup password and storage keys to disk only after the website is built, so the code it
+  builds and the packages that build installs never see them. Nothing to change in your settings.
+- Copy buttons put their own label back after "Copied" instead of re-reading it from the page as HTML.
 
 ## [2.1.0] - 2026-10-10
 
