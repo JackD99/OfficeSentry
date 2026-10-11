@@ -2,7 +2,7 @@
 
     Child templates fill these blocks:
       doc_title     report name, e.g. "Monthly Security & Licensing Review"
-      client        who it's for (the tenant's name, or "All tenants")
+      client        who it's for (the client's name, or "All clients")
       cover_meta    <div><dt>..</dt><dd>..</dd></div> pairs under the cover band
       cover_status  optional verdict shown on the cover
       contents      optional <li><a href="#id">Section</a></li> items: the PDF
@@ -11,7 +11,7 @@
       toolbar       links and download buttons (web only)
       body          the report itself
     Set `compact_cover = true` before extending for one-page documents and
-    `document = true` for table reports (detail, all tenants, changes), with
+    `document = true` for table reports (detail, all clients, changes), with
     `wide = true` for landscape pages.
     Needs: pdf, css_href, brand (injected), and report.css components.
     print_view (web/printing.py) is the browser-made PDF: the page as it

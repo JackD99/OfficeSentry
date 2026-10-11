@@ -76,7 +76,7 @@ def _flag(g: dict, now: datetime) -> str | None:
 def file_permissions(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = (snap.objects("shared_files", "scan_status") or [None])[0]
     if status is None:
-        report.unavailable = 'Shared files haven\'t been scanned yet. Refresh "Shared files" on the tenant page.'
+        report.unavailable = 'Shared files haven\'t been scanned yet. Refresh "Shared files" on the client page.'
         return
     if not status.get("available"):
         report.unavailable = (
@@ -85,7 +85,7 @@ def file_permissions(snap: TenantSnapshot, now: datetime, report: DataReport) ->
             else DENIED_TEXT
             if status.get("reason") == "denied"
             else "Office Sentry can't read this tenant's files yet. It needs the Sites.Read.All "
-            "permission: open the tenant page, send the consent link to the client's Global "
+            "permission: open the client page, send the consent link to the client's Global "
             "Admin again and ask them to accept. The other SharePoint reports work without it."
         )
         return
@@ -94,7 +94,7 @@ def file_permissions(snap: TenantSnapshot, now: datetime, report: DataReport) ->
         report.notice = (
             "The last scan was made by an earlier version, which only recorded what's shared outside. The next "
             'Shared files collection records every file and folder with its own permissions; refresh "Shared '
-            'files" on the tenant page to see them now.'
+            'files" on the client page to see them now.'
         )
     outside_people = {
         g["who"]

@@ -102,7 +102,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = (snap.objects("sharepoint_storage", "storage_status") or [None])[0]
     if status is None:
         report.unavailable = (
-            'SharePoint storage hasn\'t been scanned yet. Refresh "SharePoint storage" on the tenant page.'
+            'SharePoint storage hasn\'t been scanned yet. Refresh "SharePoint storage" on the client page.'
         )
         return
     if not status.get("available"):
@@ -112,7 +112,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             else DENIED_TEXT
             if status.get("reason") == "denied"
             else "Office Sentry can't read this tenant's files yet. It needs the Sites.Read.All "
-            "permission: open the tenant page, send the consent link to the client's Global "
+            "permission: open the client page, send the consent link to the client's Global "
             "Admin again and ask them to accept."
         )
         return
@@ -186,7 +186,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     if not status.get("complete"):
         report.notes.append(
             "Some sites or libraries were too large to read in full, so their figures are partial. "
-            "The last SharePoint storage run on the tenant page says which."
+            "The last SharePoint storage run on the client page says which."
         )
 
     parts = Section(

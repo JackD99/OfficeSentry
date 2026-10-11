@@ -1,31 +1,31 @@
 # Office Sentry v2
 
-Read-only Microsoft 365 reporting for MSPs: nightly snapshots of every client
-tenant, cross-tenant rollups, month-over-month changes and branded client
-reports. The [root README](../README.md) is the product page with screenshots;
-this page lists every feature in detail and covers setup and development.
-Running it on a server is in [DEPLOY.md](DEPLOY.md).
+Read-only Microsoft 365 reporting for MSPs: nightly snapshots of every
+client's Microsoft 365, cross-client rollups, month-over-month changes and
+branded client reports. The [root README](../README.md) is the product page
+with screenshots; this page lists every feature in detail and covers setup
+and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
 
 ## Reports
 
 - **Monthly Security & Licensing Review** (`/tenants/<id>/report`): KPIs with
   4-week change, Secure Score trend, failing checks with affected accounts and
   recommendations, licence waste in money, passing checks, checks that the
-  tenant's licences can't support, and data freshness.
+  client's licences can't support, and data freshness.
 - **Reports** (`/reports`): every report in one searchable page, by area and by
   job ("Offboarding check", "Insurance renewal", "Storage cleanup"...), opened
-  for one tenant or across all of them. The search also finds tenants and
+  for one client or across all of them. The search also finds clients and
   settings, and lists your saved views.
-- **All tenants** (`/across/<report>`): a sortable, filterable table with one row
-  per tenant for the monthly review, the insurance evidence pack and every
-  detail report, limited to the tenants you can see. New detail reports appear
+- **All clients** (`/across/<report>`): a sortable, filterable table with one row
+  per client for the monthly review, the insurance evidence pack and every
+  detail report, limited to the clients you can see. New detail reports appear
   automatically.
-- **What changed** (`/changes`, and each tenant's *Changes* tab): a standalone
+- **What changed** (`/changes`, and each client's *Changes* tab): a standalone
   month-over-month report for the last 7, 30 or 90 days. It covers key
   figures then and now, new and fixed findings, admin, account, Conditional
   Access, forwarding, app, device and group changes, and a row-by-row
   comparison of every detail report.
-- **Downloads**: every page above has CSV and XLSX. Values from tenants can
+- **Downloads**: every page above has CSV and XLSX. Values from clients can
   never become spreadsheet formulas.
 - **Licence prices** (admin): enter monthly prices per SKU to cost waste and
   right-sizing savings.
@@ -35,28 +35,28 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
 - **Since last month**: new and fixed findings, admin role changes, new,
   disabled and deleted accounts, and Conditional Access policies added,
   switched or edited, compared with the snapshot from 4+ weeks earlier.
-- **Emailed reports** (a tenant's *Emailed reports* tab, and *Email reports*
+- **Emailed reports** (a client's *Emailed reports* tab, and *Email reports*
   for everything at once):
   - Send any mix of reports (the monthly review, the evidence pack, any detail
     report) weekly, monthly or quarterly, at a time in the schedule's own timezone.
   - **Saved views** too: a report with your filters, columns and sort, as a PDF,
-    XLSX or CSV, for one client, or with every tenant's rows (or one group's)
+    XLSX or CSV, for one client, or with every client's rows (or one group's)
     for your team.
   - Recipients are contacts: the client's people get the email, your team gets a
     hidden copy. Optional note at the top of the email.
-  - A cross-tenant **digest** for your team, worst tenants first.
+  - A cross-client **digest** for your team, worst clients first.
   - A weekly **Coming up** email (and page) for your team: renewals and trials, expiring app secrets and
     certificates, mailboxes filling up, DMARC still at p=none and accepted risks due in the next 90 days.
   - **Alert emails** when a scan finds something new and critical (or high), for
-    one tenant or all of them. They come from the same alert event as the
-    Teams/Slack alerts below. A tenant's first scan never emails.
+    one client or all of them. They come from the same alert event as the
+    Teams/Slack alerts below. A client's first scan never emails.
   - Preview (desktop and phone width), Send now, pause, and a delivery history
     with failures, automatic retries (5 min, 30 min, 2 h) and a Retry button.
   - Sent over SMTP or Microsoft 365 (Graph `sendMail` from a mailbox in your own
     tenant, through a separate send-only app), under Settings → Email delivery.
 - **Alerts** (Admin → Alerts): a Microsoft Teams (Workflows), Slack or generic
-  JSON webhook message when a tenant gets new findings at or above a chosen
-  severity (one message per tenant per collection), when a collection fails
+  JSON webhook message when a client gets new findings at or above a chosen
+  severity (one message per client per collection), when a collection fails
   after working last time, optionally when it works again, and optionally when a
   client's report is ready ("The October 2026 report for Contoso is ready", a
   link to the report history, never the files). The webhook URL
@@ -69,17 +69,17 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   worker runs, data is being collected, backups are recent and there's room on
   the disk, with what to do about anything that isn't. The team is emailed and
   the alert webhook posted when the worker stops, a backup fails, the disk is
-  over 85% full or most tenants fail to collect; once when it starts, daily
+  over 85% full or most clients fail to collect; once when it starts, daily
   while it lasts and when it's fixed. `/health/ready` answers 503 for uptime
   monitors when the portal can't do its job (DEPLOY.md, "Is it working?").
 - **Detail reports** (`/tenants/<id>/data/<report>`, each also as PDF, XLSX and CSV),
   grouped by area (identity, email, files, devices, tenant). Every table can be
   filtered by the values in it (or by age, for dates), sorted, and have columns
   hidden; headers stay visible while scrolling, and the view can be saved by
-  name and reused on any tenant. Downloads contain the rows and columns shown.
+  name and reused on any client. Downloads contain the rows and columns shown.
   The busiest tables have a bar chart that follows the filters (click a bar for
   its rows), and headline figures carry a line of their last 90 days.
-  Every headline number opens the rows behind it, here and on All tenants:
+  Every headline number opens the rows behind it, here and on All clients:
   - *Mail forwarding*: every forward (admin-set or inbox rule), and the
     outbound spam policies and remote domains that allow or block it.
   - *Inbox rules*: rules that forward outside, delete or hide mail, every
@@ -92,7 +92,7 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     (`Get-MailboxStatistics`), with mailboxes over 90% flagged.
   - *Mailbox size trend*: each mailbox's growth over one and three months
     from Office Sentry's own kept snapshots, the date each will fill at that
-    rate, and the tenant's total month by month.
+    rate, and the client's total month by month.
   - *Automatic replies*: mailboxes sending an out-of-office reply (Graph,
     `MailboxSettings.Read`), who outside hears it, and replies on for over 30
     days on an active account, dated from the kept snapshots.
@@ -318,9 +318,9 @@ page break), set it up in its panel (which severities, how many rows, the headin
 by side, and watch the preview on a real client update as you go. Start from an executive summary, a
 full security review, a licensing review or a blank page.
 
-A design belongs to the MSP and works for every tenant: a block with nothing to show for a client (no
-accepted risks, no commentary yet) is left out of that client's report. Each tenant's **Reports →
-Custom reports** lists every design as a page and a PDF, and a report plan or a tenant's email schedule
+A design belongs to the MSP and works for every client: a block with nothing to show for a client (no
+accepted risks, no commentary yet) is left out of that client's report. Each client's **Reports →
+Custom reports** lists every design as a page and a PDF, and a report plan or a client's email schedule
 can send a design (as a PDF) alongside or instead of the monthly review. Text blocks take `{client}`,
 `{month}`, `{msp}` and `{date}`. Admins and analysts make and edit designs; removing one is an admin's
 call, and it comes out of any plan or schedule that sent it.
@@ -339,7 +339,7 @@ work without it.
 
 `python -m officesentry live-test [--out DIR]` runs every collector against a
 test tenant using `OFFICESENTRY_TEST_TENANT_ID`, `OFFICESENTRY_TEST_CLIENT_ID`
-and `OFFICESENTRY_TEST_CLIENT_SECRET`, stores the result as tenant "Live test"
+and `OFFICESENTRY_TEST_CLIENT_SECRET`, stores the result as client "Live test"
 and prints each collector's outcome and every check. The secret is only for
 this command; the product signs in with a certificate.
 
@@ -374,7 +374,7 @@ These areas have no real recording and are tested with simulated data only:
   asked to approve access. Every permission, what is and isn't read, where the
   data is kept and how to remove access.
 - [Onboarding a client](docs/onboarding-a-client.md): for technicians. Adding
-  a tenant, consent, Global Reader, the first collection, connection health,
+  a client, consent, Global Reader, the first collection, connection health,
   the errors on the Data collection page, pausing, archiving and offboarding.
 - [Check catalogue](docs/checks.md): every check, data source, detail report
   and permission, generated from the code by `scripts/gen_check_catalogue.py`.
@@ -396,11 +396,11 @@ These areas have no real recording and are tested with simulated data only:
   certificate (or the mail app's) expires. *App connection → Replace
   certificate* adds a new one next to the old, tests it and switches without
   stopping collection. `SECURITY.md` has the steps for a leaked key.
-- **Extra access is flagged.** A tenant that gave the app more than the
+- **Extra access is flagged.** A client whose tenant gave the app more than the
   read-only permissions, or any admin role besides Global Reader, shows as
-  needing attention on its Manage page and on Client tenants.
-- **Deny-by-default access.** Users see only tenants granted to them (admins
-  and "all tenants" analysts excepted). Hidden tenants return 404.
+  needing attention on its Manage page and on Client settings.
+- **Deny-by-default access.** Users see only clients granted to them (admins
+  and "all clients" analysts excepted). Hidden clients return 404.
 - **Every run is a snapshot** (`runs` → `objects` + `metrics`), so reports
   can show history and changes. Metrics and findings are kept forever; full
   snapshots for the last 30 days plus one per month for 12 months. The daily
@@ -483,7 +483,7 @@ Then:
    tenant who can create app registrations (Global Administrator, Application
    Administrator or Cloud Application Administrator). Office Sentry generates
    the certificate, registers the multi-tenant read-only app and saves the
-   connection with its client ID, then offers to add your first tenant. The
+   connection with its client ID, then offers to add your first client. The
    sign-in's token is used once, in memory, and never stored; the device code
    is kept encrypted only while the page waits (`app_setup.py`).
    `docker compose run --rm worker python -m officesentry create-app` does the
@@ -495,46 +495,46 @@ Then:
    work), add the redirect URI `https://<your portal>/consent/callback` as a
    Web platform and paste its client ID. Enter your Directory (tenant) ID with
    the client ID to check the certificate straight away.
-3. **Add tenant** (or the form at the end of the wizard). The tenant's page shows a setup checklist that ticks itself
+3. **Add client** (or the form at the end of the wizard). The client's page shows a setup checklist that ticks itself
    off: grant admin consent (a Global Administrator of the tenant opens the
    link; a full collection is queued on return), assign Global Reader, first
-   full collection, all permissions granted. The tenant's **Manage** tab says
+   full collection, all permissions granted. The client's **Manage** tab says
    in plain words what's wrong and how to fix it if Office Sentry can't sign
    in or is missing a permission or role.
 
-## Managing client tenants
+## Managing clients
 
-- **Client tenants** (*Settings*, or *Connection health* on the Tenants page)
-  lists every tenant with its status (*Onboarding*, *Healthy*, *Needs
+- **Client settings** (*Settings*, or *Connection health* on the Clients page)
+  lists every client with its status (*Onboarding*, *Healthy*, *Needs
   attention*, *Paused*, *Archived*), consent, missing permissions, Global
   Reader, last good collection and failing data sources, worst first.
-- A tenant's **Manage** tab (admins and analysts) shows its connection health:
+- A client's **Manage** tab (admins and analysts) shows its connection health:
   consent, sign-in, which of the app's permissions the tenant actually granted,
   whether the app holds Global Reader (or more than it needs), licences, last
   collection and failing data sources, each with the fix. It's read by the
   `connection` collector with every collection (GET only, from permissions the
   app already has); *Check connection now* queues it straight away.
-- Admins can rename a tenant, change its tenant ID (until data has been
+- Admins can rename a client, change its tenant ID (until data has been
   collected) or app connection, keep notes, **pause** it (no collection,
   emailed reports or alert emails; data stays) and **archive** it (also hidden
   from lists, dashboards, rollups, digests and its client users; restorable).
-- **Tenant groups** (*Settings*, *Tenant groups*) sort clients by tier, region,
-  service level or anything else; a tenant can be in several. Pick a group at
-  the top of the Tenants dashboard, All tenants, What changed, Month-end or
-  Client tenants to see only those clients, with downloads to match, and give
-  a digest one group instead of every tenant. Groups never show anyone more:
+- **Client groups** (*Settings*, *Client groups*) sort clients by tier, region,
+  service level or anything else; a client can be in several. Pick a group at
+  the top of the Clients dashboard, All clients, What changed, Month-end or
+  Client settings to see only those clients, with downloads to match, and give
+  a digest one group instead of every client. Groups never show anyone more:
   the only way a group grants access is an admin ticking it for an analyst on
-  their user page, which then covers every tenant in it, including ones added
-  later. Client accounts are never given tenants through a group.
+  their user page, which then covers every client in it, including ones added
+  later. Client accounts are never given clients through a group.
 - **Offboard** walks through a final export, the client's side (remove Global
   Reader, delete the enterprise app) and what will be deleted, then deletes the
-  tenant and everything stored for it after you type its name, optionally with
-  client accounts that had no other tenant. `python -m officesentry
+  client and everything stored for it after you type its name, optionally with
+  client accounts that had no other client. `python -m officesentry
   delete-tenant <id>` does the same from the server.
 
 ## National clouds (GCC High, DoD, China)
 
-Each tenant has a **Microsoft cloud**, chosen when it's added (or later under
+Each client has a **Microsoft cloud**, chosen when it's added (or later under
 **Manage**):
 
 | Cloud | Sign-in | Microsoft Graph | Exchange admin API |
@@ -561,13 +561,13 @@ in to them, and the other way round. For clients in one of those clouds:
    (entra.microsoft.us for GCC High and DoD, the 21Vianet Azure portal for
    China), exactly as for the commercial app, after generating a certificate
    for that cloud under *Other ways to create the app*, and save its client ID.
-3. Add the tenant with the same cloud and that app connection. Its consent
+3. Add the client with the same cloud and that app connection. Its consent
    link opens on that cloud's sign-in page, and collection signs in to that
    cloud's Graph and Exchange.
 
-A tenant in a cloud with no app connection for it is added anyway; its page
+A client in a cloud with no app connection for it is added anyway; its page
 says to set up an app for that cloud, and collection doesn't start until there
-is one. An app connection can only be chosen for tenants in its own cloud.
+is one. An app connection can only be chosen for clients in its own cloud.
 
 Microsoft doesn't offer everything in every cloud. Where it doesn't (Secure
 Score and Identity Protection's risky users in China; the Microsoft 365 Apps
@@ -635,6 +635,6 @@ officesentry/
   tenant_health.py  connection health and the onboarding checklist, from stored state
   system_health.py  Office Sentry's own health: /health/ready and System status
   system_alerts.py  emails and webhook posts when Office Sentry itself needs attention
-  lifecycle.py   first collection, pause, archive and deleting a tenant
+  lifecycle.py   first collection, pause, archive and deleting a client
   web/           Flask app: access.py is the single authorization gate
 ```

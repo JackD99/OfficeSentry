@@ -131,7 +131,7 @@
 {{ head(item) }}
 {% set d = item.data %}
 {% if d.nothing %}
-  {% if d.first %}<p class="muted">This is the first report for this tenant, so its findings are the starting point. Changes are tracked from here on.</p>
+  {% if d.first %}<p class="muted">This is the first report for your organisation, so its findings are the starting point. Changes are tracked from here on.</p>
   {% else %}<p class="muted">No changes recorded since {{ d.since }}.</p>{% endif %}
 {% else %}
   {% if d.resolved or d.new %}
@@ -145,7 +145,7 @@
   </ul>
   {% endif %}
   {% if d.changes %}
-  <h3 class="changes-head">In the tenant</h3>
+  <h3 class="changes-head">In Microsoft 365</h3>
   <ul class="changes">
     {% for c in d.changes %}<li>{{ ui.change_tag(c.kind) }} <strong>{{ c.area }}:</strong> {{ c.subject }}: {{ c.detail }}</li>{% endfor %}
     {% if d.more_changes %}<li class="muted">…and {{ d.more_changes }} more changes</li>{% endif %}
@@ -257,9 +257,9 @@
 {#- One block: its section, or in the preview a note on why it's empty or broken. -#}
 {% macro draw(item, preview=false) -%}
 {% if item.error %}
-  {% if preview %}<section class="block block-empty"><div class="block-note">{{ item.widget.title }}: couldn't be built for this tenant. The log has the details.</div></section>{% endif %}
+  {% if preview %}<section class="block block-empty"><div class="block-note">{{ item.widget.title }}: couldn't be built for this client. The log has the details.</div></section>{% endif %}
 {% elif item.data is none %}
-  {% if preview %}<section class="block block-empty"><div class="block-note"><strong>{{ item.widget.title }}</strong> has nothing to show for this tenant, so it's left out: {{ item.empty }}</div></section>{% endif %}
+  {% if preview %}<section class="block block-empty"><div class="block-note"><strong>{{ item.widget.title }}</strong> has nothing to show for this client, so it's left out: {{ item.empty }}</div></section>{% endif %}
 {% elif item.block.kind == 'page_break' %}
   {% if preview %}<div class="block-note page-break-note">Page break</div>{% endif %}{{ w_page_break(item) }}
 {% else %}
