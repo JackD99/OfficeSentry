@@ -1148,6 +1148,9 @@ def delete_tenant(base: Path | None, key: int) -> int:
                 with transaction(db, immediate=True):
                     deleted += db.execute(f"DELETE FROM {TABLE[store]} WHERE tenant = ?", (key,)).rowcount
                     db.execute("DELETE FROM label WHERE tenant = ?", (key,))
+                # The deleted rows' old pages are in the file until the WAL is written back, even while the
+                # worker holds the file open.
+                db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 empty = not db.execute(f"SELECT 1 FROM {TABLE[store]} LIMIT 1").fetchone()
             if empty:
                 _remove(path)

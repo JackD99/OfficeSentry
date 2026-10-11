@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from ..collectors.sharepoint_lookup import DENIED_TEXT
 from ..collectors.sharepoint_storage import NEARLY_FULL, STALE_DAYS
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
@@ -108,6 +109,8 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         report.unavailable = (
             "This tenant has no SharePoint licence."
             if status.get("reason") == "no_sharepoint"
+            else DENIED_TEXT
+            if status.get("reason") == "denied"
             else "Office Sentry can't read this tenant's files yet. It needs the Sites.Read.All "
             "permission: open the tenant page, send the consent link to the client's Global "
             "Admin again and ask them to accept."
@@ -189,6 +192,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     parts = Section(
         "Where the space goes",
         ["Part", "Size", "Share of storage", "How to free it"],
+        drifts=("Size", "Share of storage"),
         intro="Everything stored in SharePoint sites, by what it is."
         + (f" The tenant has about {size(quota.total)} ({quota.explained})." if quota else ""),
         empty="No SharePoint storage in use.",
@@ -220,6 +224,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             "Site limit",
             "Last change",
         ],
+        drifts=("Storage used", "Current files", "Older versions", "Recycle bin", f"Untouched {years}+ years"),
         intro="Largest first. Storage used includes versions, the recycle bin and everything else on the site.",
         empty="No sites.",
     )
@@ -314,6 +319,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     libraries = Section(
         "Libraries",
         ["Library", "Size", "Current files", "Older versions", "Files", "Highest version", "Last change"],
+        drifts=("Size", "Current files", "Older versions", "Files", "Highest version"),
         intro="Every document library, largest first. Preservation Hold libraries hold copies kept "
         "by retention policies.",
         empty="No libraries.",
@@ -347,6 +353,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     full = Section(
         "OneDrives nearly full",
         ["Person", "Used", "Quota", "Share used", "Recycle bin", "Older versions"],
+        drifts=("Used", "Share used", "Recycle bin", "Older versions"),
         intro=f"OneDrives over {NEARLY_FULL:.0%} of their own quota. OneDrive storage doesn't count "
         "towards the tenant's SharePoint storage.",
         empty=f"No OneDrive is more than {NEARLY_FULL:.0%} full.",

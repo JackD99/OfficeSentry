@@ -126,6 +126,13 @@ def inbox_rule_risk(rule: dict, domains: set[str]) -> RuleRisk:
         elif actions.get("markAsRead"):
             risk.reasons.append(f"{where[0].upper()}{where[1:]} and marks as read")
             severity = severity or "medium"
+    elif actions.get("moveToFolder") and not rule.get("moveToFolderName") and (keywords or actions.get("markAsRead")):
+        # The folder's name comes from Exchange; without it a rule burying mail in Deleted Items or RSS
+        # Feeds can't be told from a tidy-up rule, so it's raised for review rather than passed.
+        what = f"mail mentioning {', '.join(keywords)}" if keywords else "mail"
+        read = " and marks it as read" if actions.get("markAsRead") else ""
+        risk.reasons.append(f"Moves {what} to a folder Office Sentry couldn't name{read}")
+        severity = severity or "medium"
     if odd_name and (risk.forwards_to or hides):
         risk.reasons.append(f"Rule name {rule.get('displayName')!r} looks deliberately blank")
         severity = severity or "medium"

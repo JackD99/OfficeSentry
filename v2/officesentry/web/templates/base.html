@@ -81,7 +81,7 @@
 {%- endmacro %}
 {#- Signed-in pages say which version is running, for support and after an update; the sign-in page doesn't. -#}
 {% macro powered_by(version=false) -%}
-{% if version %}<p class="powered-by">{% if brand.name or brand.logo %}Powered by {% endif %}Office Sentry {{ app_version }}</p>
+{% if version %}<p class="powered-by">{% if brand.name or brand.logo %}Powered by {% endif %}Office Sentry <span class="app-version">{{ app_version }}</span></p>
 {%- elif brand.name or brand.logo %}<p class="powered-by">Powered by Office Sentry</p>{% endif %}
 {%- endmacro %}
 
