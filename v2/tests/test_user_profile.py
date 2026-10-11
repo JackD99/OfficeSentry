@@ -38,6 +38,7 @@ def test_profile_brings_the_account_together(db, two_tenants):
         "usage",
         "mfa",
         "roles",
+        "admin_units",
         "groups",
         "mailbox",
         "devices",
