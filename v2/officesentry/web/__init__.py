@@ -28,6 +28,7 @@ from . import (
     designs,
     email,
     filters,
+    group_pages,
     groups,
     history,
     home,
@@ -321,6 +322,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(across.bp)
     app.register_blueprint(people.bp)
     app.register_blueprint(mailboxes.bp)
+    app.register_blueprint(group_pages.bp)
     app.register_blueprint(history.bp)
     app.register_blueprint(saved_views.bp)
     app.register_blueprint(tenant_admin.bp)

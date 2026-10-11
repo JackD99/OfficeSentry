@@ -36,6 +36,8 @@ PAGES = [
     Page("person", "/tenants/{t}/users/u1"),
     Page("mailboxes-list", "/tenants/{t}/mailboxes"),
     Page("mailbox", "/tenants/{t}/mailboxes/x-acc"),
+    Page("groups-list", "/tenants/{t}/groups"),
+    Page("group", "/tenants/{t}/groups/g1"),
     Page("monthly-review", "/tenants/{t}/report"),
     Page("evidence", "/tenants/{t}/evidence"),
     Page("tenant-projects", "/tenants/{t}/projects"),

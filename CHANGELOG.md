@@ -91,6 +91,13 @@ first.
   over the retained months, forwarding and inbox rules, who can open or send from it, protocols and
   settings, its automatic reply, the phones syncing it, email activity, open findings and what changed.
   Mailbox addresses in reports and search results open the page, and it downloads as PDF and XLSX.
+- One page per group: Users > Groups and teams lists every team, Microsoft 365 group, security group and
+  distribution list with its owners, members, guests and membership type, and each opens a page with what
+  needs attention first, then its owners, members and the groups inside it, what membership gives
+  (Conditional Access policies, admin roles, licences), its mail settings and traffic, the team's site with
+  its headline sharing figures, how it's set up, admin changes, open findings and what changed. Group names
+  and addresses in reports, the person page and search results open the page, and it downloads as PDF and
+  XLSX.
 
 ### Changed
 
@@ -216,6 +223,12 @@ first.
   night, with the run partial and the permission named, instead of the Users collection failing.
 - An Exchange list longer than 200 pages (200,000 results) is cut there with a warning naming the
   cmdlet, instead of failing the whole collection.
+- A session or proxy setting that can't work (`OFFICESENTRY_SESSION_HOURS=0`, which signed everyone out
+  on their next request) stops the portal at start with a plain message, like the other settings.
+- A form sent after the session had ended comes back, after signing in, to the page the form was on
+  rather than to an address that only takes forms ("Method not allowed").
+- The daily rebuild of the What changed and check matrix rows is no longer lost for a client whose
+  rows were being refreshed at that moment.
 
 ### Security
 
