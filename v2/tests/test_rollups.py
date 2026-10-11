@@ -10,6 +10,7 @@ import pytest
 from openpyxl import load_workbook
 
 from officesentry import store
+from officesentry.collectors import site_permissions, teams
 from officesentry.reports import data_reports, month_changes, rollups, tables
 from officesentry.reports.data_reports import Section
 from officesentry.reports.identity_reports import Money
@@ -347,7 +348,11 @@ def test_a_report_missing_one_of_its_data_sources_at_the_start_is_not_compared(d
 
 def test_a_permission_approved_or_still_awaited_is_not_compared_as_change(db, two_tenants):
     # Teams channels and site permissions waiting for the client's approval on one of the two days.
-    waiting = {"teams_kw": {"status": 403}, "sharepoint_kw": {"rest": "consent"}}
+    waiting = {
+        "teams_kw": {"status": 403},
+        "sharepoint_kw": {"rest": "consent"},
+        "our_app": {"missing": (teams.CHANNELS, teams.APPS, site_permissions.SITES_READ)},
+    }
     alpha, bravo = two_tenants
     for tenant_id, then, now in ((alpha, waiting, {}), (bravo, {}, waiting)):
         seed_tenant(db, tenant_id, **then)
