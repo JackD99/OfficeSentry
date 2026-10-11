@@ -64,16 +64,15 @@ The steps for the project's server, in order. Each takes a minute or two.
 
 ## Keeping them up to date
 
-The website and the demo follow `main` by themselves; the portal only changes when you say so.
+Nothing changes on the server by itself: merges to `main` don't deploy, so they use no Actions minutes
+here.
 
-| What changes on `main` | Website | Demo | Portal |
+| Deploy action | Website | Demo | Portal |
 |---|---|---|---|
-| Docs only (Markdown, `docs/`, `examples/`, `website/`) | straight away | stays | stays |
-| Code, once its tests pass | updated | rebuilt from that commit | only with `AUTO_DEPLOY` set to `true` |
+| **deploy** (a branch, or a release tag such as `v2.2.0`) | updated | rebuilt from that code | updated |
+| **website-and-demo** | updated | rebuilt from that code | stays |
 
-To update the portal, run the Deploy workflow with action **deploy** (it updates the website and the demo
-from the same commit too). With the `AUTO_DEPLOY` variable set to `true`, every merge whose tests pass
-updates the portal as well. Action **website-and-demo** does the automatic update by hand.
+With the `AUTO_DEPLOY` variable set to `true`, every merge whose tests pass runs **deploy** on `main`.
 
 The demo builds from its own copy of the code (`/opt/officesentry/demo-src`), so it can run newer code than
 the portal; the Caddy setup and this compose file come from the portal's copy, so a change to them reaches
