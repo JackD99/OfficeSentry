@@ -47,8 +47,8 @@ MEMBERS = {
     "c2": [_member("Alice", "alice@x.com", ["owner"]), _member("Bob", "bob@x.com")],
     "c5": [
         _member("Carol", "carol@x.com", ["owner"]),
-        _member("Gail Guest", "gail@partner.com", ["guest"]),
-        _member("Pat Partner", "pat@partner.com", tenant=PARTNER),
+        _member("Gail Guest", "gail@partner.example", ["guest"]),
+        _member("Pat Partner", "pat@partner.example", tenant=PARTNER),
     ],
 }
 

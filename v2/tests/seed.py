@@ -167,6 +167,7 @@ def mock_tenant(
     deleted_groups=None,
     risky_users=None,
     app_sign_ins=None,
+    admin_units=None,
     teams_kw=None,
     **phase4,
 ):
@@ -235,6 +236,21 @@ def mock_tenant(
     rsps.get(
         f"{V1}/directory/deletedItems/microsoft.graph.group",
         json={"value": gd.DELETED_GROUPS if deleted_groups is None else deleted_groups},
+    )
+    rsps.get(
+        f"{V1}/directory/administrativeUnits",
+        json={"value": gd.ADMIN_UNITS if admin_units is None else admin_units},
+    )
+
+    def unit_members(request):
+        uid = request.path_url.split("?")[0].split("/")[4]
+        return 200, {}, json.dumps({"value": gd.ADMIN_UNIT_MEMBERS.get(uid, [])})
+
+    rsps.add_callback(
+        responses.GET,
+        re.compile(re.escape(V1) + r"/directory/administrativeUnits/[^/]+/members"),
+        callback=unit_members,
+        content_type="application/json",
     )
     rsps.get(f"{V1}/groupSettings", json={"value": grp.GROUP_SETTINGS})
     rsps.get(f"{V1}/groupLifecyclePolicies", json={"value": grp.LIFECYCLE_POLICIES})

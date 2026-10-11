@@ -162,6 +162,8 @@ GRAPH: tuple[Endpoint, ...] = (
     Endpoint("/directory/subscriptions", V1, "Organization.Read.All", ("directory",)),
     Endpoint("/directory/deletedItems/microsoft.graph.user", V1, "Directory.Read.All", ("directory",)),
     Endpoint("/directory/deletedItems/microsoft.graph.group", V1, "Directory.Read.All", ("directory",)),
+    Endpoint("/directory/administrativeUnits", V1, "Directory.Read.All", ("directory",)),
+    Endpoint("/directory/administrativeUnits/{id}/members", V1, "Directory.Read.All", ("directory",), cost=3),
     Endpoint("/applications", V1, "Application.Read.All", ("directory",)),
     Endpoint("/servicePrincipals", V1, "Application.Read.All", ("directory",)),
     Endpoint("/servicePrincipals/{id}", V1, "Application.Read.All", ("directory",)),

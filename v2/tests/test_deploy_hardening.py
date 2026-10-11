@@ -108,6 +108,19 @@ def test_compose_keeps_the_keys_out_of_the_data_volume():
     assert "chown sentry /data /keys" in dockerfile  # a new keys volume is the app user's
 
 
+def test_compose_keeps_the_containers_fenced_in():
+    compose = yaml.safe_load((V2 / "docker-compose.yml").read_text(encoding="utf-8"))
+    services = compose["services"]
+    for name in ("web", "worker"):
+        svc = services[name]
+        assert svc["read_only"] is True and svc["cap_drop"] == ["ALL"] and svc["pids_limit"] == 256
+        assert "no-new-privileges:true" in svc["security_opt"]
+    caddy = services["caddy"]
+    assert caddy["cap_drop"] == ["ALL"] and caddy["cap_add"] == ["NET_BIND_SERVICE"] and caddy["pids_limit"] == 256
+    assert "no-new-privileges:true" in caddy["security_opt"]
+    assert "header -Server" in (V2 / "Caddyfile").read_text(encoding="utf-8")
+
+
 def test_a_slow_upgrade_is_given_time_before_the_deploy_gives_up():
     """A database upgrade copies the whole database before the portal answers, which takes minutes on a large
     one: the health check's start period, the start script's wait and Docker's live-restore allow for it."""
