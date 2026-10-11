@@ -20,7 +20,7 @@ from officesentry.collectors.auto_replies import plain_text
 from officesentry.collectors.mobile_devices import owner_name
 from officesentry.exchange import EXCHANGE_ROOT
 from officesentry.graph import GraphClient
-from officesentry.reports import library
+from officesentry.reports import library, views
 from officesentry.reports.auto_replies import ENDED, ON, SCHEDULED_ON, UPCOMING, state
 from officesentry.reports.data_reports import GROUPS, REPORTS, build
 from officesentry.reports.mobile_devices import platform
@@ -59,6 +59,13 @@ def _report(db, tenant, key):
 
 def _tiles(report):
     return {t.label: t for t in report.tiles}
+
+
+def _opens(report, tile):
+    """The first column of the rows a headline figure's link shows."""
+    view, _ = views.rows_view(report, tile.rows)
+    shown = views.apply(report, view)
+    return [r[0] for s in shown.sections if s.title == tile.rows.table for r in s.rows]
 
 
 def _collect(db, tenant_id, key, *, exchange=None, **kwargs):
@@ -154,7 +161,7 @@ def test_mobile_devices_lead_with_what_needs_attention(db, tenant):
     assert tiles["Mobile devices"].foot == "2 synced in the last 30 days"
     assert (tiles["Leavers' devices"].value, tiles["Leavers' devices"].tone) == (1, "bad")
     assert tiles["Waiting for approval"].value == 1
-    assert tiles["Not synced in 90 days"].value == 1
+    assert tiles["Not synced in 90 days"].value == 1 and _opens(report, tiles["Not synced in 90 days"]) == ["ann@x.com"]
 
     attention = s["Devices that need attention"]
     assert attention.flags == ["high", "medium", "low"]
@@ -163,6 +170,18 @@ def test_mobile_devices_lead_with_what_needs_attention(db, tenant):
     assert str(bob[2]) == "Still syncing mail although the person's sign-in is blocked"
     assert info[0] == "info@x.com" and "Waiting for an admin" in str(info[2])
     assert android[1] == "SM-G991B" and str(android[2]).startswith("Not synced for 200 days")
+
+
+def test_not_synced_figure_counts_calendar_days_like_its_link(db, two_tenants):
+    """Ann's old phone last synced at midnight 90 days ago: over 90 days by the clock, but not "Older than 90
+    days" on the table, which counts calendar days. The figure counts what its link opens."""
+    alpha, _ = two_tenants
+    midnight = (datetime.now(UTC) - timedelta(days=90)).strftime("%Y-%m-%dT00:00:00.0000000Z")
+    stats = {**xd.DEVICE_STATS, "g-u1": [xd.DEVICE_STATS["g-u1"][0], xd._stats(xd.ANN_ANDROID, midnight)]}
+    seed_tenant(db, alpha, users=USERS, exchange={**gd.EXCHANGE, "Get-MobileDeviceStatistics": stats})
+    report, _ = _report(db, store.get_tenant(db, alpha), "mobile-devices")
+    stale = _tiles(report)["Not synced in 90 days"]
+    assert stale.value == 0 and _opens(report, stale) == []
 
 
 def test_every_device_row(db, tenant):
@@ -307,6 +326,9 @@ def test_scheduled_reply_to_contacts(db, two_tenants):
     row = s["Mailboxes with an automatic reply"].rows[0]
     assert row[:7] == ["info@x.com", "Shared", "Scheduled", soon[:10], later[:10], "Contacts only", ""]
     assert _tiles(report)["Scheduled to start"].value == 1 and _tiles(report)["Replying now"].value == 0
+    # Not replying yet, so not counted as replying outside, and its link doesn't show it either.
+    outside = _tiles(report)["Replying outside the organisation"]
+    assert outside.value == 0 and _opens(report, outside) == []
 
 
 # -- Distribution lists ------------------------------------------------------------------------------------
@@ -348,6 +370,7 @@ def test_distribution_lists(db, tenant):
             "Open to outside senders",
         )
     ] == [3, 1, 2, 0, 1]
+    assert _opens(report, tiles["No mail in 90 days"]) == []  # Old project gets no mail, but isn't watched long enough
     members = s["Members"].rows
     assert ["Sales", "Partner", "pat@partner.example", "External contact"] in members
     assert ["Everyone", "Sales", "sales@x.com", "Security group"] in members
@@ -423,6 +446,7 @@ def test_unused_list_is_flagged_once_watched_long_enough(db, tenant):
     attention = {r[0]: r for r in s["Lists that need attention"].rows}
     assert "No mail in 90 days" in attention["Old project"][1].parts
     assert "Everyone" not in attention and _tiles(report)["No mail in 90 days"].value == 1
+    assert _opens(report, _tiles(report)["No mail in 90 days"]) == ["Old project"]
     assert not report.notes
 
 

@@ -17,6 +17,7 @@ from officesentry.collectors.mail_usage import LEGACY_CLIENTS, summarise_signins
 from officesentry.exchange import ExchangeClient
 from officesentry.graph import GRAPH_ROOT, GraphClient, GraphError
 from officesentry.mailflow import size_bytes
+from officesentry.reports import views
 from officesentry.reports.data_reports import REPORTS, build
 from officesentry.snapshot import TenantSnapshot
 from officesentry.worker import execute_run
@@ -217,6 +218,9 @@ def test_legacy_auth_report(db, tenant):
     ]
     assert allows.flags == [None, None]
     assert [h.value for h in report.highlights] == [1, 1, "1 of 2"]
+    # The accounts that signed in open their rows, not Ann's failed attempt.
+    view, _ = views.rows_view(report, report.highlights[0].rows)
+    assert [r[0] for r in views.apply(report, view).sections[0].rows] == ["info@x.com"]
 
 
 def test_legacy_auth_without_entra_p1(db, two_tenants):
