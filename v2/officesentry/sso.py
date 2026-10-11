@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import re
 import secrets
 import threading
@@ -305,7 +306,6 @@ PROBLEMS = {
     "50126": "That didn't work on Microsoft's page. Try again.",
 }
 _AADSTS = re.compile(r"AADSTS(\d+)")
-_SENTENCE = re.compile(r"^(AADSTS\d+: )?([^\r\n]*?)(\. Trace ID.*)?$", re.S)
 
 
 def problem(error: str | None, description: str | None = None) -> str:
@@ -314,9 +314,15 @@ def problem(error: str | None, description: str | None = None) -> str:
     for key in (code.group(1) if code else None, error):
         if key in PROBLEMS:
             return PROBLEMS[key]
-    first = (description or "").split("\r\n", 1)[0].split("\n", 1)[0].strip()
-    m = _SENTENCE.match(first)
-    first = (m.group(2) if m else first).strip()
+    # The first line of Microsoft's text, without its "AADSTS12345: " prefix and trace ids, printable only.
+    first = (description or "").splitlines()[:1]
+    first = "".join(ch for ch in (first[0] if first else "") if ch.isprintable()).strip()
+    if code and first.startswith(code.group(0) + ": "):
+        first = first[len(code.group(0)) + 2 :]
+    cut = first.find(". Trace ID")
+    if cut >= 0:
+        first = first[:cut]
+    first = first.strip()
     return f"Microsoft refused the sign-in: {first or error or 'no reason given'}."
 
 
@@ -577,10 +583,15 @@ def setup_scope(cloud_key: str | None = None) -> str:
 
 def _token_claim(token: str, claim: str) -> str | None:
     """A claim from the wizard's access token, for choosing what to do (never trusted for access: Microsoft
-    checks the token itself when it's used)."""
+    checks the token itself when it's used).
+
+    The token came straight from Microsoft's token endpoint over TLS and is for Graph, whose tokens can't be
+    verified by anyone else, so the payload is read as it is rather than checked as a signed token.
+    """
     try:
-        value = jwt.decode(token, options={"verify_signature": False}).get(claim)
-    except jwt.PyJWTError:
+        payload = token.split(".")[1]
+        value = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))).get(claim)
+    except (IndexError, ValueError, AttributeError):
         return None
     return value.lower() if isinstance(value, str) and GUID_RE.match(value.lower()) else None
 
