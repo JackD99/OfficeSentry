@@ -131,6 +131,7 @@ class TenantChanges:
     reports: list[ReportChanges]
     baseline: str | None  # when the oldest data used as the starting point was collected
     notes: list[str] = field(default_factory=list)
+    chosen_end: bool = False  # ``until`` is the end of a day asked for, not the latest data
 
     @property
     def report_changes(self) -> int:
@@ -404,6 +405,7 @@ def build(
         reports,
         baseline,
         notes,
+        until is not None,
     )
 
 
@@ -415,7 +417,12 @@ def to_tables(tc: TenantChanges) -> list[Table]:
     tables = [
         Table(
             "Key figures",
-            ["Measure", f"On {tc.since.day} {tc.since:%b %Y}", "Now", "Change"],
+            [
+                "Measure",
+                f"On {tc.since.day} {tc.since:%b %Y}",
+                f"On {tc.until.day} {tc.until:%b %Y}" if tc.chosen_end else "Now",
+                "Change",
+            ],
             [[f.label, f.before, f.after, f.delta] for f in tc.figures],
         ),
         Table(

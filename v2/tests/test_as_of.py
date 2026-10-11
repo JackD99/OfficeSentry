@@ -3,9 +3,11 @@ from the daily history once retention has removed the snapshots (web/as_of.py, s
 
 from __future__ import annotations
 
+import io
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
+from openpyxl import load_workbook
 
 from officesentry import changes, state_history, store
 from officesentry.reports import data_reports, month_changes
@@ -219,6 +221,18 @@ def test_the_reports_a_period_ending_before_today_changed_open_at_its_end(admin,
     assert f'href="/tenants/{then_and_now}/data/guests?on={day(1)}"' in ended
     latest = admin.get(f"{url}?from={day(60)}").get_data(as_text=True)
     assert f'href="/tenants/{then_and_now}/data/guests"' in latest  # up to today: today's data
+
+
+def test_a_period_ending_before_today_names_its_end_day_in_the_spreadsheet(admin, db, then_and_now):
+    tenant = store.get_tenant(db, then_and_now)
+    end = TODAY - timedelta(days=20)
+    ended = month_changes.build(db, tenant, since=as_of.end_of(TODAY - timedelta(days=60)), until=as_of.end_of(end))
+    assert month_changes.to_tables(ended)[0].columns[2] == f"On {end.day} {end:%b %Y}"
+    assert month_changes.to_tables(month_changes.build(db, tenant, 30))[0].columns[2] == "Now"
+    xlsx = admin.get(f"/tenants/{then_and_now}/changes.xlsx?from={day(60)}&to={day(20)}")
+    sheet = load_workbook(io.BytesIO(xlsx.data))["Key figures"]
+    cells = {c.value for row in sheet.iter_rows() for c in row}
+    assert f"On {end.day} {end:%b %Y}" in cells and "Now" not in cells
 
 
 def test_a_past_day_is_only_shown_for_the_tenants_a_user_can_see(client, db, two_tenants, then_and_now):
