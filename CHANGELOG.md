@@ -9,6 +9,32 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
+## [2.3.0] - Unreleased
+
+### Added
+
+- **Intune policies report** (Devices menu). Which platforms have devices enrolled but no compliance policy,
+  what each compliance policy requires in plain words, configuration profiles and Windows update rings
+  (deferral days, restart deadline, paused or not), endpoint security and settings catalog policies, and app
+  protection for iPhones and Android phones (PIN, sharing, copy and paste, backups), each with who it's
+  assigned to. Needs attention lists policies assigned to nobody, paused update rings, compliance policies
+  that require nothing and app protection without a PIN. It reads the Intune permissions clients approved
+  with 2.2; until a client has, the report says it's waiting.
+- **BitLocker recovery keys** in the Devices report: every Windows computer joined to Entra ID, whether its
+  recovery key is saved there, how many keys and when the newest was saved. Office Sentry reads only that a
+  key exists, never the key. A computer Intune reports as encrypted with no saved key is flagged, since it
+  can't be unlocked if it asks for its key.
+- **Two device checks**: *Windows computers have their BitLocker recovery key saved* and *Every platform in
+  use has a compliance policy*, both in the Device management with Intune project.
+- **PIM for groups in the Admins report**: people who can make themselves a member of a group that holds an
+  admin role are listed with that role as eligible, marked "(eligible member)" beside the group.
+
+### New Microsoft permissions
+
+None. These use permissions added in 2.2 (`DeviceManagementConfiguration.Read.All`,
+`DeviceManagementApps.Read.All`, `BitLockerKey.ReadBasic.All` and
+`PrivilegedEligibilitySchedule.Read.AzureADGroup`), which nothing read until now.
+
 ## [2.2.0] - 2026-10-11
 
 Who can open what, and evidence for more than Cyber Essentials. The headlines: Site access, Site
@@ -718,6 +744,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
+[2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0

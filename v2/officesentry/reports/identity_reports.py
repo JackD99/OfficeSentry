@@ -25,6 +25,7 @@ from ..licences import (
     load_prices,
     sku_name,
 )
+from ..permission_batch import waiting_text
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .charts import line_chart
@@ -113,8 +114,10 @@ def _roles(snap: TenantSnapshot) -> dict[str, dict] | None:
                 "groups": [],
             },
         )
-        if r.get("viaGroup") and r["viaGroup"] not in p["groups"]:
-            p["groups"].append(r["viaGroup"])
+        # Someone who can activate membership of the group (PIM for groups) holds its roles as eligible.
+        via = f"{r['viaGroup']} (eligible member)" if r.get("viaGroup") and r.get("viaPim") else r.get("viaGroup")
+        if via and via not in p["groups"]:
+            p["groups"].append(via)
         name = (r.get("roleName") or "Unknown role") + (
             "" if r.get("directoryScopeId") in (None, "/") else " (limited scope)"
         )
@@ -458,6 +461,7 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
 
 # -- Admins and privileged roles ------------------------------------------------------------
 
+PIM_GROUPS = "PrivilegedEligibilitySchedule.Read.AzureADGroup"
 BREAK_GLASS_NAME = re.compile(r"break.?glass|emergency|\bbg[-_.]?admin|\beaa\b", re.IGNORECASE)
 
 
@@ -487,6 +491,12 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         )
     if not any(u.get("signInActivityAvailable") for u in users.values()):
         report.notes.append(f"Last sign-in dates need {P1}, so inactive admins aren't checked.")
+    pim_groups = snap.objects("admin_roles", "pim_groups_status") or []
+    if pim_groups and isinstance(pim_groups[0], dict) and pim_groups[0].get("state") == "waiting":
+        report.notes.append(
+            "People who can make themselves a member of a group that holds an admin role (PIM for groups) aren't "
+            "listed yet. " + waiting_text(snap.tenant["name"], [PIM_GROUPS])
+        )
 
     privileged = Section(
         "Privileged role holders",

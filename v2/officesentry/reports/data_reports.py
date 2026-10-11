@@ -20,6 +20,7 @@ from ..checks.tenant_settings import GUEST_ROLES, admin_consent_missing
 from ..collectors import REGISTRY
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
+from ..permission_batch import waiting_text
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from . import workbook
@@ -1172,7 +1173,12 @@ SUPPORT = {
 }
 
 
-def _device_issues(d: dict, now: datetime) -> tuple[list[str], str | None]:
+NO_RECOVERY_KEY = "Encrypted, but no BitLocker recovery key saved in Entra ID"
+
+
+def _device_issues(d: dict, now: datetime, keys: dict[str, dict] | None = None) -> tuple[list[str], str | None]:
+    """A managed device's problems, worst first by flag. ``keys`` (``devices.recovery_keys``) is given when the
+    recovery key list was read."""
     issues, flag = [], None
     rank = {"high": 0, "medium": 1, "low": 2}
 
@@ -1188,6 +1194,13 @@ def _device_issues(d: dict, now: datetime) -> tuple[list[str], str | None]:
         add("Not compliant", "medium")
     if devices.is_computer(d) and d.get("isEncrypted") is False:
         add("Not encrypted", "high")
+    if (
+        keys is not None
+        and devices.is_windows(d)
+        and d.get("isEncrypted")
+        and not devices.has_recovery_key(d.get("azureADDeviceId"), keys)
+    ):
+        add(NO_RECOVERY_KEY, "medium")
     if devices.is_windows(d):
         support = devices.windows_support(d.get("osVersion"), now.date())
         if support.status in ("ended", "pro_ended", "ending"):
@@ -1209,11 +1222,12 @@ def _seen(value: str | None, now: datetime) -> str:
 @report(
     "devices",
     "Devices",
-    "Intune compliance, encryption and Windows support, and every Entra ID device record.",
+    "Intune compliance, encryption and Windows support, BitLocker recovery keys saved in Entra ID, and every "
+    "Entra ID device record.",
     ("devices",),
     group="devices",
     order=10,
-    keywords="intune compliance bitlocker encryption windows",
+    keywords="intune compliance bitlocker recovery key escrow encryption windows",
 )
 def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     entra = devices.objects(snap, "entra_device")
@@ -1223,6 +1237,8 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
     status = devices.objects(snap, "intune_status") or []
     intune = bool(status and status[0].get("available"))
     managed = (devices.objects(snap, "managed_device") or []) if intune else []
+    key_state = devices.bitlocker_state(snap)
+    keys = devices.recovery_keys(snap) if key_state == "read" else None
 
     # Operating systems: Intune's view when there is one, otherwise devices active in Entra.
     if managed:
@@ -1283,7 +1299,7 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
         )
         every.chart = Chart("Compliance")
         for d in sorted(managed, key=lambda d: (d.get("deviceName") or "").lower()):
-            issues, flag = _device_issues(d, now)
+            issues, flag = _device_issues(d, now, keys)
             if issues:
                 attention.add(
                     [d.get("deviceName"), d.get("userPrincipalName"), devices.os_label(d), "; ".join(issues)], flag
@@ -1304,6 +1320,16 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
             )
         attention.rows, attention.flags = _by_flag(attention)
         sections += [attention, every]
+
+    if key_state == "read":
+        sections.append(_recovery_key_section(entra, managed, keys or {}, now))
+    elif key_state == "waiting":
+        report.notes.append(
+            "Whether each computer's BitLocker recovery key is saved isn't shown yet. "
+            + waiting_text(snap.tenant["name"], [devices.BITLOCKER])
+        )
+    elif key_state == "failed":
+        report.notes.append("BitLocker recovery keys couldn't be read; see the Devices collection's log.")
 
     records = Section(
         "Entra ID device records",
@@ -1329,6 +1355,46 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
         )
     sections.append(records)
     report.sections = sections
+
+
+RECOVERY_KEYS = "BitLocker recovery keys"
+
+
+def _recovery_key_section(entra: list[dict], managed: list[dict], keys: dict[str, dict], now: datetime) -> Section:
+    """Joined Windows computers seen recently and whether each has its recovery key saved in Entra ID. Without
+    it, a computer that asks for its recovery key (after a firmware update, say) can't be unlocked."""
+    encrypted = {
+        (d.get("azureADDeviceId") or "").lower(): d.get("isEncrypted") for d in managed if d.get("azureADDeviceId")
+    }
+    section = Section(
+        RECOVERY_KEYS,
+        ["Device", "Join type", "Encrypted", "Recovery key saved", "Keys saved", "Last saved", "Last seen"],
+        intro="Windows computers joined to Entra ID and seen in the last "
+        f"{devices.STALE_DAYS} days, and whether the BitLocker recovery key for the system drive is saved in "
+        "Entra ID. Encrypted comes from Intune. Office Sentry only reads that a key exists, never the key.",
+        empty="No Windows computers are joined to Entra ID.",
+    )
+    for d in sorted(entra, key=lambda d: (d.get("displayName") or "").lower()):
+        if not devices.escrows_keys(d, now):
+            continue
+        device_id = (d.get("deviceId") or "").lower()
+        saved = keys.get(device_id) or {}
+        has_key = devices.has_recovery_key(device_id, keys)
+        is_encrypted = encrypted.get(device_id)
+        section.add(
+            [
+                d.get("displayName"),
+                JOIN_TYPES.get(d.get("trustType"), d.get("trustType") or "Unknown"),
+                is_encrypted if isinstance(is_encrypted, bool) else "",
+                has_key,
+                saved.get("keys") if isinstance(saved.get("keys"), int) else 0,
+                _date(saved.get("latest") if isinstance(saved.get("latest"), str) else None),
+                _seen(d.get("approximateLastSignInDateTime"), now),
+            ],
+            "medium" if is_encrypted and not has_key else None,
+        )
+    section.rows, section.flags = _by_flag(section)
+    return section
 
 
 def _by_flag(section: Section) -> tuple[list, list]:
