@@ -11,7 +11,9 @@ would leave it:
 
 - a run row of every collector and its metrics, every night (neither is ever pruned);
 - run log lines for the last 90 nights (``store.RUN_LOG_DAYS``);
-- objects only for the runs retention keeps: the last 30 nights and the last run of each of 12 months.
+- objects only for the runs retention keeps: the last 30 nights and the last run of each of 12 months;
+- the template's open findings, a contact, and a place on one month-end report plan (send on approval), so
+  the month-end queue, the Clients home page and the findings pages have the work a real MSP's would.
 
 Nightly snapshots are copies of their template, so What changed finds nothing to report, and the data
 dedupes perfectly; compression doesn't depend on that (each pack is compressed on its own). ``--plain``
@@ -148,6 +150,39 @@ def add_tenant(db, n: int, template: dict, days: int, keep: set[int], cid: int) 
         "INSERT INTO objects (run_id, kind, object_id, data, items) SELECT p.run_id, o.kind, o.object_id,"
         " o.data, o.items FROM plan p JOIN tpl.objects o ON o.run_id = p.template_run WHERE p.objects"
     )
+    db.execute(
+        "INSERT INTO findings (tenant_id, rule_key, object_id, severity, subject, detail, first_seen, last_seen)"
+        " SELECT ?, rule_key, object_id, severity, subject, detail, first_seen, last_seen FROM tpl.findings"
+        " WHERE tenant_id = ? AND resolved_at IS NULL",
+        (tid, template["tenant"]),
+    )
+    db.execute(
+        "INSERT INTO contacts (tenant_id, name, email, created_at) VALUES (?, ?, ?, ?)",
+        (tid, f"Contact {n:04}", f"it@client{n:04}.example", _iso(datetime.now(UTC))),
+    )
+
+
+def add_plan(db) -> None:
+    """Every tenant on one month-end plan that waits for approval, as an MSP reviewing reports would have."""
+    from officesentry import month_end
+
+    values = {
+        "name": "Monthly security report",
+        "reports": ["review"],
+        "include_xlsx": 1,
+        "day_of_month": 1,
+        "hour": 8,
+        "timezone": "",
+        "subject": month_end.DEFAULT_SUBJECT,
+        "message": "",
+        "mode": "approval",
+        "delivery": "email",
+        "bcc_team": 0,
+    }
+    with transaction(db, immediate=True):
+        plan = month_end.get_plan(db, month_end.save_plan(db, values, "scale"))
+        ids = [r["id"] for r in db.execute("SELECT id FROM tenants ORDER BY id")]
+        month_end.apply_plan(db, plan, ids, "scale", "UTC")
 
 
 def table_sizes(db) -> list[tuple[str, int]]:
@@ -312,6 +347,7 @@ def main() -> None:
             print(f"  {n + 1} tenants ({time.monotonic() - started:.0f} s)", flush=True)
     db.execute("DETACH DATABASE tpl")
     (args.data_dir / "templates.db").unlink()
+    add_plan(db)
     db.execute("ANALYZE")
     print(
         f"\n{args.tenants} tenants, {accounts / args.tenants:.0f} accounts on average, {args.days} nights, "
