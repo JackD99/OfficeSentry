@@ -115,6 +115,10 @@ No.
 - A database upgrade on a large database no longer fails the deploy: the portal's health check allows 15
   minutes to start, the start script waits that long and then starts the worker, and Docker keeps the
   containers running while it is itself updated (`live-restore`, on new servers).
+- A long write to the database (a restore, a backup, a large delete) no longer makes every page fail:
+  pages don't wait for it to note a sign-in was seen or to store a dashboard row, and a change that
+  still finds the database locked after five seconds is answered with "Office Sentry is busy right
+  now, try again in a moment" instead of an error page.
 
 ### Security
 
