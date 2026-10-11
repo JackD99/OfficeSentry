@@ -3,6 +3,7 @@
 {% from "_macros.html" import icon %}
 {% from "_groups.html" import group_picker with context %}
 {% from "_home.html" import home_switch, make_home with context %}
+{% from "_get_started.html" import get_started as get_started_card %}
 {% block title %}Today · Office Sentry{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -13,13 +14,16 @@
   <div class="actions">{{ group_picker() }}{{ home_switch('today') }}</div>
 </div>
 
+{% if get_started %}{{ get_started_card(get_started) }}{% endif %}
 {% if not data.tenants %}
+{% if not get_started %}
 <div class="card empty">
   <h3>No clients to look after yet</h3>
   {% if current_user.role == 'admin' %}<p>Add a client, and what needs you each day shows here after its first collection.</p>
-  <a class="btn primary" href="{{ url_for('tenants.dashboard') }}">Go to Clients</a>
+  <a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">Add a client</a>
   {% else %}<p>You haven't been given access to any active clients yet. Ask an admin to grant access.</p>{% endif %}
 </div>
+{% endif %}
 {% else %}
 <div class="callout lead-answer {{ data.rows[0].tone if data.rows else 'ok' }}" role="status">{{ icon('alert' if data.rows else 'check') }}
   <div><strong>{{ data.sentence() }}</strong>

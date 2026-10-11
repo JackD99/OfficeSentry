@@ -22,6 +22,12 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
 - **Staff sign-in with Microsoft** needs nothing on upgrade: it's off until an admin sets it up.
 
+### Added
+
+- **A Get started checklist for new installs.** After creating the first admin, the home page lists the
+  four steps to the first report (the app connection, the first client, its consent and its first
+  collection), ticks each off as Office Sentry sees it done and goes away after the first collection.
+
 ### New Microsoft permissions
 
 None for client tenants. Setting up staff sign-in creates a separate app in your own tenant with no API
@@ -55,6 +61,11 @@ Microsoft account links on users and how each session was started.
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
   and the members of each unit by name. A new Administrative units collector reads them with the permissions
   the app already has, and each person's page shows the units they are in and administer.
+- One page per mailbox: Users > Mailboxes lists every mailbox with its size, forwarding, who else can
+  open it and its inbox rules, and each opens a page with what needs attention first, then size and growth
+  over the retained months, forwarding and inbox rules, who can open or send from it, protocols and
+  settings, its automatic reply, the phones syncing it, email activity, open findings and what changed.
+  Mailbox addresses in reports and search results open the page, and it downloads as PDF and XLSX.
 
 ### Changed
 

@@ -312,6 +312,19 @@ something searchable, add a `Kind(key, collector, kind, values)` to
 `search_index.KINDS` and a `show` under its key in `search.SHOW`, linking the
 person's page or the detail report filtered to the row.
 
+## One page per mailbox, group or site
+
+`reports/object_page.py` is the same pattern for things that aren't people: an `ObjectPage` drawn by
+`templates/object_page.html` for every kind, a `Subject` (the snapshot, the object, `flag()`), areas as
+`@part(kind, order)` functions returning a `Part`, `findings_for()`, `sources_for()` and `object_path()`.
+Each kind is one module (`reports/mailbox_page.py`: `/tenants/<id>/mailboxes/<object id>` and the
+Mailboxes list, routes in `web/mailboxes.py`), imported in `reports/__init__.py`, with its list in the Users
+tab's second row. A module registers how its objects are named in reports in `data_reports.PAGE_INDEXES`
+(lower-cased name -> page path); `data_reports.build()` turns matching plain cells into `PageLink`s after
+people are linked, so an address that is an account's still opens the person's page. Pages read stored
+snapshots only (`store.object_copies` for history) and link back to the reports the facts came from,
+filtered to the object (`Subject.report()`).
+
 ## Home pages by role
 
 `home.py` (pages in `web/home.py`, staff only, `@group_aware` over `scoped_tenants()`): **Today**
@@ -323,6 +336,10 @@ reports to approve and projects to propose). Each opens with one sentence (`Toda
 settings, or "Make this my home page" on either page); `/home` (the sidebar's Home and the logo) opens it,
 and signing in without a page to go back to lands there. Client users keep the dashboard. A new reason on Today
 is a `Reason` with a `kind` in `home.KINDS` and a `target` that `web/home._link` turns into a URL.
+Until the first collection has run, admins see the **Get started** checklist (`first_run.py`,
+`_get_started.html`) on Today, Accounts and Clients instead of the empty state: the app connection, the first
+client, its consent and its first collection, each read from stored state, with `web/home.get_started`
+turning each step's `target` into a link.
 
 ## Web UI conventions
 

@@ -94,8 +94,8 @@ On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone)
    From the newest [release](https://github.com/JackD99/OfficeSentry/releases),
    download `docker-compose.yml`, `Caddyfile` and `env.example` into it.
    They run that release: the image `ghcr.io/jackd99/officesentry`, built and
-   tested by GitHub, for amd64 (Intel and AMD) servers; arm64 builds follow
-   once the repository is public.
+   tested by GitHub, for amd64 (Intel and AMD) servers and, from the first
+   release after 2.1.0, arm64 (such as Ampere and Raspberry Pi 4 or 5).
 2. Create your settings file: `cp env.example .env`
 3. Open `.env` in an editor (`nano .env`) and set at least:
    - `OFFICESENTRY_BASE_URL` to the address people will use, e.g. `https://sentry.yourmsp.com`
@@ -109,19 +109,17 @@ On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone)
    docker compose --profile https up -d
    ```
 
-   Until the repository is public its image is private: pulling it needs
-   `docker login ghcr.io` with a GitHub token that can read packages. The
-   Hetzner deploy below doesn't pull, it builds.
-
    Already have a reverse proxy (nginx, Traefik)? Leave out `--profile https`
    and point the proxy at `http://127.0.0.1:8000`.
 5. Create the first admin account. Run `docker compose logs web`, find the line
    starting **No admin account yet** and open the link on it (`docker compose exec
    web python -m officesentry setup-link` prints it again). Choose a username and
    password, scan the QR code with an authenticator app and save the recovery codes.
-6. Open **Settings → App connection** and press **Sign in to Microsoft**. Enter the code it shows on
-   Microsoft's page and sign in as an admin of your own tenant who can create app registrations. Office
-   Sentry creates its read-only app and then offers to add your first client. No command needed.
+6. Your home page now shows a **Get started** checklist: the app connection, your first client, its
+   consent and its first collection, each ticking itself off as it happens. Press **Set up the app
+   connection** (or open **Settings → App connection**) and press **Sign in to Microsoft**. Enter the code it
+   shows on Microsoft's page and sign in as an admin of your own tenant who can create app registrations.
+   Office Sentry creates its read-only app and then offers to add your first client. No command needed.
 
 ## Is it working?
 

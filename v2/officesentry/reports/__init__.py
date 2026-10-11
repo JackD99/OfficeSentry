@@ -13,6 +13,7 @@ from . import (  # noqa: F401
     identity_reports,
     mail_compliance,
     mail_reports,
+    mailbox_page,
     mailbox_trend,
     mobile_devices,
     risky_users,
