@@ -566,7 +566,9 @@ These areas have no real recording and are tested with simulated data only:
   minutes), and a spread-out attack on one account slows new addresses only,
   so nobody can lock a person out from elsewhere. Five wrong two-step codes
   (which need the password) lock that step for 15 minutes. Admins can clear
-  both from the user page. Details in [DEPLOY.md](DEPLOY.md#sign-in-protection).
+  both from the user page. Five wrong passwords where a signed-in browser is
+  asked for it again sign that browser out, without locking the account.
+  Details in [DEPLOY.md](DEPLOY.md#sign-in-protection).
 - **Sessions are stored on the server.** Signing out ends the session, so a
   copied cookie stops working. People can see where they're signed in and
   sign out other browsers on their **Account** page. Sessions end after 2 hours
@@ -575,7 +577,9 @@ These areas have no real recording and are tested with simulated data only:
 - **Activity log:** Administrators and Team leaders see sign-ins and every
   change, with the address, under *Settings → Activity log* (filters, paging,
   CSV). Failed sign-ins are kept for 90 days, the rest for good unless
-  *Settings → Data retention* sets a period (never under a year).
+  *Settings → Data retention* sets a period (never under a year). A custom
+  role given the activity log that only sees some clients reads only the
+  entries about those clients.
 - **Cookies** are `Secure`, `HttpOnly`, `SameSite=Lax` and use the `__Host-`
   prefix. Behind a reverse proxy, set `OFFICESENTRY_TRUSTED_PROXIES=1` so the
   real client IP and scheme are used.
