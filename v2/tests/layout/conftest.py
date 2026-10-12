@@ -143,12 +143,14 @@ RESOLVERS = {
 @pytest.fixture(scope="session")
 def sites(tmp_path_factory):
     """{"demo": the demo site with the stress data, "new": a new install}, each running."""
+    from officesentry.crypto import Vault
     from officesentry.db import connect
 
     cfg, ids, passwords, _ = screenshots.build_site(tmp_path_factory.mktemp("layout") / "data")
     db = connect(cfg.db_path)
     try:
         added = stress.add(db, ids)
+        stress.audit_addon(db, Vault(cfg.encryption_keys), added["tenant"])
         staff_id = db.execute("SELECT id FROM users WHERE username = ?", (stress.STAFF_USER,)).fetchone()[0]
     finally:
         db.close()
