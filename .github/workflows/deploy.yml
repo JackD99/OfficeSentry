@@ -87,9 +87,12 @@ jobs:
     permissions:
       contents: read
     steps:
+      # After a merge this is github.sha, main's newest commit, which the latest job has checked is the one whose
+      # tests passed: the site is always built from main's own history, never from the commit of whichever run
+      # set this off. A run started by hand builds the ref it names.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha || inputs.ref || github.sha }}
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
 
       # No pip cache: this job runs whichever ref the deploy names, and a cache it saved would be restored by
