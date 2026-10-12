@@ -173,6 +173,37 @@ def test_security_headers(client, db):
         assert headers["X-Content-Type-Options"] == "nosniff" and headers["Referrer-Policy"] == "same-origin", url
 
 
+def test_hsts_only_over_https_and_nothing_signed_in_is_stored(cfg, db):
+    """HSTS goes out only when the visitor came over HTTPS (behind a proxy, when it says so), so a proxy that
+    doesn't pass X-Forwarded-Proto shows by its absence; pages, downloads and errors are never stored, and
+    the brand files only by the visitor's own browser."""
+    from officesentry.web import create_app
+
+    cfg.secure_cookies, cfg.trusted_proxies = True, 1
+    client = create_app(cfg).test_client()
+    assert "Strict-Transport-Security" not in client.get("/login").headers
+    over_https = client.get("/login", headers={"X-Forwarded-Proto": "https"})
+    assert over_https.headers["Strict-Transport-Security"] == "max-age=31536000; includeSubDomains"
+    make_user(db, "admin")
+    login(client, "admin")
+    for url in ("/", "/admin/activity.csv", "/health", "/nowhere"):
+        assert client.get(url).headers["Cache-Control"] == "no-store", url
+    for url in ("/brand.css", "/brand/logo"):
+        assert client.get(url).headers["Cache-Control"] == "private, max-age=3600", url
+
+
+def test_a_forwarded_path_prefix_is_ignored(cfg, db):
+    """The portal runs at the root of its address; a prefix a visitor sends can't move its links or redirects."""
+    from officesentry.web import create_app
+
+    cfg.trusted_proxies = 1
+    client = create_app(cfg).test_client()
+    elsewhere = {"X-Forwarded-Prefix": "//elsewhere.example"}
+    resp = client.get("/admin/users", headers=elsewhere)
+    assert resp.status_code == 302 and "elsewhere" not in resp.headers["Location"]
+    assert "elsewhere" not in client.get("/login", headers=elsewhere).get_data(as_text=True)
+
+
 def test_csrf_enforced_when_enabled(cfg, db):
     from officesentry.web import create_app
 
@@ -181,6 +212,9 @@ def test_csrf_enforced_when_enabled(cfg, db):
     make_user(db, "admin")
     resp = app.test_client().post("/login", data={"username": "admin", "password": PASSWORD})
     assert resp.status_code == 400
+    # The refusal page's own script still runs: its policy carries a real nonce.
+    nonce = re.search(r"'nonce-([\w-]+)'", resp.headers["Content-Security-Policy"])
+    assert nonce and f'nonce="{nonce[1]}"' in resp.get_data(as_text=True)
 
 
 @pytest.mark.parametrize(

@@ -89,9 +89,11 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.extensions["officesentry.vault"] = Vault(cfg.encryption_keys)
 
     if cfg.trusted_proxies > 0:
-        # Behind a reverse proxy: take the client IP, scheme and host from its headers.
+        # Behind a reverse proxy: take the client IP, scheme and host from its headers. Not a path prefix: the
+        # portal always runs at the root of its address, and proxies pass X-Forwarded-Prefix on from the visitor
+        # untouched, which would let a request point every link on its own page somewhere else.
         n = cfg.trusted_proxies
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=n, x_proto=n, x_host=n, x_port=n, x_prefix=n)
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=n, x_proto=n, x_host=n, x_port=n)
 
     conn = connect(cfg.db_path)
     try:
@@ -108,6 +110,12 @@ def create_app(cfg: Config | None = None) -> Flask:
     finally:
         conn.close()
 
+    # Before CSRFProtect's own check, so the page refusing a form sent with a stale token has a nonce for its
+    # script too.
+    @app.before_request
+    def _csp_nonce():
+        g.csp_nonce = secrets.token_urlsafe(16)
+
     csrf.init_app(app)
     filters.register(app)
 
@@ -116,7 +124,6 @@ def create_app(cfg: Config | None = None) -> Flask:
         # The worker can't report that it has stopped, so the portal watches it (system_alerts.py).
         system_alerts.start_watchdog(app, cfg)
         g.db = connect(cfg.db_path, busy_timeout_ms=WEB_BUSY_TIMEOUT_MS)
-        g.csp_nonce = secrets.token_urlsafe(16)
         access.load_user()
         # Every line logged while handling this request names it (logs.py); the id goes back in the
         # X-Request-ID header and on the error page, so a report can quote it.
@@ -160,7 +167,10 @@ def create_app(cfg: Config | None = None) -> Flask:
         resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         resp.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         resp.headers["X-Permitted-Cross-Domain-Policies"] = "none"
-        if cfg.secure_cookies:
+        # Only over HTTPS, as browsers only take it from there: a portal behind a proxy that doesn't say the
+        # visitor came over HTTPS (X-Forwarded-Proto) then shows it by the header missing
+        # (docs/securing-the-portal.md, "Checking it worked").
+        if cfg.secure_cookies and request.is_secure:
             resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         # Static files and the public brand colours and logo may be cached; nothing else is.
         if request.endpoint not in ("static", "branding.brand_css", "branding.logo"):
@@ -279,15 +289,6 @@ def create_app(cfg: Config | None = None) -> Flask:
     def _too_large(_e):
         limit = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
         return _error(413, "That file is too large.", f"Uploads are limited to {limit} MB.")
-
-    @app.errorhandler(500)
-    def _server_error(_e):
-        return _error(
-            500,
-            "Something went wrong on the server.",
-            "Nothing was changed. Try again in a moment; if it keeps happening, tell your admin, who can read the "
-            "portal's log.",
-        )
 
     @app.errorhandler(500)
     def _failed(_e):

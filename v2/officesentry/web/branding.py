@@ -25,8 +25,9 @@ from .access import needs
 bp = Blueprint("branding", __name__)
 
 DEFAULT_ICON = Path(__file__).parent / "static" / "favicon.svg"
-# Public, versioned URLs (?v=<brand.version>), so browsers may keep them for a while.
-CACHE = "public, max-age=3600"
+# Public, versioned URLs (?v=<brand.version>), so browsers may keep them for a while. Private: a signed-in
+# visitor's response also refreshes their session cookie, which a shared cache or CDN must never keep.
+CACHE = "private, max-age=3600"
 TITLE_SUFFIX = " · " + branding.DEFAULT_NAME
 
 

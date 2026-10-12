@@ -70,10 +70,79 @@ jobs:
             echo "ok=false" >> "$GITHUB_OUTPUT"
           fi
 
-  server:
+  # The website, built on a runner of its own: the build installs the test tools and a browser from the internet
+  # and runs them, while the server job below holds the server's SSH key and the Hetzner token. A runner keeps
+  # whatever a step leaves running until its job ends, so on one runner the downloads would run beside the keys.
+  # Same conditions as the server job, for the runs that update the website (SITE there).
+  website:
     needs: latest
     if: >-
-      always() && (github.event_name == 'workflow_dispatch' ||
+      always() && vars.OFFICESENTRY_WEBSITE_DOMAIN != '' && (github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+       && needs.latest.outputs.ok == 'true'
+       && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true'))
+      && contains(fromJSON('["deploy", "website-and-demo"]'), inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true' && 'deploy') || 'website-and-demo')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      # After a merge this is github.sha, main's newest commit, which the latest job has checked is the one whose
+      # tests passed: the site is always built from main's own history, never from the commit of whichever run
+      # set this off. A run started by hand builds the ref it names.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+
+      # No pip cache: this job runs whichever ref the deploy names, and a cache it saved would be restored by
+      # the main branch's own runs.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.12'
+
+      # Fresh screenshots and example reports of this exact code, from the fictional demo data, so the website
+      # shows every page as it is now (v2/scripts/screenshots.py). If this fails, the site uses the copies in
+      # the repository (docs/screenshots/, examples/) instead.
+      - name: Take the website's screenshots and example reports
+        continue-on-error: true
+        working-directory: v2
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core poppler-utils
+          pip install -q --require-hashes --no-deps -r requirements-dev.txt -r tests/browser/requirements.txt
+          pip install -q --no-deps --no-build-isolation -e .
+          python -m playwright install --with-deps chromium
+          python scripts/screenshots.py
+
+      # The product page and the repository's docs as web pages (website/README.md). It holds nothing that
+      # isn't in the repository already.
+      - name: Build the website
+        env:
+          SITE_URL: https://${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
+          SITE_DEMO_URL: ${{ vars.OFFICESENTRY_DEMO_DOMAIN && format('https://{0}', vars.OFFICESENTRY_DEMO_DOMAIN) || '' }}
+          SITE_SOURCE_PUBLIC: ${{ !github.event.repository.private }}
+          # The project's own address unless the variable says otherwise (v2/deploy/public/README.md).
+          SITE_CONTACT: ${{ vars.OFFICESENTRY_WEBSITE_CONTACT || (vars.OFFICESENTRY_WEBSITE_DOMAIN == 'officesentry.co.uk' && 'hello@officesentry.co.uk') || '' }}
+        run: |
+          pip install -q --require-hashes -r website/requirements.txt
+          python website/build.py
+
+      - name: Keep it for the server job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: website
+          path: website/_site/
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true  # re-running the job uploads it again
+
+  server:
+    needs: [latest, website]
+    # A website that didn't build stops the run before anything reaches the server, as it always has.
+    if: >-
+      always() && needs.website.result != 'failure' && needs.website.result != 'cancelled'
+      && (github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
        && needs.latest.outputs.ok == 'true'
        && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true'))
@@ -83,6 +152,8 @@ jobs:
       contents: read
       # Only to read the release image's digest and pull it (PRODUCTION_FROM_TAGS).
       packages: read
+      # Only to fetch the website the website job built.
+      actions: read
     env:
       # A merge whose tests pass only gets here with AUTO_DEPLOY on (and PRODUCTION_FROM_TAGS off): a deploy.
       ACTION: ${{ inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true' && 'deploy') || 'website-and-demo' }}
@@ -166,52 +237,20 @@ jobs:
           echo "RELEASE_DIGEST=$digest" >> "$GITHUB_ENV"
           echo "Deploying release $REF to the portal: \`$IMAGE:$version@$digest\`" >> "$GITHUB_STEP_SUMMARY"
 
+      # The job's token can pull images, so it isn't left in the checkout copied to the server.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        if: env.DEPLOYS == 'true' || env.SITE == 'true' || env.DEMO == 'true'
+        if: env.DEPLOYS == 'true' || env.DEMO == 'true'
         with:
           ref: ${{ env.REF }}
+          persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        if: env.SITE == 'true'
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: |
-            website/requirements.txt
-            v2/requirements-dev.txt
-            v2/tests/browser/requirements.txt
-
-      # Fresh screenshots and example reports of this exact code, from the fictional demo data, so the website
-      # shows every page as it is now (v2/scripts/screenshots.py). If this fails, the site uses the copies in
-      # the repository (docs/screenshots/, examples/) instead.
-      - name: Take the website's screenshots and example reports
-        if: env.SITE == 'true'
-        continue-on-error: true
-        working-directory: v2
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core poppler-utils
-          pip install -q --require-hashes --no-deps -r requirements-dev.txt -r tests/browser/requirements.txt
-          pip install -q --no-deps --no-build-isolation -e .
-          python -m playwright install --with-deps chromium
-          python scripts/screenshots.py
-
-      # The product page and the repository's docs as web pages (website/README.md). It holds nothing that
-      # isn't in the repository already.
-      - name: Build the website
+      # Built by the website job, which runs nothing on this runner.
+      - name: Fetch the website
         if: env.SITE == 'true'
         env:
-          SITE_URL: https://${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
-          SITE_DEMO_URL: ${{ vars.OFFICESENTRY_DEMO_DOMAIN && format('https://{0}', vars.OFFICESENTRY_DEMO_DOMAIN) || '' }}
-          SITE_SOURCE_PUBLIC: ${{ !github.event.repository.private }}
-          # The project's own address unless the variable says otherwise (v2/deploy/public/README.md).
-          SITE_CONTACT: ${{ vars.OFFICESENTRY_WEBSITE_CONTACT || (vars.OFFICESENTRY_WEBSITE_DOMAIN == 'officesentry.co.uk' && 'hello@officesentry.co.uk') || '' }}
-        run: |
-          pip install -q --require-hashes -r website/requirements.txt
-          python website/build.py
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name website --dir "$RUNNER_TEMP/website"
 
-      # Written after the website build, so the packages it installs and runs never find the backup password
-      # and storage keys on disk.
       - name: Write the server's settings files
         if: env.DEPLOYS == 'true'
         env:
@@ -347,7 +386,7 @@ jobs:
       - name: Copy the website to the server
         if: env.SITE == 'true'
         run: |
-          rsync -az --delete website/_site/ server:/opt/officesentry/website/
+          rsync -az --delete "$RUNNER_TEMP/website/" server:/opt/officesentry/website/
           echo "Website: https://$WEBSITE_DOMAIN" >> "$GITHUB_STEP_SUMMARY"
 
       # The demo builds from a copy of its own (tests included, as it makes its data from their fixtures), so

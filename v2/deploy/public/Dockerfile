@@ -5,8 +5,10 @@ ARG BASE=officesentry-demo-base:local
 FROM ${BASE}
 USER root
 COPY requirements-dev.txt /tmp/
-# The same hash-pinned lock CI tests with; what the portal image already has is skipped.
-RUN pip install --no-cache-dir --require-hashes --no-deps -r /tmp/requirements-dev.txt && rm /tmp/requirements-dev.txt
+# The same hash-pinned lock CI tests with; what the portal image already has is skipped. The portal's image ships
+# without pip, so Python's own bundled copy installs it first, offline.
+RUN python -m ensurepip --default-pip \
+    && pip install --no-cache-dir --require-hashes --no-deps -r /tmp/requirements-dev.txt && rm /tmp/requirements-dev.txt
 COPY tests ./tests
 COPY scripts ./scripts
 COPY demo.sh /usr/local/bin/officesentry-demo
