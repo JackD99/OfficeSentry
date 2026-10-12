@@ -52,7 +52,8 @@ No.
   just scanned from it still works.
 - The Kubernetes manifests and the deploy guides' examples name this release (they still said 2.1.0), and a
   test keeps them in step with each release.
-- Tests no longer fail when run around midnight UTC or from the first of a month.
+- Tests no longer fail when run around midnight UTC, from the first of a month, or a few hours after the live
+  tenant was recorded.
 - **Wide tables fit a laptop.** The last tables that scrolled sideways at 1366 px with long names now fit: a long
   name before an address's "@" or a long host name in a DNS record may wrap at its dots, and **Every row** on All
   clients opens without a column or two its Client column has no room for (Size on shared mailboxes, Synced
