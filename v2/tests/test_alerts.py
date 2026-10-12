@@ -518,7 +518,7 @@ def test_a_proxy_is_asked_for_the_address_that_was_checked(monkeypatch):
     with pytest.raises(alerts.AlertError, match="Couldn't connect"):
         alerts.post(HOOK, {"x": 1})
     thread.join(5)
-    assert asked == [f"CONNECT {PUBLIC_IP}:443 HTTP/1.1"]
+    assert [line.split()[:2] for line in asked] == [["CONNECT", f"{PUBLIC_IP}:443"]]  # HTTP/1.0 before 3.12
 
 
 def test_pinned_connection_keeps_the_name_for_tls():
