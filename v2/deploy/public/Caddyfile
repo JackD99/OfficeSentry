@@ -17,6 +17,7 @@
 	respond @outside "Not found" 404 {
 		close
 	}
+	header -Server
 	encode gzip
 	reverse_proxy web:8000
 }

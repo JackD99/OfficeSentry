@@ -155,7 +155,10 @@ as `grants` and drops grants past their expiry from exposure.
   in templates), never "account(s)".
 - A check that calls for work an MSP would sell goes in one project's
   `checks` in `projects.CATALOG` with a rough `Effort` in hours (each check
-  in at most one; `test_projects.py` checks). A project is half a day or more
+  in at most one; `test_projects.py` checks), and in the `when` of the
+  `Cover` lines it calls for, so a proposal lists only the work found. A
+  project's title is what a client buys (you'd put it on a quote); a repair
+  (sync that stopped) is in no project. A project is half a day or more
   (`projects.MIN_HOURS`, counting `OVERHEAD`); `projects.assess` turns the rest
   into quick fixes, and a small critical fix is always a quick fix so it isn't
   held for a sale. Failing checks in no project are quick fixes too.
@@ -947,7 +950,9 @@ deduplicated on (tenant, time, id), so reading an event twice stores it once.
   audits 7 years); whole months go as files (`events.prune`). `lifecycle.delete_tenant` deletes the
   tenant's rows from every file after the database delete, and the daily pass sweeps rows whose key is
   gone (`events.sweep`). `backup` mirrors the folder (`backups.mirror_events`) and `restore` puts back
-  missing files.
+  missing files; with none at all, it forgets the restored cursors (`backups._forget_history`), so the next
+  run reads back what Microsoft keeps instead of claiming months that aren't there. `deploy/jobs.sh restore`
+  fetches the `events` copies with the database.
 - Tests that need a fixed "now" patch `events.clock` (the live replay sets it to the recording's time).
 
 ## Logs and the support package

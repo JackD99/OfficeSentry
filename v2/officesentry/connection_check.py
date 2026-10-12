@@ -119,6 +119,13 @@ def check(tenant_ref: str, client_id: str, key_pem: str, thumbprint: str, cloud:
     try:
         orgs = GraphClient(token, max_retries=1, cloud=c.key).get("/organization", params={"$select": "displayName"})
     except GraphError as exc:
+        if exc.code == "network_error":
+            return CheckResult(
+                False,
+                "Office Sentry couldn't reach Microsoft.",
+                f"Check that this server can reach {c.login} and {c.graph} (its internet connection, DNS, "
+                "firewall or proxy), then try again.",
+            )
         problem = explain(exc.message, exc.code)
         if problem:
             return CheckResult(False, problem.title, problem.fix)
