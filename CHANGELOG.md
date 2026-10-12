@@ -11,9 +11,8 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.3.1] - 2026-10-12
 
-### Action required
-
-None. `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are the same as 2.3.0's.
+Fixes for 2.3. Nothing to do before updating: `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are
+the same as 2.3.0's, so the Update button can install it.
 
 ### New Microsoft permissions
 
