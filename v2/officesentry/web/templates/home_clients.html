@@ -42,9 +42,9 @@
   <a class="tile link{{ ' tone-warn' if data.to_approve }}" href="{{ url_for('reporting.queue', period=data.period) }}">
     <div class="label">Reports to approve{{ icon('arrow', 'go') }}</div><div class="value">{{ data.to_approve if data.on_plan else '–' }}</div>
     <div class="foot">{% if data.on_plan %}for {{ data.period_label }}, of {{ data.on_plan }}{% else %}no client on a report plan{% endif %}</div></a>
-  <a class="tile link" href="{{ url_for('projects.index') }}">
+  {% if can('projects.view') %}<a class="tile link" href="{{ url_for('projects.index') }}">
     <div class="label">Projects to propose{{ icon('arrow', 'go') }}</div><div class="value">{{ data.to_propose }}</div>
-    <div class="foot">recommended, not proposed yet</div></a>
+    <div class="foot">recommended, not proposed yet</div></a>{% endif %}
 </div>
 
 <div class="card flush">

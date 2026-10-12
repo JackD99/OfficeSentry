@@ -86,13 +86,11 @@ def _homes() -> dict:
 @needs("clients.compare", kind="staff")
 @group_aware
 def today():
-    data = home.today(g.db, scoped_tenants())
     a = current()
+    data = home.today(g.db, scoped_tenants(), shows=lambda kind, tenant_id: a.can(REASON_NEEDS[kind], tenant_id))
     for row in data.rows:
-        row.reasons = [r for r in row.reasons if a.can(REASON_NEEDS[r.kind], row.tenant["id"])]
         for reason in row.reasons:
             reason.href = _link(reason)
-    data.rows = [row for row in data.rows if row.reasons]
     return render_template(
         "home_today.html", data=data, homes=_homes(), mine=home.home_of(g.user), get_started=get_started()
     )
@@ -106,6 +104,9 @@ def clients():
     period = month_end.current_period(cfg.timezone)
     currency = setting(g.db, "currency", "GBP")
     data = home.clients(g.db, scoped_tenants(), period, period_label(period), currency)
+    for r in data.rows:
+        if not can("projects.view", r.tenant["id"]):
+            r.projects, r.proposed, r.note = 0, 0, "You can't see this client's projects."
     return render_template(
         "home_clients.html",
         data=data,

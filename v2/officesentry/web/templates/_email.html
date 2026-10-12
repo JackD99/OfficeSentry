@@ -48,10 +48,11 @@
     <div class="people-line">{{ people(s.recipients, staff) }}</div>
     {% if staff %}
     <div class="row-actions sched-actions">
-      <a class="btn sm ghost" href="{{ url_for('email.preview_schedule', schedule_id=s.id) }}">{{ icon('eye') }} Preview</a>
+      {% set security = can('reports.security', s.tenant_id) %}
+      {% if security %}<a class="btn sm ghost" href="{{ url_for('email.preview_schedule', schedule_id=s.id) }}">{{ icon('eye') }} Preview</a>{% endif %}
       {% if s.on_approval %}<a class="btn sm ghost" href="{{ url_for('reporting.index') }}">{{ icon('check') }} Review</a>
       {% else %}<form method="post" action="{{ url_for('email.send_now', schedule_id=s.id) }}" data-busy="Sending…">{{ csrf() }}<button class="sm ghost">{{ icon('send') }} Send now</button></form>{% endif %}
-      <a class="btn sm ghost" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>
+      {% if security %}<a class="btn sm ghost" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>{% endif %}
     </div>
     {% endif %}
   </div>
@@ -67,7 +68,7 @@
   <tr class="{{ 'failed' if d.status == 'failed' }}">
     <td class="wrap"><span class="strong">{{ d.subject }}</span>
       {% set files = d.attachments|fromjson %}
-      <span class="sub">{{ KINDS.get(d.kind, d.kind) }}{% if files %} · {{ files|length }} attachment{{ 's' if files|length != 1 }}{% endif %}{% if d.trigger == 'manual' %} · sent by {{ d.sent_by }}{% elif d.trigger == 'retry' %} · retried by {{ d.sent_by }}{% endif %}</span></td>
+      <span class="sub">{{ KINDS.get(d.kind, d.kind) }}{% if files %} · {{ files|length }} attachment{{ 's' if files|length != 1 }}{% endif %}{% if not d.sent_by %}{% elif d.trigger == 'manual' %} · sent by {{ d.sent_by }}{% elif d.trigger == 'retry' %} · retried by {{ d.sent_by }}{% endif %}</span></td>
     <td data-label="To" class="wrap small">{{ d.recipients }}{% if staff and d.bcc %}<span class="sub">Hidden copy: {{ d.bcc }}</span>{% endif %}</td>
     <td data-label="Result" class="wrap">{% if d.status == 'sent' %}<span class="pill ok">Sent</span>{% else %}<span class="pill bad">Failed</span>{% if staff and d.error %}<span class="sub bad-text">{{ d.error }}</span>{% endif %}{% endif %}</td>
     <td data-label="When" class="nowrap">{{ ts(d.created_at) }}</td>

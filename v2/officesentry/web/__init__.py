@@ -178,6 +178,7 @@ def create_app(cfg: Config | None = None) -> Flask:
         cloud_of=clouds.of,
         report_catalogue=library.catalogue,
         can=access.can,
+        manages_groups=access.manages_groups,
         report_areas_open=reports.report_groups,
         report_capability=reports.report_capability,
         entry_capability=reports.entry_capability,
