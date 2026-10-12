@@ -271,7 +271,14 @@ def test_a_user_manager_who_is_not_an_administrator_cannot_raise_anyones_access(
     )
     assert resp.status_code == 400
 
-    # Roles: nothing they don't hold goes in, the scope stays, and wider roles can't be copied or reset.
+    # Roles: not one held by someone who sees or does more (changing it would change their account)...
+    page = client.get(f"/admin/roles/{first_line.id}").data.decode()
+    assert "Only an Administrator can change this role." in page and "Save role" not in page
+    client.post(f"/admin/roles/{first_line.id}", data={"name": "First line", "capabilities": ["collect"]})
+    assert roles.get(db, first_line.id).capabilities == first_line.capabilities
+    roles.assign(db, wide, roles.by_key(db, "auditor"))
+    # ...and otherwise nothing they don't hold goes in, the scope stays, and wider roles can't be copied
+    # or reset.
     page = client.get(f"/admin/roles/{first_line.id}").data.decode()
     assert 'value="settings.manage" data-cap="settings.manage" disabled' in page
     client.post(

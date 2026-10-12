@@ -64,7 +64,7 @@
     {% if alert %}
     <p class="small">Emails {{ people(alert.recipients) }} when a scan finds something new that's <strong>{{ 'critical' if alert.min_severity == 'critical' else 'critical or high' }}</strong>.</p>
     <div class="form-actions">
-      <a class="btn sm" href="{{ url_for('email.preview_alert', alert_id=alert.id) }}">{{ icon('eye') }} Preview</a>
+      {% if can('reports.security', tenant.id) %}<a class="btn sm" href="{{ url_for('email.preview_alert', alert_id=alert.id) }}">{{ icon('eye') }} Preview</a>{% endif %}
       <form method="post" action="{{ url_for('email.delete_alert', alert_id=alert.id) }}">{{ csrf() }}<button class="sm danger">Turn off</button></form>
     </div>
     <details class="alert-edit"><summary class="small">Change who gets them</summary>
