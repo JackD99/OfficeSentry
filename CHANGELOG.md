@@ -20,6 +20,8 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   read-only Exchange command, `Get-AdminAuditLogConfig`, under the Global Reader role clients already gave,
   and the CIS benchmark pack judges its audit log search recommendation from it.
 
+## [2.3.1] - Unreleased
+
 ## [2.3.0] - 2026-10-12
 
 ### Action required
@@ -1078,7 +1080,8 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
-[2.4.0]: https://github.com/JackD99/OfficeSentry/compare/v2.3.0...HEAD
+[2.4.0]: https://github.com/JackD99/OfficeSentry/compare/v2.3.1...HEAD
+[2.3.1]: https://github.com/JackD99/OfficeSentry/compare/v2.3.0...HEAD
 [2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
