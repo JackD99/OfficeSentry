@@ -11,17 +11,6 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.3.0] - Unreleased
 
-### Action required
-
-- **Updated to 2.2.0 without downloading its `docker-compose.yml` and `Caddyfile`, or without
-  `--profile https`?** Download both from the release and run `docker compose --profile https up -d`. Until
-  then the portal keeps 2.1.0's 30 seconds to start instead of 15 minutes, and Caddy keeps running without
-  2.2.0's hardening (responses still carry a `Server` header). [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating)
-  now says to download both every time, since releases change them without always saying so.
-- **Off-site backups set up by hand** ([v2/DEPLOY.md, "Off-site backups"](v2/DEPLOY.md#off-site-backups),
-  step 5): copy `deploy/jobs.sh` from this release's source over your copy, so a restore from the off-site
-  copy brings back the activity history too.
-
 ### Changed
 
 - **All clients opens reports from the All reports menu**, the same one as a client's Reports tab: every
@@ -41,26 +30,6 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   never granted isn't approved and sent a report with that part missing. A client that removed the app,
   whose report could only say "Nothing has been collected, so no security checks could run", is flagged
   "No checks could run": it was marked Ready and sent in bulk before.
-- Restoring the off-site copy (`deploy/jobs.sh restore`) brings back the activity history as well as the
-  database. Before, a new server got the database only, so every sign-in and audit event older than the 30
-  days Microsoft keeps was gone, although the off-site copy held them.
-- A backup restored without its activity history (a database file moved on its own) now says so, and the next
-  collection reads back the 30 days Microsoft still keeps. Before, it said nothing, the Activity history page
-  claimed months it no longer had, and those 30 days weren't read again. [v2/DEPLOY.md, "Moving to a new
-  server"](v2/DEPLOY.md#moving-to-a-new-server) now moves the whole backups folder, history included.
-- **Check connection now**, saving the client ID and the other connection checks say when Office Sentry can't
-  reach Microsoft, or when Microsoft doesn't know the tenant (a mistyped domain or ID), instead of showing an
-  error page. A collection that can't reach Microsoft fails with that reason, not as a bug.
-- `restore` of a file the portal can't read (one put in with `docker compose cp`, which leaves it owned by
-  root) says so instead of failing with a traceback, and restoring or checking a `.db.gz` no longer leaves
-  `restore-*.db.part-shm` and `-wal` files behind. The activity history's backup manifest is readable by its
-  owner only, like the copies.
-- The Deploy workflow restarts Caddy after starting the portal, so a deploy that changes only a `Caddyfile`
-  takes effect (Caddy reads it only when it starts, and compose doesn't recreate it for that). The project
-  server's Caddy drops the portal's `Server` header too, as the bundled one does.
-- [v2/DEPLOY.md](v2/DEPLOY.md): *Rolling back an update* copies the key back before 2.0.0 runs anything, and
-  *Running your own build* keeps `docker-compose.override.yml` (the `/backups` folder) when `COMPOSE_FILE` is
-  set, since Docker stops reading it by itself then.
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
