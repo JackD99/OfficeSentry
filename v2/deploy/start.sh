@@ -53,6 +53,11 @@ if [ "$only" != demo ] && [ "$started" = no ]; then
   echo "The portal is healthy now; starting the rest."
   docker compose up -d --remove-orphans
 fi
+# Caddy reads its Caddyfile only when it starts, and compose recreates it only when its own settings
+# change, so a deploy that changed just the Caddyfile would otherwise keep the old one running.
+if [ "$only" != demo ] && [[ $profiles == *,https,* ]]; then
+  docker compose restart caddy
+fi
 # Nightly backups, the off-site copy, the restore drill and the uptime ping
 # (deploy/jobs.sh), in the deploy user's crontab.
 if [ "$only" != demo ] && ! bash deploy/jobs.sh schedule; then

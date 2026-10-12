@@ -1,9 +1,12 @@
+import ast
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 import responses
 
+import officesentry
 from officesentry import store
 from officesentry.collectors import REGISTRY
 from officesentry.graph import GRAPH_ROOT, GraphClient
@@ -99,6 +102,33 @@ def _run(db, tenant_id, collector, factory):
     store.enqueue_run(db, tenant_id, collector)
     run = store.claim_next_run(db)
     return run["id"], execute_run(db, run, factory)
+
+
+def test_snapshot_reads_name_a_registered_collector_and_a_kind_collectors_write():
+    """Every ``.objects("<collector>", "<kind>")`` read in the package names a collector key and a kind some
+    collector writes, so a typo can't make a check or report quietly read nothing."""
+    package = Path(officesentry.__file__).parent
+    written = {
+        node.value
+        for path in (package / "collectors").glob("*.py")
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    wrong = []
+    for path in package.rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.args):
+                continue
+            words = [a.value if isinstance(a, ast.Constant) and isinstance(a.value, str) else None for a in node.args]
+            if node.func.attr == "objects" and len(words) == 2 and None not in words:
+                collector, kind = words
+            elif node.func.attr == "has" and len(words) == 1 and words[0] is not None:
+                collector, kind = words[0], None
+            else:
+                continue
+            if collector not in REGISTRY or (kind is not None and kind not in written):
+                wrong.append(f"{path.relative_to(package)}:{node.lineno} {collector} {kind}")
+    assert not wrong
 
 
 @responses.activate

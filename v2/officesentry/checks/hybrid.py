@@ -37,6 +37,8 @@ def directory_sync_running(snap: TenantSnapshot, now: datetime):
     problem = hybrid.sync_problem(status, now)
     if problem:
         severity, detail = problem
+        if hours is not None:  # say it's a problem, not just when it last ran
+            summary = f"Not syncing: last sync {hybrid.age(hours)}"
         return ("fail", summary, [Finding(severity, "Directory sync", detail)])
     return ("pass", summary, [])
 

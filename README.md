@@ -258,11 +258,13 @@ Microsoft 365 can't answer; one written answer fills every pack.
 
 **Projects** turns each client's findings into the projects an account manager can sell: no Conditional Access
 becomes an *Identity and Conditional Access* project, unencrypted laptops a *Device management* one, missing
-Business Premium features a *Security licence upgrade*, and so on. A project is half a day's work or more; anything
-smaller, like registering MFA for one admin, is a quick fix the team just does, listed on the client's page. Every
-client's recommendations sit in one list, worst first, with what was found, how big the job is, a rough estimate
-and where it stands (suggested, proposed, agreed or declined, with a note). Each client's page downloads a branded
-proposal PDF to send them. A project drops off by itself once its findings are fixed.
+Business Premium features a *Security licence upgrade*, a small business still syncing accounts from an office
+server *Move to cloud-only accounts*, and so on. A project is half a day's work or more; anything smaller, like
+registering MFA for one admin, and repairs, like directory sync that has stopped, are quick fixes the team just
+does, listed on the client's page. Every client's recommendations sit in one list, worst first, with what was
+found, how big the job is, a rough estimate and where it stands (suggested, proposed, agreed or declined, with a
+note). Each client's page downloads a branded proposal PDF to send them, listing only the work their findings call
+for. A project drops off by itself once its findings are fixed.
 
 <table>
   <tr>

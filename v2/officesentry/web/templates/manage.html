@@ -85,8 +85,10 @@
     </section>
 
     <section class="card">
-      <div class="card-head"><h2>Groups</h2>{% if admin %}<a class="small" href="{{ url_for('groups.index') }}">Manage groups</a>{% endif %}</div>
-      {% if admin and groups %}
+      {#- Only someone who manages clients and sees every one changes groups (access.manages_groups). -#}
+      {% set groups_admin = manages_groups() %}
+      <div class="card-head"><h2>Groups</h2>{% if groups_admin %}<a class="small" href="{{ url_for('groups.index') }}">Manage groups</a>{% endif %}</div>
+      {% if groups_admin and groups %}
       {% set mine = in_groups|map(attribute='id')|list %}
       <form method="post" action="{{ url_for('tenant_admin.set_groups', tenant_id=tenant.id) }}">
         {{ csrf() }}
@@ -95,7 +97,7 @@
         </div>
         <div class="form-actions"><button class="sm">Save groups</button></div>
       </form>
-      {% elif admin %}
+      {% elif groups_admin %}
       <p class="small muted m0">No groups yet. <a href="{{ url_for('groups.index') }}">Create groups</a> to sort clients by tier, region or service level.</p>
       {% elif in_groups %}{{ group_chips(in_groups) }}
       {% else %}<p class="small muted m0">Not in any group.</p>{% endif %}

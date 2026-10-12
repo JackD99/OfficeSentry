@@ -28,8 +28,8 @@ from .. import app_setup, cert_lifecycle, clouds, entra, permissions, roles, sso
 from ..certs import cert_der
 from ..db import audit, audit_counted, transaction, utcnow
 from . import sessions
-from .access import login_required, needs, safe_next, visible_tenants
-from .admin import _out_of_reach, _user_or_404
+from .access import login_required, needs, out_of_reach, safe_next, visible_tenants
+from .admin import _user_or_404
 from .auth import confirm_password
 from .home import home_url
 
@@ -344,7 +344,7 @@ def disconnect():
 @needs("users.manage")
 def admin_disconnect(user_id: int):
     user = _user_or_404(user_id)
-    if problem := _out_of_reach(user):
+    if problem := out_of_reach(user):
         flash(problem, "error")
     elif sso.unlink(g.db, user_id):
         g.db.execute("UPDATE users SET session_version = session_version + 1 WHERE id = ?", (user_id,))

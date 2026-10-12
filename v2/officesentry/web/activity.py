@@ -143,6 +143,6 @@ def export():
     audit(g.db, g.user["username"], "activity_log_downloaded", detail=f"{len(rows)} rows")
     return Response(
         to_csv(table),
-        mimetype="text/csv; charset=utf-8",
+        mimetype="text/csv",
         headers={"Content-Disposition": 'attachment; filename="office-sentry-activity.csv"'},
     )

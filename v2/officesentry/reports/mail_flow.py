@@ -166,21 +166,31 @@ def mail_flow_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> No
         f"The people Microsoft caught the most phishing for in the last {TOP_DAYS} days (its top 20). These are "
         "the people attackers target: make sure they have phishing-resistant MFA and know how to report a message."
     )
-    if status.get("available") is False and status.get("reason"):
-        out.notes.append(f"The message trace wasn't readable: {status['reason']}")
+    traced = status.get("available") is not False
+    if not traced:
+        out.notice = "The message trace wasn't readable, so mail wasn't counted" + (
+            f": {status['reason']}" if status.get("reason") else "."
+        )
     if read_to:
         out.footnote = f"Counted up to {day(read_to.isoformat())}; the message trace runs about an hour behind."
+
+    def counted(label: str, value, foot: str, tone: str | None, rows: Rows | None = None) -> Tile:
+        """A figure from the message trace, or "Not read" without a tone when the trace wasn't readable."""
+        if not traced:
+            return Tile(label, "Not read", "The message trace wasn't readable", None, rows)
+        return Tile(label, value, foot, tone, rows)
+
     out.tiles = [
-        Tile("Messages", messages, f"Counted {span}", rows=Rows(DOMAINS)),
-        Tile("Delivered", _share(totals["delivered"], messages) or 0, plural(totals["delivered"], "message")),
-        Tile(
+        counted("Messages", messages, f"Counted {span}", None, Rows(DOMAINS)),
+        counted("Delivered", _share(totals["delivered"], messages) or 0, plural(totals["delivered"], "message"), None),
+        counted(
             "Quarantined",
             totals["quarantined"],
             "Held in quarantine",
             "warn" if totals["quarantined"] else "ok",
             Rows(DOMAINS),
         ),
-        Tile("Failed", totals["failed"], "Not delivered", "warn" if totals["failed"] else "ok", Rows(DOMAINS)),
+        counted("Failed", totals["failed"], "Not delivered", "warn" if totals["failed"] else "ok", Rows(DOMAINS)),
         Tile(
             "Phishing recipients",
             len(tops["phish"].rows) if read.get("phish") else "Not read",

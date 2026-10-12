@@ -477,7 +477,7 @@ SHARED_FREE_BYTES = 50 * 1024**3
 def _shared_needing_licence(snap: TenantSnapshot) -> set[str]:
     """Shared mailboxes that must keep a licence although their account is blocked from sign-in (as it
     should be): over 50 GB, with an archive or on litigation hold. Their directory object ids."""
-    sizes = {r.get("mailboxId") or r["_id"]: r for r in snap.objects("mail_usage", "mailbox_size") or []}
+    sizes = {r.get("mailboxId") or r["_id"]: r for r in snap.objects("mailbox_usage", "mailbox_size") or []}
     out = set()
     for m in snap.objects("mailboxes", "mailbox") or []:
         if m.get("RecipientTypeDetails") != "SharedMailbox" or not m.get("ExternalDirectoryObjectId"):

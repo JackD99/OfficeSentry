@@ -15,9 +15,9 @@ from flask import Blueprint, current_app, flash, g, redirect, render_template, r
 
 from .. import permissions, roles, sso, store
 from ..db import audit, transaction, utcnow
-from .access import needs, tenant_or_404
+from .access import needs, out_of_reach, tenant_or_404
 from .admin import SIGN_IN_ADDRESS_RE as EMAIL_RE
-from .admin import _givable, _out_of_reach
+from .admin import _givable
 from .sso import approval_link
 
 bp = Blueprint("client_access", __name__)
@@ -81,7 +81,7 @@ def _existing(person: dict, email: str):
 def _connectable(user, t, tid: str) -> bool:
     """Can this existing account be connected to the person's Microsoft account? Only a client account of this
     client's, connected to nothing yet, that sees no client in another organisation and is within reach."""
-    if user["role"] != "client" or user["entra_oid"] or _out_of_reach(user):
+    if user["role"] != "client" or user["entra_oid"] or out_of_reach(user):
         return False
     granted = [
         store.get_tenant(g.db, r[0])

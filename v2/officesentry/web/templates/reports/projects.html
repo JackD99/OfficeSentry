@@ -33,9 +33,9 @@
   <p>{{ p.pitch }}</p>
   <div class="control-cols">
     <div><div class="col-title">What we found</div>
-      <ul class="evidence">{% for r in rec.reasons %}<li>{{ r.summary }}</li>{% endfor %}</ul></div>
+      <ul class="evidence">{% for r in rec.reasons %}<li>{{ r.headline }}<span class="goal">{{ r.detail }}</span></li>{% endfor %}</ul></div>
     <div><div class="col-title">What the project covers</div>
-      <ul class="evidence">{% for c in p.covers %}<li>{{ c }}</li>{% endfor %}</ul>
+      <ul class="evidence">{% for c in rec.covers %}<li>{{ c }}</li>{% endfor %}</ul>
       {% if rec.size %}<p class="outside">Scope: {{ rec.size }}</p>{% endif %}</div>
   </div>
 </section>

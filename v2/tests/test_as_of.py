@@ -3,9 +3,11 @@ from the daily history once retention has removed the snapshots (web/as_of.py, s
 
 from __future__ import annotations
 
+import io
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
+from openpyxl import load_workbook
 
 from officesentry import changes, state_history, store
 from officesentry.reports import data_reports, month_changes
@@ -46,6 +48,19 @@ def then_and_now(db, two_tenants):
     db.execute(f"DELETE FROM objects WHERE run_id IN ({marks})", old)  # as the retention policy does
     assert db.execute(f"SELECT COUNT(*) FROM state_runs WHERE run_id IN ({marks})", old).fetchone()[0] > 20
     return alpha
+
+
+def _collected_again(db, tenant_id: int, days_ago: int) -> None:
+    """Move today's collection back ``days_ago`` days."""
+    when = (NOW - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    new = [
+        r[0] for r in db.execute("SELECT id FROM runs WHERE tenant_id = ? AND finished_at > ?", (tenant_id, day(30)))
+    ]
+    marks = ",".join("?" * len(new))
+    db.execute(
+        f"UPDATE runs SET created_at = ?, started_at = ?, finished_at = ? WHERE id IN ({marks})", (when,) * 3 + (*new,)
+    )
+    db.execute(f"UPDATE state_runs SET finished_at = ? WHERE run_id IN ({marks})", (when, *new))
 
 
 @pytest.fixture
@@ -143,7 +158,7 @@ def test_a_report_shows_the_tenant_as_it_was_on_a_chosen_day(admin, then_and_now
     page = admin.get(f"{url}?on={day(30)}").get_data(as_text=True)
     assert "gwen@then.example" in page and "gwen@now.example" not in page
     assert "As it was on" in page and "Back to today" in page
-    assert f"/tenants/{then_and_now}/changes?from={day(30)}" in page
+    assert f"/tenants/{then_and_now}/changes?from={day(29)}" in page  # from the end of the day shown
     # The downloads and every table link keep the day.
     assert f"guests.pdf?on={day(30)}" in page and f"guests.xlsx?on={day(30)}" in page
     assert f"on={day(30)}&amp;section=1" in page or f"section=1&amp;on={day(30)}" in page
@@ -152,6 +167,19 @@ def test_a_report_shows_the_tenant_as_it_was_on_a_chosen_day(admin, then_and_now
     assert "gwen@then.example" in csv and "gwen@now.example" not in csv
     xlsx = admin.get(f"{url}.xlsx?on={day(30)}")
     assert xlsx.status_code == 200 and f"-{day(30)}.xlsx" in xlsx.headers["Content-Disposition"]
+
+
+def test_what_changed_since_a_past_day_starts_after_what_that_day_shows(admin, db, then_and_now):
+    # The second collection two days ago: that day already shows it, so nothing has changed since.
+    _collected_again(db, then_and_now, 2)
+    page = admin.get(f"/tenants/{then_and_now}/data/guests?on={day(2)}").get_data(as_text=True)
+    assert "gwen@now.example" in page
+    assert f'href="/tenants/{then_and_now}/changes?from={day(1)}"' in page
+    period = as_of.period(db, then_and_now, day(1), None)
+    since = month_changes.build(db, store.get_tenant(db, then_and_now), since=period.since)
+    assert not [c for c in since.key_changes if c.area == "Accounts"]
+    assert not next(r for r in since.reports if r.key == "guests").count
+    assert as_of.day(db, then_and_now, day(1)).changes_from == TODAY  # never after today
 
 
 def test_a_past_day_keeps_the_filters_and_saved_views(admin, db, then_and_now):
@@ -185,6 +213,28 @@ def test_the_changes_page_compares_any_two_days(admin, then_and_now):
     assert "Last 30 days" in admin.get(f"{url}?from=nonsense").get_data(as_text=True)
 
 
+def test_the_reports_a_period_ending_before_today_changed_open_at_its_end(admin, db, then_and_now):
+    _collected_again(db, then_and_now, 2)
+    url = f"/tenants/{then_and_now}/changes"
+    ended = admin.get(f"{url}?from={day(60)}&to={day(1)}").get_data(as_text=True)
+    assert "gwen@now.example" in ended
+    assert f'href="/tenants/{then_and_now}/data/guests?on={day(1)}"' in ended
+    latest = admin.get(f"{url}?from={day(60)}").get_data(as_text=True)
+    assert f'href="/tenants/{then_and_now}/data/guests"' in latest  # up to today: today's data
+
+
+def test_a_period_ending_before_today_names_its_end_day_in_the_spreadsheet(admin, db, then_and_now):
+    tenant = store.get_tenant(db, then_and_now)
+    end = TODAY - timedelta(days=20)
+    ended = month_changes.build(db, tenant, since=as_of.end_of(TODAY - timedelta(days=60)), until=as_of.end_of(end))
+    assert month_changes.to_tables(ended)[0].columns[2] == f"On {end.day} {end:%b %Y}"
+    assert month_changes.to_tables(month_changes.build(db, tenant, 30))[0].columns[2] == "Now"
+    xlsx = admin.get(f"/tenants/{then_and_now}/changes.xlsx?from={day(60)}&to={day(20)}")
+    sheet = load_workbook(io.BytesIO(xlsx.data))["Key figures"]
+    cells = {c.value for row in sheet.iter_rows() for c in row}
+    assert f"On {end.day} {end:%b %Y}" in cells and "Now" not in cells
+
+
 def test_a_past_day_is_only_shown_for_the_tenants_a_user_can_see(client, db, two_tenants, then_and_now):
     alpha, bravo = two_tenants
     make_user(db, "bravo-only", role="analyst", tenants=(bravo,))
@@ -208,6 +258,15 @@ def test_every_report_builds_on_a_past_day(db, then_and_now):
             assert "no longer held" in report.unavailable
         else:  # as available as today's
             assert report.unavailable == data_reports.build(db, tenant, key).unavailable, key
+
+
+def test_legacy_sign_ins_retention_removed_are_said_to_be_gone_not_compared(db, then_and_now):
+    # Kept for less time than the daily history: the day says so, and What changed doesn't list today's as new.
+    tenant = store.get_tenant(db, then_and_now)
+    then = data_reports.build(db, tenant, "legacy-auth", as_of=as_of.end_of(TODAY - timedelta(days=30)))
+    assert "Legacy sign-ins from that day is no longer held" in then.notice
+    legacy = next(r for r in month_changes.build(db, tenant, 30).reports if r.key == "legacy-auth")
+    assert legacy.count == 0 and "Legacy sign-ins from the start of the period is no longer held" in legacy.note
 
 
 def test_end_of_a_day_is_its_last_second():

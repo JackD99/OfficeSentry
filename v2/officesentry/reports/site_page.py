@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 from .. import store
 from ..devices import parse_day, parse_ts
 from ..snapshot import TenantSnapshot
-from ..text import plural
+from ..text import fold, plural
 from .data_reports import PAGE_INDEXES, REPORTS, Highlight, Link, PageIndex, PageLink, Section
 from .object_page import (
     ObjectPage,
@@ -708,7 +708,7 @@ def directory(conn, tenant, now: datetime | None = None) -> tuple[list[SiteRow],
                 counts.get(site_key(r), 0),
             )
         )
-    out.sort(key=lambda r: (r.type == "System", -r.findings, -r.anyone, -r.storage_sort, r.name.lower()))
+    out.sort(key=lambda r: (r.type == "System", -r.findings, -r.anyone, -r.storage_sort, fold(r.name)))
     user = [r for r in out if r.type != "System"]
     system = len(out) - len(user)
     shared = [r for r in user if r.anyone]

@@ -6,6 +6,7 @@ from datetime import datetime
 
 from ..snapshot import TenantSnapshot
 from ..text import plural
+from ..usage import owner_label
 from .base import Finding, _unavailable, rule
 
 NEAR = 0.9  # share of the quota that counts as nearly full
@@ -90,7 +91,7 @@ def onedrive_quota(snap: TenantSnapshot, now: datetime):
         share = r["storageUsed"] / r["storageAllocated"]
         if share < NEAR:
             continue
-        who = r.get("ownerPrincipalName") or ("Name hidden by Microsoft" if r.get("concealed") else r.get("owner"))
+        who = owner_label(r)
         findings.append(
             Finding(
                 "high" if share >= 1 else "medium",

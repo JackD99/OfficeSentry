@@ -7,7 +7,7 @@ Days are UTC days, like the dates the portal shows; a day means the data held at
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 
 from .. import state_history
 
@@ -52,6 +52,12 @@ class Day:
     @property
     def query(self) -> dict:
         return {"on": self.on.isoformat()} if self.on else {}
+
+    @property
+    def changes_from(self) -> date | None:
+        """Where "what changed since then" starts: the day after, since this day is shown as it stood at its end
+        and a period starts at the start of its first day."""
+        return min(self.on + timedelta(days=1), self.today) if self.on else None
 
 
 def day(conn, tenant_id: int, raw, today: date | None = None) -> Day:

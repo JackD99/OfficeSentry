@@ -7,6 +7,9 @@
   <div class="sub">{{ 'Built-in' if role.built_in else 'Custom' }} role for {{ 'everyone who runs Office Sentry' if role.kind == 'admin' else 'staff' if role.kind == 'staff' else "a client's people" }}
     · {{ holders|length|plural('person', 'people') }} hold{{ 's' if holders|length == 1 else '' }} it{% if role.changed_from_template %} · changed from its default{% endif %}</div></div></div>
 
+{% if held_by_more %}
+<div class="callout">{{ icon('shield') }}<span class="grow"><strong>Only an Administrator can change this role.</strong> Someone holding it can see or do more than you can, and changing the role would change what they can do.</span></div>
+{% endif %}
 {% if not role.editable %}
 <div class="callout">{{ icon('shield') }}<span class="grow"><strong>Administrator can't be changed.</strong> It holds every capability on every client, so there is always someone who can fix things. Give people a narrower role, or take single capabilities away on their page.</span></div>
 {% endif %}
@@ -16,14 +19,14 @@
   <div>
     <section class="card">
       <h2>Capabilities</h2>
-      {% if role.editable and grantable|length < capabilities|length and capabilities|rejectattr('key', 'in', grantable)|list %}<p class="muted small">Greyed-out capabilities are ones you don't hold yourself, so they stay as they are.</p>{% endif %}
+      {% if editable and grantable|length < capabilities|length and capabilities|rejectattr('key', 'in', grantable)|list %}<p class="muted small">Greyed-out capabilities are ones you don't hold yourself, so they stay as they are.</p>{% endif %}
       {% for key, title, help in groups %}{% set caps = capabilities|selectattr('group', 'equalto', key)|list %}{% if caps %}
       <fieldset>
         <legend>{{ title }}</legend>
         <p class="muted small m0">{{ help }}</p>
         <div class="check-grid">
         {% for c in caps %}
-        <label class="check" title="{{ c.help }}"><input type="checkbox" name="capabilities" value="{{ c.key }}" data-cap="{{ c.key }}"{% if c.key in role.capabilities %} checked{% endif %}{% if not role.editable or c.key not in grantable %} disabled{% endif %}>
+        <label class="check" title="{{ c.help }}"><input type="checkbox" name="capabilities" value="{{ c.key }}" data-cap="{{ c.key }}"{% if c.key in role.capabilities %} checked{% endif %}{% if not editable or c.key not in grantable %} disabled{% endif %}>
           <span>{{ c.title }}{% if template and (c.key in template.capabilities) != (c.key in role.capabilities) %} <span class="faint small">({{ 'on' if c.key in template.capabilities else 'off' }} by default)</span>{% endif %}<span class="sub faint small">{{ c.help }}</span></span></label>
         {% endfor %}
         </div>
@@ -35,8 +38,8 @@
   <div>
     <section class="card">
       <h2>Details</h2>
-      <label>Name <input name="name" maxlength="60" required value="{{ role.name }}" autocomplete="off"{% if not role.editable %} disabled{% endif %}></label>
-      <label>Description <input name="description" maxlength="300" value="{{ role.description }}" autocomplete="off"{% if not role.editable %} disabled{% endif %}>
+      <label>Name <input name="name" maxlength="60" required value="{{ role.name }}" autocomplete="off"{% if not editable %} disabled{% endif %}></label>
+      <label>Description <input name="description" maxlength="300" value="{{ role.description }}" autocomplete="off"{% if not editable %} disabled{% endif %}>
         <span class="hint">Shown beside the role on each person's page.</span></label>
       {% if role.kind == 'staff' %}
       <fieldset class="choices">
@@ -49,7 +52,7 @@
       {% elif role.kind == 'client' %}
       <p class="muted small">A client's people only ever see the clients granted on their page, and only report capabilities.</p>
       {% endif %}
-      {% if role.editable %}
+      {% if editable %}
       <div class="form-actions wrap"><button class="primary">Save role</button><a class="btn ghost" href="{{ url_for('roles.index') }}">Cancel</a></div>
       {% endif %}
     </section>
@@ -73,7 +76,7 @@
   </div>
 </form>
 
-{% if role.editable %}
+{% if editable %}
 <section class="card narrow-lg{{ ' danger-zone' if not role.built_in }}">
   {% if role.built_in %}
   <h2>Back to default</h2>

@@ -12,10 +12,12 @@ from .. import alerts, clouds, delivery, issued, mailer, month_end, store, tenan
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..mailer import Email, MailError
+from ..reports import designs, findings_report
 from ..reports.data_reports import grouped as report_groups
 from ..text import plural
-from .access import can, is_staff, needs, tenant_or_404, visible_tenants
+from .access import can, is_staff, needs, require, tenant_or_404, visible_tenants
 from .filters import _strftime as datefmt
+from .reports import report_capability
 
 bp = Blueprint("email", __name__)
 
@@ -53,6 +55,34 @@ def _schedule_or_404(schedule_id: int):
     else:
         tenant_or_404(s["tenant_id"])
     return s
+
+
+def _needs(key: str) -> set[str]:
+    """What sending or downloading a report needs on its tenant. ``key`` is a report a schedule sends
+    (``delivery.catalog``), an issued file's kind, or ``view:<report key>`` for a saved view: a detail
+    report needs its area's capability; the reviews, evidence and Findings need security findings, and a
+    design those and the area of each detail report it shows."""
+    report = key.removeprefix("view:").removeprefix("data:")
+    if report != key and report not in findings_report.TITLES:
+        return {report_capability(report)}
+    needs = {"reports.security"}
+    if (design_id := designs.id_of(key)) is not None and (row := designs.get(g.db, design_id)) is not None:
+        needs |= {report_capability(k) for k in designs.detail_reports(row)}
+    return needs
+
+
+def _opens(key: str, tenant_id: int) -> bool:
+    return all(can(cap, tenant_id) for cap in _needs(key))
+
+
+def _sends_only_what_they_open(s) -> bool:
+    """Whether the signed-in person may open every report and saved view a tenant's schedule sends: only
+    then may they change it, since changing who it goes to would hand them the rest."""
+    keys = [
+        *json.loads(s["reports"] or "[]"),
+        *(f"view:{v.report_key}" for v in delivery.schedule_views(g.db, s["id"])),
+    ]
+    return all(_opens(k, s["tenant_id"]) for k in keys)
 
 
 def _alert_or_404(alert_id: int):
@@ -153,32 +183,41 @@ def tenant_emails(tenant_id: int):
 
 
 def _client_copy(d, contacts) -> dict | None:
-    """A delivery as a client may see it: only their own contacts' addresses, never the team's. None for an
-    email that went to none of them."""
+    """A delivery as a client may see it: only their own contacts' addresses, never the team's or who on it
+    sent it. None for an email that went to none of them."""
     own = {c["email"].lower() for c in contacts}
     shown = [a.strip() for a in (d["recipients"] or "").split(",") if a.strip().lower() in own]
-    return {**dict(d), "recipients": ", ".join(shown), "bcc": "", "error": None} if shown else None
+    return {**dict(d), "recipients": ", ".join(shown), "bcc": "", "error": None, "sent_by": ""} if shown else None
 
 
 @bp.get("/tenants/<int:tenant_id>/report-history")
 @needs("emails.view")
 def report_history(tenant_id: int):
-    """Every report file emailed for this tenant, as it was sent. Clients don't see who it went to."""
+    """Every report file emailed for this tenant, as it was sent, leaving out reports the person can't open.
+    Clients don't see who it went to."""
     t = tenant_or_404(tenant_id)
-    return render_template("report_history.html", tenant=t, staff=_is_staff(), sends=issued.history(g.db, t["id"]))
+    sends = []
+    for s in issued.history(g.db, t["id"]):
+        files = [f for f in s["files"] if _opens(f["kind"], t["id"])]
+        if files:
+            sends.append({**s, "files": files, "titles": list(dict.fromkeys(f["title"] for f in files))})
+    return render_template(
+        "report_history.html", tenant=t, staff=_is_staff(), sends=sends, downloads=can("export", t["id"])
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>/report-history/<int:report_id>")
-@needs("emails.view")
+@needs("emails.view", "export")
 def issued_report(tenant_id: int, report_id: int):
     t = tenant_or_404(tenant_id)
     r = issued.get(g.db, t["id"], report_id)
     if r is None:
         abort(404)
+    require(*_needs(r["kind"]), tenant_id=t["id"])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"issued:{r['filename']}")
     return Response(
         bytes(r["data"]),
-        mimetype=r["content_type"],
+        content_type=r["content_type"],  # as stored, charset and all
         headers={"Content-Disposition": f'attachment; filename="{r["filename"]}"'},
     )
 
@@ -207,9 +246,14 @@ def _blank(kind: str, reports=None) -> dict:
     }
 
 
-def _form_values(kind: str) -> dict:
+def _catalog(tenant_id: int | None) -> list[delivery.ReportOption]:
+    """The reports a schedule may send: for one tenant, those the person may open there."""
+    return [o for o in delivery.catalog(g.db) if tenant_id is None or _opens(o.key, tenant_id)]
+
+
+def _form_values(kind: str, tenant_id: int | None) -> dict:
     f = request.form
-    valid = {o.key for o in delivery.catalog(g.db)}
+    valid = {o.key for o in _catalog(tenant_id)}
     values = {
         "kind": kind,
         "reports": [k for k in dict.fromkeys(f.getlist("reports")) if k in valid] if kind == "report" else [],
@@ -255,12 +299,18 @@ def _chosen_contacts(tenant_id: int | None) -> tuple[list[int], list[str]]:
     return list(dict.fromkeys(ids)), errors
 
 
-def _my_views(across: bool) -> dict[int, dict]:
-    """The signed-in person's saved views that a schedule can send, by id."""
+def _my_views(across: bool, tenant_id: int | None = None) -> dict[int, dict]:
+    """The signed-in person's saved views that a schedule can send, by id: for one tenant, of reports they
+    may open there."""
     rows = g.db.execute(
         "SELECT * FROM saved_views WHERE user_id = ? ORDER BY name COLLATE NOCASE", (g.user["id"],)
     ).fetchall()
-    return {r["id"]: dict(r) for r in rows if delivery.can_schedule_view(r["report_key"], across)}
+    return {
+        r["id"]: dict(r)
+        for r in rows
+        if delivery.can_schedule_view(r["report_key"], across)
+        and (tenant_id is None or _opens(f"view:{r['report_key']}", tenant_id))
+    }
 
 
 def _view_value(v: delivery.ScheduledView, mine: dict) -> str:
@@ -269,9 +319,9 @@ def _view_value(v: delivery.ScheduledView, mine: dict) -> str:
     return f"s{v.saved_view_id}" if v.saved_view_id in mine else f"k{v.id}"
 
 
-def _view_options(schedule_id: int | None, across: bool) -> list[dict]:
+def _view_options(schedule_id: int | None, across: bool, tenant_id: int | None) -> list[dict]:
     """The saved views the form offers, by report: the person's own, then copies the schedule already sends."""
-    mine = _my_views(across)
+    mine = _my_views(across, tenant_id)
     options = [
         {"value": f"s{r['id']}", "name": r["name"], "report": delivery.view_report_title(r["report_key"]), "note": ""}
         for r in mine.values()
@@ -289,10 +339,10 @@ def _view_options(schedule_id: int | None, across: bool) -> list[dict]:
     return sorted(options, key=lambda o: (o["report"].lower(), o["name"].lower()))
 
 
-def _chosen_views(schedule_id: int | None, across: bool) -> list[delivery.ScheduledView]:
+def _chosen_views(schedule_id: int | None, across: bool, tenant_id: int | None) -> list[delivery.ScheduledView]:
     """The saved views ticked on the form, each copied with its format. Only the person's own saved views,
     or copies the schedule already had, count."""
-    mine = _my_views(across)
+    mine = _my_views(across, tenant_id)
     kept = {v.id: v for v in delivery.schedule_views(g.db, schedule_id)}
     out = []
     for value in dict.fromkeys(request.form.getlist("views")):
@@ -316,7 +366,8 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
     cfg = _cfg()
     across = values["kind"] == "digest"
     sends_views = not across or delivery.VIEWS_KEY in values["reports"]
-    mine = _my_views(across)
+    tenant_id = tenant["id"] if tenant else None
+    mine = _my_views(across, tenant_id)
     view_values = {_view_value(v, mine): v.format for v in values.get("views", [])}
     zones = list(
         dict.fromkeys([cfg.timezone, *delivery.COMMON_TIMEZONES] + ([values["timezone"]] if values["timezone"] else []))
@@ -326,7 +377,7 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
         tenant=tenant,
         s=values,
         chosen=chosen,
-        catalog=delivery.catalog(g.db),
+        catalog=_catalog(tenant_id),
         report_groups=report_groups(),
         contacts=delivery.tenant_contacts(g.db, tenant["id"]) if tenant else [],
         team=delivery.team_contacts(g.db),
@@ -338,7 +389,7 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
         pdf_available=delivery.export.pdf_available(),
         recipients_limit=mailer.MAX_RECIPIENTS,
         groups=tenant_groups.all_groups(g.db) if not tenant else [],
-        view_options=_view_options(values.get("id"), across) if sends_views else [],
+        view_options=_view_options(values.get("id"), across, tenant_id) if sends_views else [],
         view_values=view_values,
         view_formats=delivery.VIEW_FORMATS,
     )
@@ -347,7 +398,7 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
 def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: bool = False):
     kind = existing["kind"] if existing else ("report" if tenant else "digest")
     tenant_id = tenant["id"] if tenant else None
-    values = _form_values(kind)
+    values = _form_values(kind, tenant_id)
     # Pausing and resuming is the toggle's job: an edit keeps a paused schedule paused.
     values["enabled"] = existing["enabled"] if existing is not None else 1
     if coming_up or (existing is not None and delivery.is_upcoming(existing)):
@@ -357,7 +408,9 @@ def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: 
     if views_email:
         values["reports"] = [delivery.VIEWS_KEY]  # a digest schedule that sends saved views across tenants
     sends_views = kind == "report" or views_email
-    values["views"] = _chosen_views(existing["id"] if existing else None, kind == "digest") if sends_views else []
+    values["views"] = (
+        _chosen_views(existing["id"] if existing else None, kind == "digest", tenant_id) if sends_views else []
+    )
     with transaction(g.db):
         ids, errors = _chosen_contacts(tenant_id)
         if kind == "digest":
@@ -438,7 +491,7 @@ def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: 
 
 
 @bp.route("/tenants/<int:tenant_id>/schedules/new", methods=["GET", "POST"])
-@needs("emails.manage")
+@needs("emails.manage", "reports.security")  # every report email opens with the security summary
 def new_schedule(tenant_id: int):
     t = tenant_or_404(tenant_id)
     if request.method == "POST":
@@ -446,7 +499,7 @@ def new_schedule(tenant_id: int):
     team_default = {c["id"] for c in delivery.tenant_contacts(g.db, t["id"])}
     values = _blank("report")
     # "Email this view" from a report's Views menu: start with that view, as a PDF, and no other report.
-    picked = _my_views(False).get(request.args.get("view", type=int) or 0)
+    picked = _my_views(False, t["id"]).get(request.args.get("view", type=int) or 0)
     if picked:
         values["reports"] = []
         values["views"] = [
@@ -492,10 +545,13 @@ def new_views():
 
 
 @bp.route("/schedules/<int:schedule_id>/edit", methods=["GET", "POST"])
-@needs("emails.manage")
+@needs("emails.manage", "reports.security")
 def edit_schedule(schedule_id: int):
     s = _schedule_or_404(schedule_id)
     tenant = tenant_or_404(s["tenant_id"]) if s["tenant_id"] else None
+    if tenant is not None and not _sends_only_what_they_open(s):
+        flash("Only someone who can open every report this email sends can change it.", "error")
+        return _back(tenant["id"])
     if request.method == "POST":
         return _save_schedule(tenant, s)
     values = dict(s)
@@ -580,7 +636,7 @@ def _build_preview(s):
 
 
 @bp.get("/schedules/<int:schedule_id>/preview")
-@needs("emails.view", kind="staff")
+@needs("emails.view", "reports.security", kind="staff")  # a report email opens with the security summary
 def preview_schedule(schedule_id: int):
     s = _schedule_or_404(schedule_id)
     built = _build_preview(s)
@@ -602,7 +658,7 @@ def _email_body(html: str):
 
 
 @bp.get("/schedules/<int:schedule_id>/preview/body")
-@needs("emails.view", kind="staff")
+@needs("emails.view", "reports.security", kind="staff")
 def preview_schedule_body(schedule_id: int):
     return _email_body(_build_preview(_schedule_or_404(schedule_id)).email.html_for_browser())
 
@@ -648,7 +704,7 @@ def _alert_example(a):
 
 
 @bp.get("/alerts/<int:alert_id>/preview")
-@needs("emails.view", kind="staff")
+@needs("emails.view", "reports.security", kind="staff")  # an alert lists findings
 def preview_alert(alert_id: int):
     a = _alert_or_404(alert_id)
     built = _alert_example(a)
@@ -666,7 +722,7 @@ def preview_alert(alert_id: int):
 
 
 @bp.get("/alerts/<int:alert_id>/preview/body")
-@needs("emails.view", kind="staff")
+@needs("emails.view", "reports.security", kind="staff")
 def preview_alert_body(alert_id: int):
     built = _alert_example(_alert_or_404(alert_id))
     if built is None:
