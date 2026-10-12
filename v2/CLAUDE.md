@@ -32,7 +32,9 @@ overview and DEPLOY.md for running it on a server.
   one of its objects) with another tenant's IDs and expects a refusal, then
   opens every GET route with the granted tenant's IDs (every download read
   inside, PDFs as their page) and posts every form with the other tenant's
-  IDs, and expects nothing of the other tenant. A new
+  IDs, and expects nothing of the other tenant (clients included, with a
+  password and signed in with Microsoft; `tests/test_client_sign_in_attacks.py`
+  attacks that sign-in itself). A new
   URL argument fails there until it's listed in `TENANT_ARGS` (seed an object
   for it in `_objects`) or `OTHER_ARGS`. Templates use
   `can('<capability>', tenant.id)` to show or hide; never `current_user.role`
@@ -75,8 +77,9 @@ overview and DEPLOY.md for running it on a server.
   running it, and reports and checks show it as unavailable with that reason.
 - **Credentials never touch disk as files** and are never sent to the browser.
   `tests/test_no_secrets_downloadable.py` plants one of every kind of secret
-  and searches every page and download, as an admin, an analyst and a client,
-  for any of them; a new kind of secret gets planted there.
+  and searches every page and download, as an admin, an analyst and a client
+  (with a password and signed in with Microsoft), for any of them; a new kind
+  of secret gets planted there.
 - **Mock Graph with `responses`, never by replacing `GraphClient`.**
 - **Sessions are server-side** (`web/sessions.py`). To sign someone out, bump
   `users.session_version` or delete their `sessions` rows; never trust anything

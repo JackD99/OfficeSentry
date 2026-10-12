@@ -19,7 +19,7 @@ asked for.
 
 Then the other way round, since a page about A can leak B too: A gets the same
 objects, and every GET route in the URL map (any arguments at all) is opened
-with A's IDs, as the analyst, the client and a ``manager`` (a custom role
+with A's IDs, as the analyst, both clients and a ``manager`` (a custom role
 limited to A that holds every capability, so no missing capability hides a
 missing tenant check), plain and with ``?tenant=`` naming B, every download
 in each format; none may carry anything of B's, read inside spreadsheets,
@@ -292,29 +292,45 @@ def world(app, db, connection_id):
     return alpha, bravo, ids
 
 
+def microsoft_client(db, vault, username: str, alpha: int, tenants) -> int:
+    """One of A's people with a client account here and no password, connected to their work account in A's
+    own tenant (Jo, ``csi.JO``) as the Client sign-in page connects it, and granted ``tenants``. Client sign-in
+    with Microsoft is set up and on (keeping a sign-in certificate already made), and A's Directory ID is
+    A's tenant. A grant of a client in another organisation must count for nothing (``access._organisation``)."""
+    sso.forget_keys()
+    if not sso.settings(db).get("sso_key_enc"):
+        sso.new_certificate(db, vault)
+    sso.store_manual(db, vault, csi.MSP, csi.CLIENT_ID, "commercial", "Office Sentry sign-in", "admin")
+    sso.save(db, {"sso_enabled": "1", "sso_multi_tenant": "1", "sso_clients": "1"})
+    db.execute("UPDATE tenants SET tenant_ref = ? WHERE id = ?", (csi.ALPHA, alpha))
+    user = make_user(db, username, role="client", tenants=tenants)
+    db.execute(
+        "UPDATE users SET password_hash = ?, entra_oid = ?, entra_tid = ?, entra_upn = ? WHERE id = ?",
+        (sso.NO_PASSWORD, csi.JO["oid"], csi.ALPHA, csi.JO["upn"], user),
+    )
+    db.commit()
+    return user
+
+
+def sign_in_with_microsoft(client, username: str, person: dict = csi.JO) -> None:
+    """Sign in with Microsoft as ``person``, from their own tenant, as test_client_sign_in does (Microsoft
+    simulated at the HTTP level), and check it reached ``username``'s account."""
+    responses.start()
+    try:
+        assert csi.sign_in(client, person).status_code == 302
+    finally:
+        responses.stop()
+        responses.reset()
+    assert csi.signed_in_as(client) == username
+
+
 def _sign_in(client, db, role: str, alpha: int, ids: dict, vault=None) -> None:
     """Someone who may see tenant A only, however ``role`` grants it."""
     if role == "client-by-microsoft":
         # One of A's people, signed in with their own work account from A's tenant. B is granted too, by
         # mistake, but it isn't in A's organisation, so that grant counts for nothing.
-        sso.forget_keys()
-        sso.new_certificate(db, vault)
-        sso.store_manual(db, vault, csi.MSP, csi.CLIENT_ID, "commercial", "Office Sentry sign-in", "admin")
-        sso.save(db, {"sso_enabled": "1", "sso_multi_tenant": "1", "sso_clients": "1"})
-        db.execute("UPDATE tenants SET tenant_ref = ? WHERE id = ?", (csi.ALPHA, alpha))
-        user = make_user(db, "someone", role="client", tenants=[alpha, ids["tenant_id"]])
-        db.execute(
-            "UPDATE users SET password_hash = ?, entra_oid = ?, entra_tid = ? WHERE id = ?",
-            (sso.NO_PASSWORD, csi.JO["oid"], csi.ALPHA, user),
-        )
-        db.commit()
-        responses.start()
-        try:
-            assert csi.sign_in(client, csi.JO).status_code == 302
-        finally:
-            responses.stop()
-            responses.reset()
-        assert csi.signed_in_as(client) == "someone"
+        microsoft_client(db, vault, "someone", alpha, [alpha, ids["tenant_id"]])
+        sign_in_with_microsoft(client, "someone")
         return
     if role == "analyst-by-group":
         user = make_user(db, "someone", role="analyst")
@@ -531,12 +547,12 @@ def _a_urls(app, db, alpha: int, ids: dict) -> list[tuple[str, str]]:
     return out
 
 
-@pytest.mark.parametrize("role", ["analyst", "client", "manager"])
-def test_nothing_of_another_tenant_on_any_page_or_download(app, client, db, world, role, _pdf_as_page):
+@pytest.mark.parametrize("role", ["analyst", "client", "client-by-microsoft", "manager"])
+def test_nothing_of_another_tenant_on_any_page_or_download(app, client, db, vault, world, role, _pdf_as_page):
     """Every GET route, opened with A's IDs by someone granted A, plain and with ``?tenant=`` naming B: no page,
     download or file inside one carries anything of B's."""
     alpha, bravo, ids = world
-    _sign_in(client, db, role, alpha, ids)
+    _sign_in(client, db, role, alpha, ids, vault)
     opened = 0
     for endpoint, url in _a_urls(app, db, alpha, ids):
         for query in ("", f"tenant={bravo}&tenant_id={bravo}"):
@@ -544,7 +560,7 @@ def test_nothing_of_another_tenant_on_any_page_or_download(app, client, db, worl
             resp = client.get(full)
             assert not _leaks(_readable(resp)), (role, endpoint, full, resp.status_code, _leaks(_readable(resp)))
             opened += resp.status_code == 200
-    assert opened >= {"analyst": 450, "client": 120, "manager": 480}[role], opened
+    assert opened >= {"analyst": 450, "client": 120, "client-by-microsoft": 120, "manager": 480}[role], opened
 
 
 @pytest.mark.parametrize("role", ["analyst", "manager"])
