@@ -171,6 +171,8 @@ def site_guest_full_control(snap: TenantSnapshot, now: datetime):
             else "Office Sentry can't read this tenant's SharePoint permissions yet"
         )
     sites = [s for s in snap.objects("site_permissions", "site") or [] if isinstance(s, dict)]
+    if not sites and status.get("unreadable"):
+        return _unavailable("No site's permissions could be read on the last collection")
     findings = []
     for s in sites:
         groups = {g.get("id"): g for g in s.get("groups") or [] if isinstance(g, dict)}

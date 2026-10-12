@@ -5,9 +5,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from officesentry import retention, store, worker
+from officesentry.collectors import REGISTRY
 from officesentry.db import audit
 
 from .conftest import login, make_user
+from .seed import seed_tenant
 
 
 def iso(days_ago: float) -> str:
@@ -160,16 +162,33 @@ def test_sign_in_detail_is_pruned_after_its_period(db, two_tenants):
     alpha, _ = two_tenants
     old = run_with(db, alpha, "sign_ins", 45, ("sign_in_status", "sign_in_account", "sign_in_failure_ip"))
     recent = run_with(db, alpha, "sign_ins", 10, ("sign_in_account",))
-    mail = run_with(db, alpha, "mail_usage", 45, ("mailbox_size", "legacy_signin"))
+    legacy = run_with(db, alpha, "legacy_signins", 45, ("legacy_signin_status", "legacy_signin"))
+    sizes = run_with(db, alpha, "mailbox_usage", 45, ("mailbox_size",))
     users = run_with(db, alpha, "users", 45, ("user",))
     policy = retention.Policy(signin_days=30)
-    assert retention.dry_run(db, policy)["signin_days"] == 4
-    assert retention.prune_signin_detail(db, 30) == 4
+    assert retention.dry_run(db, policy)["signin_days"] == 5
+    assert retention.prune_signin_detail(db, 30) == 5
     assert not kinds_of(db, old)
+    assert not kinds_of(db, legacy)  # accounts, addresses and countries of legacy sign-ins go too
     assert kinds_of(db, recent) == {"sign_in_account"}
-    assert kinds_of(db, mail) == {"mailbox_size"}
+    assert kinds_of(db, sizes) == {"mailbox_size"}
     assert kinds_of(db, users) == {"user"}
     assert retention.prune_signin_detail(db, None) == 0
+
+
+def test_every_data_source_that_stores_sign_in_detail_is_pruned(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    marks = ",".join("?" * len(retention.SIGNIN_KINDS))
+    sources = {
+        r[0]
+        for r in db.execute(
+            f"SELECT DISTINCT r.collector FROM runs r JOIN objects o ON o.run_id = r.id WHERE o.kind IN ({marks})",
+            retention.SIGNIN_KINDS,
+        )
+    }
+    assert sources == set(retention.SIGNIN_COLLECTORS)
+    assert set(retention.SIGNIN_COLLECTORS) <= set(REGISTRY)
 
 
 def test_resolved_findings_are_pruned_after_their_period(db, two_tenants):

@@ -1,5 +1,7 @@
 """Microsoft 365 usage and licence right-sizing: collector, rules and reports."""
 
+import copy
+import hashlib
 import io
 from datetime import UTC, datetime
 
@@ -8,6 +10,7 @@ from openpyxl import load_workbook
 from officesentry import store, usage
 from officesentry.reports import data_reports, rollups
 from officesentry.snapshot import TenantSnapshot
+from tests import graphdata as gd
 from tests import usagedata as ud
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -246,6 +249,49 @@ def test_rightsizing_skips_new_and_inactive_accounts_and_notes_missing_prices(db
     assert rows["ann@x.com"][4] == "Not priced"
     assert any("Microsoft 365 Business Premium" in n and "Licence prices" in n for n in report.notes)
     assert report.highlights[0].value == "Not priced"
+
+
+def test_rightsizing_finds_the_mailbox_by_account_not_address(db, two_tenants):
+    """Ann signs in as ann@x.com, but her mailbox's address is ann.smith@x.com and it holds 48 GB with an archive:
+    too much for Exchange Online Plan 1, so the cheaper plan to suggest is Plan 2."""
+    alpha, _ = two_tenants
+    exchange = copy.deepcopy(gd.EXCHANGE)
+    exchange["Get-Mailbox"][0].update({"PrimarySmtpAddress": "ann.smith@x.com", "ArchiveStatus": "Active"})
+    size = {"TotalItemSize": "48 GB (51,539,607,552 bytes)", "TotalDeletedItemSize": "0 B (0 bytes)", "ItemCount": 9}
+    exchange["Get-MailboxStatistics"] = {"g-u1": [size]}
+    seed_tenant(db, alpha, exchange=exchange)
+    _price(db)
+    rows = {
+        r[0]: r for r in _section(_report(db, alpha, "licence-rightsizing"), "Could move to a cheaper licence").rows
+    }
+    assert rows["ann@x.com"][3] == "Exchange Online (Plan 2)"
+
+
+def test_rightsizing_with_hidden_names_never_suggests_removing_a_licence(db, two_tenants, monkeypatch):
+    """With names hidden nobody can be matched to an account, so disabled Bob, whose licence Licence waste already
+    counts, looks like anyone else who used nothing. Removing a licence isn't suggested, so nothing is counted
+    twice; the cheaper plans still are."""
+    alpha, _ = two_tenants
+
+    def code(upn):
+        return hashlib.sha256(upn.encode()).hexdigest()[:32].upper()  # as Microsoft hides a name
+
+    def hide(rows):
+        return [dict(r, userPrincipalName=code(r["userPrincipalName"])) for r in rows]
+
+    for name in ("EMAIL", "TEAMS", "ACTIVATIONS"):
+        monkeypatch.setattr(ud, name, hide(getattr(ud, name)))
+    seed_tenant(db, alpha, usage_kw={"active": hide(ud.ACTIVE_USERS), "apps": hide(ud.APP_USERS), "concealed": True})
+    _price(db)
+    report = _report(db, alpha, "licence-rightsizing")
+    moves = _section(report, "Could move to a cheaper licence")
+    assert [(r[0], r[3]) for r in moves.rows] == [
+        (f"Hidden name ({code('ann@x.com')[:6]})", "Exchange Online (Plan 1)"),
+        (f"Hidden name ({code('carol@x.com')[:6]})", "Microsoft 365 Business Basic"),
+    ]
+    highlights = {h.label: h.value for h in report.highlights}
+    assert highlights["Saving / month"] == 20.20 and highlights["People who could move"] == 2
+    assert any("removing a licence isn't suggested for 2 people" in n for n in report.notes)
 
 
 def test_rollup_and_pages(client, db, two_tenants):

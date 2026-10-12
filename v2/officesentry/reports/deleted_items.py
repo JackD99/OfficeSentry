@@ -85,9 +85,6 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     else:
         report.notes.append("Deleted teams and groups weren't readable on the last collection.")
 
-    soon_users = sum(1 for r in users.rows if r[-1] == SOON) if status.get("users") else 0
-    soon_groups = sum(1 for r in groups.rows if r[-1] == SOON) if status.get("groups") else 0
-    soon = soon_users + soon_groups
     teams = sum(1 for r in groups.rows if r[1] == "Team")
     report.tiles = []
     if status.get("users"):
@@ -111,27 +108,23 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                 trend=metric_trend(snap, "deleted.groups", now),
             )
         )
-    # Link to a table that's on the page: the one with accounts ending soon, else whichever was read.
-    target = (
-        USERS
-        if soon_users
-        else GROUPS
-        if soon_groups
-        else USERS
-        if status.get("users")
-        else GROUPS
-        if status.get("groups")
-        else None
-    )
-    report.tiles.append(
-        Tile(
-            f"Permanently deleted within {EXPIRING_DAYS} days",
-            soon,
-            f"{plural(soon_users, 'user')}, {plural(soon_groups, 'group')}",
-            ("warn" if users.flagged or groups.flagged else None) if soon else "ok",
-            Rows(target, {"Ends within": SOON}) if target else None,
+    # One figure per table, so each opens the rows it counts: licensed members and teams are flagged.
+    for read, section, kind, flagged in (
+        ("users", users, "Users", "licensed member"),
+        ("groups", groups, "Groups", "team"),
+    ):
+        if not status.get(read):
+            continue
+        soon = sum(1 for r in section.rows if r[-1] == SOON)
+        report.tiles.append(
+            Tile(
+                f"{kind} deleted for good within {EXPIRING_DAYS} days",
+                soon,
+                f"{plural(section.flagged, flagged)} among them",
+                ("warn" if section.flagged else None) if soon else "ok",
+                Rows(section.title, {"Ends within": SOON}),
+            )
         )
-    )
     report.footnote = (
         f"Microsoft keeps deleted users and Microsoft 365 groups for {RETENTION_DAYS} days, then "
         "deletes them for good. Restore them in the Microsoft Entra admin center (Users > Deleted "

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import unicodedata
+
 # Words whose plural doesn't follow the endings below.
 IRREGULAR = {
     "person": "people",
@@ -77,3 +79,8 @@ def duration(seconds: float) -> str:
         if seconds < below:
             return plural(seconds // size, unit)
     return plural(seconds // 86400, "day")
+
+
+def fold(text: str) -> str:
+    """``text`` as it sorts: without case or accents, so "Åsa" comes before "Bea" rather than after "Zoe"."""
+    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)).casefold()

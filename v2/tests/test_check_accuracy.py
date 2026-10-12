@@ -52,6 +52,16 @@ def test_a_scoped_policy_allowing_forwarding_passes(db, two_tenants):
     assert (finding.severity, finding.subject) == ("medium", "Default")
 
 
+def test_no_outbound_spam_policy_at_all_is_unknown_not_blocked(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, exchange=_exchange(**{"Get-HostedOutboundSpamFilterPolicy": []}))
+    result = _results(db, alpha)["auto_forward_policy"]
+    assert result.status == "unavailable" and result.summary == "Exchange returned no outbound spam policy"
+    report = data_reports.build(db, store.get_tenant(db, alpha), "mailboxes")
+    forwarding = next(h for h in report.highlights if h.label == "Automatic forwarding")
+    assert (forwarding.value, forwarding.tone) == ("Unknown", None)
+
+
 def test_forwarding_to_an_unresolved_recipient_is_flagged(db, two_tenants):
     alpha, _ = two_tenants
     mailboxes = copy.deepcopy(gd.EXCHANGE["Get-Mailbox"])
