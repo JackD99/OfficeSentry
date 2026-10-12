@@ -76,7 +76,9 @@ The defaults are the secure ones. Nothing below needs switching on.
 - **A report area taken away stays away.** Someone who can't open a report
   area on a client (a role without it, or taken away with *Customise*) can't
   schedule it by email, download it from the report history or see it in a
-  report design, and the home pages leave it out of their counts. Every report
+  report design, the home pages leave it out of their counts, and *What
+  changed* leaves out its changes (and findings, without *Security findings and
+  reviews*). Every report
   email opens with the client's security summary, so setting up, changing or
   previewing one needs *Security findings and reviews* on that client.
 

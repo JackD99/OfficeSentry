@@ -230,6 +230,7 @@ def test_a_user_manager_who_is_not_an_administrator_cannot_raise_anyones_access(
     for uid in (boss, wide):
         page = client.get(f"/admin/users/{uid}").data.decode()
         assert "only an administrator can change" in page.lower() and "Save changes" not in page
+        assert "Signed in on" not in page and "Sign out everywhere" not in page  # nor their sessions
         assert "Delete " not in page and "Reset two-step" not in page
         client.post(f"/admin/users/{uid}", data={"role": str(first_line.id), "password": "x" * 16})
         client.post(f"/admin/users/{uid}/delete")
@@ -293,8 +294,15 @@ def test_a_user_manager_who_is_not_an_administrator_cannot_raise_anyones_access(
     assert edited.capabilities == first_line.capabilities | {"collect"} and edited.scope == "granted"
     client.post("/admin/roles", data={"name": "Leads", "copy": str(team_leader.id)})
     assert db.execute("SELECT 1 FROM roles WHERE name = 'Leads'").fetchone() is None
+    # Nor take anything out of a role wider than their own (they couldn't put it back), or reset or delete one.
+    page = client.get(f"/admin/roles/{team_leader.id}").data.decode()
+    assert "Only an Administrator can change this role." in page and "put back anything you took out" in page
+    assert "Save role" not in page and "Reset to default" not in page
     client.post(f"/admin/roles/{team_leader.id}", data={"name": "Team leader", "capabilities": ["export"]})
-    shrunk = roles.get(db, team_leader.id)
-    assert shrunk.scope == "all" and "settings.manage" not in shrunk.capabilities
+    assert roles.get(db, team_leader.id) == team_leader
+    roles.update(db, "admin", team_leader, "Team leader", "", "all", team_leader.capabilities - {"export"})
     client.post(f"/admin/roles/{team_leader.id}/reset")
     assert roles.get(db, team_leader.id).changed_from_template
+    wider = roles.create(db, "admin", "Wider", "", permissions.STAFF, "all", ["reports.identity"])
+    client.post(f"/admin/roles/{wider}/delete")
+    assert roles.get(db, wider) is not None

@@ -29,7 +29,9 @@ Office Sentry yourself; it's how the project shows itself.
   switches are needed, so the setting
   alone does nothing to a real portal, and an admin account called `demo` signs nobody in.
 - **Limits.** The demo gets at most one CPU and 1 GB of memory, so a busy demo can't starve the portal or
-  its worker. It can't collect (its tenants aren't real) and sends no email.
+  its worker. PDFs, which take it seconds each, go through two at a time (the `@pdf` block in the
+  Caddyfile) and the rest wait their turn, so its pages stay quick however many anyone asks for. It can't
+  collect (its tenants aren't real) and sends no email.
 - **Kept out of search engines.** Every page says `noindex`.
 
 It is the same machine, though, so a flaw that let someone break out of the demo's container would reach

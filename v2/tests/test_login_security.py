@@ -217,6 +217,32 @@ def test_every_visit_to_two_step_setup_makes_a_new_secret(app, db, vault, staff_
     assert vault.decrypt(db.execute("SELECT totp_secret_enc FROM users").fetchone()[0]) == secret
 
 
+def test_reloading_two_step_setup_keeps_the_qr_code_just_scanned(app, db, vault, staff_mfa):
+    make_user(db, "client", role="client")
+    person, other = app.test_client(), app.test_client()
+    login(person, "client")
+    login(other, "client")
+    person.get("/two-step/setup")
+    scanned = pending_secret(db, vault, "client")
+    person.get("/two-step/setup")
+    assert pending_secret(db, vault, "client") == scanned
+    # A few minutes on, a reload is a new visit.
+    with person.session_transaction() as cookie:
+        cookie["two_step_shown"] = {**cookie["two_step_shown"], "at": cookie["two_step_shown"]["at"] - 5 * 60}
+    person.get("/two-step/setup")
+    scanned = pending_secret(db, vault, "client")
+    # Another browser always gets a new one, and this browser's reload then does too.
+    other.get("/two-step/setup")
+    assert pending_secret(db, vault, "client") != scanned
+    seen_elsewhere = pending_secret(db, vault, "client")
+    person.get("/two-step/setup")
+    secret = pending_secret(db, vault, "client")
+    assert secret not in (scanned, seen_elsewhere)
+    person.get("/two-step/setup")
+    person.post("/two-step/setup", data={"code": totp.code(secret), "password": PASSWORD})
+    assert vault.decrypt(db.execute("SELECT totp_secret_enc FROM users").fetchone()[0]) == secret
+
+
 NEW_PASSWORD = "my own long passphrase"
 
 
@@ -423,6 +449,9 @@ def test_setup_link_is_logged_and_private(cfg, db, caplog):
     assert f"/setup?token={token}" in caplog.text
     if os.name != "nt":
         assert stat.S_IMODE(os.stat(cfg.data_dir / "setup-token").st_mode) == 0o600
+    # The log file (in support packages and on the Support page) says where the link is, not the token.
+    in_file = (cfg.data_dir / "logs" / "web.log").read_text(encoding="utf-8")
+    assert "No admin account yet" in in_file and "setup-link" in in_file and token not in in_file
 
 
 # -- Redirects, cookies, proxies -------------------------------------------------------

@@ -16,7 +16,7 @@ from ..exchange import ExchangeAccessDenied, ExchangeError
 from ..graph import GraphError, PermissionMissing
 from ..text import plural
 from . import mailbox_window
-from .base import Collector, RunContext, register
+from .base import Collector, NothingToRead, RunContext, register
 
 MAILBOX_TYPES = {"UserMailbox", "SharedMailbox"}
 # What Graph answers for an account with no Exchange Online mailbox (or one hosted on-premises).
@@ -39,7 +39,12 @@ def _targets(ctx: RunContext) -> list[dict]:
                 if m.get("ExternalDirectoryObjectId") and m.get("RecipientTypeDetails") in MAILBOX_TYPES
             ]
     run = store.latest_run(ctx.conn, ctx.tenant["id"], "users")
-    users = store.run_objects(ctx.conn, run["id"], "user") if run else []
+    if run is None:
+        raise NothingToRead(
+            "Neither mailboxes nor users have been collected for this client yet, so there were no mailboxes to "
+            "read. The next collection reads them first, then this."
+        )
+    users = store.run_objects(ctx.conn, run["id"], "user")
     return [
         {"id": u["_id"], "upn": u.get("userPrincipalName"), "type": "UserMailbox"}
         for u in users

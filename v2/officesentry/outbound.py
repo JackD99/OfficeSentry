@@ -1,11 +1,13 @@
-"""Outbound HTTPS to addresses an admin or analyst typed: webhooks and MTA-STS policy files.
+"""Outbound connections to addresses an admin or analyst typed: webhooks, MTA-STS policy files and the SMTP server.
 
 ``public_address`` resolves the host once and refuses it if any address is
 internal (private, loopback, link-local, reserved...). ``pinned_session``
 then connects to exactly that address, keeping the host name for TLS (SNI and
 the certificate check) and the Host header, so a DNS answer that changes
 between the check and the request (DNS rebinding) can't send the request to an
-internal address.
+internal address. Behind a proxy (``HTTPS_PROXY``) the proxy is asked for that
+address too. ``mail_server_address`` is the SMTP server's check (``mailer``
+connects to the address it returns).
 """
 
 from __future__ import annotations
@@ -60,6 +62,25 @@ def public_address(host: str, port: int = 443) -> str:
     addresses = resolve(host, port)
     for address in addresses:
         if not _is_public(ipaddress.ip_address(address)):
+            raise NotPublic(host, address)
+    return addresses[0]
+
+
+def _never_a_server(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Link-local (where cloud metadata services answer), multicast, reserved and unspecified addresses."""
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    if ip.is_loopback:  # ::1 is in IPv6's reserved ::/8
+        return False
+    return ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified
+
+
+def mail_server_address(host: str, port: int) -> str:
+    """The address to connect to for the SMTP server. Unlike ``public_address`` it allows this machine and the
+    local network, where mail relays often are, but nothing that is never a mail server. Raises otherwise."""
+    addresses = resolve(host, port)
+    for address in addresses:
+        if _never_a_server(ipaddress.ip_address(address)):
             raise NotPublic(host, address)
     return addresses[0]
 

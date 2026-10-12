@@ -133,6 +133,7 @@ jobs:
         with:
           name: website
           path: website/_site/
+          include-hidden-files: true  # .well-known/security.txt
           if-no-files-found: error
           retention-days: 1
           overwrite: true  # re-running the job uploads it again

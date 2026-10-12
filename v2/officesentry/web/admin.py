@@ -323,6 +323,7 @@ def edit_user(user_id: int):
         return redirect(url_for("admin.edit_user", user_id=user_id))
     granted = {r["tenant_id"] for r in g.db.execute("SELECT tenant_id FROM user_tenants WHERE user_id = ?", (user_id,))}
     all_roles = roles.all_roles(g.db)
+    beyond = out_of_reach(user)
     return render_template(
         "user_edit.html",
         user=user,
@@ -333,7 +334,7 @@ def edit_user(user_id: int):
         roles=all_roles,
         givable={r.id for r in all_roles if _givable(r)},
         actor=actor,
-        out_of_reach=out_of_reach(user),
+        out_of_reach=beyond,
         own_access=_own_access(user),
         grantable=actor.everywhere(),
         capabilities=permissions.CAPABILITIES,
@@ -344,7 +345,7 @@ def edit_user(user_id: int):
         tenant_names={t["id"]: t["name"] for t in tenants},
         groups=tenant_groups.all_groups(g.db) if actor.sees_all else [],
         granted_groups=tenant_groups.user_groups(g.db, user_id),
-        sessions=sessions.list_for(user_id),
+        sessions=[] if beyond else sessions.list_for(user_id),  # an Administrator's are for Administrators
         locked=_is_locked(user),
         failures=throttle.recent_failures(g.db, user["username"]),
         two_step_required=current_app.extensions["officesentry.config"].mfa_required(user["role"], g.db),
@@ -718,6 +719,8 @@ def set_client_id(conn_id: int):
         with transaction(g.db):
             g.db.execute("UPDATE app_connections SET client_id = ? WHERE id = ?", (client_id, conn_id))
             audit(g.db, g.user["username"], "connection_client_id_set", detail=client_id)
+            if not old:  # made by hand from this page's steps, which list every permission this release asks for
+                permission_batch.mark_app(g.db, conn_id, g.user["username"], "by hand, with the client ID")
             again = _consent_again(conn_id, old, client_id) if old and old != client_id else 0
         if not home:
             flash("Client ID saved.", "success")

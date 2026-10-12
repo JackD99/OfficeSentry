@@ -107,7 +107,9 @@ def test_size_growth_and_history_across_collections(db, two_tenants):
     page = mailbox_page.build(db, _tenant(db, alpha), "u1", NOW)
     size = _parts(page)["size"]
     assert size.chart.startswith("<svg") and size.tables[0].title == "Size by month"
-    assert [row[0] for row in size.tables[0].rows] == [NOW.strftime("%Y-%m")]
+    # A month per month the two collections ran in, by the clock (NOW only says where the page looks from).
+    ran = {r[0][:7] for r in db.execute("SELECT finished_at FROM runs WHERE collector = 'mailbox_usage'")}
+    assert [row[0] for row in size.tables[0].rows] == sorted(ran)
     assert ("Forwarding set by an admin", "None") in _parts(page)["forwarding"].facts
     events = {(e.area, e.text) for e in page.history}
     assert ("Forwarding", "Removed") in events and ("Settings", "Litigation hold turned on") in events

@@ -336,6 +336,8 @@ def history_cutoffs(policy: Policy, now: datetime | None = None) -> dict[str, da
 
 
 HISTORY_STORES = {"history_signin_days": "signins", "history_daily_months": "daily", "history_audit_years": "audits"}
+# Each log's history is the stores read from it: the sign-in log's is its sign-ins and their daily summaries.
+HISTORY_SOURCES = {"signins": ("history_signin_days", "history_daily_months"), "audits": ("history_audit_years",)}
 
 
 def prune_state(conn, months: int | None, now: datetime | None = None, dry_run: bool = False) -> int:
@@ -349,10 +351,16 @@ def prune_state(conn, months: int | None, now: datetime | None = None, dry_run: 
 
 
 def prune_history(conn, policy: Policy, now: datetime | None = None, dry_run: bool = False) -> dict[str, int]:
-    """Delete (or count) activity history older than its period, per setting."""
+    """Delete (or count) activity history older than its period, per setting. The history then starts where
+    the longest-kept of its stores does (``events.trim_coverage``)."""
     out = {}
-    for key, cutoff in history_cutoffs(policy, now).items():
+    cutoffs = history_cutoffs(policy, now)
+    for key, cutoff in cutoffs.items():
         out[key] = 0 if cutoff is None else events.prune(conn, HISTORY_STORES[key], cutoff, dry_run=dry_run)
+    for source, keys in HISTORY_SOURCES.items():
+        kept_from = [cutoffs[key] for key in keys]
+        if not dry_run and None not in kept_from:
+            events.trim_coverage(conn, source, min(kept_from))
     return out
 
 

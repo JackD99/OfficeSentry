@@ -260,6 +260,32 @@ def test_cli_create_app_also_reuses_the_generated_certificate(db, cfg, vault, mo
 
 
 @pytest.mark.parametrize(
+    ("tenant", "answer", "words"),
+    [
+        ("organizations", None, "couldn't reach Microsoft's sign-in service"),  # no network
+        ("nowhere.example", (400, {"error": "invalid_tenant"}), "Microsoft doesn't know the tenant nowhere.example"),
+        ("organizations", (503, {}), "sign-in service isn't working right now"),
+    ],
+)
+@responses.activate
+def test_cli_app_commands_say_why_sign_in_failed_without_a_traceback(db, cfg, vault, tenant, answer, words):
+    from argparse import Namespace
+
+    from officesentry import __main__ as cli
+
+    if answer:
+        responses.add(
+            responses.GET, f"{LOGIN}/{tenant}/v2.0/.well-known/openid-configuration", status=answer[0], json=answer[1]
+        )
+    with pytest.raises(SystemExit, match=words):
+        cli.cmd_create_app(Namespace(name="Office Sentry (read-only)", tenant=tenant, cloud="commercial"), cfg)
+    assert not store.list_connections(db)
+    store.create_connection(db, vault, "Office Sentry", generate_certificate("x"), client_id=APP_ID)
+    with pytest.raises(SystemExit, match=words):
+        cli.cmd_update_app(Namespace(connection=None, tenant=tenant), cfg)
+
+
+@pytest.mark.parametrize(
     ("body", "words"),
     [
         (

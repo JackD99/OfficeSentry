@@ -37,7 +37,7 @@ from email.utils import formataddr, parseaddr
 
 import requests
 
-from . import clouds
+from . import clouds, outbound
 from .text import nouns
 
 EMAIL_RE = re.compile(r"^[^@\s,;<>]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$")
@@ -284,6 +284,19 @@ def is_loopback(host: str) -> bool:
         return False
 
 
+class _CheckedAddress:
+    """Mixed into smtplib's classes: resolves the server once, refuses an address that is never a mail server
+    (``outbound.mail_server_address``) and connects to that address, while EHLO, TLS's server name and the
+    certificate check keep the host name."""
+
+    def _get_socket(self, host, port, timeout):
+        return super()._get_socket(outbound.mail_server_address(host, port), port, timeout)
+
+
+def _checked(cls):
+    return type(cls.__name__, (_CheckedAddress, cls), {})
+
+
 def _send_smtp(s: dict, vault, email: Email) -> None:
     sender = s["smtp_from"]
     if s.get("msp_name") and "<" not in sender:
@@ -294,9 +307,9 @@ def _send_smtp(s: dict, vault, email: Email) -> None:
     context = ssl.create_default_context()
     try:
         if security == "ssl":
-            server = smtplib.SMTP_SSL(s["smtp_host"], port, context=context, timeout=60)
+            server = _checked(smtplib.SMTP_SSL)(s["smtp_host"], port, context=context, timeout=60)
         else:
-            server = smtplib.SMTP(s["smtp_host"], port, timeout=60)
+            server = _checked(smtplib.SMTP)(s["smtp_host"], port, timeout=60)
         with server:
             if security == "starttls":
                 server.starttls(context=context)
@@ -309,6 +322,13 @@ def _send_smtp(s: dict, vault, email: Email) -> None:
                 password = vault.decrypt(s["smtp_password_enc"]) if s.get("smtp_password_enc") else ""
                 server.login(s["smtp_user"], password)
             server.send_message(msg, from_addr=parseaddr(sender)[1], to_addrs=[*email.to, *email.bcc])
+    except outbound.LookupFailed as exc:
+        raise MailError(f"Couldn't look up the mail server {s['smtp_host']}") from exc
+    except outbound.NotPublic as exc:
+        raise MailError(
+            f"{s['smtp_host']} resolves to {exc.address}, a link-local, multicast or reserved address that is never "
+            "a mail server, so Office Sentry didn't connect. A relay on this machine or your network is fine"
+        ) from None
     except smtplib.SMTPAuthenticationError as exc:
         raise MailError("The mail server rejected the username or password") from exc
     except smtplib.SMTPRecipientsRefused as exc:

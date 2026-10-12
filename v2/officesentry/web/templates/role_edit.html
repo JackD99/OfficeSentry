@@ -7,7 +7,9 @@
   <div class="sub">{{ 'Built-in' if role.built_in else 'Custom' }} role for {{ 'everyone who runs Office Sentry' if role.kind == 'admin' else 'staff' if role.kind == 'staff' else "a client's people" }}
     · {{ holders|length|plural('person', 'people') }} hold{{ 's' if holders|length == 1 else '' }} it{% if role.changed_from_template %} · changed from its default{% endif %}</div></div></div>
 
-{% if held_by_more %}
+{% if holds_more %}
+<div class="callout">{{ icon('shield') }}<span class="grow"><strong>Only an Administrator can change this role.</strong> It can see or do more than you can, so you couldn't put back anything you took out of it.</span></div>
+{% elif held_by_more %}
 <div class="callout">{{ icon('shield') }}<span class="grow"><strong>Only an Administrator can change this role.</strong> Someone holding it can see or do more than you can, and changing the role would change what they can do.</span></div>
 {% endif %}
 {% if not role.editable %}

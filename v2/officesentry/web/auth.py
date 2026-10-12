@@ -12,6 +12,7 @@ account's two-step step for LOCKOUT after MAX_FAILURES.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import time
 from datetime import UTC, datetime, timedelta
@@ -33,6 +34,7 @@ MIN_PASSWORD = 12
 MAX_FAILURES = 5  # wrong two-step codes (sign-in or enrolment) before LOCKOUT; wrong confirmations (confirm_password)
 LOCKOUT = timedelta(minutes=15)
 PENDING_SECONDS = 10 * 60
+SAME_SECRET_SECONDS = 5 * 60  # this browser reloading two-step setup keeps the QR code it may have just scanned
 # Compared against when the username doesn't exist, so timing doesn't reveal it.
 _DUMMY_HASH = generate_password_hash("not-a-real-password")
 _SIGN_IN_FAILED = "Invalid username or password, or the account is temporarily locked."
@@ -431,14 +433,25 @@ def two_step_setup():
 
 
 def _setup_page(user, signed_in: bool, fresh: bool):
-    """The QR code to scan. Every visit (``fresh``) makes a new secret, so whoever saw the page before (with a
-    stolen session, say) doesn't know the one the person goes on to add; a wrong code shows the same one."""
+    """The QR code to scan. A visit (``fresh``) makes a new secret, so whoever saw the page in another browser
+    (with a stolen session, say) doesn't know the one the person goes on to add. A wrong code shows the same
+    one, and so does this browser reloading the page within ``SAME_SECRET_SECONDS`` of making it, so a QR code
+    just scanned still works."""
     vault = _vault()
-    if user["totp_pending_enc"] and not fresh:
-        secret = vault.decrypt(user["totp_pending_enc"])
+    pending = user["totp_pending_enc"]
+    shown = session.get("two_step_shown") or {}
+    recent = (
+        pending is not None
+        and shown.get("for") == hashlib.sha256(pending.encode()).hexdigest()
+        and time.time() - shown.get("at", 0) < SAME_SECRET_SECONDS
+    )
+    if pending and (not fresh or recent):
+        secret = vault.decrypt(pending)
     else:
         secret = totp.new_secret()
-        g.db.execute("UPDATE users SET totp_pending_enc = ? WHERE id = ?", (vault.encrypt(secret), user["id"]))
+        pending = vault.encrypt(secret)
+        g.db.execute("UPDATE users SET totp_pending_enc = ? WHERE id = ?", (pending, user["id"]))
+        session["two_step_shown"] = {"for": hashlib.sha256(pending.encode()).hexdigest(), "at": int(time.time())}
     return render_template(
         "two_step_setup.html",
         signed_in=signed_in,

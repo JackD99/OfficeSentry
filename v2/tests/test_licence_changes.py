@@ -85,19 +85,21 @@ def _licence_event(eid, activity, days, by, uid, upn, props=()):
     )
 
 
-AUDITS = [
-    _licence_event(
-        "e1",
-        "Update user",
-        2,
-        "admin@x.com",
-        "u5",
-        "eve@x.com",
-        [ad.prop("AssignedLicense", ["[SkuName=Microsoft_365_Copilot, SkuId=sku-copilot, DisabledPlans=[]]"], [])],
-    ),
-    _licence_event("e2", "Change user license", 3, "helpdesk@x.com", "u1", "ann@x.com"),
-    _licence_event("e3", "Update user", 1, "admin@x.com", "u5", "eve@x.com", [ad.prop("DisplayName", "Eve", "E")]),
-]
+def _audits() -> list[dict]:
+    """Dated when the test reads them (a run may pass midnight UTC after this module loads)."""
+    return [
+        _licence_event(
+            "e1",
+            "Update user",
+            2,
+            "admin@x.com",
+            "u5",
+            "eve@x.com",
+            [ad.prop("AssignedLicense", ["[SkuName=Microsoft_365_Copilot, SkuId=sku-copilot, DisabledPlans=[]]"], [])],
+        ),
+        _licence_event("e2", "Change user license", 3, "helpdesk@x.com", "u1", "ann@x.com"),
+        _licence_event("e3", "Update user", 1, "admin@x.com", "u5", "eve@x.com", [ad.prop("DisplayName", "Eve", "E")]),
+    ]
 
 
 def _a_month_of_changes(db, tenant_id):
@@ -105,7 +107,7 @@ def _a_month_of_changes(db, tenant_id):
     _backdate_all(db, tenant_id, 40)
     _collect(db, tenant_id, "users", users=LATER_USERS)
     _collect(db, tenant_id, "tenant_profile", users=LATER_USERS, skus=LATER_SKUS)
-    _collect(db, tenant_id, "admin_activity", users=LATER_USERS, audits=AUDITS)
+    _collect(db, tenant_id, "admin_activity", users=LATER_USERS, audits=_audits())
 
 
 def test_needs_two_collections_to_compare(db, two_tenants):

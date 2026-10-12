@@ -367,6 +367,24 @@ def test_added_by_hand(client, db, connection_id):
     assert store.get_connection(db, connection_id)["permissions_release"] == "2.2"
 
 
+def test_an_app_made_by_hand_from_the_steps_is_not_asked_to_update(client, db, vault):
+    """The page's steps for making the app by hand list every permission, the batch's included."""
+    from officesentry.certs import generate_certificate
+
+    conn_id = store.create_connection(db, vault, "By hand", generate_certificate("h"))
+    make_user(db, "admin")
+    login(client, "admin")
+    client.post(f"/admin/connections/{conn_id}/client-id", data={"client_id": CLIENT_ID})
+    assert store.get_connection(db, conn_id)["permissions_release"] == BATCH.release
+    assert "Update this app for Office Sentry" not in client.get("/admin/connections").get_data(as_text=True)
+
+    # A connection that already had an app keeps what it knew: the new ID may be an older app.
+    db.execute("UPDATE app_connections SET permissions_release = NULL WHERE id = ?", (conn_id,))
+    db.commit()
+    client.post(f"/admin/connections/{conn_id}/client-id", data={"client_id": CLIENT_ID.replace("1", "9")})
+    assert store.get_connection(db, conn_id)["permissions_release"] is None
+
+
 def test_a_new_app_asks_for_the_latest_batch(db, vault):
     from officesentry import app_setup
     from officesentry.certs import generate_certificate

@@ -42,6 +42,7 @@ from . import (
     throttle,
 )
 from .collectors import REGISTRY, RunContext
+from .collectors.base import NothingToRead
 from .config import Config
 from .connection_check import explain
 from .crypto import Vault
@@ -216,7 +217,7 @@ def _run_collector(
         else:
             collector_cls().collect(ctx)
             ctx.note_exchange_cuts()
-    except (NotConnected, PermissionMissing, LicenseRequired, GraphError, ExchangeError) as exc:
+    except (NotConnected, NothingToRead, PermissionMissing, LicenseRequired, GraphError, ExchangeError) as exc:
         store.log_event(conn, run_id, "error", str(exc))
         # Sign-in failures get the plain explanation; the raw message stays in the run log.
         problem = explain(getattr(exc, "message", ""), getattr(exc, "code", ""))

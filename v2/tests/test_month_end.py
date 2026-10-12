@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 
+import pytest
 import responses
 
 from officesentry import delivery, lifecycle, mailer, month_end, store, tasks
@@ -18,8 +19,20 @@ from tests.test_email import (  # noqa: F401 (autouse fixture)
     sends,
 )
 
-NOW = datetime.now(UTC)
-PERIOD = f"{NOW.year}-{NOW.month:02d}"  # the server timezone in tests is UTC
+
+def this_month() -> str:
+    now = datetime.now(UTC)
+    return f"{now.year}-{now.month:02d}"  # the server timezone in tests is UTC
+
+
+PERIOD = this_month()
+
+
+@pytest.fixture(autouse=True)
+def _this_month():
+    """This month as the test starts, not as the module loaded: a run may pass midnight at a month's end."""
+    global PERIOD
+    PERIOD = this_month()
 
 
 def _plan(client, tenants, mode="approval", delivery_="email", **extra):
@@ -232,6 +245,26 @@ def test_a_data_source_never_collected_is_flagged(client, db, two_tenants):
     db.execute("UPDATE runs SET status = 'failed' WHERE tenant_id = ? AND collector != 'inbox_rules'", (bravo,))
     rows = {r.tenant["id"]: r for r in month_end.queue(db, tenants, PERIOD, cached=False)}
     assert rows[bravo].flags == ["No checks could run"] and not rows[bravo].ready and rows[alpha].ready
+
+
+def test_a_paused_clients_month_is_named_under_the_queue_not_listed(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    seed_tenant(db, alpha)
+    _admin(client, db)
+    _plan(client, [alpha, bravo])
+    lifecycle.pause(db, store.get_tenant(db, bravo), "admin")
+    page = client.get(f"/reporting/{PERIOD}").get_data(as_text=True)
+    table, below = page.split('id="paused"')
+    assert "Alpha Ltd" in table and "Bravo Inc" not in table and "No data collected yet" not in table
+    assert "Bravo Inc" in below
+    assert '<div class="label">Draft</div><div class="value">1</div>' in page
+
+    # A month already acted on stays listed, paused or not.
+    month_end.update_review(db, bravo, PERIOD, "admin", state="approved")
+    assert 'id="paused"' not in client.get(f"/reporting/{PERIOD}").get_data(as_text=True)
+    lifecycle.pause(db, store.get_tenant(db, alpha), "admin")
+    month_end.update_review(db, bravo, PERIOD, "admin", state="draft")
+    assert "Every client on a report plan is paused" in client.get(f"/reporting/{PERIOD}").get_data(as_text=True)
 
 
 def test_review_suggests_projects_then_quick_fixes(client, db, two_tenants):
@@ -593,6 +626,31 @@ def test_switching_a_plan_to_automatic_does_not_email_an_unapproved_month(
     assert s["on_approval"] == 0 and s["last_period"] == "2026-10"
     db.execute("UPDATE runs SET finished_at = ?", (oct5.strftime("%Y-%m-%dT%H:%M:%SZ"),))
     assert delivery.tick(app, db, vault, cfg, oct5) == 0 and sends() == []
+
+
+def test_an_automatic_plan_with_nobody_to_email_says_so_on_its_day(app, db, two_tenants, vault, cfg, monkeypatch):
+    alpha, _ = two_tenants
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: b"%PDF-1.7")
+    seed_tenant(db, alpha)
+    _smtp_ready(db)
+    schedule = _auto_plan(db, alpha, now=datetime(2026, 9, 15, tzinfo=UTC))
+    sep30, oct1 = datetime(2026, 9, 30, 9, 0, tzinfo=UTC), datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
+    db.execute("UPDATE runs SET finished_at = ?", (oct1.strftime("%Y-%m-%dT%H:%M:%SZ"),))
+    assert delivery.tick(app, db, vault, cfg, sep30) == 0  # not its day yet
+    assert db.execute("SELECT COUNT(*) FROM email_deliveries").fetchone()[0] == 0
+    for _ in range(2):  # the timer comes round every minute; it's said once
+        assert delivery.tick(app, db, vault, cfg, oct1) == 0
+    (row,) = db.execute("SELECT * FROM email_deliveries").fetchall()
+    assert row["status"] == "failed" and row["period"] == "2026-10" and row["schedule_id"] == schedule["id"]
+    assert "Alpha Ltd has no contacts" in row["error"] and sends() == []
+    s = db.execute("SELECT * FROM email_schedules WHERE id = ?", (schedule["id"],)).fetchone()
+    assert s["last_status"] == "failed" and s["last_period"] == "2026-09"
+
+    # A contact added joins the plan's email, and the month goes out at the next tick.
+    month_end.contact_added(db, alpha, delivery.add_contact(db, alpha, "", "it@alpha.com"))
+    assert delivery.tick(app, db, vault, cfg, oct1) == 1 and len(sends()) == 1
+    s = db.execute("SELECT * FROM email_schedules WHERE id = ?", (schedule["id"],)).fetchone()
+    assert s["last_status"] == "sent" and s["last_period"] == "2026-10"
 
 
 def test_send_now_after_an_early_approval_does_not_send_the_month_again(app, db, two_tenants, vault, cfg, monkeypatch):

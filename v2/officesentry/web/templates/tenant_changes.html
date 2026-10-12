@@ -33,14 +33,18 @@
 <div class="tiles">
   <div class="tile"><div class="label">Changes</div><div class="value">{{ report.total }}</div>
     <div class="foot">{{ report.key_changes|length }} key, {{ report.report_changes }} in detail reports</div></div>
+  {% if report.findings_shown %}
   <div class="tile{% if report.new_findings %} tone-warn{% endif %}"><div class="label">New findings</div><div class="value">{{ report.new_findings|length }}</div>
     <div class="foot">new or come back</div></div>
   <div class="tile{% if report.fixed_findings %} tone-ok{% endif %}"><div class="label">Fixed findings</div><div class="value">{{ report.fixed_findings|length }}</div>
     <div class="foot">no longer found</div></div>
+  {% endif %}
+  {% if report.score_shown %}
   {% set score = (report.figures|selectattr('key', 'equalto', 'secure_score.pct')|list or [none])[0] %}
   <div class="tile"><div class="label">Secure Score</div>
     <div class="value">{% if score and score.after is not none %}{{ '%g'|format(score.after) }}%{% else %}–{% endif %}</div>
     <div class="foot">{% if score and score.delta %}<span class="delta {{ score.trend }}">{{ '%+g'|format(score.delta) }} pts</span> since {{ report.since|day }}{% elif score and score.delta is not none %}No change since {{ report.since|day }}{% else %}&nbsp;{% endif %}</div></div>
+  {% endif %}
 </div>
 
 <div class="grid-2">
@@ -62,7 +66,8 @@
 
   <section class="card flush">
     <div class="card-head"><h2>Findings</h2></div>
-    {% if report.new_findings or report.fixed_findings %}
+    {% if not report.findings_shown %}<div class="empty compact"><p>Left out: you can't open findings for this client.</p></div>
+    {% elif report.new_findings or report.fixed_findings %}
     <ul class="change-list">
       {% for f in report.new_findings[:12] %}<li><span class="chg chg-added">New</span><div><span class="sevtext {{ f.severity }}">{{ f.severity }}</span> {{ titles.get(f.rule_key, f.rule_key) }}<span class="desc">{{ f.subject }}</span></div></li>{% endfor %}
       {% if report.new_findings|length > 12 %}<li class="muted small">…and {{ report.new_findings|length - 12 }} more new. The download lists them all.</li>{% endif %}
