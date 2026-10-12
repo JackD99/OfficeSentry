@@ -30,6 +30,7 @@ NOT_PAGES = {
     "branding.brand_css": "a stylesheet",
     "branding.logo": "an image",
     "reporting.progress": "JSON polled by the queue page",
+    "updates.progress": "JSON polled by the Updates page",
     "email.issued_report": "a file download",
     "auth.setup": "only before the first admin exists",
     "auth.login_code": "only part-way through signing in",

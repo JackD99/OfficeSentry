@@ -487,6 +487,7 @@ JOB_MODULES = (
     "officesentry.system_alerts",
     "officesentry.onboarding",
     "officesentry.lifecycle",
+    "officesentry.updates",
 )
 TASK_MODULES = (
     "officesentry.delivery",

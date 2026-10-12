@@ -16,6 +16,7 @@ from .. import sso as staff_sign_in
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import audit_counted, connect, is_locked, migrate
+from ..updates import available as release_available
 from . import (
     access,
     across,
@@ -51,6 +52,7 @@ from . import (
     tenant_admin,
     tenants,
     upcoming,
+    updates,
 )
 from . import (
     roles as role_pages,
@@ -211,6 +213,8 @@ def create_app(cfg: Config | None = None) -> Flask:
         certificates = [e for e in cert_lifecycle.expiring(g.db) if e.kind != here] if admin else []
         a = access.current() if user and "db" in g else None
         sign_in = staff_sign_in.settings(g.db) if g.get("db") is not None else {}
+        # A newer release, for the note under the version at the foot of the menu (Settings → Updates).
+        newer = release_available(g.db) if a and a.can("system.update") and not g.get("public_demo") else None
         return {
             "current_user": user,
             "current_role": a.role if a else None,
@@ -218,6 +222,7 @@ def create_app(cfg: Config | None = None) -> Flask:
             "worker_down": worker_down,
             "expiring_certificates": certificates,
             "app_version": __version__,
+            "update_available": newer,
             "group_scope": g.get("group_scope"),
             "public_demo": bool(g.get("public_demo")),
             "public_demo_link": public_demo.link() if g.get("public_demo") else "",
@@ -354,6 +359,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(upcoming.bp)
     app.register_blueprint(system.bp)
     app.register_blueprint(support.bp)
+    app.register_blueprint(updates.bp)
     app.register_blueprint(styleguide.bp)
     app.register_blueprint(designs.bp)
     app.register_blueprint(evidence.bp)

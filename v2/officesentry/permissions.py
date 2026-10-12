@@ -116,12 +116,20 @@ CAPABILITIES: tuple[Capability, ...] = (
         "Health checks, the monitoring token and support. Only for someone who sees every client.",
         "run",
     ),
+    Capability(
+        "system.update",
+        "Install updates",
+        "Install a new release of Office Sentry with the Update button (the portal restarts). Only for someone "
+        "who sees every client.",
+        "run",
+    ),
 )
 BY_KEY: dict[str, Capability] = {c.key: c for c in CAPABILITIES}
 # Capabilities about every client at once (team-wide emails and alerts, report plans, the app connection,
-# system status and the support package): they only take effect for someone who sees every client, since
-# with them a person limited to some clients would see or change the others (``roles.access_for``).
-EVERY_CLIENT: frozenset[str] = frozenset({"settings.manage", "system.manage"})
+# system status and the support package, installing an update for everyone): they only take effect for
+# someone who sees every client, since with them a person limited to some clients would see or change the
+# others (``roles.access_for``).
+EVERY_CLIENT: frozenset[str] = frozenset({"settings.manage", "system.manage", "system.update"})
 KEYS: tuple[str, ...] = tuple(BY_KEY)
 CLIENT_KEYS: frozenset[str] = frozenset(c.key for c in CAPABILITIES if c.client_ok)
 # What a report area's reports need: the menu group (registry.GROUP_TITLES) -> capability.

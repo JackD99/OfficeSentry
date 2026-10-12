@@ -51,7 +51,7 @@ overview and DEPLOY.md for running it on a server.
   A role limited to some clients only uses run capabilities within them: client
   groups need `access.manages_groups()` (clients.manage and every client), the
   user list, import preview and activity log leave other clients out, and
-  `permissions.EVERY_CLIENT` (settings, system status) never takes effect
+  `permissions.EVERY_CLIENT` (settings, system status, installing updates) never takes effect
   without every client (`roles.access_for`); `test_limited_roles.py` covers
   each. A report area someone can't open on a client stays closed where a
   page shows or sends a report from inside another: schedules only take
@@ -1025,6 +1025,40 @@ Microsoft) and `support.Redactor` sweeps every piece of free text; a new part is
 Settings values go in the package only when listed in `PLAIN_SETTINGS` (or a prefix in
 `PLAIN_SETTING_PREFIXES`); everything else is a name and a length.
 
+## Updates and the updater
+
+*Settings → Updates* (`web/updates.py`, capability `system.update`: admins by default, in `EVERY_CLIENT`)
+lists every release newer than the one running, with its notes split by `updates.parse_notes` (summary, Action required,
+New Microsoft permissions, Database upgrade, Security) and drawn by `web/release_notes.render`, which escapes
+everything and keeps only https links (relative ones point at the release's tag on GitHub). The list comes
+from `updates.check`: GitHub's releases API, once a day from the `updates` periodic job (setting
+`updates.check`, on unless an admin turns it off) or on *Check now*. The job never asks GitHub under
+`cfg.testing` or on the public demo; `tests/test_updates.py` mocks GitHub's answers with `responses`. The
+menu's foot says when a release is out (`updates.available`).
+
+Installing is the **updater** (`updater.py`, `python -m officesentry updater`), the `updater` service in
+`docker-compose.yml`: off until `COMPOSE_PROFILES=updater`, root in its own container with the Docker socket
+and the compose folder (`/project`), never the keys. It talks to Docker through `docker_api.py` (stdlib HTTP
+over the Unix socket; listed in `test_no_writes.ALLOWED`) and runs `docker compose` and cosign in helper
+containers pinned by digest (`COMPOSE_IMAGE`, `COSIGN_IMAGE`; CONTRIBUTING.md, "Dependencies"). The portal
+and the updater only share files on the data volume: the portal writes `updates/request.json` (`updates.Request`,
+version and who asked; `request_update`) and reads `updates/updater.json` (`updates.Status`: heartbeat,
+readiness, the current `Job` and its `Step`s), which the page polls through `/admin/updates/progress`. The
+updater's own record of a job, which it resumes from after a restart, is `/state/updater.json` in the
+`updater-state` volume the portal never mounts, so a compromised portal can't forge a rollback. A job is
+check, verify, download, switch, health, finish (`updater.STEPS`); it refuses (`Refused`) anything but a
+published, newer, same-major release of this repository whose index digest has build provenance signed by
+`release.yml` for the tag's commit and whose `docker-compose.yml` and `Caddyfile` at that commit are the
+install's (`same_files`, `RELEASE_FILES`: the button only changes the image, so a release that changes them,
+or a file edited on the server, is a hand update), and goes back by itself (`Broken`, `rollback`) when the new version
+doesn't start healthy, restoring the `pre-upgrade-*` copy `db.migrate` made when the database changed
+(`pre_upgrade_copy`). `record_finished` audits how each job ended (`update_installed`, `update_rolled_back`,
+`update_failed`, `update_refused`) from the worker; the page audits `update_requested`.
+`tests/test_updater.py` runs the whole flow against a fake Docker and GitHub; `tests/test_docker_api.py` the
+client against a fake engine on a Unix socket. The updater only works with the published image and compose
+folder layout DEPLOY.md describes; anything else (a build from source, Portainer, Kubernetes) gets a reason
+on the page instead of the button.
+
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
@@ -1032,7 +1066,9 @@ Add `migrations/NNNN_description.sql`. Never edit an applied migration.
 processes may start at once) and, before taking the write lock, copies a
 database that already has a schema to `backups/pre-upgrade-*-from-<release>.db`
 (`backups.before_upgrade`); restoring that copy is the only way back, since
-migrations only go forward. Copies check free disk first. Backups and
+migrations only go forward. A second process upgrading at the same moment
+reuses the first one's copy, but only a copy made since the database last
+changed, so an upgrade retried after going back gets a fresh one. Copies check free disk first. Backups and
 pre-restore copies are gzipped after SQLite's backup API (`restore` takes
 `.db.gz` and plain `.db`); pre-upgrade copies stay plain, since an older
 release (whose `restore` may not read gzip) restores them. Code
@@ -1069,6 +1105,7 @@ and `python -m officesentry <command>`:
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
 | `support-package [--out FILE\|-] [--include-identifiers]` | the zip to attach to a bug report (`support.py`): versions, settings, health, failures and logs with secrets and client names taken out; works over a broken database or configuration |
 | `live-test [--record FILE] [--canary REPORT]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture or compare the answers' shape with it (the live canary) |
+| `updater` | the updater container's loop (`updater.py`): installs a release when an admin presses Update; reads no configuration and no keys |
 
 Keys: `secrets.json` lives at `OFFICESENTRY_SECRETS_FILE` when set (Docker: `/keys/secrets.json`, its own
 volume), else in the data folder; `config.move_secrets` moves one left in the data folder on start. Never

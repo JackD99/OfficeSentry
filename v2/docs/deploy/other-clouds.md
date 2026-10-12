@@ -37,8 +37,9 @@ exactly the Docker setup in [Running it on your own server](../../DEPLOY.md).
    [Off-site backups](../../DEPLOY.md#off-site-backups) with another provider.
 
 Updating and every other command are as in [Running it on your own server](../../DEPLOY.md), in
-`/opt/officesentry`. If a release changes `docker-compose.yml` or `Caddyfile`, run
-`sudo sh /opt/officesentry/install.sh`: it downloads the newest files and keeps your `.env`.
+`/opt/officesentry`, including [the Update button](../../DEPLOY.md#the-update-button). If a release
+changes `docker-compose.yml` or `Caddyfile`, run `sudo sh /opt/officesentry/install.sh`: it downloads the
+newest files and keeps your `.env`.
 
 ## Where each host keeps these
 
