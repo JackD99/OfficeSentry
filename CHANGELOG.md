@@ -11,29 +11,9 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.3.0] - Unreleased
 
-### New Microsoft permissions
+### Database upgrade
 
-None. These use permissions added in 2.2 (`DeviceManagementConfiguration.Read.All`,
-`DeviceManagementApps.Read.All`, `BitLockerKey.ReadBasic.All` and
-`PrivilegedEligibilitySchedule.Read.AzureADGroup`), which nothing read until now.
-
-### Added
-
-- **Intune policies report** (Devices menu). Which platforms have devices enrolled but no compliance policy,
-  what each compliance policy requires in plain words, configuration profiles and Windows update rings
-  (deferral days, restart deadline, paused or not), endpoint security and settings catalog policies, and app
-  protection for iPhones and Android phones (PIN, sharing, copy and paste, backups), each with who it's
-  assigned to. Needs attention lists policies assigned to nobody, paused update rings, compliance policies
-  that require nothing and app protection without a PIN. It reads the Intune permissions clients approved
-  with 2.2; until a client has, the report says it's waiting.
-- **BitLocker recovery keys** in the Devices report: every Windows computer joined to Entra ID, whether its
-  recovery key is saved there, how many keys and when the newest was saved. Office Sentry reads only that a
-  key exists, never the key. A computer Intune reports as encrypted with no saved key is flagged, since it
-  can't be unlocked if it asks for its key.
-- **Two device checks**: *Windows computers have their BitLocker recovery key saved* and *Every platform in
-  use has a compliance policy*, both in the Device management with Intune project.
-- **PIM for groups in the Admins report**: people who can make themselves a member of a group that holds an
-  admin role are listed with that role as eligible, marked "(eligible member)" beside the group.
+Yes, applied on start as usual: migration 41 adds a count of wrong passwords to each signed-in browser.
 
 ### Changed
 
@@ -60,6 +40,28 @@ None. These use permissions added in 2.2 (`DeviceManagementConfiguration.Read.Al
 - Pages no longer scroll sideways past the edge of the window: the All clients Checks page and Projects
   (hidden text in their tables widened the page), and on phones the monthly review's buttons and the
   History list on person, mailbox, group and site pages, where a long address now wraps.
+
+### Security
+
+- Someone who manages users without being an Administrator, and has a capability taken away on one client,
+  no longer counts as holding it everywhere: they can't give it to anyone, put it in a role, or change an
+  account that holds it.
+- The user pages no longer show a user manager who only sees some clients the client accounts of other
+  clients, and the activity log shows a custom role that only sees some clients only the entries about
+  those clients.
+- The support package keeps clients as numbers for anyone who doesn't see every client: *Include client
+  identifiers* is only offered to people who see them all.
+- Webhook signing secrets must be at least 16 characters, since a short one can be worked out from a single
+  signed request. A shorter secret already saved keeps working until it is changed; a long random one
+  (`openssl rand -hex 32`) is best.
+- Wrong passwords where a signed-in browser is asked for the password again (to change it, turn two-step
+  sign-in off, or reset someone else's) no longer lock the account: the fifth signs that browser out. Someone
+  holding a stolen session could otherwise keep its owner from signing in to end it.
+- Recovery codes made before 2.2.0, still stored as a plain SHA-256, are put under the recovery code key when
+  the portal starts, so a copy of the database can't be used to work them out. They keep working.
+- New tests attack sign-in, sessions and forms on every route: a form sent without this browser's own token
+  is refused, opening a page never changes stored data, sign-in answers the same whatever was wrong, and a
+  copied cookie stops working whenever its session ends.
 
 ## [2.2.0] - 2026-10-11
 
