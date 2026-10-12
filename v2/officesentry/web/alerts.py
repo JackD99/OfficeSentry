@@ -10,6 +10,10 @@ from .access import needs
 
 bp = Blueprint("alerts", __name__, url_prefix="/admin")
 
+# The shortest signing secret accepted. Every signed request is a known body and timestamp with its HMAC, so a
+# short secret can be found by trying them all, and then anyone can sign a request.
+MIN_SECRET = 16
+
 
 def _vault():
     return current_app.extensions["officesentry.vault"]
@@ -67,8 +71,12 @@ def save():
     secret = request.form.get("secret", "")
     signing_state = "kept"
     if secret:
-        if len(secret) > 256:
-            flash("The signing secret can be up to 256 characters.", "error")
+        if not MIN_SECRET <= len(secret) <= 256:
+            flash(
+                f"Use a signing secret of {MIN_SECRET} to 256 characters. A short one can be guessed from a single "
+                "signed request, and then anyone can sign their own.",
+                "error",
+            )
             return redirect(url_for("alerts.settings"))
         values["alerts.secret_enc"] = vault.encrypt(secret)
         signing_state = "changed"
