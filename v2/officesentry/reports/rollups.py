@@ -81,6 +81,7 @@ class Rollup:
     currency: str = "GBP"
     tenant_link: str = "tenant"  # which per-tenant page a row links to: tenant | review | evidence | data
     footnote: str = ""
+    uncut: Rollup | None = None  # every client, when a PDF keeps only the first rows (printing.cap_rollup)
 
     @property
     def with_attention(self) -> int:
@@ -121,7 +122,7 @@ class Rollup:
             if c.kind == "sev":
                 header += [f"{c.label}: {s}" for s in SEVERITIES]
             else:
-                header.append(c.label + (f" ({self.currency})" if c.kind == "money" else ""))
+                header.append(c.label + {"money": f" ({self.currency})", "pct": " %"}.get(c.kind, ""))
                 if c.better:
                     header.append(f"{c.label}: change")
         header.append("Note")
@@ -133,13 +134,18 @@ class Rollup:
                 if c.kind == "sev":
                     line += [(value or {}).get(s, 0) if value is not None else "" for s in SEVERITIES]
                     continue
-                line.append("" if value is None else value)
+                line.append("" if value is None else _whole(value))
                 if c.better:
                     delta = r.deltas.get(c.key)
-                    line.append("" if delta is None else delta)
+                    line.append("" if delta is None else _whole(delta))
             line.append(r.note)
             rows.append(line)
         return Table(self.title, header, rows)
+
+
+def _whole(value):
+    """A stored figure as downloads write it: 54.0 licensed users as 54, so a spreadsheet shows a count."""
+    return int(value) if type(value) is float and value.is_integer() else value
 
 
 # -- Monthly review ----------------------------------------------------------------

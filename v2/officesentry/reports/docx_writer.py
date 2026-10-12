@@ -11,6 +11,8 @@ import zipfile
 from io import BytesIO
 from xml.sax.saxutils import escape
 
+from .cells import printable
+
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 CONTENT_TYPES = (
@@ -80,7 +82,7 @@ def _run(text: str, bold: bool = False) -> str:
     for i, line in enumerate(str(text).split("\n")):
         if i:
             out.append("<w:br/>")
-        out.append(f'<w:t xml:space="preserve">{escape(line)}</w:t>')
+        out.append(f'<w:t xml:space="preserve">{escape(printable(line))}</w:t>')
     return f"<w:r>{props}{''.join(out)}</w:r>"
 
 
@@ -139,7 +141,8 @@ class Document:
             '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
             'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" '
             'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
-            f"<dc:title>{escape(self.title)}</dc:title><dc:creator>{escape(self.author)}</dc:creator>"
+            f"<dc:title>{escape(printable(self.title))}</dc:title>"
+            f"<dc:creator>{escape(printable(self.author))}</dc:creator>"
             "</cp:coreProperties>"
         )
         out = BytesIO()

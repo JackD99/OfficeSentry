@@ -163,7 +163,8 @@ def test_report(db, two_tenants):
     assert tiles["Sites with no owner"].value == 1 and tiles["Sites with no owner"].tone == "bad"
     assert tiles["One owner only"].value == 0 and tiles["Guests with access"].value == 1
     assert tiles["Open to everyone in the organisation"].value == 1 and tiles["Sites"].value == 2
-    assert any("Site permissions report" in n for n in report.notes)  # Old Projects has no group
+    (note,) = [n for n in report.notes if "Site permissions report" in n]  # Old Projects has no group
+    assert note.endswith("lists every SharePoint group and its members.")  # Site permissions has them already
 
     needing = _section(report, "Sites needing an owner")
     assert [str(c) for c in needing.rows[0]] == [
@@ -196,6 +197,13 @@ def test_report(db, two_tenants):
     admins = _section(report, "Site administrators")
     assert [(str(r[0]), r[1]) for r in admins.rows] == [("ann@x.com", 1), ("bob@x.com", 1)]
     assert "2 sites" in report.footnote
+
+
+def test_sharepoint_groups_note_says_waiting_only_while_the_client_is_to_approve(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, sharepoint_kw={"rest": "consent"}, our_app={"missing": ("SharePoint Sites.Read.All",)})
+    (note,) = [n for n in _report(db, alpha).notes if "Site permissions report" in n]
+    assert note.endswith("its members once the client approves the SharePoint permission.")
 
 
 def test_report_before_collection(db, two_tenants):

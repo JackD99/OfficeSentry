@@ -231,13 +231,18 @@ as `grants` and drops grants past their expiry from exposure.
   live build (a call with `now=...` never uses them). Rows are per tenant:
   only ever read them for `scoped_tenants()`. The same task keeps each
   tenant's rows in `search_index` (`search_index.py`) for the sidebar search.
-  The change report matches table rows on their first column; set
+  The change report matches table rows on their first column (rows whose key
+  another row shares are compared whole); set
   `Section(compare=False)` for event logs and time series. Columns named
   `Last ...`, `... (UTC)` or containing "change", and the day counts in
   `month_changes.DAY_COUNT_COLUMNS` ("Days", "Days left", ...), are ignored as
-  time-driven; "No check-in for N days" in a cell is compared without its number.
+  time-driven; day counts in a cell ("No check-in for N days",
+  `DAY_COUNT_TEXT`) are compared without their number, and age buckets
+  (`CLOCK_BUCKETS`) only count when their date changed.
   A section names its columns that drift every night with use (sizes, file and
-  item counts) in `Section(drifts=(...))`, and those are ignored too.
+  item counts) in `Section(drifts=(...))`, and those are ignored too. A report
+  isn't compared when one of its data sources has no run at the start of the
+  period, or when its `DataReport.parts` (read, waiting, failed) differ.
 - Downloads go through `reports/tables.py` (`Table`, `to_csv`, `to_xlsx`): CSV
   prefixes formula characters, XLSX never stores formulas (`safe_xlsx`).
 - Report builders in `reports/` return plain data; templates and
@@ -255,7 +260,8 @@ as `grants` and drops grants past their expiry from exposure.
   returns one account's last activity and use per service (keys in
   `usage.SERVICES`), Office apps by platform, installs and activity counts, for
   any page about one person. Usage reports may conceal names (32-character
-  codes); show `usage.label(row)` and `usage.CONCEALED_NOTICE`.
+  codes); show `usage.label(row)` (`usage.owner_label` for SharePoint and
+  OneDrive owners) and `usage.CONCEALED_NOTICE`.
 - `tests/seed.py` runs every collector against `tests/graphdata.py`; use it
   for rule and report tests.
 - Questionnaire answers (`reports/evidence.py`, `build()`, kept for the

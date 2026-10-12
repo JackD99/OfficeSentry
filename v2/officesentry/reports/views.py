@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from urllib.parse import urlencode
 
+from ..text import fold
 from . import charts
 from .data_reports import FLAG_ORDER, DataReport, Many, Rows, Section
 
@@ -63,8 +64,12 @@ _PROSE_DATE = re.compile(r"^(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|N
 _MONTHS = {
     m: i for i, m in enumerate(("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), 1)
 }
-_SIZE = re.compile(r"^([\d.,]+)\s*(bytes|KB|MB|GB|TB)$")
-_PERCENT = re.compile(r"^-?[\d.,]+%$")
+# Sizes, percentages and numbers may carry a sign, - or the minus sign U+2212 for a fall: a change ("+21.1 GB").
+_SIZE = re.compile(r"^([+\u2212-]?[\d.,]+)\s*(bytes|KB|MB|GB|TB)$")
+_PERCENT = re.compile(r"^[+\u2212-]?[\d.,]+%$")
+_NUMBER = re.compile(r"^[+\u2212-]?\d[\d,]*(?:\.\d+)?%?$")  # strict: "Nan", "inf" and "1e3" stay text
+_SIGNED = re.compile(r"^[+\u2212-]\d[\d,]*(?:\.\d+)?$")
+NO_CHANGE = "No change"  # what a change column says for zero
 _SIZES = {"bytes": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
 
 Key = tuple[str, str]  # (table slug, column slug)
@@ -229,26 +234,31 @@ def _is_number(cell) -> bool:
     return isinstance(cell, (int, float)) and not isinstance(cell, bool)
 
 
+def _float(text: str) -> float:
+    return float(text.replace(",", "").replace("\u2212", "-"))
+
+
 def sort_key(cell):
-    """Numbers (and sizes and percentages) as numbers, everything else as lower-case text; blanks are None."""
+    """Numbers (and sizes, percentages and changes) as numbers, everything else as text without case or accents;
+    blanks are None."""
     if _is_number(cell):
         return float(cell)
     text = str(cell).strip()
     if text in ("", "–", "-"):
         return None
+    if text == NO_CHANGE:
+        return 0.0
     m = _SIZE.match(text)
     if m:
         try:
-            return float(m[1].replace(",", "")) * _SIZES[m[2]]
+            return _float(m[1]) * _SIZES[m[2]]
         except ValueError:
             pass
-    try:
-        return float(text.rstrip("%").replace(",", ""))
-    except ValueError:
-        pass
+    if _NUMBER.match(text):
+        return _float(text.rstrip("%"))
     if _PROSE_DATE.match(text) and (d := as_date(text)):
         return d.isoformat()  # "3 Sep 2026" sorts by date, not alphabetically
-    return text.lower()
+    return fold(text)
 
 
 def _age_matches(cell, preset: str, today: date) -> bool:
@@ -266,11 +276,12 @@ def _age_matches(cell, preset: str, today: date) -> bool:
 
 
 def _is_measure(cell) -> bool:
-    """A number, a size ("105.4 GB") or a percentage ("88%"): right-aligned and largest first."""
+    """A number, a size ("105.4 GB"), a percentage ("88%") or a change ("+2.2", "+21.1 GB", "No change"):
+    right-aligned and largest first."""
     if _is_number(cell):
         return True
     text = str(cell).strip()
-    return bool(_SIZE.match(text) or _PERCENT.match(text))
+    return bool(_SIZE.match(text) or _PERCENT.match(text) or _SIGNED.match(text) or text == NO_CHANGE)
 
 
 def _kind(cells: list) -> str:
@@ -406,7 +417,7 @@ def _amount(cell) -> tuple[float, str] | None:
     m = _SIZE.match(text)
     if m:
         try:
-            return float(m[1].replace(",", "")) * _SIZES[m[2]], "size"
+            return _float(m[1]) * _SIZES[m[2]], "size"
         except ValueError:
             return None
     if re.fullmatch(r"\d{1,3}(,\d{3})*|\d+", text):

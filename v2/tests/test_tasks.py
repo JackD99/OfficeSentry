@@ -1,5 +1,6 @@
 """Background tasks: the queue, leases, and month-end work done off the request path, exactly once."""
 
+import re
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -341,7 +342,7 @@ def test_worker_once_runs_the_tasks_it_queues(db, cfg, two_tenants, monkeypatch)
 
 
 def test_pdfs_keep_the_first_rows_of_a_big_table(app, monkeypatch):
-    big = Section("Files", ["Name"], rows=[[f"f{i}"] for i in range(25)], flags=[None] * 25)
+    big = Section("Files", ["Name"], rows=[[f"f{i}"] for i in range(25)], flags=["high", None] * 12 + [None])
     small = Section("Sites", ["Name"], rows=[["s"]], flags=[None])
     report = DataReport(
         "files", "Files", "", {"name": "Alpha", "tenant_ref": "a"}, datetime.now(UTC), sections=[big, small]
@@ -362,14 +363,18 @@ def test_pdfs_keep_the_first_rows_of_a_big_table(app, monkeypatch):
         g.db, g.user = None, None
         printing.pdf_response("reports/detail.html", "files", report=report)
     assert "first 10 of 25 rows" in html[0] and "f9" in html[0] and "f10<" not in html[0]
+    # The heading counts the whole table, as the page and the spreadsheet do.
+    assert '<span class="count">25</span> <span class="pill warn">12 to review</span>' in html[0]
 
 
 def test_pdfs_cap_rollups_and_change_reports(app, monkeypatch):
+    from officesentry.changes import Change
     from officesentry.reports.month_changes import ReportChanges, RowChange, SectionChanges, TenantChanges
     from officesentry.reports.rollups import Column, Rollup, RollupRow
 
     tenants = [{"id": i, "name": f"T{i}", "tenant_ref": str(i)} for i in range(25)]
-    rollup = Rollup("mfa", "MFA", "", [Column("n", "N")], [RollupRow(t, {"n": 1}) for t in tenants], datetime.now(UTC))
+    rows = [RollupRow(t, {"n": 1}, attention=t["id"] % 2) for t in tenants]
+    rollup = Rollup("mfa", "MFA", "", [Column("n", "N")], rows, datetime.now(UTC))
     capped = printing.cap_rollup(rollup, 10)
     assert len(capped.rows) == 10 and "first 10 of 25 clients" in capped.footnote and len(rollup.rows) == 25
     assert printing.cap_rollup(capped, 10) is capped
@@ -380,9 +385,9 @@ def test_pdfs_cap_rollups_and_change_reports(app, monkeypatch):
         datetime.now(UTC),
         datetime.now(UTC),
         [],
-        [{"severity": "high"}] * 12,
+        [{"severity": "high", "rule_key": "x", "subject": "s"}] * 12,
         [],
-        [],
+        [Change("Accounts", "added", "ann@x.com", "New account")] * 5,
         [
             ReportChanges("a", "A", [SectionChanges("One", ["Name"], changes[:15])]),
             ReportChanges("b", "B", [SectionChanges("Two", ["Name"], changes[15:])]),
@@ -407,6 +412,7 @@ def test_pdfs_cap_rollups_and_change_reports(app, monkeypatch):
 
         g.db, g.user = None, None
         printing.pdf_response("reports/rollup.html", "mfa", rollup=rollup, key="mfa")
+        printing.pdf_response("reports/tenant_changes.html", "changes", report=tc, title="What changed", titles={})
         from officesentry.reports.month_changes import Summary
 
         summaries = [Summary(t, 1, 0, 0, 0, {}, True, ["Accounts"]) for t in tenants]
@@ -420,4 +426,11 @@ def test_pdfs_cap_rollups_and_change_reports(app, monkeypatch):
             generated_at=datetime.now(UTC),
         )
     assert "first 10 of 25 clients" in html[0] and "T9<" in html[0] and "T10<" not in html[0]
-    assert "first 10 of 25 clients" in html[1] and "T9<" in html[1] and "T10<" not in html[1]
+    # The figures and the total count every client, as the page does.
+    assert '<span class="count">25</span>' in html[0] and "<strong>25</strong>" in html[0]
+    assert re.search(r"Need attention</div>\s*<div[^>]*><span>12<", html[0])
+    # The change report counts every change and finding, not the ones the PDF keeps.
+    assert re.search(r"Changes</div>\s*<div[^>]*><span>30<", html[1]) and "5 key, 25 in detail reports" in html[1]
+    assert re.search(r"New findings</div>\s*<div[^>]*><span>12<", html[1])
+    assert "first 10 of 25 clients" in html[2] and "T9<" in html[2] and "T10<" not in html[2]
+    assert '<span class="count">25</span>' in html[2] and "of 25" in html[2]

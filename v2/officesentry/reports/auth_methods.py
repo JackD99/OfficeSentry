@@ -450,7 +450,8 @@ def _passwords(users: list[dict], reg: Registration, now: datetime) -> tuple[Sec
         registered = reg.registered(uid)
         last = last_sign_in(u)
         never = bool(u.get("signInActivityAvailable")) and last is None
-        old = bool(changed and changed < now - timedelta(days=OLD_DAYS))
+        # By calendar day, as the table's "Older than a year" filter counts, so the figure opens these rows.
+        old = bool(changed and (now.date() - changed.date()).days > OLD_DAYS)
         stats["never_expires"] += bool(u.get("passwordNeverExpires"))
         stats["old"] += old
         flag, meaning = None, ""

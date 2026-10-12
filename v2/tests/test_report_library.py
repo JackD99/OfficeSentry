@@ -10,6 +10,7 @@ from html import unescape
 
 from openpyxl import load_workbook
 
+from officesentry import text
 from officesentry.reports import data_reports, library, rollups, views
 from officesentry.reports.data_reports import DataReport, Many, Rows, Section
 from tests.conftest import login, make_user
@@ -67,6 +68,47 @@ def test_sort_and_hidden_columns():
     out = views.apply(report, views.View.parse("hide=other/setting&hide=other/value"))
     assert out.sections[1].columns == ["Setting"]
     assert out.filtered == ["Other: 1 of 1 rows, 2 columns hidden."]
+
+
+def test_changes_sort_as_numbers_and_names_without_accents_or_case():
+    report = DataReport("x", "Sample", "", {"name": "T"}, NOW)
+    sites = Section("Sites", ["Site", "30-day change", "Share"])
+    for row in (
+        ["Ola", "+7.7 GB", "+4.6%"],
+        ["Zoe", "+21.1 GB", "-1.5%"],
+        ["Émile", "+936.7 MB", "No change"],
+        ["ana", "No change", "+10%"],
+        ["Åsa", "\u22121.2 GB", ""],
+        ["Nan", "", "+0.5%"],
+    ):
+        sites.add(row)
+    report.sections = [sites]
+
+    def column(query: str, i: int) -> list:
+        return [r[i] for r in views.apply(report, views.View.parse(query)).sections[0].rows]
+
+    assert column("sort=sites/30-day-change:desc", 1) == [
+        "+21.1 GB",
+        "+7.7 GB",
+        "+936.7 MB",
+        "No change",
+        "\u22121.2 GB",
+        "",
+    ]
+    assert column("sort=sites/share:desc", 2) == ["+10%", "+4.6%", "+0.5%", "No change", "-1.5%", ""]
+    assert column("sort=sites/site:asc", 0) == ["ana", "Åsa", "Émile", "Nan", "Ola", "Zoe"]  # "Nan" isn't a number
+    tv = views.table_view(report, 0, views.View(), "/p")
+    assert [c.kind for c in tv.columns] == ["text", "num", "num"]
+    assert tv.columns[1].sort_href.endswith("sort=sites%2F30-day-change%3Adesc#t-sites")  # largest first
+    assert [views.sort_key(v) for v in ("inf", "1e3", "1_000", "+2.2", "-3", "1,024")] == [
+        "inf",
+        "1e3",
+        "1_000",
+        2.2,
+        -3.0,
+        1024.0,
+    ]
+    assert sorted(["Zoe", "Émile", "eve", "Åsa", "ana"], key=text.fold) == ["ana", "Åsa", "Émile", "eve", "Zoe"]
 
 
 def test_table_view_offers_values_and_presets():

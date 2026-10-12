@@ -40,7 +40,8 @@
 {% endif %}
 {% for section in report.sections %}
 <section class="doc-section" id="s{{ loop.index }}">
-  <h2>{{ section.title }} <span class="count">{{ section.rows|length }}</span>{% if section.flagged and section.review %} <span class="pill warn">{{ section.flagged }} to review</span>{% endif %}</h2>
+  {% set whole = section.uncut or section %}{#- a long table's PDF keeps its first rows but counts them all -#}
+  <h2>{{ section.title }} <span class="count">{{ whole.rows|length }}</span>{% if whole.flagged and section.review %} <span class="pill warn">{{ whole.flagged }} to review</span>{% endif %}</h2>
   {% if section.intro %}<p class="section-intro">{{ section.intro }}</p>{% endif %}
   {% if section.figure %}<div class="chart-wrap keep">{{ section.figure|safe }}</div>{% endif %}
   {% if section.rows %}{{ ui.data_table(section) }}{% else %}<p class="empty-note">{{ section.empty }}</p>{% endif %}

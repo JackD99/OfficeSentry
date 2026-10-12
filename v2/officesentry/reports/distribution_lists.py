@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from ..collectors.mobile_devices import mailbox_index
 from ..devices import parse_ts
 from ..snapshot import TenantSnapshot
-from ..text import day, plural, verb
+from ..text import plural, verb
 from .data_reports import DataReport, Rows, Section, Tile
 from .mail_reports import _no_exchange
 from .registry import report
@@ -131,6 +131,7 @@ def lists_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     )
     members = Section(MEMBERS, ["List", "Member", "Address", "Member type"], empty="No members were read.")
     empty = ownerless = unused = open_outside = 0
+    unused_why: set[str] = set()  # the reasons unused lists carry, which their figure's link filters on
     needs: list[tuple[int, list, str]] = []
     watched_short: list[str] = []
     for g in sorted(lists, key=lambda g: (_text(g.get("DisplayName")) or _text(g.get("Name"))).lower()):
@@ -161,8 +162,10 @@ def lists_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
             reasons.append(("medium", LEAVER_OWNERS))
         if traced and entry and watched >= MIN_WATCHED and not _recent(entry, now, min(watched, UNUSED_DAYS)):
             unused += 1
-            span = min(watched, UNUSED_DAYS)
-            reasons.append(("low", f"No mail in {span} days" + (f" (last {day(last.isoformat())})" if last else "")))
+            # The last mail's date has its own column, so lists share a few reasons to filter on, not one each.
+            why = f"No mail in {min(watched, UNUSED_DAYS)} days"
+            unused_why.add(why)
+            reasons.append(("low", why))
         elif traced and entry and watched < MIN_WATCHED:
             watched_short.append(name)
         if outside:
@@ -247,7 +250,8 @@ def lists_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
             unused if traced else "Not read",
             "Lists that look unused" if traced else "Needs the message trace",
             ("warn" if unused else "ok") if traced else None,
-            Rows(EVERY, {f"Mail in the last {RECENT_DAYS} days": 0}) if traced else None,
+            # With none unused, a reason no list has: the link shows no rows rather than every row.
+            Rows(ATTENTION, {"Why": sorted(unused_why) or [f"No mail in {UNUSED_DAYS} days"]}) if traced else None,
         ),
         Tile(
             "Open to outside senders",

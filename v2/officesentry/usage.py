@@ -110,6 +110,15 @@ def label(row: dict) -> str:
     return row.get("upn") or row.get("name") or "Unknown"
 
 
+def owner_label(row: dict) -> str | None:
+    """A SharePoint site's or OneDrive's owner from the usage reports, a hidden one shown as ``label`` shows people
+    (the OneDrive report's code is the usage reports' code in lower case)."""
+    owner = row.get("ownerPrincipalName") or row.get("owner")
+    if (isinstance(owner, str) and concealed(owner)) or (row.get("concealed") and not owner):
+        return label({"concealed": True, "upn": owner.upper() if isinstance(owner, str) else None})
+    return owner
+
+
 def status(snap: TenantSnapshot) -> dict | None:
     """The collector's status object, or None when usage hasn't been collected."""
     rows = snap.objects(COLLECTOR, "usage_status")

@@ -6,12 +6,15 @@ Graph is simulated with ``responses`` (``tests/teamsdata.py``), through a full s
 
 from datetime import UTC, datetime
 
+import responses
+
 from officesentry import store
 from officesentry.reports import data_reports
 from officesentry.snapshot import TenantSnapshot
 from officesentry.usage import COLLECTOR
+from officesentry.worker import execute_run
 from tests import teamsdata
-from tests.seed import seed_tenant
+from tests.seed import graph_factory, mock_tenant, seed_tenant
 
 NOW = datetime.now(UTC)
 CHANNEL_PERMS = ("Channel.ReadBasic.All", "ChannelMember.Read.All", "TeamsAppInstallation.ReadForTeam.All")
@@ -93,15 +96,32 @@ def test_a_client_that_has_not_approved_yet_gets_a_waiting_report_not_a_failed_r
     assert section.empty == "The apps in each team will show once the client approves the new permission."
 
 
-def test_a_refused_new_permission_counts_as_waiting_even_before_the_connection_check_says_so(db, two_tenants):
+def test_a_refused_new_permission_counts_as_waiting_before_the_connection_check_says_anything(db, two_tenants):
     alpha, _ = two_tenants
-    seed_tenant(db, alpha, teams_kw={"status": 403})
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        mock_tenant(rsps, teams_kw={"status": 403})
+        store.enqueue_run(db, alpha, "teams")  # no connection check yet
+        execute_run(db, store.claim_next_run(db), graph_factory)
     run = _run(db, alpha)
     assert run["status"] == "succeeded"
     status = TenantSnapshot(db, store.get_tenant(db, alpha)).objects("teams", "teams_status")[0]
     assert status["parts"] == {"channels": "waiting", "members": "read", "apps": "waiting"}
     report = _report(db, alpha)
     assert {t.label: t.value for t in report.tiles}["Custom uploaded apps"] == "Waiting"
+
+
+def test_a_refused_permission_the_connection_check_says_is_granted_is_a_failure_not_waiting(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, teams_kw={"status": 403})  # the connection check finds every permission granted
+    run = _run(db, alpha)
+    assert run["status"] == "partial" and "Teams channels weren't readable" in run["error"]
+    status = TenantSnapshot(db, store.get_tenant(db, alpha)).objects("teams", "teams_status")[0]
+    assert status["parts"] == {"channels": "failed", "members": "read", "apps": "failed"}
+    assert status["waiting"] == []
+    report = _report(db, alpha)
+    assert report.notice == ""
+    tiles = {t.label: (t.value, t.foot) for t in report.tiles}
+    assert tiles["Custom uploaded apps"] == ("Not read", "See the collection's log")
 
 
 def test_report_settings_say_outright_when_names_are_concealed(db, two_tenants):

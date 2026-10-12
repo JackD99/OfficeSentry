@@ -80,6 +80,7 @@ def teams_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
         return
     status = _status(snap)
     parts = status.get("parts") if isinstance(status.get("parts"), dict) else {}
+    out.parts = dict(parts)
     have_channels = parts.get("channels") == "read"
     have_members = have_channels and parts.get("members") == "read"
     have_apps = parts.get("apps") == "read"
