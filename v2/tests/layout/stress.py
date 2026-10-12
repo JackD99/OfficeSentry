@@ -7,6 +7,8 @@
 * A tenant group, a report plan, a month-end recommendation, a staff account and a client contact, all with
   long names, so the pages that list them get long text too.
 * A client user who sees only the stress client, so the client's own pages get the same data.
+* The audit log add-on switched on for the stress client, with three days of its file and mailbox records
+  (``audit_addon()``), so the add-on's pages and report are checked too.
 
 Empty states come from the demo's client still being onboarded (no data yet) and from ``empty_site()``: a new
 install with an admin and nothing else.
@@ -14,8 +16,9 @@ install with an admin and nothing else.
 
 from __future__ import annotations
 
+import json
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from werkzeug.security import generate_password_hash
@@ -226,6 +229,30 @@ def add(db, ids: list[int]) -> dict:
     ).lastrowid
     db.execute("INSERT INTO user_tenants (user_id, tenant_id) VALUES (?, ?)", (uid, tenant))
     return {"tenant": tenant, "client_password": password}
+
+
+def audit_addon(db, vault, tenant: int) -> None:
+    """Switch the audit log add-on on for ``tenant`` and collect three days of its records, with the stress
+    client's long sign-in addresses and site in place of the sample's."""
+    from tests import auditdata
+
+    now = datetime.now(UTC).replace(second=0, microsecond=0)
+    auditdata.addon_on(db, vault, [tenant], started_at=auditdata.iso(now - timedelta(days=3)))
+    batches = {}
+    for kind, records in (
+        ("Audit.SharePoint", auditdata.sharepoint_records),
+        ("Audit.Exchange", auditdata.exchange_records),
+    ):
+        batches[kind] = []
+        for hours in (50, 26, 3):
+            at = (now - timedelta(hours=hours)).replace(tzinfo=None)
+            text = json.dumps(records(at)).replace("contoso.com", _domain()).replace("contoso", TENANT["base"])
+            rows = json.loads(text)
+            for row in rows:  # each batch's records are new ones
+                row["Id"] = f"{row['Id'][:8]}{hours:04d}{row['Id'][12:]}"
+            batches[kind].append((at + timedelta(minutes=20), rows))
+    status, _ = auditdata.collect(db, tenant, batches, now)
+    assert status == "succeeded", f"the stress client's audit records weren't collected ({status})"
 
 
 def _domain() -> str:

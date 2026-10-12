@@ -1,0 +1,125 @@
+{#- The audit log add-on for one client (web/audit_addon.client): send the link, check, switch on and off. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, csrf, tenant_header with context %}
+{% block title %}Audit log add-on · {{ tenant.name }}{% endblock %}
+{% block content %}
+{{ tenant_header(tenant, 'audit_addon', title='Audit log add-on') }}
+{% set sent = row and (row.sent_at or row.approved_at or row.consented_at) %}
+{% set confirmed = row and row.consented_at %}
+{% set started = row and row.started_at and not row.stopped_at %}
+
+<div class="tiles">
+  <div class="tile"><div class="label">Add-on</div>
+    <div class="value small-value"><span class="pill {{ state.tone }}">{{ state.label }}</span></div>
+    <div class="foot">{{ state.detail }}</div></div>
+  <div class="tile"><div class="label">Last read</div>
+    <div class="value small-value">{% if last_run %}{{ ts(last_run.finished_at or last_run.created_at) }}{% else %}Not yet{% endif %}</div>
+    <div class="foot">{% if last_run and last_run.status == 'failed' %}Failed: {{ last_run.error }}{% elif last_run %}Read every night with the rest of {{ tenant.name }}'s data.{% else %}Once the feed is on, every night.{% endif %}</div></div>
+  <div class="tile"><div class="label">Events kept</div>
+    <div class="value">{{ '{:,}'.format(stored) }}</div>
+    <div class="foot">Kept {{ retention }}.</div></div>
+</div>
+
+{% if problem and not row %}
+<div class="callout warn" role="status">{{ icon('alert') }}<div>{{ problem }}{% if 'App connection' in problem and can('settings.manage') %} <a href="{{ url_for('audit_addon.settings') }}">Set it up</a>.{% endif %}</div></div>
+{% endif %}
+
+<ol class="setup-steps card send-steps">
+  <li class="{{ 'done' if sent else ('current' if link else '') }}">
+    <div class="step-title">Send the add-on link and pack</div>
+    <div class="step-body">
+      {% if link %}
+      <p class="m0">Email the client this message with the PDF attached. The link opens Microsoft's own approval page for the add-on, a second app with one read-only permission. It never expires, and it's the same link every time.</p>
+      <label class="copy-label">Subject <input class="copy-text" value="{{ subject }}" readonly id="email-subject"></label>
+      <label class="copy-label">Message <textarea class="copy-text" rows="14" readonly id="email-body">{{ body }}</textarea></label>
+      <div class="form-actions wrap">
+        <button type="button" class="primary" data-copy="#email-body">Copy message</button>
+        <button type="button" data-copy-text="{{ link }}">Copy link only</button>
+        <a class="btn" href="mailto:{{ contact.contact_email if contact and contact.contact_email else '' }}?subject={{ subject|urlencode }}&amp;body={{ body|urlencode }}">{{ icon('mail') }} Open in your email app</a>
+        <a class="btn" href="{{ url_for('audit_addon.pack', tenant_id=tenant.id) }}">{{ icon('download') }} Add-on pack PDF</a>
+      </div>
+      {% if not confirmed and not (row and row.stopped_at) %}
+      <form method="post" action="{{ url_for('audit_addon.mark_sent', tenant_id=tenant.id) }}" class="sent-row">{{ csrf() }}
+        {% if row and row.sent_at %}<span class="small">{{ icon('check') }} Sent {{ ts(row.sent_at) }}{% if row.sent_by %} by {{ row.sent_by }}{% endif %}.</span>
+          <input type="hidden" name="sent" value="0"><button class="sm ghost">Mark as not sent</button>
+        {% else %}<input type="hidden" name="sent" value="1"><button class="sm">{{ icon('send') }} Mark as sent</button>
+          <span class="small muted">That also says you want it on: Office Sentry starts the feed once the client has approved.</span>{% endif %}
+      </form>
+      {% endif %}
+      {% elif problem %}
+      <p class="m0 muted">No link yet: {{ problem }}</p>
+      {% endif %}
+    </div>
+  </li>
+  <li class="{{ 'done' if confirmed else ('current' if sent else '') }}">
+    <div class="step-title">The client approves</div>
+    <div class="step-body">
+      {% if confirmed %}Confirmed {{ ts(row.consented_at) }}: Office Sentry signed in as the add-on and read {{ tenant.name }}'s feed settings.
+      {% else %}
+      A Global Administrator of {{ tenant.name }} opens the link, checks the one permission and presses <em>Accept</em>. Office Sentry then signs in as the add-on to confirm.
+      {% if row and row.approved_at %}<p class="small">They came back from Microsoft saying they approved, {{ ts(row.approved_at) }}.</p>{% endif %}
+      {% endif %}
+      {% if row and row.checked_at and not started %}<p class="small">Last checked {{ ts(row.checked_at) }}{% if row.check_error %}: {{ row.check_error }}{% else %}.{% endif %}</p>{% endif %}
+      {% if row and not started and not row.stopped_at and tenant.enabled and not tenant.archived_at %}
+      <form method="post" action="{{ url_for('audit_addon.check', tenant_id=tenant.id) }}" class="step-action">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Check now</button></form>
+      {% endif %}
+    </div>
+  </li>
+  <li class="{{ 'done' if started else ('current' if confirmed and not (row and row.stopped_at) else '') }}">
+    <div class="step-title">The feed starts</div>
+    <div class="step-body">
+      {% if started %}Started {{ ts(row.started_at) }}{% if row.started_by %}, as {{ row.started_by }} asked{% endif %}. Office Sentry reads the client's new audit records every night.
+      {% elif confirmed and not row.wanted_at %}
+      The client approved, but nobody here has asked for the add-on on {{ tenant.name }} yet. Switching it on asks Microsoft to start the feed.
+      <form method="post" action="{{ url_for('audit_addon.switch_on', tenant_id=tenant.id) }}" class="step-action">{{ csrf() }}<button class="sm primary">Switch on</button></form>
+      {% else %}
+      Once the approval is confirmed, Office Sentry asks Microsoft to start the client's audit log feed for this app, once for each of {{ feeds|map(attribute=0)|join(' and ') }}. It changes nothing in the client's tenant. Microsoft can take up to 12 hours to make the first records available.
+      {% endif %}
+      {% if row and row.content_types %}
+      <dl class="kv small feed-states">{% for label, status in feeds %}<dt>{{ label }}</dt><dd>{% if status == 'enabled' %}<span class="pill ok">On</span>{% elif status %}<span class="pill">{{ status|capitalize }}</span>{% else %}<span class="pill">Not started</span>{% endif %}</dd>{% endfor %}</dl>
+      {% endif %}
+    </div>
+  </li>
+</ol>
+
+{% if row and row.stopped_at %}
+<section class="card">
+  <h2>Off</h2>
+  <p>{{ row.stop_reason or 'Switched off.' }} <span class="muted small">{{ ts(row.stopped_at) }}{% if row.stopped_by %}, {{ row.stopped_by }}{% endif %}.</span></p>
+  {% if row.check_error %}<p class="small">When stopping it: {{ row.check_error }}</p>{% endif %}
+  {% if pending %}<p class="small muted">{{ icon('refresh') }} Office Sentry is stopping the feed at Microsoft.</p>{% endif %}
+  <form method="post" action="{{ url_for('audit_addon.switch_on', tenant_id=tenant.id) }}" class="step-action">{{ csrf() }}
+    <button class="sm">Switch on again</button>
+    <span class="small muted">If the client removed the app, send them the link again first.</span>
+  </form>
+</section>
+{% elif row and (row.wanted_at or row.started_at) %}
+<section class="card" id="off">
+  <h2>Switch off</h2>
+  {% if row.started_at %}
+  <p class="m0">Nothing more is collected from now on, and Office Sentry asks Microsoft to stop the feed (the same two calls as starting it, the other way). The app stays approved in the client's tenant; they can delete it under <em>Enterprise applications</em>.</p>
+  {% else %}
+  <p class="m0">Office Sentry stops waiting for the client's approval and won't start the feed, even if they approve the add-on later.</p>
+  {% endif %}
+  <form method="post" action="{{ url_for('audit_addon.switch_off', tenant_id=tenant.id) }}" class="step-action" data-confirm="Switch the audit log add-on off for {{ tenant.name }}?">{{ csrf() }}
+    {% if stored %}<label class="check"><input type="checkbox" name="delete" value="1"> Also delete the {{ stored|plural('event') }} collected</label>{% endif %}
+    <button class="sm danger">Switch off</button>
+  </form>
+</section>
+{% endif %}
+
+<details class="card part">
+  <summary class="card-head"><h2>What the client approves</h2></summary>
+  <p>One permission, <code>ActivityFeed.Read</code> on the Office 365 Management APIs, for the app <strong>{{ app }}</strong>. The reports then show:</p>
+  <ul>{% for line in words %}<li>{{ line }}</li>{% endfor %}</ul>
+  <p>It never reads:</p>
+  <ul>{% for line in never %}<li>{{ line }}</li>{% endfor %}</ul>
+</details>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+document.querySelectorAll('form[data-confirm]').forEach(function (f) {
+  f.addEventListener('submit', function (e) { if (!confirm(f.dataset.confirm)) e.preventDefault(); });
+});
+</script>
+{% endblock %}

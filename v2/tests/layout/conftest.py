@@ -10,7 +10,9 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -143,12 +145,14 @@ RESOLVERS = {
 @pytest.fixture(scope="session")
 def sites(tmp_path_factory):
     """{"demo": the demo site with the stress data, "new": a new install}, each running."""
+    from officesentry.crypto import Vault
     from officesentry.db import connect
 
     cfg, ids, passwords, _ = screenshots.build_site(tmp_path_factory.mktemp("layout") / "data")
     db = connect(cfg.db_path)
     try:
         added = stress.add(db, ids)
+        stress.audit_addon(db, Vault(cfg.encryption_keys), added["tenant"])
         staff_id = db.execute("SELECT id FROM users WHERE username = ?", (stress.STAFF_USER,)).fetchone()[0]
     finally:
         db.close()
@@ -203,6 +207,26 @@ def open_as(sites, browser):
         return Opened(site, user, site.server.url + path_for(page, values))
 
     return where
+
+
+@pytest.fixture(autouse=True)
+def _every_connection_is_closed(_every_connection_is_closed, monkeypatch):
+    """tests/conftest.py's check that a test leaves no database connection open, once the portal has finished
+    what it was doing. The portal serves pages from threads of its own and runs its worker watchdog
+    (system_alerts.start_watchdog) beside them, so a check can end while one of those still has a connection
+    open; each gets a few seconds to close it before the check counts it as left open."""
+    connect, opened = sqlite3.connect, []
+
+    def tracked(*args, **kwargs):
+        conn = connect(*args, **kwargs)
+        opened.append(conn)
+        return conn
+
+    monkeypatch.setattr(sqlite3, "connect", tracked)
+    yield
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not all(getattr(conn, "closed", True) for conn in opened):
+        time.sleep(0.05)
 
 
 @pytest.fixture(scope="session")

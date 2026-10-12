@@ -139,3 +139,29 @@ def check(tenant_ref: str, client_id: str, key_pem: str, thumbprint: str, cloud:
         return CheckResult(False, "The connection test failed.", exc.message[:300])
     name = ((orgs.get("value") or [{}])[0]).get("displayName")
     return CheckResult(True, f"Connected to {name}." if name else "Connected.", organisation=name)
+
+
+def sign_in_check(
+    tenant_ref: str, client_id: str, key_pem: str, thumbprint: str, cloud: str | None = None
+) -> CheckResult:
+    """Sign in as the audit log add-on's app (``auditlog/``), for its Office 365 Management Activity feed, and
+    call nothing. The app has no Graph permission to read the tenant's name with, so a token is the proof that
+    its certificate is on the app registration."""
+    c = clouds.get(cloud)
+    if not c.management:
+        return CheckResult(False, f"The audit log add-on isn't available in {c.label}.")
+    try:
+        certificate_token_provider(tenant_ref, client_id, key_pem, thumbprint, c.management, c.key)()
+    except TokenError as exc:
+        if exc.code == "network_error":
+            return CheckResult(
+                False,
+                "Office Sentry couldn't reach Microsoft.",
+                f"Check that this server can reach {c.login} (its internet connection, DNS, firewall or proxy), then "
+                "try again.",
+            )
+        problem = explain(exc.message, exc.code)
+        if problem:
+            return CheckResult(False, problem.title, problem.fix)
+        return CheckResult(False, "The sign-in test failed.", exc.message[:300])
+    return CheckResult(True, "Signed in.")

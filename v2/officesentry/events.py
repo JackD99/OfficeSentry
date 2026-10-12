@@ -8,7 +8,10 @@ Where it lives
   * ``signins``: every sign-in the sign-in log returned, one row each;
   * ``daily``: per tenant, account, day, app and country: successes, failures, MFA, first and last time
     and the top addresses, rebuilt from the raw rows of each day a run touched, and kept much longer;
-  * ``audits``: every directory audit event, its full text compressed.
+  * ``audits``: every directory audit event, its full text compressed;
+  * ``activity``: the audit log add-on's records (``auditlog/``): the file, sharing and mailbox events it keeps,
+    one row each with its full text compressed, and OneDrive sync traffic counted per person and day
+    (``activity_count``, one row per batch Microsoft delivered it in, so reading a batch twice counts it once).
 
   Rows are keyed ``(tenant, time, id)`` in ``WITHOUT ROWID`` tables and written with ``INSERT OR IGNORE``,
   so reading the same event twice stores it once. Repeated text (names, apps, places) goes in a small
@@ -54,8 +57,10 @@ from .graph import GraphError, is_transient
 
 log = logging.getLogger(__name__)
 
-STORES = ("signins", "daily", "audits")
-TABLE = {"signins": "signin", "daily": "daily", "audits": "audit"}
+STORES = ("signins", "daily", "audits", "activity")
+TABLE = {"signins": "signin", "daily": "daily", "audits": "audit", "activity": "activity"}
+# A table beside a store's own that also holds tenants' rows, by ``tenant`` and ``day``.
+COUNTS = {"activity": "activity_count"}
 DAY = 86400
 OVERLAP = 6 * 3600  # each run re-reads the last six hours: Microsoft can add an event an hour or two late
 SLICE = DAY  # a range that times out is read again a day at a time
@@ -138,6 +143,18 @@ SCHEMA = {
         category INTEGER NOT NULL, activity INTEGER NOT NULL, result INTEGER NOT NULL,
         initiator INTEGER NOT NULL, target INTEGER NOT NULL, detail BLOB NOT NULL,
         PRIMARY KEY (tenant, ts, id)) WITHOUT ROWID""",
+    ),
+    "activity": (
+        _LABEL,
+        """CREATE TABLE IF NOT EXISTS activity (
+        tenant INTEGER NOT NULL, ts INTEGER NOT NULL, id NOT NULL,
+        operation INTEGER NOT NULL, actor INTEGER NOT NULL, owner INTEGER NOT NULL, object TEXT NOT NULL,
+        ip TEXT, summary TEXT NOT NULL, attention TEXT NOT NULL, detail BLOB NOT NULL,
+        PRIMARY KEY (tenant, ts, id)) WITHOUT ROWID""",
+        """CREATE TABLE IF NOT EXISTS activity_count (
+        tenant INTEGER NOT NULL, day TEXT NOT NULL, actor INTEGER NOT NULL, operation INTEGER NOT NULL,
+        batch TEXT NOT NULL, n INTEGER NOT NULL,
+        PRIMARY KEY (tenant, day, actor, operation, batch)) WITHOUT ROWID""",
     ),
 }
 
@@ -353,12 +370,13 @@ def _merge(gaps: list[list[int]]) -> list[list[int]]:
     return out
 
 
-def _extend(cov: Coverage, now: int, floor: int) -> None:
-    """Add this run's range, and move what Microsoft no longer keeps out of the gaps."""
+def extend(cov: Coverage, now: int, floor: int, overlap: int = OVERLAP) -> None:
+    """Add this run's range (from ``overlap`` before where the last one read to), and move what Microsoft no
+    longer keeps (before ``floor``) out of the gaps."""
     if cov.read_to is None:
         cov.since, cov.gaps = floor, [[floor, now]]
     else:
-        cov.gaps = _merge([[cov.read_to - OVERLAP, now], *cov.gaps])
+        cov.gaps = _merge([[cov.read_to - overlap, now], *cov.gaps])
     cov.read_to = max(now, cov.read_to or now)
     kept = []
     for lo, hi in cov.gaps:
@@ -504,6 +522,69 @@ def add_audits(base: Path, key: int, items) -> Added:
     return _write(base, "audits", key, items, "activityDateTime", _audit_row)
 
 
+@dataclass(frozen=True)
+class Activity:
+    """One audit record the audit log add-on keeps (``auditlog/operations.py``), as stored and read back."""
+
+    id: str
+    ts: int
+    operation: str  # Microsoft's ``Operation``
+    actor: str  # who did it
+    owner: str  # whose mailbox, or who a file was shared with
+    object: str  # the file, folder, link, rule or mailbox
+    ip: str
+    summary: str  # the detail worth a table cell
+    attention: str  # why it needs a look, or ""
+    record: dict | None = None  # the full record (email subjects taken out), when read with ``records=True``
+
+    @property
+    def when(self) -> str:
+        return _iso(self.ts)
+
+
+def add_activity(base: Path, key: int, kept: Iterable[Activity], counts: Iterable[tuple], batch: str) -> Added:
+    """Store one batch's kept records, and its counted sync traffic ``(day, actor, operation, n)`` in place of
+    whatever was counted for ``batch`` before, so a batch read twice is counted once."""
+    added = Added()
+    by_month: dict[str, list[Activity]] = {}
+    for a in kept:
+        added.rows += 1
+        added.oldest = a.ts if added.oldest is None else min(added.oldest, a.ts)
+        added.days.add(_day(a.ts))
+        by_month.setdefault(_month(a.ts), []).append(a)
+    counted: dict[str, list[tuple]] = {}
+    for day, actor, operation, n in counts:
+        counted.setdefault(day[:7], []).append((day, actor, operation, n))
+    for month in sorted(set(by_month) | set(counted)):
+        with _open(_path(base, "activity", month), "activity", create=True) as db, transaction(db, immediate=True):
+            label = _Labels(db, key)
+            for a in by_month.get(month, []):
+                detail = zlib.compress(json.dumps(a.record or {}, separators=(",", ":"), sort_keys=True).encode(), 6)
+                added.new += db.execute(
+                    "INSERT OR IGNORE INTO activity VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        key,
+                        a.ts,
+                        _pack_id(a.id),
+                        label(a.operation),
+                        label(a.actor),
+                        label(a.owner),
+                        a.object,
+                        a.ip or None,
+                        a.summary,
+                        a.attention,
+                        detail,
+                    ),
+                ).rowcount
+            db.execute("DELETE FROM activity_count WHERE tenant = ? AND batch = ?", (key, batch))
+            for day, actor, operation, n in counted.get(month, []):
+                db.execute(
+                    "INSERT INTO activity_count VALUES (?, ?, ?, ?, ?, ?)",
+                    (key, day, label(actor), label(operation), batch, n),
+                )
+    return added
+
+
 # -- Reading --------------------------------------------------------------------------------------
 
 
@@ -619,6 +700,81 @@ def audits_between(
                     yield json.loads(zlib.decompress(detail))
                 except (zlib.error, ValueError):
                     log.warning("Unreadable directory audit event in %s", month)
+
+
+def activity_between(
+    conn, tenant_id: int, start: datetime, end: datetime, records: bool = False, people: set[str] | None = None
+) -> Iterator[Activity]:
+    """The audit log add-on's stored records from ``start`` to ``end`` (inclusive), newest first; with
+    ``records``, each with its full record. With ``people`` (sign-in names or addresses, any case), only the
+    records one of them did or that were about them (their mailbox, or something shared with them)."""
+    where = _where(conn, tenant_id)
+    if where is None:
+        return
+    base, key = where
+    lo, hi = int(start.timestamp()), int(end.timestamp())
+    wanted = None if people is None else {p.lower() for p in people if p}
+    for month in _months(lo, hi):
+        with _open(_path(base, "activity", month), "activity") as db:
+            if db is None:
+                continue
+            names = _names(db, key)
+            sql, args = "", []
+            if wanted is not None:
+                ids = [i for i, name in names.items() if name and name.lower() in wanted]
+                if not ids:
+                    continue
+                marks = ", ".join("?" * len(ids))
+                sql, args = f" AND (actor IN ({marks}) OR owner IN ({marks}))", ids + ids
+            for ts, aid, operation, actor, owner, obj, ip, summary, attention, detail in db.execute(
+                "SELECT ts, id, operation, actor, owner, object, ip, summary, attention, detail FROM activity"
+                f" WHERE tenant = ? AND ts BETWEEN ? AND ?{sql} ORDER BY ts DESC, id",
+                (key, lo, hi, *args),
+            ):
+                record = None
+                if records:
+                    try:
+                        record = json.loads(zlib.decompress(detail))
+                    except (zlib.error, ValueError):
+                        log.warning("Unreadable audit record in %s", month)
+                        record = {}
+                yield Activity(
+                    _unpack_id(aid),
+                    ts,
+                    names.get(operation, ""),
+                    names.get(actor, ""),
+                    names.get(owner, ""),
+                    obj,
+                    ip or "",
+                    summary,
+                    attention,
+                    record,
+                )
+
+
+def activity_counts(conn, tenant_id: int, first_day: str, last_day: str) -> list[tuple[str, str, str, int]]:
+    """The add-on's counted sync traffic from ``first_day`` to ``last_day`` (inclusive): ``(day, person,
+    operation, count)``, oldest first."""
+    where = _where(conn, tenant_id)
+    if where is None:
+        return []
+    base, key = where
+    lo, hi = datetime.fromisoformat(first_day).replace(tzinfo=UTC), datetime.fromisoformat(last_day).replace(tzinfo=UTC)
+    out = []
+    for month in reversed(_months(int(lo.timestamp()), int(hi.timestamp()))):
+        with _open(_path(base, "activity", month), "activity") as db:
+            if db is None:
+                continue
+            names = _names(db, key)
+            out.extend(
+                (day, names.get(actor, ""), names.get(operation, ""), n)
+                for day, actor, operation, n in db.execute(
+                    "SELECT day, actor, operation, SUM(n) FROM activity_count WHERE tenant = ? AND day BETWEEN ? AND ?"
+                    " GROUP BY day, actor, operation ORDER BY day",
+                    (key, first_day, last_day),
+                )
+            )
+    return out
 
 
 @dataclass
@@ -1068,7 +1224,7 @@ def ingest(
     key = tenant_key(conn, tenant_id, create=True)
     now = int((now or clock()).timestamp())
     cov = coverage(conn, tenant_id, source.source)
-    _extend(cov, now, now - keep_days * DAY)
+    extend(cov, now, now - keep_days * DAY)
     reader = _Reader(ctx, source, base, key, cov, now, budget, retries, deadline)
     reader.save()
     try:
@@ -1096,6 +1252,9 @@ def _older(db: sqlite3.Connection, store: str, cutoff: int, count_only: bool, ba
         where, arg = "ts < ?", cutoff
     if count_only:
         return db.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}", (arg,)).fetchone()[0]
+    if store in COUNTS:
+        with transaction(db, immediate=True):
+            db.execute(f"DELETE FROM {COUNTS[store]} WHERE day < ?", (_day(cutoff),))
     done = 0
     while True:
         with transaction(db, immediate=True):
@@ -1139,6 +1298,30 @@ def prune(conn, store: str, cutoff: datetime, dry_run: bool = False) -> int:
     return total
 
 
+def _delete_store(base: Path | None, store: str, key: int) -> int:
+    """Delete one tenant key's rows from every file of one store. Returns the rows deleted."""
+    deleted = 0
+    tables = (TABLE[store], *((COUNTS[store],) if store in COUNTS else ()))
+    for month in months(base, store):
+        path = _path(base, store, month)
+        with _open(path, store) as db:
+            if db is None:
+                continue
+            db.execute("PRAGMA secure_delete = ON")
+            with transaction(db, immediate=True):
+                deleted += db.execute(f"DELETE FROM {TABLE[store]} WHERE tenant = ?", (key,)).rowcount
+                for table in tables[1:]:
+                    db.execute(f"DELETE FROM {table} WHERE tenant = ?", (key,))
+                db.execute("DELETE FROM label WHERE tenant = ?", (key,))
+            # The deleted rows' old pages are in the file until the WAL is written back, even while the
+            # worker holds the file open.
+            db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            empty = not any(db.execute(f"SELECT 1 FROM {t} LIMIT 1").fetchone() for t in tables)
+        if empty:
+            _remove(path)
+    return deleted
+
+
 def trim_coverage(conn, source: str, before: datetime) -> int:
     """After retention removed ``source``'s history from before ``before``: every tenant's history now starts
     there, so pages stop saying it's "detailed from" a date it no longer holds, and gaps or lost stretches
@@ -1159,24 +1342,19 @@ def trim_coverage(conn, source: str, before: datetime) -> int:
 
 def delete_tenant(base: Path | None, key: int) -> int:
     """Delete every event of one tenant key from every file. Returns the rows deleted."""
-    deleted = 0
-    for store in STORES:
-        for month in months(base, store):
-            path = _path(base, store, month)
-            with _open(path, store) as db:
-                if db is None:
-                    continue
-                db.execute("PRAGMA secure_delete = ON")
-                with transaction(db, immediate=True):
-                    deleted += db.execute(f"DELETE FROM {TABLE[store]} WHERE tenant = ?", (key,)).rowcount
-                    db.execute("DELETE FROM label WHERE tenant = ?", (key,))
-                # The deleted rows' old pages are in the file until the WAL is written back, even while the
-                # worker holds the file open.
-                db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-                empty = not db.execute(f"SELECT 1 FROM {TABLE[store]} LIMIT 1").fetchone()
-            if empty:
-                _remove(path)
-    return deleted
+    return sum(_delete_store(base, store, key) for store in STORES)
+
+
+def delete_activity(conn, tenant_id: int) -> int:
+    """Delete what the audit log add-on collected for a tenant (its records and counts) and forget how far its
+    feed was read. Returns the records deleted."""
+    with transaction(conn, immediate=True):
+        conn.execute("DELETE FROM event_cursors WHERE tenant_id = ? AND source LIKE 'activity:%'", (tenant_id,))
+    where = _where(conn, tenant_id)
+    if where is None:
+        return 0
+    base, key = where
+    return _delete_store(base, "activity", key)
 
 
 def sweep(conn) -> int:

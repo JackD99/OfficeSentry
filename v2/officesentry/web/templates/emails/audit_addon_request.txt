@@ -1,0 +1,24 @@
+{#- The message an admin copies to send a client the audit log add-on's link (audit_addon_client.html). First line is the subject. -#}
+Subject: Please approve audit log reports for your Microsoft 365
+Hi {{ (contact.contact_name.split()[0] if contact and contact.contact_name else 'there') }},
+
+We'd like to add a report on who deleted, downloaded and shared files and who opened other people's mailboxes to {{ tenant.name }}'s Microsoft 365 reports. It comes from your Microsoft 365 audit log, so a Global Administrator of your Microsoft 365 needs to approve one more read-only app. It takes a couple of minutes:
+
+1. Open this link and sign in with a Global Administrator account:
+{{ link }}
+
+2. Microsoft shows one permission: "Read activity data for your organization", on the Office 365 Management APIs. Press Accept.
+
+That's all; there's no role to assign this time. The reports then show:
+{% for line in words %}
+- {{ line }}{% endfor %}
+
+It never reads:
+{% for line in never %}
+- {{ line }}{% endfor %}
+
+What it reads is kept {{ retention }}. The attached PDF explains it in full, and how to remove the app at any time.
+
+Thanks,
+{{ brand.display_name }}{% if brand.contact %}
+{{ brand.contact }}{% endif %}

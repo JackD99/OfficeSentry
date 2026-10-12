@@ -1,0 +1,128 @@
+{#- The audit log add-on's settings (web/audit_addon.settings): its app, the switch, and where each client has got. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf, ts %}
+{% from "_device_code.html" import device_code %}
+{% block title %}Audit log add-on · Office Sentry{% endblock %}
+{% block content %}
+{% set ready = connections|selectattr('client_id')|list %}
+{% set status = sign_in.status if sign_in else none %}
+{% set active = status in ('waiting', 'working') %}
+<div class="crumbs"><a href="{{ url_for('admin.connections') }}">App connection</a><span>/</span><span>Audit log add-on</span></div>
+<div class="page-head"><div><h1>Audit log add-on {% if on %}<span class="pill ok">On</span>{% else %}<span class="pill">Off</span>{% endif %}</h1>
+  <div class="sub">Who deleted, downloaded and shared files, and who opened someone else's mailbox, from each client's Microsoft 365 audit log. It uses a second app, with one read-only permission, that each client approves only if they want it. Clients who don't keep everything they have today.</div></div></div>
+
+{% if not ready or sign_in %}
+<section class="card setup wizard" id="setup" aria-labelledby="setup-title">
+  <div class="card-head"><h2 id="setup-title">Create the add-on's app</h2>
+    {% if active %}<span class="pill accent">Waiting for sign-in</span>{% endif %}</div>
+  <ol class="setup-steps flush-steps">
+    <li class="current">
+      <div class="step-title">Sign in to Microsoft</div>
+      <div class="step-body">
+      {% if active %}
+        {{ device_code(sign_in, url_for('audit_addon.check_setup'), url_for('audit_addon.cancel_setup'), seconds_left,
+            "Sign in as someone in your own (the MSP's) tenant who can create app registrations: a Global Administrator, Application Administrator or Cloud Application Administrator. Office Sentry uses this sign-in once, to create the add-on's app, and doesn't keep it.") }}
+      {% else %}
+        {% if status == 'failed' %}
+        <div class="callout bad" role="alert">{{ icon('alert') }}<div><strong>The app wasn't created.</strong> {{ sign_in.error }}</div></div>
+        {% endif %}
+        The same sign-in as the App connection page: Office Sentry shows you a code, and you sign in on Microsoft's page in another tab. Your password and the sign-in itself never pass through Office Sentry.
+        <form method="post" action="{{ url_for('audit_addon.start_setup') }}" class="step-form setup-start">
+          {{ csrf() }}
+          <div class="form-actions"><button class="primary">{{ icon('shield') }} Sign in to Microsoft</button></div>
+          <details class="by-hand small">
+            <summary>More options</summary>
+            <div class="form-row">
+              <label>Microsoft cloud <select name="cloud">{% for key, label in cloud_choices %}{% if key not in ready_clouds %}<option value="{{ key }}">{{ label }}</option>{% endif %}{% endfor %}</select>
+                <span class="hint">Commercial unless your own tenant is in US Government GCC High or DoD. Microsoft doesn't offer the feed in China (21Vianet).</span></label>
+              <label>Your tenant <input name="tenant" placeholder="Any tenant" autocomplete="off" class="mono">
+                <span class="hint">Blank works for most people. If you sign in as a guest in your tenant, enter its domain or ID.</span></label>
+            </div>
+          </details>
+        </form>
+      {% endif %}
+      </div>
+    </li>
+    <li>
+      <div class="step-title">Office Sentry creates the app and switches the add-on on</div>
+      <div class="step-body">A multi-tenant app named “{{ default_name }}” with one permission, <code>ActivityFeed.Read</code> on the Office 365 Management APIs, and its own certificate whose private key never leaves Office Sentry. Switching the add-on on only adds it to each client's Settings tab; nothing is read from any client yet.</div>
+    </li>
+    <li>
+      <div class="step-title">Ask the clients who want it</div>
+      <div class="step-body">From each client's Settings tab, Audit log add-on: send its Global Administrator the add-on link and pack. Office Sentry starts reading once they've approved.</div>
+    </li>
+  </ol>
+  {% if not active %}
+  <div class="card-foot">
+  <details class="by-hand other-ways">
+    <summary>Create the app by hand instead</summary>
+    <div class="small">
+      <p>If your Conditional Access blocks device sign-in:</p>
+      <ol>
+        <li>Generate the add-on's certificate below, then download its .cer file from App connection.</li>
+        <li>In the Entra admin centre: <em>App registrations → New registration</em>, named “{{ default_name }}”. Supported account types: <em>Accounts in any organizational directory</em>.</li>
+        <li>Redirect URI (Web): <code>{{ redirect_uri }}</code>.</li>
+        <li>Under <em>Certificates &amp; secrets</em>, upload the .cer file. Under <em>API permissions → Add a permission → Office 365 Management APIs → Application permissions</em>, tick <code>ActivityFeed.Read</code> and nothing else.</li>
+        <li>Copy the app's <em>Application (client) ID</em> into its card on App connection. Saving it switches the add-on on.</li>
+      </ol>
+      <form method="post" action="{{ url_for('audit_addon.create_by_hand') }}" class="form-row step-form">
+        {{ csrf() }}
+        <label>Microsoft cloud <select name="cloud">{% for key, label in cloud_choices %}{% if key not in ready_clouds %}<option value="{{ key }}">{{ label }}</option>{% endif %}{% endfor %}</select></label>
+        <button>Generate certificate</button>
+      </form>
+    </div>
+  </details>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if ready %}
+<section class="card" id="switch">
+  <div class="card-head"><h2>{{ 'The add-on is on' if on else 'The add-on is off' }}</h2></div>
+  {% if on %}
+  <p>Each client's Settings tab has an <em>Audit log add-on</em> page to send the link from, and the clients it's on for get the Files and mailbox access report.</p>
+  <form method="post" action="{{ url_for('audit_addon.switch') }}" class="step-action">{{ csrf() }}<input type="hidden" name="on" value="0">
+    <button class="sm">Switch off</button>
+    <span class="small muted">Hides the add-on everywhere. Switch it off for each client first.</span></form>
+  {% else %}
+  <p>Nothing about the add-on shows anywhere until it's on: not on clients' Settings tabs, the onboarding tracker or the reports.</p>
+  <form method="post" action="{{ url_for('audit_addon.switch') }}" class="step-action">{{ csrf() }}<input type="hidden" name="on" value="1">
+    <button class="sm primary">Switch on</button></form>
+  {% endif %}
+  <dl class="kv">
+    {% for c in ready %}<dt>App{% if not cloud_of(c).is_default %} ({{ cloud_of(c).label }}){% endif %}</dt><dd>{{ c.name }} · <span class="mono small">{{ c.client_id }}</span> · <a href="{{ url_for('admin.connections') }}#conn-{{ c.id }}">Certificate</a></dd>{% endfor %}
+  </dl>
+</section>
+{% endif %}
+
+{% if on %}
+<section class="card flush" id="clients">
+  <div class="card-head"><h2>Clients</h2>
+    <span class="meta">{% for key, (label, tone) in states.items() if key != 'not_sent' and counts[key] %}<span class="pill {{ tone }}">{{ counts[key] }} {{ label|lower }}</span> {% endfor %}</span></div>
+  {% if clients %}
+  <table class="stack-sm">
+    <thead><tr><th>Client</th><th>Add-on</th><th>What's happening</th></tr></thead>
+    <tbody>
+    {% for t, s in clients %}
+    <tr><td><a class="strong" href="{{ url_for('audit_addon.client', tenant_id=t.id) }}">{{ t.name }}</a></td>
+      <td data-label="Add-on"><span class="pill {{ s.tone }}">{{ s.label }}</span></td>
+      <td data-label="What's happening">{{ s.detail }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="intro muted">No client has been asked yet. Open a client, then Settings, Audit log add-on, to send them the link.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<details class="card part">
+  <summary class="card-head"><h2>What the add-on reads and sends</h2></summary>
+  <p>One application permission, <code>ActivityFeed.Read</code> on the Office 365 Management APIs. From each client that approves it, the reports show:</p>
+  <ul>{% for line in client_words %}<li>{{ line }}</li>{% endfor %}</ul>
+  <p>It never reads:</p>
+  <ul>{% for line in never %}<li>{{ line }}</li>{% endfor %}</ul>
+  <p>Every request it makes reads, except two that Microsoft's feed needs: <strong>start</strong> asks Microsoft to make a client's new audit records available to the add-on's app, and <strong>stop</strong> asks it to stop. Office Sentry sends start once per kind of record ({{ content_types|join(' and ') }}), after it has confirmed that a client you asked for approved the add-on; and stop the same way when you switch the add-on off for a client or delete the client. Neither changes anything in the client's tenant, and a nightly collection never sends either.</p>
+</details>
+{% endblock %}

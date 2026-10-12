@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 
 from .. import adminactivity, events, retention, signins
+from ..auditlog import addon
 from ..text import plural
 from . import charts
 
@@ -79,6 +80,7 @@ class Page:
     review: list[dict]  # normalised admin events with "severity" and "why"
     review_total: int
     policy: retention.Policy
+    addon: dict | None = None  # the audit log add-on's state and records kept, where it was asked for
 
     @property
     def collected(self) -> bool:
@@ -233,8 +235,10 @@ def build(conn, tenant_id: int, policy: retention.Policy, now: datetime | None =
                 "foot": f"in the last {RECENT_DAYS} days",
             }
         )
+    row = addon.row_for(conn, tenant_id) if addon.enabled(conn) else None
+    shown = None if row is None else {"state": addon.state(row), "records": events.counts(conn, tenant_id)["activity"]}
     return Page(
-        now, signins_src, audits_src, tiles, chart, chart_label, months, review[:MAX_REVIEW], len(review), policy
+        now, signins_src, audits_src, tiles, chart, chart_label, months, review[:MAX_REVIEW], len(review), policy, shown
     )
 
 

@@ -32,7 +32,7 @@ import requests
 from . import clouds, dnscheck, recording, store
 from .canary import compare
 from .checks import evaluate
-from .collectors import REGISTRY
+from .collectors import REGISTRY, core
 from .config import Config
 from .db import connect, migrate, utcnow
 from .exchange import ExchangeClient, ExchangeError
@@ -166,7 +166,7 @@ def run(
         dnscheck.lookup = recording.recording_lookup(answers, doh_lookup if dns_over_https else real_lookup)
         if record or canary:
             dnscheck.lookup = recording.recording_lookup(log, dnscheck.lookup)
-        keys = [k for k in REGISTRY if not only or k in only]
+        keys = [k for k in REGISTRY if k in only] if only else core()  # add-ons only when asked for
         # Count the test app as consented while collecting: a first success on an unconsented tenant queues every
         # other collector (worker.execute_run), which would run collectors that weren't asked for, in another order.
         consented = store.get_tenant(conn, tenant_id)["consented_at"]

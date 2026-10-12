@@ -1,9 +1,15 @@
-{#- Public: a client's Global Administrator back from Microsoft's consent page (web/onboarding.client_returned).
-    Names no tenant and shows none of Microsoft's text, only a known explanation. -#}
+{#- Public: a client's Global Administrator back from Microsoft's consent page (web/onboarding.client_returned,
+    or web/audit_addon.client_returned with `addon`). Names no tenant and shows none of Microsoft's text, only a
+    known explanation. -#}
 {% extends "base.html" %}
 {% block title %}{{ 'Thank you' if approved else 'Not approved' }} · {{ brand.display_name }}{% endblock %}
 {% macro message() %}
-{% if approved %}
+{% if approved and addon %}
+<h1>Thank you</h1>
+<p>You've approved {{ app }}, which lets {{ brand.display_name }} read your Microsoft 365 audit log. Office Sentry is checking it can sign in now; nothing else happens until then.</p>
+<p>There's nothing else to do. To remove it later, delete <strong>{{ app }}</strong> under <strong>Enterprise applications</strong> in the Microsoft Entra admin centre (<a href="{{ cloud.admin_centre }}" rel="noopener">{{ cloud.admin_centre.split('//')[-1] }}</a>).</p>
+<p class="muted small">You can close this page.</p>
+{% elif approved %}
 <h1>Thank you</h1>
 <p>You've approved read-only access for {{ brand.display_name }}'s Microsoft 365 reports. Office Sentry is checking it can sign in now; nothing else happens until then.</p>
 <h2 class="h3">One more step, for mailbox reports</h2>

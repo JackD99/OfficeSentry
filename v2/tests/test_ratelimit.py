@@ -12,7 +12,7 @@ import pytest
 import responses
 
 from officesentry import endpoints, ratelimit, store
-from officesentry.collectors import REGISTRY
+from officesentry.collectors import core
 from officesentry.endpoints import LIMITS, Limit
 from officesentry.exchange import ExchangeClient
 from officesentry.graph import GRAPH_ROOT, USER_AGENT, GraphClient, GraphError
@@ -278,7 +278,7 @@ def test_every_run_records_its_requests(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     runs = db.execute("SELECT * FROM runs WHERE tenant_id = ?", (alpha,)).fetchall()
-    assert {r["collector"] for r in runs} == set(REGISTRY)
+    assert {r["collector"] for r in runs} == set(core())
     users = next(r for r in runs if r["collector"] == "users")
     pages = -(-len(SEED_USERS) // PAGE)  # the seed answers a page at a time, and every page is a request
     assert (users["requests"], users["throttled"], users["wait_seconds"]) == (pages, 0, 0)

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from flask import g, render_template
 
-from ..reports.data_reports import grouped
+from ..reports.data_reports import grouped, hidden
 from ..reports.monthly_review import build
 
 MAX_RECOMMENDATIONS = 8
@@ -59,4 +59,4 @@ def _row(tenant) -> dict:
 
 
 def render(tenants):
-    return render_template("client_home.html", rows=[_row(t) for t in tenants], report_groups=grouped())
+    return render_template("client_home.html", rows=[_row(t) for t in tenants], report_groups=grouped(hidden(g.db)))

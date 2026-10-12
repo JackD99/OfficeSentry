@@ -1,0 +1,80 @@
+{#- The audit log add-on's "send this to your client" pack (web/audit_addon.pack): how to approve the add-on, what it
+    reads and never reads, and how to remove it. For the client's Global Administrator: no staff, no internals. -#}
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+{% set compact_cover = true %}
+{% set document = true %}
+
+{% block doc_title %}Approving audit log reports{% endblock %}
+{% block client %}{{ tenant.name }}{% endblock %}
+{% block cover_subtitle %}<p class="cover-sub">An addition to your Microsoft 365 reports from {{ brand.display_name }}</p>{% endblock %}
+{% block toolbar %}
+  <a class="back" href="{{ url_for('audit_addon.client', tenant_id=tenant.id) }}">&larr; {{ tenant.name }}</a>
+  <span class="spacer"></span>
+  <a class="button primary" href="{{ url_for('audit_addon.pack', tenant_id=tenant.id) }}"><span class="wide">Download </span>PDF</a>
+{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Date', today.day ~ ' ' ~ today.strftime('%B %Y')) }}
+  {{ ui.meta('Microsoft 365 tenant', tenant.tenant_ref) }}
+  {{ ui.meta('App to approve', app) }}
+{% endblock %}
+{% block footer_note %}For {{ tenant.name }}{% endblock %}
+
+{% block body %}
+<p class="lede">{{ brand.display_name }} would like to add a report on who deleted, downloaded and shared files, and who opened other people's mailboxes, to your Microsoft 365 reports. That comes from your Microsoft 365 audit log, which the app you approved before can't read. So this is a second app, with one read-only permission. A <strong>Global Administrator</strong> of your Microsoft 365 approves it once; it takes a couple of minutes.</p>
+
+<section class="doc-section keep">
+  <h2>Approve the app</h2>
+  {% if link %}
+  <ol class="pack-steps">
+    <li>Open this link and sign in with a Global Administrator account of {{ tenant.name }}:
+      <p class="pack-link"><a href="{{ link }}">{{ link|breakable }}</a></p></li>
+    <li>Microsoft shows the app's name, <strong>{{ app }}</strong>, and one permission, <em>Read activity data for your organization</em>, on the Office 365 Management APIs. Press <strong>Accept</strong>.</li>
+    <li>You land on a {{ brand.display_name }} page saying thank you. There's no role to assign and nothing else to do.</li>
+  </ol>
+  {% else %}
+  <p class="section-intro">{{ brand.display_name }} will send you the approval link separately.</p>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2>What it reads</h2>
+  <p class="section-intro">The permission Microsoft lists on the approval page, in Microsoft's name:</p>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Permission</th><th>What it reads</th></tr></thead>
+    <tbody>
+    {% for name, words in permission.items() %}<tr><td class="nw"><code>{{ name }}</code><br><span class="muted">Office 365 Management APIs</span></td><td>{{ words }}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+<section class="doc-section keep">
+  <h2>What the reports show</h2>
+  <p class="section-intro">From your audit log:</p>
+  <ul class="pack-list">{% for item in words %}<li>{{ item }}</li>{% endfor %}</ul>
+  <p class="section-intro">What it reads is kept {{ retention }}, then deleted.</p>
+</section>
+
+<section class="doc-section keep">
+  <h2>What it never reads</h2>
+  <ul class="pack-list">{% for item in never %}<li>{{ item }}</li>{% endfor %}</ul>
+  <p class="section-intro">The app connects with a certificate {{ brand.display_name }} holds, not with anyone's password. Once you've approved it, {{ brand.display_name }} asks Microsoft to make your new audit records available to it (and, if the add-on is switched off, to stop). That only decides whether the app may read the records; it changes nothing in your tenant.</p>
+</section>
+
+<section class="doc-section keep">
+  <h2>Before you approve</h2>
+  <p class="section-intro">Microsoft only records this activity while auditing is on, which it is by default. If someone turned it off, the reports stay empty until it's on again: in the Microsoft Purview portal, go to <strong>Audit</strong> and choose <strong>Start recording user and admin activity</strong>.</p>
+</section>
+
+<section class="doc-section keep">
+  <h2>Removing it</h2>
+  <p class="section-intro">You can remove it at any time, and it stops straight away. In the Microsoft Entra admin centre ({{ cloud.admin_centre.split('//')[-1] }}), go to <strong>Enterprise applications</strong>, open <strong>{{ app }}</strong>, choose <strong>Properties</strong>, then <strong>Delete</strong>. Your other reports carry on as before.</p>
+</section>
+
+<section class="cta keep">
+  <h3>Questions?</h3>
+  <p>Ask us before you approve anything you're unsure of.</p>
+  <p class="contact">{{ brand.display_name }}{% if brand.contact %} · {{ brand.contact }}{% endif %}</p>
+</section>
+{% endblock %}

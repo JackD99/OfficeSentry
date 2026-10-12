@@ -17,6 +17,7 @@ from flask import Blueprint, Response, abort, current_app, flash, g, redirect, r
 from itsdangerous import BadSignature, URLSafeSerializer
 
 from .. import clouds, onboarding, permission_batch, store, tenant_health
+from ..auditlog import addon
 from ..db import audit, audit_counted
 from ..entra import GRAPH_APP_ID, PERMISSIONS, admin_consent_url
 from ..reports import tables
@@ -121,8 +122,13 @@ def index():
         e.connection["id"]: e.connection for e in everything if e.state.key in onboarding.NEW_STATES and e.connection
     }
     behind = [c for c in asking.values() if not permission_batch.app_ready(g.db, c)]
+    # The audit log add-on's column, while the add-on is switched on: where each client has got with it.
+    addon_rows = addon.rows_for(g.db, [e.tenant["id"] for e in entries]) if addon.enabled(g.db) else None
     return render_template(
         "onboarding.html",
+        addon=None
+        if addon_rows is None
+        else {e.tenant["id"]: addon.state(addon_rows.get(e.tenant["id"])) for e in entries},
         entries=entries,
         counts=counts,
         total=len(everything),

@@ -18,7 +18,7 @@
 {#- (endpoint, label, other endpoints that belong to the page, the capability that opens it; '' means any staff role) -#}
 {% set ALL_SETTINGS = [('tenant_admin.clients', 'Client settings', ['onboarding.index', 'onboarding.import_tenants', 'onboarding.send'], ''),
                    ('groups.index', 'Client groups', ['groups.edit'], 'clients.manage'),
-                   ('admin.connections', 'App connection', [], 'settings.manage'),
+                   ('admin.connections', 'App connection', ['audit_addon.settings'], 'settings.manage'),
                    ('reports.prices', 'Licence prices', [], 'settings.manage'), ('email.settings', 'Email delivery', [], 'settings.manage'),
                    ('alerts.settings', 'Alerts', [], 'settings.manage'), ('branding.settings', 'Branding', [], 'settings.manage'),
                    ('retention.settings', 'Data retention', [], 'settings.manage'), ('admin.users', 'Users', ['admin.edit_user', 'roles.index', 'roles.edit'], 'users.manage'),

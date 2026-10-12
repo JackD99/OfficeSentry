@@ -21,10 +21,10 @@ def test_catalogue_mentions_every_check_collector_and_report():
     text = _generator().render()
     for r in RULES:
         assert f"`{r.key}`" in text, r.key
-    for key in REGISTRY:
-        assert f"`{key}`" in text, key
-    for key in REPORTS:
-        assert f"`{key}`" in text, key
+    for key in REGISTRY:  # an add-on's collector and report are documented with the add-on
+        assert (f"`{key}`" in text) == (not REGISTRY[key].addon), key
+    for key, (_title, _description, sources, _builder) in REPORTS.items():
+        assert (f"`{key}`" in text) == any(not REGISTRY[s].addon for s in sources), key
 
 
 def test_catalogue_finds_the_collectors_a_check_reads():

@@ -87,6 +87,7 @@ FORM = {
     "history_signin_days": "180",
     "history_daily_months": "25",
     "history_audit_years": "7",
+    "history_activity_months": "24",
     "state_months": "25",
 }
 

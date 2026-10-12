@@ -17,7 +17,7 @@ from ..reports.data_reports import grouped as report_groups
 from ..text import plural
 from .access import can, is_staff, needs, require, tenant_or_404, visible_tenants
 from .filters import _strftime as datefmt
-from .reports import report_capability
+from .reports import hidden_reports, report_capability
 
 bp = Blueprint("email", __name__)
 
@@ -251,8 +251,10 @@ def _blank(kind: str, reports=None) -> dict:
 
 
 def _catalog(tenant_id: int | None) -> list[delivery.ReportOption]:
-    """The reports a schedule may send: for one tenant, those the person may open there."""
-    return [o for o in delivery.catalog(g.db) if tenant_id is None or _opens(o.key, tenant_id)]
+    """The reports a schedule may send: for one tenant, those the person may open there (and an add-on's
+    report only where the add-on is on)."""
+    hide = {f"data:{key}" for key in hidden_reports(tenant_id)}
+    return [o for o in delivery.catalog(g.db) if o.key not in hide and (tenant_id is None or _opens(o.key, tenant_id))]
 
 
 def _form_values(kind: str, tenant_id: int | None) -> dict:
@@ -382,7 +384,7 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
         s=values,
         chosen=chosen,
         catalog=_catalog(tenant_id),
-        report_groups=report_groups(),
+        report_groups=report_groups(hidden_reports(tenant_id)),
         contacts=delivery.tenant_contacts(g.db, tenant["id"]) if tenant else [],
         team=delivery.team_contacts(g.db),
         frequencies=delivery.FREQUENCIES,

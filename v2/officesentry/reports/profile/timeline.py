@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from urllib.parse import unquote, urlsplit
 
 from ... import events as events_store
 from ... import signins, store
+from ...auditlog import addon, operations
 from ...checks.apps import SENSITIVE_DELEGATED
 from ...formatting import day
 from ...formatting import when as at_time
@@ -20,6 +23,7 @@ from .sign_ins import _int
 
 TIMELINE_DAYS = 90
 TIMELINE_LIMIT = 50
+AREAS = {"files": "Files", "sharing": "Sharing", "audit": "Audit log"}  # the add-on's groups; the rest are Mailbox
 
 
 def _sightings(
@@ -220,10 +224,46 @@ def timeline(p: Person) -> list[_Happened]:
     for name, at in held.items():
         first(at, oldest, "Admin roles", f"{name} role first seen", "warn")
 
+    if addon.row_for(conn, tid) is not None:
+        out.extend(_audit_log(p))
+
     cutoff = (p.now - timedelta(days=TIMELINE_DAYS)).strftime("%Y-%m-%d")
     out = [e for e in out if e.at[:10] >= cutoff]
     out.sort(key=lambda e: e.at, reverse=True)
     return out[:TIMELINE_LIMIT]
+
+
+def _item(value: str) -> str:
+    return unquote(urlsplit(value).path) or value if value.lower().startswith("https://") else value
+
+
+def _audit_log(p: Person) -> list[_Happened]:
+    """The audit log add-on's records (``auditlog/``) about the account: what it did to files, sharing and
+    mailboxes, and what someone else did to its mailbox. Its own file deletes and downloads are counted per day
+    and kind, so a busy day is one line."""
+    out: list[_Happened] = []
+    files: Counter = Counter()
+    last: dict[tuple[str, str], str] = {}
+    start = p.end - timedelta(days=TIMELINE_DAYS)
+    for a in events_store.activity_between(p.snap.conn, p.snap.tenant["id"], start, p.end, people=p.keys):
+        at = f"{datetime.fromtimestamp(a.ts, UTC):%Y-%m-%dT%H:%M:%SZ}"
+        group, what = operations.group(a.operation), operations.label(a.operation)
+        if group == "files" and p.named(a.actor) and not a.attention:
+            files[(at[:10], what)] += 1
+            last.setdefault((at[:10], what), _item(a.object))
+            continue
+        if p.named(a.actor):
+            about = a.owner if a.owner and not p.named(a.owner) else _item(a.object)
+            text = f"{what}: {about}" if about else what
+        else:  # done to the account's mailbox (or shared with it) by someone else
+            who = a.actor or "someone"
+            text = what.replace("by someone else", f"by {who}").replace("someone else", "this account")
+            text = (text if who in text else f"{text} by {who}") + (f": {_item(a.object)}" if a.object else "")
+        text += f" ({a.summary})" if a.summary else ""
+        out.append(_Happened(at, at_time(at), AREAS.get(group, "Mailbox"), text, "warn" if a.attention else None))
+    for (on, what), n in files.items():
+        out.append(_Happened(on, day(on), "Files", f"{what}: {last[(on, what)]}" if n == 1 else f"{what} {n} times"))
+    return out
 
 
 @part(95)
@@ -239,9 +279,14 @@ def timeline_part(p: Person) -> Part:
         result.tables = [table]
         result.summary = _plural(len(events), "event")
         result.tone = "bad" if any(e.tone == "bad" for e in events) else None
+    timed = (
+        "Admin changes, sign-ins and audit log records"
+        if addon.row_for(p.snap.conn, p.snap.tenant["id"])
+        else ("Admin changes and sign-ins")
+    )
     result.note = (
-        f"Newest first, the last {TIMELINE_DAYS} days (up to {TIMELINE_LIMIT} events). Admin changes "
-        "and sign-ins keep their own time; rules, forwarding, app consents, MFA methods and roles are dated "
+        f"Newest first, the last {TIMELINE_DAYS} days (up to {TIMELINE_LIMIT} events). {timed} "
+        "keep their own time; rules, forwarding, app consents, MFA methods and roles are dated "
         "when Office Sentry first collected them, so they were set up on or before that day."
     )
     return result

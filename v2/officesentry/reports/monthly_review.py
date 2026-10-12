@@ -15,7 +15,7 @@ from pathlib import Path
 
 from ..changes import Change, all_changes
 from ..checks import SEVERITY_RANK, Finding, RuleResult, evaluate
-from ..collectors import REGISTRY
+from ..collectors import REGISTRY, core
 from ..db import try_write, utcnow
 from ..devices import parse_day
 from ..findings import finding_key, lifecycle_map, resolved_since
@@ -321,7 +321,7 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
     ]
 
     freshness = []
-    for key, cls in REGISTRY.items():
+    for key, cls in ((k, REGISTRY[k]) for k in core()):
         run = snap.runs.get(key)
         finished = run["finished_at"] if run else None
         is_stale = finished is None or datetime.fromisoformat(finished.replace("Z", "+00:00")) < now - STALE_AFTER
@@ -490,7 +490,7 @@ def _fingerprint(conn, tenant, now: datetime) -> str:
 
 def _stale(conn, tenant_id: int, now: datetime) -> bool:
     """True when a data source has never succeeded or last did longer than ``STALE_AFTER`` ago."""
-    keys = list(REGISTRY)
+    keys = core()
     # One MAX per collector and status, each a single index lookup (idx_runs_latest).
     rows = conn.execute(
         f"WITH c(key) AS (VALUES {','.join(f'(:k{i})' for i in range(len(keys)))})"

@@ -27,7 +27,9 @@ class Step:
 
 def steps(conn) -> list[Step]:
     """Every step, in order, with whether it's done."""
-    connected = conn.execute("SELECT 1 FROM app_connections WHERE client_id IS NOT NULL LIMIT 1").fetchone()
+    connected = conn.execute(
+        "SELECT 1 FROM app_connections WHERE client_id IS NOT NULL AND kind = 'main' LIMIT 1"
+    ).fetchone()
     first = conn.execute("SELECT id, name FROM tenants WHERE archived_at IS NULL ORDER BY id LIMIT 1").fetchone()
     consented = conn.execute(
         "SELECT id, name FROM tenants WHERE consented_at IS NOT NULL AND archived_at IS NULL"

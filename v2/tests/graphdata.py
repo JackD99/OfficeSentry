@@ -665,6 +665,7 @@ EXCHANGE = {
         {"Identity": "Ann", "Trustee": "NT AUTHORITY\\SELF", "AccessRights": ["SendAs"]},
     ],
     "Get-OrganizationConfig": [{"AuditDisabled": False}],
+    "Get-AdminAuditLogConfig": [{"UnifiedAuditLogIngestionEnabled": True}],
     "Get-TransportConfig": [{"SmtpClientAuthenticationDisabled": False}],
     "Get-HostedOutboundSpamFilterPolicy": [{"Name": "Default", "AutoForwardingMode": "Automatic", "IsDefault": True}],
     "Get-RemoteDomain": [{"Name": "Default", "DomainName": "*", "AutoForwardEnabled": True}],

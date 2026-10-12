@@ -24,7 +24,7 @@ from ..permission_batch import waiting_text
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from . import workbook
-from .registry import GROUPS, REPORTS, ReportGroup, grouped, report  # noqa: F401  (read from here)
+from .registry import GROUPS, REPORTS, ReportGroup, grouped, hidden, report  # noqa: F401  (read from here)
 from .tables import Table
 
 

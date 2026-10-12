@@ -22,13 +22,23 @@ def atomic(conn):
 # -- App connections ---------------------------------------------------------
 
 
+MAIN, AUDIT = "main", "audit"  # app_connections.kind: the shared read-only app, or the audit log add-on (auditlog/)
+
+
 def create_connection(
-    conn, vault, name: str, cert, client_id: str | None = None, multi_tenant: bool = True, cloud: str = "commercial"
+    conn,
+    vault,
+    name: str,
+    cert,
+    client_id: str | None = None,
+    multi_tenant: bool = True,
+    cloud: str = "commercial",
+    kind: str = MAIN,
 ) -> int:
     """An app registration Office Sentry signs in as, in one Microsoft cloud (``clouds.py``)."""
     cur = conn.execute(
         "INSERT INTO app_connections (name, client_id, multi_tenant, cert_pem, key_enc, thumbprint,"
-        " not_after, created_at, cloud) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " not_after, created_at, cloud, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             name,
             client_id,
@@ -39,17 +49,24 @@ def create_connection(
             cert.not_after.strftime("%Y-%m-%dT%H:%M:%SZ"),
             utcnow(),
             cloud,
+            kind,
         ),
     )
     return cur.lastrowid
 
 
-def get_connection(conn, connection_id: int):
-    return conn.execute("SELECT * FROM app_connections WHERE id = ?", (connection_id,)).fetchone()
+def get_connection(conn, connection_id: int, kind: str | None = None):
+    """The app connection, or None. With ``kind``, only a connection of that kind (a tenant's connection, chosen
+    in a form, is always a ``MAIN`` one)."""
+    row = conn.execute("SELECT * FROM app_connections WHERE id = ?", (connection_id,)).fetchone()
+    return row if row is not None and (kind is None or row["kind"] == kind) else None
 
 
-def list_connections(conn):
-    return conn.execute("SELECT * FROM app_connections ORDER BY id").fetchall()
+def list_connections(conn, kind: str | None = MAIN):
+    """App connections of one kind, the shared read-only app's by default; ``kind=None`` for every one."""
+    if kind is None:
+        return conn.execute("SELECT * FROM app_connections ORDER BY id").fetchall()
+    return conn.execute("SELECT * FROM app_connections WHERE kind = ? ORDER BY id", (kind,)).fetchall()
 
 
 # -- Tenants -----------------------------------------------------------------

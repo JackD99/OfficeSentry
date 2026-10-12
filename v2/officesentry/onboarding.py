@@ -4,6 +4,8 @@
   show before anything is created; ``create()`` adds the new ones in one transaction. Imported tenants
   are ordinary tenants: admins see them, analysts only when granted them (one by one, or through a
   group the import put them in, see ``access._GRANTED``).
+* ``audit_log_on()`` says whether a client's Microsoft 365 audit log is on, from its latest mailbox collection, for
+  the tracker's Audit log column.
 * ``state()`` says where a tenant has got (``STATES``: not sent, sent, approved, consented, Global
   Reader missing, new permissions to approve, sent or approved, connected), from stored state only: the
   tenant row, its ``onboarding`` row, its ``permission_requests`` row for the current batch and the
@@ -411,6 +413,7 @@ class Entry:
     app: str
     problem: str | None  # why no consent link can be made (no app connection for its cloud), or None
     request: object = None  # permission_requests row for the current batch, or None
+    audit_log: bool | None = None  # whether the client's Microsoft 365 audit log is on (``audit_log_on``)
 
     @property
     def needs_link(self) -> bool:
@@ -450,9 +453,20 @@ def tracker(conn, tenants) -> list[Entry]:
                 app_name(connection, result),
                 problem,
                 requests.get(t["id"]),
+                audit_log_on(conn, t["id"]),
             )
         )
     return entries
+
+
+def audit_log_on(conn, tenant_id: int) -> bool | None:
+    """Whether the client's Microsoft 365 audit log is recording, from its latest mailbox collection
+    (``Get-AdminAuditLogConfig``), or None when that hasn't been read. The audit log add-on has nothing to
+    read until it's on, so the tracker says so before anyone asks the client to approve it."""
+    run = store.latest_run(conn, tenant_id, "mailboxes")
+    found = store.find_object(conn, run["id"], "mail_settings", "org") if run else None
+    value = found.get("UnifiedAuditLogIngestionEnabled") if isinstance(found, dict) else None
+    return value if isinstance(value, bool) else None
 
 
 def mark_sent(conn, tenant_ids, user: str, sent: bool = True) -> int:

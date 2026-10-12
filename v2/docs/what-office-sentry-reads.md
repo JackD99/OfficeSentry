@@ -44,7 +44,7 @@ Office Sentry is built so that it can't change anything in your tenant.
   so Office Sentry refuses to run any command that isn't on its list. Every
   command on the list starts with `Get-` (Exchange's word for "show me"):
 
-  `Get-AcceptedDomain`, `Get-AntiPhishPolicy`, `Get-AntiPhishRule`, `Get-ATPProtectionPolicyRule`,
+  `Get-AcceptedDomain`, `Get-AdminAuditLogConfig`, `Get-AntiPhishPolicy`, `Get-AntiPhishRule`, `Get-ATPProtectionPolicyRule`,
   `Get-CASMailbox`, `Get-DistributionGroup`, `Get-DistributionGroupMember`,
   `Get-EOPProtectionPolicyRule`, `Get-HostedContentFilterPolicy`, `Get-HostedContentFilterRule`,
   `Get-HostedOutboundSpamFilterPolicy`, `Get-InboundConnector`, `Get-InboxRule`, `Get-Mailbox`,
@@ -76,7 +76,9 @@ Office Sentry is built so that it can't change anything in your tenant.
   free text such as a disclaimer short, and only counts the people an
   anti-phishing policy protects from impersonation. The Safe Links, Safe
   Attachments and `Get-ATPProtectionPolicyRule` commands are only run for
-  clients with Defender for Office 365.
+  clients with Defender for Office 365. `Get-AdminAuditLogConfig` returns
+  whether your Microsoft 365 audit log is recording; Office Sentry keeps only
+  that yes or no.
 
 The only things Office Sentry ever creates or changes are its own app
 registrations in your **MSP's** tenant: the one that reads your tenant
@@ -124,7 +126,7 @@ built from the checks, so they use all of the information below.
 | `DeviceManagementConfiguration.Read.All` *(new in 2.2)* | Intune configuration and compliance policies, such as firewall, screen lock, encryption and update settings, and which devices they apply to. | To show what each compliance policy requires, which platforms have none, update rings and endpoint security policies, and who each applies to. | Intune policies; the compliance policy coverage check. Needs an Intune licence. |
 | `DeviceManagementApps.Read.All` *(new in 2.2)* | Intune app protection policies and the apps Intune deploys, with their versions. | To show whether company data in apps on phones (including personal ones) is protected by a PIN and kept inside managed apps. | Intune policies (app protection). Needs an Intune licence. |
 | `Sites.Read.All` on **Office 365 SharePoint Online** *(new in 2.2)* | SharePoint's own permission lists: who is in each SharePoint group and who has access to each site and list (it needs the app's certificate). Microsoft lists it under SharePoint, separately from Microsoft Graph's permission of the same name. **Not** what's inside the files. | Graph doesn't say who is in SharePoint's own groups, so without it "who has access to this site" is incomplete. | Site permissions; the guests with full control check. Until it's approved, Site permissions says it's waiting for it. |
-| `Exchange.ManageAsApp` | Lets the app use Exchange Online's admin commands. Office Sentry only runs the `Get-` commands listed above. | Mailbox forwarding, who has access to which mailbox, shared mailboxes, mailbox sizes, which protocols each mailbox allows, phones and tablets syncing mail, distribution lists and how much mail they get, how much mail each domain sends and receives, organisation mail settings, mail flow rules and connectors, and the spam, phishing and malware filtering policies. Works only with the Global Reader role (below). | Mail forwarding; Mailbox permissions; Shared mailboxes; Mailbox size; Mobile devices; Distribution lists; Mail flow by domain; Mail rules and protection; Legacy sign-ins; email checks. |
+| `Exchange.ManageAsApp` | Lets the app use Exchange Online's admin commands. Office Sentry only runs the `Get-` commands listed above. | Mailbox forwarding, who has access to which mailbox, shared mailboxes, mailbox sizes, which protocols each mailbox allows, phones and tablets syncing mail, distribution lists and how much mail they get, how much mail each domain sends and receives, organisation mail settings, whether the Microsoft 365 audit log is on, mail flow rules and connectors, and the spam, phishing and malware filtering policies. Works only with the Global Reader role (below). | Mail forwarding; Mailbox permissions; Shared mailboxes; Mailbox size; Mobile devices; Distribution lists; Mail flow by domain; Mail rules and protection; Legacy sign-ins; email checks. |
 
 A few things Office Sentry checks come from the **public internet**, not from
 your tenant: the SPF, DKIM, DMARC, MTA-STS and TLS-RPT records of your email
@@ -182,6 +184,34 @@ its conditions (for example "subject contains *invoice*" or "from
 destination folder from the rule in Exchange (`Get-InboxRule`). It never opens
 the folder.
 
+## The audit log add-on, if you approve it
+
+Your MSP may also ask you to approve a second, separate app, **Office Sentry
+audit log add-on**. It's optional: if you don't approve it, nothing else on
+this page changes.
+
+- **One permission**: *Read activity data for your organization*
+  (`ActivityFeed.Read` on the Office 365 Management APIs). It has none of the
+  permissions above.
+- **What it reads**: your Microsoft 365 audit log for SharePoint, OneDrive and
+  Exchange, of which it keeps a short list of activities: files deleted,
+  downloaded, moved or shared; mail read, sent or deleted by someone other
+  than the mailbox's owner (an admin or a delegate); inbox rules, forwarding
+  and mailbox permissions set up; and changes to auditing itself. Files
+  opened or edited, and people reading their own mail, are left out.
+- **What it never reads**: email, attachments, file contents, chats or
+  channel messages. The audit log says *that* something happened and who did
+  it, not what was in it, and Office Sentry doesn't keep the email subjects
+  some audit records carry.
+- **Two requests that aren't reads.** Microsoft's audit log feed needs one to
+  start and one to stop: Office Sentry sends *start* once you've approved the
+  add-on, and *stop* when your MSP switches it off. They tell Microsoft whether
+  to make your new audit records available to the add-on; neither changes
+  anything in your tenant.
+
+It's removed the same way as the main app (see *How to remove access*,
+step 2), by deleting "Office Sentry audit log add-on" instead.
+
 ## Where the information is kept
 
 Office Sentry runs on hosting your MSP chooses, so some of the details below
@@ -210,7 +240,8 @@ data forever; ask them what they use.
 - **Activity history** (the sign-in and audit logs described under
   `AuditLog.Read.All` above): every sign-in for **180 days**, the daily
   sign-in summaries for **25 months** and every directory audit event for
-  **7 years**.
+  **7 years**. If you approved the audit log add-on, the activities it keeps
+  are kept for **2 years**.
 - **Detailed snapshots** (lists of users, mailboxes, policies and so on) are
   kept for the last 30 days, plus one per month for the last 12 months, and
   older ones are deleted automatically. The most recent collection of each

@@ -475,7 +475,9 @@ def _accepted_risks(conn, tenant, now: datetime, today: date) -> list[Item]:
 
 
 def _our_certificates(conn, now: datetime, today: date) -> list[Item]:
-    found = [cert_lifecycle.connection_expiry(c, now) for c in store.list_connections(conn) if c["client_id"]]
+    found = [
+        cert_lifecycle.connection_expiry(c, now) for c in store.list_connections(conn, kind=None) if c["client_id"]
+    ]
     found.append(cert_lifecycle.mail_expiry(mailer.mail_settings(conn), now))
     out = []
     for e in found:

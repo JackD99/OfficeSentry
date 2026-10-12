@@ -169,7 +169,7 @@ def catalog(conn=None) -> list[ReportOption]:
                 )
             )
     for key, (title, description, _collectors, _builder) in data_reports.REPORTS.items():
-        options.append(ReportOption(f"data:{key}", title, description, False, True))
+        options.append(ReportOption(f"data:{key}", title, description, False, True))  # forms leave out hidden()
     return options
 
 

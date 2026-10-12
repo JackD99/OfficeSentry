@@ -1,7 +1,8 @@
 """Every call Office Sentry makes to Microsoft: path, version, permission, throttle limits and fallback.
 
-One list (``GRAPH``, ``EXCHANGE`` and ``SHAREPOINT``) says, for each Graph path,
-Exchange cmdlet and SharePoint REST path the collectors use, which permission it needs, which of Microsoft's
+One list (``GRAPH``, ``EXCHANGE``, ``SHAREPOINT`` and, for the audit log add-on, ``MANAGEMENT``) says, for each
+Graph path, Exchange cmdlet, SharePoint REST path and audit feed path the collectors use, which permission it needs,
+which of Microsoft's
 throttling limits (``LIMITS``) it counts against and how many units it costs,
 and what the collector does when Microsoft can't answer. The shared limiter
 (``ratelimit.py``) reads it before each request, and run telemetry groups
@@ -24,6 +25,10 @@ GRAPH_DOCS = "https://learn.microsoft.com/graph/throttling-limits"
 SHAREPOINT_DOCS = (
     "https://learn.microsoft.com/sharepoint/dev/general-development/"
     "how-to-avoid-getting-throttled-or-blocked-in-sharepoint-online"
+)
+FEED_DOCS = (
+    "https://learn.microsoft.com/office/office-365-management-api/"
+    "office-365-management-activity-api-reference#api-throttling"
 )
 
 
@@ -75,6 +80,8 @@ LIMITS: dict[str, Limit] = {
             "Exchange message trace",
             "https://learn.microsoft.com/powershell/module/exchangepowershell/get-messagetracev2",
         ),
+        # The audit log add-on's feed: a baseline per tenant that Microsoft raises for larger and E5 tenants.
+        Limit("audit_feed", 2_000, 60, "tenant", "Microsoft 365 audit log feed", FEED_DOCS),
     )
 }
 
@@ -112,6 +119,8 @@ class Endpoint:
             return f"Exchange {self.path}"
         if self.api == "sharepoint":
             return f"SharePoint {self.path}"
+        if self.api == "management":
+            return f"Audit feed {self.path}"
         return f"{version or self.versions[0]} {self.path}" + (f" ({self.select})" if self.select else "")
 
 
@@ -428,6 +437,15 @@ EXCHANGE: tuple[Endpoint, ...] = tuple(
         api="exchange",
         fallback="Undocumented InvokeCommand endpoint; the top spam and phishing recipients are left out without it",
     ),
+    Endpoint(
+        "Get-AdminAuditLogConfig",
+        ("beta",),
+        "Exchange.ManageAsApp and Global Reader",
+        ("exchange",),
+        api="exchange",
+        fallback="Undocumented InvokeCommand endpoint; without it whether the Microsoft 365 audit log is on is "
+        "shown as not known",
+    ),
 )
 # Mail rules and protection: each part is read on its own, and one that fails is shown as unread.
 EXCHANGE += tuple(
@@ -487,6 +505,32 @@ SHAREPOINT: tuple[Endpoint, ...] = tuple(
         ("/web/lists", SP_MANY, ""),
         ("/web/lists(guid'{list}')/roleassignments", SP_MANY, "Read for lists with their own permissions only"),
         ("/web/webs", SP_MANY, ""),
+    )
+)
+
+# The audit log add-on's Office 365 Management Activity feed (``auditlog/feed.py``), signed in as the add-on app,
+# never the shared one. Paths are what follows ``/api/v1.0/<tenant>/activity/feed``. The two POSTs are the only
+# calls Office Sentry ever sends a client's Microsoft 365 that aren't reads, and only from an admin's action.
+_FEED_PERMISSION = "ActivityFeed.Read (Office 365 Management APIs)"
+MANAGEMENT: tuple[Endpoint, ...] = tuple(
+    Endpoint(path, ("v1.0",), _FEED_PERMISSION, ("audit_feed",), api="management", fallback=fallback)
+    for path, fallback in (
+        (
+            "/subscriptions/list",
+            "Read to confirm a client approved the add-on and before each collection; a refusal means the client "
+            "hasn't approved it, or removed it",
+        ),
+        (
+            "/subscriptions/start",
+            "POST, once per content type, after the client approved and an admin asked for the add-on; never sent by "
+            "a collection",
+        ),
+        (
+            "/subscriptions/stop",
+            "POST, once per content type, when an admin switches the add-on off or deletes the client",
+        ),
+        ("/subscriptions/content", "Which audit records Microsoft has ready, a day at a time within its last 7 days"),
+        ("/audit/{content}", "One batch of audit records; one that expired before it was read is noted as lost"),
     )
 )
 
@@ -552,3 +596,20 @@ def sharepoint_key(url: str) -> str:
     if endpoint is not None:
         return endpoint.key()
     return "SharePoint " + re.sub(r"\(guid'[^']*'\)", "({id})", sharepoint_path(url))
+
+
+def management_path(url: str) -> str:
+    """The part of an audit feed URL after ``/activity/feed`` (``/subscriptions/list``)."""
+    path = urlsplit(url).path
+    return path.split("/activity/feed", 1)[1] if "/activity/feed" in path else path
+
+
+def management(url: str) -> Endpoint | None:
+    """The catalogue entry for an audit feed request (full URL, any tenant)."""
+    path = management_path(url)
+    return next((e for e in MANAGEMENT if e.pattern.match(path)), None)
+
+
+def management_key(url: str) -> str:
+    endpoint = management(url)
+    return endpoint.key() if endpoint is not None else "Audit feed " + management_path(url)

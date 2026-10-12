@@ -63,7 +63,7 @@ def test_collector_threads_share_the_queue(cfg, db, two_tenants, monkeypatch):
     running: dict[int, int] = {}
     seen = []
 
-    def fake_execute(conn, run, *args):
+    def fake_execute(conn, run, *args, **kwargs):
         with lock:
             running[run["tenant_id"]] = running.get(run["tenant_id"], 0) + 1
             seen.append((run["tenant_id"], run["collector"], dict(running)))

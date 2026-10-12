@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from officesentry.reports import data_reports, export, rollups
+from tests import auditdata
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
@@ -83,10 +84,11 @@ def test_detail_reports_tab_opens_the_first_report_or_the_picked_one(client, db,
 # -- PDFs ---------------------------------------------------------------------------
 
 
-def test_every_pdf_download_works_without_weasyprint(client, db, two_tenants, no_weasyprint):
+def test_every_pdf_download_works_without_weasyprint(client, db, vault, two_tenants, no_weasyprint):
     """No WeasyPrint: each PDF link gives the print-ready page, named for Save as PDF."""
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
+    auditdata.everywhere(db, vault)  # the add-on's report too
     make_user(db, "admin")
     login(client, "admin")
     for url in _pdf_urls(alpha):
@@ -123,9 +125,10 @@ def test_pdf_downloads_render(client, db, two_tenants):
 
 
 @needs_pdf
-def test_every_detail_report_renders_as_pdf_with_no_data(client, db, two_tenants):
+def test_every_detail_report_renders_as_pdf_with_no_data(client, db, vault, two_tenants):
     """Before any collection every report is 'not available'; its PDF still renders."""
     alpha, _ = two_tenants
+    auditdata.everywhere(db, vault)  # the add-on's report too
     make_user(db, "admin")
     login(client, "admin")
     for key in data_reports.REPORTS:

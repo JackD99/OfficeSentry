@@ -24,7 +24,7 @@ import types
 from collections.abc import Callable
 
 from officesentry.checks import RULES
-from officesentry.collectors import REGISTRY
+from officesentry.collectors import REGISTRY, core
 from officesentry.entra import PERMISSIONS
 from officesentry.reports.data_reports import REPORTS
 
@@ -138,10 +138,16 @@ def _codes(items) -> str:
     return ", ".join(f"`{i}`" for i in items) or "none"
 
 
+def main_reports() -> dict:
+    """The detail reports built from the main app's data (an add-on's report is documented with the add-on)."""
+    sources = set(core())
+    return {key: value for key, value in REPORTS.items() if sources & set(value[2])}
+
+
 def permission_users() -> dict[str, list[str]]:
     users: dict[str, list[str]] = {p: [] for p in PERMISSIONS}
-    for key, cls in sorted(REGISTRY.items()):
-        for permission in cls.permissions:
+    for key in sorted(core()):
+        for permission in REGISTRY[key].permissions:
             users.setdefault(permission, []).append(key)
     return users
 
@@ -158,7 +164,7 @@ def render() -> str:
         "PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md",
         "```",
         "",
-        f"{len(RULES)} checks, {len(REGISTRY)} data sources (collectors) and {len(REPORTS)} detail reports.",
+        f"{len(RULES)} checks, {len(core())} data sources (collectors) and {len(main_reports())} detail reports.",
         "",
         "A check reads only the data its collectors stored. When that data is missing, or the tenant's licence "
         "can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.",
@@ -193,7 +199,8 @@ def render() -> str:
         "| Key | Title | What it reads | Permissions |",
         "|---|---|---|---|",
     ]
-    for key, cls in sorted(REGISTRY.items()):
+    for key in sorted(core()):
+        cls = REGISTRY[key]
         title = _cell(cls.title) + ("" if cls.nightly else " (*on demand*)")
         out.append(f"| `{key}` | {title} | {_cell(cls.description)} | {_codes(cls.permissions)} |")
     out.append("")
@@ -206,7 +213,7 @@ def render() -> str:
         "| Key | Title | Description | Data from |",
         "|---|---|---|---|",
     ]
-    for key, (title, description, sources, _builder) in sorted(REPORTS.items()):
+    for key, (title, description, sources, _builder) in sorted(main_reports().items()):
         out.append(f"| `{key}` | {_cell(title)} | {_cell(description)} | {_codes(sorted(sources))} |")
     out.append("")
 

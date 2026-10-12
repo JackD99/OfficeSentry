@@ -82,4 +82,11 @@
 
 <p class="footnote">Kept: every sign-in for {{ describe('history_signin_days', page.policy.history_signin_days) }}, daily sign-in summaries for {{ describe('history_daily_months', page.policy.history_daily_months) }} and directory audit events for {{ describe('history_audit_years', page.policy.history_audit_years) }}.{% if can('settings.manage') %} <a href="{{ url_for('retention.settings') }}#history">Change in Data retention</a>.{% endif %}</p>
 {% endif %}
+
+{% if page.addon %}
+<section class="card">
+  <div class="card-head"><h2>Files and mailbox events</h2><span class="pill {{ page.addon.state.tone }}">{{ page.addon.state.label }}</span></div>
+  <p class="m0">{{ page.addon.records|plural('record') }} kept from the client's Microsoft 365 audit log by the audit log add-on, for {{ describe('history_activity_months', page.policy.history_activity_months) }}. {{ page.addon.state.detail }} <a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key='files-and-mailboxes') }}">Files and mailbox access</a> shows them.</p>
+</section>
+{% endif %}
 {% endblock %}

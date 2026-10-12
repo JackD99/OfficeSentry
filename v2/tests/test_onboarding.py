@@ -3,7 +3,7 @@ from urllib.parse import parse_qs, urlparse
 import responses
 
 from officesentry import store
-from officesentry.collectors import REGISTRY
+from officesentry.collectors import core
 from officesentry.entra import GRAPH_PERMISSIONS, required_resource_access
 from tests.conftest import login, make_user
 
@@ -53,7 +53,7 @@ def test_admin_adds_tenant_and_records_consent(client, db, connection_id):
     t = store.get_tenant(db, tenant_id)
     assert t["consented_at"] and t["tenant_ref"] == GUID
     queued = db.execute("SELECT collector, status FROM runs WHERE tenant_id = ? ORDER BY id", (tenant_id,)).fetchall()
-    assert [(r["collector"], r["status"]) for r in queued] == [(key, "queued") for key in REGISTRY]
+    assert [(r["collector"], r["status"]) for r in queued] == [(key, "queued") for key in core()]
 
 
 def test_consent_callback_rejects_forged_state(client, db, two_tenants):

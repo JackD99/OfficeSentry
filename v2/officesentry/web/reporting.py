@@ -20,6 +20,7 @@ from .. import delivery, month_end, tasks, worker
 from ..db import audit, transaction, utcnow
 from ..reports import branding, designs, monthly_review, summary
 from ..reports.data_reports import grouped as report_groups
+from ..reports.data_reports import hidden
 from ..text import plural
 from .access import can, is_staff, needs, report_capability, tenant_or_404, visible_tenants
 from .designs import PREVIEW_CSP
@@ -74,9 +75,15 @@ def _blank_plan() -> dict:
     }
 
 
+def _plan_catalog() -> list:
+    """The reports a plan may send: an add-on's report only while the add-on is on."""
+    hide = {f"data:{key}" for key in hidden(g.db)}
+    return [o for o in delivery.catalog(g.db) if o.key not in hide]
+
+
 def _plan_values() -> dict:
     f = request.form
-    valid = {o.key for o in delivery.catalog(g.db)}
+    valid = {o.key for o in _plan_catalog()}
     values = {
         "name": f.get("name", "").strip()[:100],
         "reports": [k for k in dict.fromkeys(f.getlist("reports")) if k in valid],
@@ -124,8 +131,8 @@ def _render_plan(values: dict, chosen: set[int]):
         tenants=tenants,
         on_plan=on_plan,
         contacts=contacts,
-        catalog=delivery.catalog(g.db),
-        report_groups=report_groups(),
+        catalog=_plan_catalog(),
+        report_groups=report_groups(hidden(g.db)),
         zones=zones,
         default_tz=cfg.timezone,
         ordinal=delivery.ordinal,

@@ -25,6 +25,7 @@ import time
 from datetime import UTC, datetime, timedelta
 
 from . import events, packing, schedule, tasks
+from .auditlog import addon
 from .backups import database_file
 from .db import audit, transaction, utcnow
 from .devices import parse_ts
@@ -39,7 +40,7 @@ KEPT = {"audit_log"}
 def queue_first_collection(conn, tenant_id: int, requested_by: str = "Onboarding") -> int:
     """Queue every data source that has never succeeded for the tenant. Returns how many."""
     from . import store
-    from .collectors import REGISTRY
+    from .collectors import core
 
     done = {
         r["collector"]
@@ -48,7 +49,7 @@ def queue_first_collection(conn, tenant_id: int, requested_by: str = "Onboarding
             (tenant_id,),
         )
     }
-    keys = [k for k in REGISTRY if k not in done]
+    keys = [k for k in core() if k not in done]
     for key in keys:
         store.enqueue_run(conn, tenant_id, key, requested_by=requested_by)
     return len(keys)
@@ -227,6 +228,7 @@ def _delete(conn, tenant, user: str, delete_users, allowed: dict[int, str]) -> d
         run_ids = [r["id"] for r in conn.execute("SELECT id FROM runs WHERE tenant_id = ?", (tenant["id"],))]
         for uid in delete_users:
             conn.execute("DELETE FROM users WHERE id = ?", (uid,))
+        addon.on_delete(conn, tenant, user)  # stops its audit log feed at Microsoft afterwards, if it's on
         conn.execute("DELETE FROM tenants WHERE id = ?", (tenant["id"],))
         left = leftovers(conn, tenant["id"], run_ids)
         if left:

@@ -50,6 +50,14 @@
   {{ number('history_audit_years', p.history_audit_years, d.history_audit_years, 'Keep forever', unit='Years', label='Directory audit events') }}
   <p class="footnote">Admin role, Conditional Access, app, domain and account changes. Small, and the record investigators and auditors ask for years later.</p>
   {{ next_run(counts.history_audit_years, 'audit event') }}
+  {% if audit_addon_on() %}
+  {{ number('history_activity_months', p.history_activity_months, d.history_activity_months, 'Keep forever', unit='Months', label='Files and mailbox events') }}
+  <p class="footnote">From the audit log add-on, for the clients that approved it: files deleted, downloaded and shared, mailboxes opened by someone other than their owner, inbox rules and forwarding. At least 6 months.</p>
+  {{ next_run(counts.history_activity_months, 'file or mailbox event') }}
+  {% else %}
+  <input type="hidden" name="history_activity_months" value="{{ p.history_activity_months if p.history_activity_months is not none else d.history_activity_months }}">
+  {% if p.history_activity_months is none %}<input type="hidden" name="history_activity_months_forever" value="1">{% endif %}
+  {% endif %}
 
   <h2>Resolved findings</h2>
   <p class="muted small">Findings that were fixed: the check, the account or object it named and when it was first seen, last seen and resolved. Open findings and accepted risks are never deleted. Each client's findings from its first scan are kept, so alert emails can still tell them apart.</p>

@@ -13,6 +13,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .. import __version__, logs, system_alerts, system_health, totp, worker
 from .. import sso as staff_sign_in
+from ..auditlog import addon as addon_switch
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import audit_counted, connect, is_locked, migrate
@@ -53,6 +54,9 @@ from . import (
     tenants,
     upcoming,
     updates,
+)
+from . import (
+    audit_addon as addon_pages,
 )
 from . import (
     roles as role_pages,
@@ -196,12 +200,17 @@ def create_app(cfg: Config | None = None) -> Flask:
         cloud_choices=clouds.CHOICES,
         cloud_label=lambda key: clouds.get(key).label,
         cloud_of=clouds.of,
-        report_catalogue=library.catalogue,
+        report_catalogue=lambda tenant_id=None: library.catalogue(
+            reports.hidden_reports(tenant_id) if g.get("db") is not None else frozenset()
+        ),
         can=access.can,
         manages_groups=access.manages_groups,
         report_areas_open=reports.report_groups,
         report_capability=reports.report_capability,
         entry_capability=reports.entry_capability,
+        # Whether the audit log add-on is switched on for this install (``auditlog/addon.py``): until it is,
+        # nothing about it shows.
+        audit_addon_on=lambda: g.get("db") is not None and addon_switch.enabled(g.db),
     )
 
     @app.context_processor
@@ -358,6 +367,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(saved_views.bp)
     app.register_blueprint(tenant_admin.bp)
     app.register_blueprint(onboarding.bp)
+    app.register_blueprint(addon_pages.bp)
     app.register_blueprint(activity.bp)
     app.register_blueprint(search.bp)
     app.register_blueprint(reporting.bp)
