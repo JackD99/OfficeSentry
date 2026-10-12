@@ -202,6 +202,15 @@ EXCHANGE = Theme(
     "Auditing on, no forwarding outside, SMTP AUTH off, and every domain with SPF, DKIM and DMARC.",
     (
         Control(
+            "audit_log",
+            "",
+            "Microsoft 365 audit log search on",
+            "The Microsoft 365 audit log records user and admin activity, so it can be searched.",
+            rules=("audit_log",),
+            report="tenant-settings",
+            scope="Judged from Exchange Online, which reports the audit log setting.",
+        ),
+        Control(
             "mailbox_auditing",
             "",
             "Mailbox auditing on",

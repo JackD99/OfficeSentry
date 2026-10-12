@@ -123,6 +123,8 @@ STAND_INS: dict[str, dict] = {
     "Get-SafeAttachmentRule": {"value": []},
     "Get-EOPProtectionPolicyRule": {"value": []},
     "Get-ATPProtectionPolicyRule": {"value": []},
+    # Whether the Microsoft 365 audit log is on (2.4): Microsoft turns it on for new tenants.
+    "Get-AdminAuditLogConfig": {"value": [{"UnifiedAuditLogIngestionEnabled": True}]},
 }
 NEW_FIELDS: frozenset[str] = frozenset()
 

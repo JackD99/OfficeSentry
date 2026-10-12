@@ -212,6 +212,34 @@ def _mail_setting(snap: TenantSnapshot, key: str):
 
 
 @rule(
+    "audit_log",
+    "The Microsoft 365 audit log is on",
+    "Email",
+    "Turn on the audit log in Microsoft Purview (Audit, then Start recording user and admin activity). Without "
+    "it there's no record of who deleted, downloaded or shared files, who opened someone else's mailbox or who "
+    "created an inbox rule, and Microsoft can take up to a day to start recording.",
+)
+def audit_log(snap: TenantSnapshot, now: datetime):
+    if missing := _exchange_missing(snap):
+        return missing
+    rows = snap.objects("mailboxes", "mail_settings")
+    if not rows:
+        return _unavailable("Exchange data hasn't been collected yet")
+    value = rows[0].get("UnifiedAuditLogIngestionEnabled")
+    if not isinstance(value, bool):
+        return _unavailable("Exchange Online didn't say whether the audit log is on")
+    return (
+        ("pass", "The audit log is recording user and admin activity", [])
+        if value
+        else (
+            "fail",
+            "The Microsoft 365 audit log is turned off",
+            [Finding("high", "Organisation", "Audit log search isn't recording")],
+        )
+    )
+
+
+@rule(
     "mailbox_auditing",
     "Mailbox auditing is on",
     "Email",

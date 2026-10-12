@@ -48,6 +48,7 @@ READ_ONLY_CMDLETS = frozenset(
         "Get-Recipient",
         "Get-RecipientPermission",
         "Get-OrganizationConfig",
+        "Get-AdminAuditLogConfig",
         "Get-TransportConfig",
         "Get-RemoteDomain",
         "Get-HostedOutboundSpamFilterPolicy",

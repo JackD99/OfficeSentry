@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-68 checks, 40 data sources (collectors) and 49 detail reports.
+69 checks, 40 data sources (collectors) and 49 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -57,6 +57,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
+| **The Microsoft 365 audit log is on**<br>`audit_log` | `mailboxes` | The tenant has no Exchange Online licence | Turn on the audit log in Microsoft Purview (Audit, then Start recording user and admin activity). Without it there's no record of who deleted, downloaded or shared files, who opened someone else's mailbox or who created an inbox rule, and Microsoft can take up to a day to start recording. |
 | **Automatic forwarding to outside addresses is off**<br>`auto_forward_policy` | `mailboxes` | The tenant has no Exchange Online licence | Set the outbound spam filter policy's automatic forwarding to Off (or Automatic, which Microsoft treats as Off), and allow forwarding only for named mailboxes with a separate policy. |
 | **DKIM signing is on for every mail domain**<br>`dkim_enabled` | `domain_health` |  | Turn on DKIM for each domain in the Defender portal (Email authentication settings > DKIM), publishing the two selector CNAME records it shows. This applies to domains behind a mail gateway too when Microsoft 365 still sends for them (their SPF includes spf.protection.outlook.com); a gateway signs only the mail that goes out through it. |
 | **Every domain enforces DMARC**<br>`dmarc_policy` | `domain_health` |  | Publish a DMARC record with a rua= reporting address, start at p=none to see who sends as the domain, then move to p=quarantine and p=reject. Without enforcement, spoofed mail from the domain is delivered. |

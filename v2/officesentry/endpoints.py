@@ -428,6 +428,15 @@ EXCHANGE: tuple[Endpoint, ...] = tuple(
         api="exchange",
         fallback="Undocumented InvokeCommand endpoint; the top spam and phishing recipients are left out without it",
     ),
+    Endpoint(
+        "Get-AdminAuditLogConfig",
+        ("beta",),
+        "Exchange.ManageAsApp and Global Reader",
+        ("exchange",),
+        api="exchange",
+        fallback="Undocumented InvokeCommand endpoint; without it whether the Microsoft 365 audit log is on is "
+        "shown as not known",
+    ),
 )
 # Mail rules and protection: each part is read on its own, and one that fails is shown as unread.
 EXCHANGE += tuple(

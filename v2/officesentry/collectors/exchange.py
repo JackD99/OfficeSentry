@@ -152,6 +152,7 @@ class Mailboxes(Collector):
                     {
                         "AuditDisabled": org.get("AuditDisabled"),
                         "SmtpClientAuthenticationDisabled": transport.get("SmtpClientAuthenticationDisabled"),
+                        "UnifiedAuditLogIngestionEnabled": self._audit_log(ctx),
                     },
                 )
             ],
@@ -177,6 +178,19 @@ class Mailboxes(Collector):
         ctx.metric(
             "mailboxes.forwarding", sum(bool(r["ForwardingSmtpAddress"] or r["ForwardingAddress"]) for r in data)
         )
+
+    @staticmethod
+    def _audit_log(ctx: RunContext) -> bool | None:
+        """Whether the Microsoft 365 (unified) audit log is on, or None when Exchange wouldn't say. Only Exchange
+        Online PowerShell reports it truly (Security & Compliance PowerShell always says False). Not knowing
+        doesn't make the run partial: the check and the onboarding tracker say it's not known."""
+        try:
+            config = (ctx.exchange.invoke("Get-AdminAuditLogConfig") or [{}])[0]
+        except ExchangeError as exc:
+            ctx.log(f"Could not read whether the Microsoft 365 audit log is on: {exc.message}", "warning")
+            return None
+        value = config.get("UnifiedAuditLogIngestionEnabled")
+        return value if isinstance(value, bool) else None
 
     @staticmethod
     def _client_access(ctx: RunContext) -> None:

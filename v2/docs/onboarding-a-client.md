@@ -243,6 +243,13 @@ bulk and following each one through consent.
 | Global Reader missing | Consented, but the app doesn't hold Global Reader, so mailbox reports can't be collected (step 3 below). |
 | Connected | Consent and Global Reader in place. |
 
+The **Audit log** column says whether the client's Microsoft 365 audit log is recording, read from
+Exchange Online with each collection (`Get-AdminAuditLogConfig`, under Global Reader). **Off** means
+nobody can search who deleted or shared files, opened someone else's mailbox or created an inbox rule: the
+client's admin turns it on in Microsoft Purview (*Audit*, then *Start recording user and admin activity*),
+and the **The Microsoft 365 audit log is on** check stays failed until they do. **Not known yet** means
+it hasn't been read: the client isn't connected, has no Exchange Online, or Exchange didn't answer.
+
 Imported clients are ordinary clients: people whose role covers every client
 (Administrators and Team leaders) see them; everyone else only once they're
 given access, one by one or through a group (someone given a group sees the
