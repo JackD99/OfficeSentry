@@ -355,8 +355,10 @@ a.preparing { cursor: progress; opacity: .7; }
   .hide-sm { display: none; }
   table.stack-sm thead { display: none; }
   table.stack-sm tr { display: block; padding: var(--space-2-5) 0; border-bottom: 1px solid var(--border); }
-  table.stack-sm td { display: flex; justify-content: space-between; gap: var(--space-3); border: 0; padding: 3px 0 !important; text-align: right; }
-  table.stack-sm td::before { content: attr(data-label); color: var(--muted); font-size: var(--fs-sm); text-align: left; }
+  /* The label takes the free space, so a value of several parts ("Visio Plan 2" and "in 20 days") stays
+     together on the right rather than spreading across the row. */
+  table.stack-sm td { display: flex; justify-content: flex-end; gap: var(--space-1) var(--space-3); border: 0; padding: 3px 0 !important; text-align: right; }
+  table.stack-sm td::before { content: attr(data-label); margin-right: auto; color: var(--muted); font-size: var(--fs-sm); text-align: left; }
   table.stack-sm td:first-child { display: block; text-align: left; font-weight: 600; }
   table.stack-sm td:first-child::before { content: none; }
   table.stack-sm td:empty { display: none; }

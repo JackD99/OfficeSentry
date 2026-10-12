@@ -545,7 +545,8 @@ turning each step's `target` into a link.
   `formatting.py` (`money`, `when`, `day`, `capability`); reports and checks
   never import `web` (`tests/test_imports.py`).
 - Tables that people read on phones get `class="stack-sm"` and a
-  `data-label` on every cell after the first.
+  `data-label` on every cell after the first. Stacked, the label sits on the
+  left and the cell's content stays together on the right.
 - Scripts need `nonce="{{ csp_nonce }}"`; there are no external assets.
 - The root README's screenshots (`docs/screenshots/`) and `examples/` come from
   `python scripts/screenshots.py` (demo data from `scripts/demo_data.py`); re-run
