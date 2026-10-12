@@ -59,7 +59,9 @@ Every page has a title, a description, its canonical address and link preview ta
 front page also tells search engines the site's name and what Office Sentry is (`home_data` in `build.py`),
 and each doc page says it sits under Docs (`breadcrumbs`). The build writes `sitemap.xml` with every page and
 a `robots.txt` that points to it, and it uses `SITE_URL` with its host in lower case wherever it gives the
-site's address.
+site's address. It also writes `/.well-known/security.txt` (`security_txt.py`), which takes where to report a
+vulnerability from `SECURITY.md` (GitHub's private reporting form only once the repository is public) and
+expires 350 days after the deploy, so a deploy at least once a year keeps it current.
 
 ## How the screenshots and example reports stay current
 
