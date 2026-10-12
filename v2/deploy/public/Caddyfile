@@ -53,5 +53,17 @@ www.{$WEBSITE_ADDRESS} {
 {$DEMO_SITE_ADDRESS} {
 	header -Server
 	encode zstd gzip
-	reverse_proxy demo:8000
+	# A PDF takes the demo seconds of its one CPU. Stock Caddy has no per-address rate limit, so PDFs share two
+	# connections to the demo: more wait their turn, however many anyone asks for, and pages stay quick.
+	@pdf path *.pdf
+	handle @pdf {
+		reverse_proxy demo:8000 {
+			transport http {
+				max_conns_per_host 2
+			}
+		}
+	}
+	handle {
+		reverse_proxy demo:8000
+	}
 }

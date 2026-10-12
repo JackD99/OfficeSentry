@@ -131,6 +131,17 @@ def test_compose_keeps_the_containers_fenced_in():
     assert "header -Server" in (V2 / "Caddyfile").read_text(encoding="utf-8")
 
 
+def test_the_public_demo_makes_pdfs_two_at_a_time():
+    """A PDF takes the demo seconds of its one CPU, and stock Caddy has no per-address rate limit, so PDFs
+    share two connections to it and its pages stay quick whoever asks for many."""
+    text = (V2 / "deploy" / "public" / "Caddyfile").read_text(encoding="utf-8")
+    demo = text[text.index("{$DEMO_SITE_ADDRESS} {") :]
+    assert "@pdf path *.pdf" in demo
+    pdfs = demo[demo.index("handle @pdf {") : demo.index("\thandle {")]
+    assert "reverse_proxy demo:8000" in pdfs and "max_conns_per_host 2" in pdfs
+    assert "max_conns_per_host" not in demo[demo.index("\thandle {") :]  # pages aren't held up
+
+
 def test_the_image_ships_without_pip():
     """Nothing runs pip once the image is built, and the base image's copy trails pip's security fixes, so the
     last build step removes it; the public demo, which installs more on top, brings Python's bundled copy back."""
