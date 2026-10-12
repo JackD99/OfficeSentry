@@ -23,11 +23,12 @@ from ..reports import (
     workbook,
 )
 from ..reports.monthly_review import build as build_review
+from ..reports.registry import DECLARED
 from . import as_of
 from .access import can, need_also, needs, require, tenant_or_404
 from .groups import group_aware, scope, scoped_tenants
 from .printing import pdf_response
-from .reports import report_capability
+from .reports import exists, hidden_reports, report_capability
 from .saved_views import MAX_VIEWS
 from .saved_views import store as store_view
 
@@ -77,19 +78,29 @@ def index():
 
 
 def _available() -> list[tuple[str, str]]:
-    """The rollups this person may open: the summaries need the security capability, a report its area's."""
-    return [(k, title) for k, title in rollups.available() if can(_rollup_capability(k))]
+    """The rollups this person may open: the summaries need the security capability, a report its area's.
+    An add-on's report only while the add-on is on (``data_reports.hidden``)."""
+    hide = hidden_reports()
+    return [(k, title) for k, title in rollups.available() if k not in hide and can(_rollup_capability(k))]
 
 
 def _rollup_capability(key: str) -> str:
     return "reports.security" if key in ("review", "evidence") else report_capability(key)
 
 
+def _tenants_for(key: str) -> list:
+    """The tenants in scope that have this report: an add-on's report only those it's on for."""
+    tenants = scoped_tenants()
+    if key not in DECLARED or DECLARED[key].shown is None:
+        return tenants
+    return [t for t in tenants if key not in data_reports.hidden(g.db, t)]
+
+
 def _rollup_or_404(key: str):
-    if key not in dict(rollups.available()):
+    if key not in dict(rollups.available()) or key in hidden_reports():
         abort(404)
     need_also(_rollup_capability(key))  # so the tenants listed leave out per-client denies
-    return rollups.build(g.db, scoped_tenants(), key)
+    return rollups.build(g.db, _tenants_for(key), key)
 
 
 def _picker() -> dict:
@@ -109,12 +120,12 @@ def rollup(key: str):
 
 
 def _all_rows(key: str) -> rollups.AllRows:
-    if key not in data_reports.REPORTS:
+    if not exists(key):
         abort(404)
     need_also(report_capability(key))
     return rollups.all_rows(
         g.db,
-        scoped_tenants(),
+        _tenants_for(key),
         key,
         href=lambda t: url_for("reports.data_report", tenant_id=t["id"], key=key),
         label=scope().label,
@@ -206,7 +217,7 @@ def rows_pdf(key: str, table: str):
 @needs("clients.compare")
 def save_rows_view(key: str, table: str):
     """Save a view from the every-row page. Views are per report, so it also opens on each tenant's page."""
-    if key not in data_reports.REPORTS:
+    if not exists(key):
         abort(404)
     page = url_for("across.rows", key=key, table=table)
     query = views.View.parse(request.form.get("query", "")).query()
@@ -471,7 +482,7 @@ def tenant_changes_download(tenant_id: int, ext: str):
 @needs("export")
 def data_report_csv(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
-    if key not in data_reports.REPORTS:
+    if not exists(key, t["id"]):
         abort(404)
     require(report_capability(key), tenant_id=t["id"])
     day = as_of.day(g.db, t["id"], request.args.get("on"))

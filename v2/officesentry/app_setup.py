@@ -34,6 +34,7 @@ from datetime import UTC, datetime, timedelta
 import requests
 
 from . import clouds, entra, permission_batch, sso, store
+from .auditlog import addon
 from .certs import generate_certificate
 from .db import audit
 
@@ -52,9 +53,10 @@ NO_ANSWER = "Microsoft didn't answer just now. Office Sentry will keep checking.
 # Statuses: waiting (for the admin to sign in), working (one check is talking to Microsoft), done, failed.
 ACTIVE = ("waiting", "working")
 # What a sign-in is for: creating the read-only app connection, the staff sign-in app (sso.py), adding a
-# permission batch to an existing connection's app (``connection_id`` names it from the start), or letting the
-# sign-in app accept other organisations' accounts for client sign-in (``sso.allow_other_organisations``).
-PURPOSES = ("connection", "sign_in", "update", "sign_in_update")
+# permission batch to an existing connection's app (``connection_id`` names it from the start), letting the
+# sign-in app accept other organisations' accounts for client sign-in (``sso.allow_other_organisations``), or
+# creating the audit log add-on's app (``auditlog/``).
+PURPOSES = ("connection", "sign_in", "update", "sign_in_update", "audit")
 SIGN_IN_PURPOSES = ("sign_in", "sign_in_update")
 
 
@@ -74,17 +76,19 @@ def tenant_ref(value: str) -> str | None:
     return value if TENANT_RE.match(value) else None
 
 
-def pending_connection(conn, cloud: str):
+def pending_connection(conn, cloud: str, kind: str = store.MAIN):
     """A connection in ``cloud`` whose certificate was generated but whose app was never saved."""
     return conn.execute(
-        "SELECT * FROM app_connections WHERE client_id IS NULL AND cloud = ? ORDER BY id LIMIT 1", (cloud,)
+        "SELECT * FROM app_connections WHERE client_id IS NULL AND cloud = ? AND kind = ? ORDER BY id LIMIT 1",
+        (cloud, kind),
     ).fetchone()
 
 
-def ready_connection(conn, cloud: str):
+def ready_connection(conn, cloud: str, kind: str = store.MAIN):
     """A connection in ``cloud`` that already has its app."""
     return conn.execute(
-        "SELECT * FROM app_connections WHERE client_id IS NOT NULL AND cloud = ? ORDER BY id LIMIT 1", (cloud,)
+        "SELECT * FROM app_connections WHERE client_id IS NOT NULL AND cloud = ? AND kind = ? ORDER BY id LIMIT 1",
+        (cloud, kind),
     ).fetchone()
 
 
@@ -96,14 +100,17 @@ def register_app(
     name: str = DEFAULT_NAME,
     cloud: str = clouds.DEFAULT,
     session: requests.Session | None = None,
+    kind: str = store.MAIN,
+    home: str | None = None,
 ) -> tuple[int, dict]:
-    """Create the multi-tenant read-only app with ``token`` and save it as an app connection.
+    """Create the multi-tenant read-only app with ``token`` and save it as an app connection (with ``kind`` "audit",
+    the audit log add-on's app). ``home`` is the MSP's tenant the sign-in was in, when known.
 
-    Reuses the certificate of a connection in the same cloud that's still waiting for its client ID, so
-    there's one connection per app. Returns the connection's id and Microsoft's application object.
+    Reuses the certificate of a connection of the same kind in the same cloud that's still waiting for its client
+    ID, so there's one connection per app. Returns the connection's id and Microsoft's application object.
     Raises ``entra.SignInError`` in words for people when Microsoft refuses.
     """
-    pending = pending_connection(conn, cloud)
+    pending = pending_connection(conn, cloud, kind)
     cert = None if pending else generate_certificate(f"Office Sentry - {name}"[:64])
     try:
         app = entra.create_app_registration(
@@ -113,19 +120,28 @@ def register_app(
             display_name=name,
             session=session,
             cloud=cloud,
+            audit=kind == store.AUDIT,
         )
     except requests.RequestException as exc:
         raise entra.SignInError(entra.create_problem(exc)) from exc
+    except ValueError as exc:  # an API the app asks for isn't in the tenant (the add-on's Management APIs)
+        raise entra.SignInError(
+            f"Microsoft wouldn't create the app: {exc}. Create it by hand instead, as this page describes."
+        ) from exc
     client_id = str(app["appId"]).lower()
     if pending:
         conn_id = pending["id"]
         conn.execute("UPDATE app_connections SET client_id = ? WHERE id = ?", (client_id, conn_id))
     else:
-        conn_id = store.create_connection(conn, vault, name[:100], cert, client_id=client_id, cloud=cloud)
-    # A new app asks for every permission, the latest batch's included.
-    conn.execute(
-        "UPDATE app_connections SET permissions_release = ? WHERE id = ?", (permission_batch.CURRENT.release, conn_id)
-    )
+        conn_id = store.create_connection(conn, vault, name[:100], cert, client_id=client_id, cloud=cloud, kind=kind)
+    if home:
+        conn.execute("UPDATE app_connections SET home_tenant = ? WHERE id = ?", (home, conn_id))
+    if kind == store.MAIN:
+        # A new app asks for every permission, the latest batch's included.
+        conn.execute(
+            "UPDATE app_connections SET permissions_release = ? WHERE id = ?",
+            (permission_batch.CURRENT.release, conn_id),
+        )
     return conn_id, app
 
 
@@ -176,6 +192,8 @@ def start(
     now = now or datetime.now(UTC)
     if connection is not None:
         purpose, cloud, name = "update", clouds.of(connection).key, connection["name"]
+    if purpose == "audit" and name == DEFAULT_NAME:
+        name = addon.AUDIT_NAME
     if purpose not in PURPOSES:
         raise ValueError(purpose)
     scope = None
@@ -210,7 +228,8 @@ def start(
         actor,
         "app_update_started" if purpose == "update" else "app_setup_started",
         detail=(cloud if tenant == ANY_TENANT else f"{cloud} {tenant}")
-        + (" (sign-in app)" if purpose in SIGN_IN_PURPOSES else ""),
+        + (" (sign-in app)" if purpose in SIGN_IN_PURPOSES else "")
+        + (" (audit log add-on)" if purpose == "audit" else ""),
     )
     return current(conn, user_id, purpose)
 
@@ -289,6 +308,8 @@ def check(
         return _finish_sign_in_app(conn, vault, row, poll.token, redirect_uri, actor, home, now, session)
     if purpose == "sign_in_update":
         return _finish_sign_in_update(conn, row, poll.token, actor, home, now, session)
+    if purpose == "audit":
+        return _finish_audit_app(conn, vault, row, poll.token, redirect_uri, actor, home, now, session)
     try:
         conn_id, app = register_app(conn, vault, poll.token, redirect_uri, row["name"], row["cloud"], session=session)
     except entra.SignInError as exc:
@@ -322,6 +343,31 @@ def _finish_update(conn, row, token: str, home: str | None, actor: str, user_id:
         conn, actor, "app_updated", detail=f"{connection['name']} {connection['client_id']}: {added} permissions added"
     )
     return current(conn, user_id, "update")
+
+
+def _finish_audit_app(conn, vault, row, token: str, redirect_uri: str, actor: str, home, now, session):
+    """The audit log add-on's app (``auditlog/``), created with the wizard's token. It asks only for
+    ActivityFeed.Read, and creating it switches the add-on on (``addon.switch``)."""
+    try:
+        conn_id, app = register_app(
+            conn, vault, token, redirect_uri, row["name"], row["cloud"], session=session, kind=store.AUDIT, home=home
+        )
+    except entra.SignInError as exc:
+        _fail(conn, row, str(exc), actor)
+        return current(conn, row["user_id"], "audit")
+    conn.execute(
+        "UPDATE setup_sign_ins SET status = 'done', device_code_enc = NULL, error = NULL, connection_id = ?,"
+        " client_id = ?, home_tenant = ?, updated_at = ? WHERE id = ?",
+        (conn_id, str(app["appId"]).lower(), home, _iso(now), row["id"]),
+    )
+    audit(
+        conn,
+        actor,
+        "connection_created",
+        detail=f"{row['name']} {app['appId']} {row['cloud']} (audit log add-on, setup wizard)",
+    )
+    addon.switch(conn, True, actor)
+    return current(conn, row["user_id"], "audit")
 
 
 def _finish_sign_in_app(conn, vault, row, token: str, redirect_uri: str, actor: str, home, now, session):

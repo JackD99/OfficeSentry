@@ -33,6 +33,7 @@ from .. import (
     tenant_groups,
     throttle,
 )
+from ..auditlog import addon
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..text import plural
@@ -518,17 +519,21 @@ def connections():
     # An update under way takes the page's one wizard panel, in its connection's card.
     updating = update["connection_id"] if update else None
     sign_in = update or sign_in
+    # The audit log add-on's apps (made on its own page) keep their certificate and client ID here too.
+    addon_rows = addon.connections(g.db)
+    every = [*rows, *addon_rows]
     return render_template(
         "connections.html",
         connections=rows,
+        addon_connections=addon_rows,
         permissions=entra.PERMISSIONS,
         batch=permission_batch.CURRENT,
         release_of=permission_batch.release_of,
         app_ready={c["id"]: permission_batch.app_ready(g.db, c) for c in rows if c["client_id"]},
         updating=updating,
         redirect_uri=_redirect_uri(),
-        expiry={c["id"]: cert_lifecycle.connection_expiry(c) for c in rows},
-        test_tenant={c["id"]: cert_lifecycle.test_tenant(g.db, c["id"]) for c in rows if c["next_thumbprint"]},
+        expiry={c["id"]: cert_lifecycle.connection_expiry(c) for c in every},
+        test_tenant={c["id"]: cert_lifecycle.test_tenant(g.db, c["id"]) for c in every if c["next_thumbprint"]},
         sign_in=sign_in,
         seconds_left=app_setup.seconds_left(sign_in) if sign_in else 0,
         opened_at=_address_problem(),
@@ -715,17 +720,29 @@ def set_client_id(conn_id: int):
         flash("The tenant ID is the Directory (tenant) ID on the app's overview page, a GUID.", "error")
     else:
         old = connection["client_id"]
+        audit_app = connection["kind"] == store.AUDIT
         with transaction(g.db):
             g.db.execute("UPDATE app_connections SET client_id = ? WHERE id = ?", (client_id, conn_id))
+            if audit_app and home:  # the add-on's feed names the MSP's tenant as its publisher
+                g.db.execute("UPDATE app_connections SET home_tenant = ? WHERE id = ?", (home, conn_id))
             audit(g.db, g.user["username"], "connection_client_id_set", detail=client_id)
-            again = _consent_again(conn_id, old, client_id) if old and old != client_id else 0
+            again = 0
+            if old and old != client_id:
+                again = (
+                    addon.app_changed(g.db, conn_id, old, g.user["username"])
+                    if audit_app
+                    else _consent_again(conn_id, old, client_id)
+                )
+            if audit_app and not old:
+                addon.switch(g.db, True, g.user["username"])  # the add-on's app is ready, so the add-on is on
         if not home:
             flash("Client ID saved.", "success")
         else:
-            # Sign in to the tenant the app was created in, to prove the certificate is on the app.
-            from ..connection_check import check
+            # Sign in to the tenant the app was created in, to prove the certificate is on the app. The add-on's
+            # app has no Graph permission, so for it a sign-in is the whole check.
+            from ..connection_check import check, sign_in_check
 
-            result = check(
+            result = (sign_in_check if audit_app else check)(
                 home,
                 client_id,
                 current_app.extensions["officesentry.vault"].decrypt(connection["key_enc"]),
@@ -736,13 +753,19 @@ def set_client_id(conn_id: int):
                 flash(f"Client ID saved and checked: {result.title} The certificate works.", "success")
             else:
                 flash(f"Client ID saved, but the check failed. {result.title} {result.fix}", "error")
-        if again:
+        if again and audit_app:
+            flash(
+                f"The client ID changed, so {plural(again, 'client')} must approve the audit log add-on again. Send "
+                "each one the add-on link again, from its Settings tab.",
+                "warning",
+            )
+        elif again:
             flash(
                 f"The client ID changed, so {plural(again, 'client tenant')} must approve the app again before "
                 "Office Sentry can read their data. Send each one its new consent link from Onboarding.",
                 "warning",
             )
-    return redirect(url_for("admin.connections"))
+    return _to_connection(conn_id)
 
 
 @bp.get("/connections/<int:conn_id>/certificate.cer")

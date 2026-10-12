@@ -409,7 +409,10 @@ def build(
         notes.append(f"Key changes couldn't be worked out ({type(exc).__name__}).")
 
     reports = []
+    hide = data_reports.hidden(conn, tenant)  # an add-on's report where the add-on isn't on
     for key in data_reports.REPORTS:
+        if key in hide:
+            continue
         try:
             reports.append(compare_report(conn, tenant, key, since, now, old_snap, new_snap))
         except Exception as exc:

@@ -7,6 +7,7 @@ import re
 import pytest
 
 from officesentry.reports import data_reports
+from tests import auditdata
 from tests import sharepoint_data as sd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -90,9 +91,10 @@ def _picker(page: str) -> str:
     return pickers[0]
 
 
-def test_report_picker_links_every_report(client, db, seeded):
+def test_report_picker_links_every_report(client, db, vault, seeded):
     """The Reports tab has one picker: the summaries and every detail report, the open one marked."""
     alpha = seeded
+    auditdata.everywhere(db, vault)  # the add-on's report too
     make_user(db, "admin")
     login(client, "admin")
     for url, current in (

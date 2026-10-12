@@ -1,9 +1,10 @@
 """Tenant isolation, walked over every route: nothing of a tenant someone wasn't granted reaches them.
 
-Two tenants are seeded with full snapshots, and tenant B gets one of everything
-a URL can point at (a run, finding, schedule, alert, contact, delivery, issued
-report, recommendation and note), a report plan, and every person, group,
-device, mailbox and site named with a word (``B_MARK``) that appears nowhere in
+Two tenants are seeded with full snapshots and the audit log add-on's records, and
+tenant B gets one of everything a URL can point at (a run, finding, schedule,
+alert, contact, delivery, issued report, recommendation and note), a report plan,
+and every person, group, device, mailbox, site and audit record named with a word
+(``B_MARK``) that appears nowhere in
 A's data, so a page that shows B's data gives itself away even where it never
 names the tenant. Each is in its own tenant group. Signed in as an analyst and
 as a client who were each granted only tenant A (the analyst directly or
@@ -36,9 +37,10 @@ until ``FORMS`` has the form it accepts.
 """
 
 import io
+import json
 import re
 import zipfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import responses
@@ -50,6 +52,7 @@ from officesentry.reports import data_reports, designs, evidence_answers, export
 from officesentry.reports.data_reports import REPORTS
 from officesentry.reports.evidence_answers import QUESTIONS
 from officesentry.web import saved_views
+from tests import auditdata
 from tests import sharepoint_data as sd
 from tests import test_client_sign_in as csi
 from tests.conftest import login, make_user
@@ -159,6 +162,8 @@ FORMS = {
     "email.save_tenant_alert": lambda ids: {"min_severity": "high", "contacts": str(ids["contact_id"])},
     "onboarding.contact": lambda ids: {"contact_name": "Bravo IT", "contact_email": "it@bravo.example"},
     "onboarding.mark_sent": lambda ids: {"sent": "1"},
+    "audit_addon.mark_sent": lambda ids: {"sent": "1"},
+    "audit_addon.switch_off": lambda ids: {"delete": "1"},
     "projects.set_status": lambda ids: {"status": next(iter(projects.STATUSES)), "note": "Agreed by phone"},
     "reporting.add_action": lambda ids: {"title": "Turn on MFA for everyone", "detail": "By the end of the month"},
     "reporting.add_note": lambda ids: {"rule_key": "admin_mfa", "body": "Spoke to the client", "visibility": "staff"},
@@ -185,6 +190,8 @@ SCHEDULE_FORM = {
 }
 # POST routes with no form of their own: a button.
 BUTTONS = {
+    "audit_addon.check",
+    "audit_addon.switch_on",
     "email.delete_alert",
     "email.delete_contact",
     "email.delete_schedule",
@@ -270,13 +277,26 @@ def _plan(db, name: str, tenant: int) -> int:
     return plan
 
 
+def _marked(batches: dict, word: str) -> dict:
+    """The add-on's sample records with every person, mailbox and file in them named with ``word``."""
+    return {
+        kind: [(when, json.loads(json.dumps(records).replace("contoso", word))) for when, records in items]
+        for kind, items in batches.items()
+    }
+
+
 @pytest.fixture
-def world(app, db, connection_id):
+def world(app, db, vault, connection_id):
     alpha = store.create_tenant(db, "Alpha Ltd", "alpha.onmicrosoft.com", connection_id)
     bravo = store.create_tenant(db, "Bravo Inc", "bravo.onmicrosoft.com", connection_id)
     db.execute("UPDATE tenants SET consented_at = ?", (utcnow(),))
     seed_tenant(db, alpha)
     seed_tenant(db, bravo, mark=B_MARK)
+    # The audit log add-on on for both, B's audit log naming B's mark (its report and pages are walked too).
+    now = datetime.now(UTC)
+    auditdata.addon_on(db, vault, [alpha, bravo], started_at=auditdata.iso(now - timedelta(hours=3)))
+    auditdata.collect(db, alpha, auditdata.sample(now), now)
+    auditdata.collect(db, bravo, _marked(auditdata.sample(now), B_MARK), now)
     ids = {**_objects(db, bravo, "Bravo"), "connection_id": connection_id}
     ids["alpha"] = _objects(db, alpha, "Alpha")  # A's own, for walking the pages someone granted A may open
     ids["design_id"] = designs.create(db, "Walk design", "test", designs.STARTERS["executive"][2])
@@ -413,7 +433,8 @@ def test_the_walk_opens_real_pages(app, client, db, world):
         assert "/login" not in resp.headers.get("Location", ""), rule.endpoint
         opened += 1
     assert opened >= 40
-    for page in ("users", "data/all-users", "data/groups", "data/devices", "data/distribution-lists"):
+    pages = ("users", "data/all-users", "data/groups", "data/devices", "data/distribution-lists")
+    for page in (*pages, "data/files-and-mailboxes"):
         assert B_MARK.encode() in client.get(f"/tenants/{bravo}/{page}").data, page  # or a leak couldn't be seen
         assert B_MARK.encode() not in client.get(f"/tenants/{alpha}/{page}").data, page
 

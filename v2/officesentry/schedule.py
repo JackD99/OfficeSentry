@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from croniter import croniter
 
 from . import store
-from .collectors import REGISTRY
+from .collectors import REGISTRY, core, for_tenant
 
 log = logging.getLogger(__name__)
 
@@ -119,8 +119,10 @@ def run_periodic(ctx: TickContext) -> None:
             log.exception("Periodic job %s failed", name)
 
 
-def nightly_collectors() -> list[str]:
-    return [key for key, cls in REGISTRY.items() if cls.nightly]
+def nightly_collectors(conn=None, tenant=None) -> list[str]:
+    """The data sources collected every night; for ``tenant``, an add-on's too where it's on for it."""
+    keys = for_tenant(conn, tenant) if tenant is not None else core()
+    return [key for key in keys if REGISTRY[key].nightly]
 
 
 def is_fresh(conn, tenant_id: int, collector: str, slot: datetime, max_age_hours: float) -> bool:

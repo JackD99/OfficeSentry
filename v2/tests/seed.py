@@ -9,7 +9,7 @@ import requests
 import responses
 
 from officesentry import store
-from officesentry.collectors import REGISTRY
+from officesentry.collectors import core
 from officesentry.exchange import EXCHANGE_ROOT, ExchangeClient
 from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.worker import execute_run
@@ -415,7 +415,7 @@ def seed_tenant(db, tenant_id, dns=None, precompute=False, mark: str | None = No
         patch("officesentry.dnscheck.lookup", dns or gd.fake_dns),
     ):
         mock_tenant(rsps, **kwargs)
-        for key in REGISTRY:
+        for key in core():  # the audit log add-on's source is seeded by tests/auditdata.py
             store.enqueue_run(db, tenant_id, key)
         while (run := store.claim_next_run(db)) is not None:
             assert execute_run(db, run, factory, exchange) in ("succeeded", "partial"), run["collector"]

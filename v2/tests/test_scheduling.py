@@ -233,7 +233,7 @@ def test_worker_once_queues_the_slot_and_drains_it(cfg, db, two_tenants, monkeyp
     monkeypatch.setattr(
         worker,
         "execute_run",
-        lambda conn, run, *a: (calls.append(run["collector"]), store.finish_run(conn, run["id"], "failed")),
+        lambda conn, run, *a, **k: (calls.append(run["collector"]), store.finish_run(conn, run["id"], "failed")),
     )
     worker.run_worker(cfg, once=True, graph_factory=lambda *a: None, exchange_factory=lambda *a: None)
     assert len(calls) == 2 * len(schedule.nightly_collectors())
@@ -279,7 +279,7 @@ def test_worker_once_survives_a_failing_housekeeping_pass(cfg, db, two_tenants, 
     monkeypatch.setattr(
         worker,
         "execute_run",
-        lambda conn, run, *a: (ran.append(run["id"]), store.finish_run(conn, run["id"], "failed")),
+        lambda conn, run, *a, **k: (ran.append(run["id"]), store.finish_run(conn, run["id"], "failed")),
     )
     store.enqueue_run(db, two_tenants[0], "users")
     worker.run_worker(cfg, once=True, graph_factory=lambda *a: None, exchange_factory=lambda *a: None)

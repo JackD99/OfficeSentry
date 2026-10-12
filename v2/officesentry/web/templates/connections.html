@@ -121,7 +121,9 @@
 </section>
 {% endif %}
 
-{% for c in connections %}{% set e = expiry[c.id] %}
+{#- One app connection's card: the shared app's, or the audit log add-on's (kind 'audit'), which has no
+    permission batches to add. -#}
+{% macro connection_card(c) %}{% set e = expiry[c.id] %}
 <section class="card" id="conn-{{ c.id }}">
   <div class="card-head"><h2>{{ c.name }}{% if not cloud_of(c).is_default %} <span class="pill info">{{ cloud_of(c).label }}</span>{% endif %}</h2>
     <div class="row-actions">{% if e and e.level %}<span class="pill {{ e.tone }}">{{ 'Certificate expired' if e.level == 'expired' else 'Certificate expires soon' }}</span>{% endif %}
@@ -133,7 +135,7 @@
     <form method="post" action="{{ url_for('admin.start_rollover', conn_id=c.id) }}">{{ csrf() }}<button class="primary sm">{{ icon('refresh') }} Replace certificate</button></form></div>
   {% endif %}
 
-  {% if c.client_id and not app_ready[c.id] %}{% set mine = updating == c.id %}
+  {% if c.kind != 'audit' and c.client_id and not app_ready[c.id] %}{% set mine = updating == c.id %}
   {% set up_status = sign_in.status if mine else none %}
   <div class="callout {{ 'bad' if up_status == 'failed' else 'warn' }} app-update" role="status" id="update-{{ c.id }}">{{ icon('shield') }}<div class="grow">
     <strong>Update this app for Office Sentry {{ batch.release }}.</strong>
@@ -226,7 +228,17 @@
   </details>
   {% endif %}
 </section>
-{% endfor %}
+{% endmacro %}
+
+{% for c in connections %}{{ connection_card(c) }}{% endfor %}
+
+{% if addon_connections %}
+<h2 class="section-title" id="audit-addon">Audit log add-on</h2>
+<p class="muted small">The add-on's own app, which each client that wants the add-on approves separately. Its certificate is replaced here like the shared app's; everything else is on <a href="{{ url_for('audit_addon.settings') }}">Audit log add-on</a>.</p>
+{% for c in addon_connections %}{{ connection_card(c) }}{% endfor %}
+{% elif ready and not sign_in %}
+<p class="muted small">Want to know who deleted, downloaded or shared files, or opened someone else's mailbox? The <a href="{{ url_for('audit_addon.settings') }}">audit log add-on</a> reads that from each client's audit log, with a second app that clients approve one by one.</p>
+{% endif %}
 
 {% if ready and not sign_in %}
 <details class="card add-another" id="another">

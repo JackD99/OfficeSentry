@@ -174,7 +174,7 @@ def expiring(conn, now: datetime | None = None) -> list[Expiry]:
 
     A connection without a client ID isn't signing in to anything yet, so it isn't listed.
     """
-    found = [connection_expiry(c, now) for c in store.list_connections(conn) if c["client_id"]]
+    found = [connection_expiry(c, now) for c in store.list_connections(conn, kind=None) if c["client_id"]]
     found.append(mail_expiry(mailer.mail_settings(conn), now))
     found.append(sign_in_expiry(sso.settings(conn), now))
     return sorted((e for e in found if e and e.level), key=lambda e: e.days)
@@ -220,14 +220,17 @@ def test(conn, vault, conn_id: int, tenant_ref: str, user: str):
     ``switch`` waits for: it proves the new certificate is on the app registration.
     """
     from . import clouds
-    from .connection_check import check
+    from .connection_check import check, sign_in_check
 
     c = _connection(conn, conn_id)
     if not c["next_thumbprint"]:
         raise RolloverError("There's no replacement certificate to test. Start replacing the certificate first.")
     if not c["client_id"]:
         raise RolloverError("Save the app's client ID first.")
-    result = check(tenant_ref, c["client_id"], vault.decrypt(c["next_key_enc"]), c["next_thumbprint"], clouds.of(c).key)
+    test_with = sign_in_check if c["kind"] == store.AUDIT else check  # the add-on's app can't read Graph
+    result = test_with(
+        tenant_ref, c["client_id"], vault.decrypt(c["next_key_enc"]), c["next_thumbprint"], clouds.of(c).key
+    )
     if result.ok:
         conn.execute("UPDATE app_connections SET next_checked_at = ? WHERE id = ?", (utcnow(), conn_id))
     audit(
@@ -285,7 +288,11 @@ def forget_old(conn, conn_id: int, user: str) -> None:
 
 
 def test_tenant(conn, conn_id: int) -> str | None:
-    """A client tenant to test a replacement against: one on this connection that has consented."""
+    """A client tenant to test a replacement against: one on this connection that has consented (for the audit
+    log add-on's app, the tenant it was created in)."""
+    c = conn.execute("SELECT kind, home_tenant FROM app_connections WHERE id = ?", (conn_id,)).fetchone()
+    if c is not None and c["kind"] == store.AUDIT:
+        return c["home_tenant"]
     row = conn.execute(
         "SELECT tenant_ref FROM tenants WHERE connection_id = ? AND consented_at IS NOT NULL"
         " AND archived_at IS NULL ORDER BY enabled DESC, id LIMIT 1",

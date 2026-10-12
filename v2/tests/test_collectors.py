@@ -8,7 +8,7 @@ import responses
 
 import officesentry
 from officesentry import store
-from officesentry.collectors import REGISTRY
+from officesentry.collectors import REGISTRY, core
 from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.worker import execute_run, schedule_tick
 from tests import licencedata as ld
@@ -367,7 +367,7 @@ def test_orphaned_runs_are_failed_once_their_lease_runs_out(db, two_tenants):
 
 def test_schedule_queues_each_slot_once(db, cfg, two_tenants):
     now = datetime(2026, 10, 2, 3, 0, tzinfo=UTC)
-    assert schedule_tick(db, cfg, now) == 2 * len(REGISTRY)
+    assert schedule_tick(db, cfg, now) == 2 * len(core())  # the add-on's collector only where it's on
     assert schedule_tick(db, cfg, now) == 0
     # Even after the runs finish, the same slot is not queued again.
     db.execute("UPDATE runs SET status = 'succeeded'")

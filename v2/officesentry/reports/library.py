@@ -209,8 +209,9 @@ SUMMARIES = (
 )
 
 
-def catalogue() -> list[Area]:
-    """Every report once, under its area, with the summaries first."""
+def catalogue(hide: frozenset[str] = frozenset()) -> list[Area]:
+    """Every report once, under its area, with the summaries first, but the detail reports in ``hide``
+    (``data_reports.hidden()``: an add-on's report where it isn't on)."""
     uses = {}
     for use in USES:
         for key in use.reports:
@@ -225,7 +226,7 @@ def catalogue() -> list[Area]:
             ],
         )
     ]
-    for group in data_reports.grouped():
+    for group in data_reports.grouped(hide):
         areas.append(
             Area(
                 group.key,

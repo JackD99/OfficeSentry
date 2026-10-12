@@ -18,7 +18,7 @@ import pytest
 import responses
 
 from officesentry import coverage, store
-from officesentry.collectors import REGISTRY
+from officesentry.collectors import core
 from officesentry.config import load_config
 from officesentry.db import connect, migrate
 from officesentry.exchange import ExchangeClient
@@ -169,7 +169,7 @@ def live(db):
         # The test tenant hasn't approved the SharePoint permission, so SharePoint's own API refuses the app.
         rsps.get(re.compile(r"https://[a-z0-9-]+\.sharepoint\.com(/.*)?/_api/.*"), status=401, json={})
         statuses = {}
-        for key in REGISTRY:
+        for key in core():  # the test tenant has no audit log add-on
             store.enqueue_run(db, tenant_id, key)
             statuses[key] = execute_run(db, store.claim_next_run(db), graph, exo, client_id=FIXTURE["client_id"])
     assert not missing, f"requests not in the recording: {missing}"
@@ -296,6 +296,8 @@ def test_detail_reports_and_exports(db, live, key):
         assert "Entra ID P2" in report.unavailable and not report.sections
     elif key == "site-permissions":  # nor the SharePoint permission
         assert report.unavailable.startswith("Waiting for the client to approve") and not report.sections
+    elif key in data_reports.hidden(db, live):  # nor the audit log add-on
+        assert report.unavailable and not report.sections
     else:
         assert report.unavailable is None and report.sections
     assert data_reports.to_xlsx(report)[:2] == b"PK"
@@ -335,9 +337,8 @@ def test_pages_and_downloads(client, db, live):
         f"{t}/evidence/supplier.docx",
         f"{t}/evidence/supplier.txt",
     ]
-    pages += [f"{t}/data/{key}" for key in data_reports.REPORTS] + [
-        f"{t}/data/{key}.xlsx" for key in data_reports.REPORTS
-    ]
+    shown = [key for key in data_reports.REPORTS if key not in data_reports.hidden(db, live)]
+    pages += [f"{t}/data/{key}" for key in shown] + [f"{t}/data/{key}.xlsx" for key in shown]
     if export.pdf_available():
         pages += [f"{t}/report.pdf", f"{t}/evidence/insurance.pdf", f"{t}/evidence/cyber-essentials.pdf"]
     for url in pages:

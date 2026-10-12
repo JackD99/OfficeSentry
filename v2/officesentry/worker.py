@@ -41,6 +41,8 @@ from . import (
     tasks,
     throttle,
 )
+from .auditlog import addon
+from .auditlog.feed import FeedClient, FeedError
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .connection_check import explain
@@ -119,6 +121,15 @@ def default_exchange_factory(vault: Vault):
     return factory
 
 
+def default_feed_factory(vault: Vault):
+    """The audit log add-on's feed client for a tenant, signed in as the add-on's own app in its cloud."""
+
+    def factory(conn, tenant: dict) -> FeedClient:
+        return addon.client_for(conn, vault, tenant, session=_session(), shared=True, limiter=ratelimit.LIMITER)
+
+    return factory
+
+
 def execute_run(
     conn,
     run,
@@ -126,17 +137,19 @@ def execute_run(
     exchange_factory=None,
     alerting: alerts.Alerting | None = None,
     client_id: str | None = None,
+    feed_factory=None,
 ) -> str:
     """Execute one claimed run. Returns the final status.
 
     ``client_id`` is the app the graph client signs in as, when that isn't the
     tenant's app connection (``live-test`` signs in with a separate test app).
+    ``feed_factory`` makes the audit log add-on's feed client (``default_feed_factory``).
 
     Findings are synced (and alerted on) once the tenant has nothing else queued
     or running, so a night's collection evaluates the checks once on complete
     data rather than after each of its runs.
     """
-    status = _collect(conn, run, graph_factory, exchange_factory, client_id)
+    status = _collect(conn, run, graph_factory, exchange_factory, client_id, feed_factory)
     tenant = store.get_tenant(conn, run["tenant_id"])
     if (
         tenant is not None
@@ -168,11 +181,11 @@ def _sync(conn, tenant, run_id: int, alerting: alerts.Alerting | None) -> None:
         store.log_event(conn, run_id, "error", "Updating findings failed:\n" + traceback.format_exc())
 
 
-def _collect(conn, run, graph_factory, exchange_factory, client_id: str | None) -> str:
+def _collect(conn, run, graph_factory, exchange_factory, client_id: str | None, feed_factory=None) -> str:
     """Run the collector, then store how many requests it made to Microsoft (whatever the outcome)."""
     telemetry = ratelimit.Telemetry()
     try:
-        return _run_collector(conn, run, graph_factory, exchange_factory, client_id, telemetry)
+        return _run_collector(conn, run, graph_factory, exchange_factory, client_id, telemetry, feed_factory)
     finally:
         try:
             ratelimit.save(conn, run["id"], telemetry)
@@ -181,7 +194,13 @@ def _collect(conn, run, graph_factory, exchange_factory, client_id: str | None) 
 
 
 def _run_collector(
-    conn, run, graph_factory, exchange_factory, client_id: str | None, telemetry: ratelimit.Telemetry
+    conn,
+    run,
+    graph_factory,
+    exchange_factory,
+    client_id: str | None,
+    telemetry: ratelimit.Telemetry,
+    feed_factory=None,
 ) -> str:
     run_id = run["id"]
     tenant = store.get_tenant(conn, run["tenant_id"])
@@ -211,12 +230,28 @@ def _run_collector(
                 return client
 
             ctx.exchange_factory = exchange
+        if feed_factory is not None:
+
+            def feed() -> FeedClient:
+                client = feed_factory(conn, dict(tenant))
+                client.telemetry = telemetry
+                return client
+
+            ctx.feed_factory = feed
         if why := clouds.missing(clouds.of(tenant), collector_cls.key):
             ctx.warn(why)  # Microsoft doesn't offer it in this national cloud: partial, not failed
         else:
             collector_cls().collect(ctx)
             ctx.note_exchange_cuts()
-    except (NotConnected, PermissionMissing, LicenseRequired, GraphError, ExchangeError) as exc:
+    except (
+        NotConnected,
+        PermissionMissing,
+        LicenseRequired,
+        GraphError,
+        ExchangeError,
+        FeedError,
+        addon.AddonError,
+    ) as exc:
         store.log_event(conn, run_id, "error", str(exc))
         # Sign-in failures get the plain explanation; the raw message stays in the run log.
         problem = explain(getattr(exc, "message", ""), getattr(exc, "code", ""))
@@ -314,11 +349,11 @@ def schedule_tick(conn, cfg: Config, now: datetime | None = None) -> int:
     tenants = conn.execute(
         # Nothing is scheduled before consent: every run would fail to sign in.
         # Paused and archived tenants keep their data but aren't collected.
-        "SELECT id FROM tenants WHERE enabled = 1 AND archived_at IS NULL AND connection_id IS NOT NULL"
+        "SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL AND connection_id IS NOT NULL"
         " AND consented_at IS NOT NULL ORDER BY id"
     ).fetchall()
     for tenant in tenants:
-        for key in schedule.nightly_collectors():
+        for key in schedule.nightly_collectors(conn, tenant):
             done = conn.execute(
                 "SELECT 1 FROM runs WHERE tenant_id = ? AND collector = ? AND scheduled_for = ?",
                 (tenant["id"], key, slot),
@@ -488,6 +523,7 @@ JOB_MODULES = (
     "officesentry.onboarding",
     "officesentry.lifecycle",
     "officesentry.updates",
+    "officesentry.auditlog.jobs",
 )
 TASK_MODULES = (
     "officesentry.delivery",
@@ -495,6 +531,7 @@ TASK_MODULES = (
     "officesentry.reports.precomputed",
     "officesentry.onboarding",
     "officesentry.lifecycle",
+    "officesentry.auditlog.addon",
 )
 TASK_THREADS = 2  # rendering is CPU-bound: two let one client's approval pass a long run of others
 
@@ -540,13 +577,13 @@ def _rollback(conn) -> None:
             log.warning("Rollback after a failed housekeeping pass failed", exc_info=True)
 
 
-def _execute(conn, run, graph_factory, exchange_factory, alerting, liveness: Liveness) -> None:
+def _execute(conn, run, graph_factory, exchange_factory, alerting, liveness: Liveness, feed_factory=None) -> None:
     # Every line logged until the run ends names it (logs.py), so an error can be matched to the run.
     with logs.context(run=run["id"], tenant=run["tenant_id"], collector=run["collector"]):
         log.info("Run started")
         liveness.start_run(run["id"])
         try:
-            status = execute_run(conn, run, graph_factory, exchange_factory, alerting)
+            status = execute_run(conn, run, graph_factory, exchange_factory, alerting, feed_factory=feed_factory)
             alerts.after_run(conn, alerting, run["id"], status)
         finally:
             liveness.end_run()
@@ -569,6 +606,7 @@ def _collector_thread(
     exchange_factory,
     alerting,
     liveness: Liveness | None = None,
+    feed_factory=None,
 ) -> threading.Thread:
     """Claim and execute queued runs until ``stop`` is set, then finish the current run."""
     liveness = liveness or Liveness()
@@ -582,7 +620,7 @@ def _collector_thread(
                     stop.wait(IDLE_WAIT)
                     continue
                 try:
-                    _execute(conn, run, graph_factory, exchange_factory, alerting, liveness)
+                    _execute(conn, run, graph_factory, exchange_factory, alerting, liveness, feed_factory)
                 except Exception:  # say, the database stayed locked: keep the thread alive
                     log.exception("Run %s could not be finished", run["id"])
                     _rollback(conn)
@@ -673,13 +711,20 @@ def _daily_thread(cfg: Config, liveness: Liveness) -> threading.Thread:
 
 
 def run_worker(
-    cfg: Config, *, once: bool = False, graph_factory=None, exchange_factory=None, stop: threading.Event | None = None
+    cfg: Config,
+    *,
+    once: bool = False,
+    graph_factory=None,
+    exchange_factory=None,
+    stop: threading.Event | None = None,
+    feed_factory=None,
 ) -> None:
     conn = connect(cfg.db_path)
     migrate(conn)
     vault = Vault(cfg.encryption_keys)
     graph_factory = graph_factory or default_graph_factory(vault)
     exchange_factory = exchange_factory or default_exchange_factory(vault)
+    feed_factory = feed_factory or default_feed_factory(vault)
     from .web import create_app
 
     app = create_app(cfg)  # for rendering emailed reports and alert emails
@@ -695,7 +740,7 @@ def run_worker(
             _housekeeping(app, conn, vault, cfg)
             _daily(conn, cfg)
             while (run := _claim(conn)) is not None:
-                _execute(conn, run, graph_factory, exchange_factory, alerting, liveness)
+                _execute(conn, run, graph_factory, exchange_factory, alerting, liveness, feed_factory)
             tasks.drain(app, conn, vault, cfg)
         finally:
             conn.close()
@@ -714,7 +759,7 @@ def run_worker(
         schedule.next_fire(cfg.collect_cron, cfg.timezone, datetime.now(UTC)).isoformat(),
     )
     collectors = [
-        _collector_thread(cfg, n + 1, stop, graph_factory, exchange_factory, alerting, liveness)
+        _collector_thread(cfg, n + 1, stop, graph_factory, exchange_factory, alerting, liveness, feed_factory)
         for n in range(cfg.worker_concurrency)
     ]
     collectors += [_task_thread(app, vault, cfg, n + 1, stop, liveness) for n in range(TASK_THREADS)]

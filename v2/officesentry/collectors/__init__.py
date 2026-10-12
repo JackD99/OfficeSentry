@@ -29,6 +29,7 @@ from . import mail_flow  # noqa: F401
 from . import mail_protection  # noqa: F401  (its report tells outside addresses by the mailbox snapshot's domains)
 from . import app_sign_ins, group_nesting, user_details  # noqa: F401  (their reports join Apps, Groups and Users)
 from . import admin_units  # noqa: F401  (its report joins Admin roles, Users and Groups)
-from .base import REGISTRY, Collector, RunContext
+from . import audit_activity  # noqa: F401  (the audit log add-on's; only for clients it's on for)
+from .base import REGISTRY, Collector, RunContext, core, for_tenant
 
-__all__ = ["REGISTRY", "Collector", "RunContext"]
+__all__ = ["REGISTRY", "Collector", "RunContext", "core", "for_tenant"]

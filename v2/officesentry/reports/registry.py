@@ -81,6 +81,9 @@ class Declaration:
     order: int
     uses: tuple[str, ...]
     keywords: str
+    # An add-on's report: (conn, tenant or None) -> whether it's there for that tenant (or, without one, at all).
+    # None for every other report, which is always there.
+    shown: Callable | None = None
 
 
 @dataclass
@@ -107,6 +110,7 @@ def report(
     order: int = 0,
     uses: tuple[str, ...] = (),
     keywords: str = "",
+    shown: Callable | None = None,
 ):
     """Declare a detail report; see the module docstring."""
     if group is not None and group not in dict(GROUP_TITLES):
@@ -116,7 +120,7 @@ def report(
         if key in DECLARED:
             raise ValueError(f"Report {key!r} is declared twice")
         DECLARED[key] = Declaration(
-            key, title, description, tuple(collectors), builder, group, order, tuple(uses), keywords
+            key, title, description, tuple(collectors), builder, group, order, tuple(uses), keywords, shown
         )
         _rebuild()
         return builder
@@ -151,9 +155,16 @@ def declared_uses() -> dict[str, list[str]]:
     return out
 
 
-def grouped() -> list[ReportGroup]:
-    """Every detail report, once, under its menu group. Read at call time so new reports appear."""
-    seen: set[str] = set()
+def hidden(conn, tenant=None) -> frozenset[str]:
+    """The reports that aren't there for ``tenant`` (without one: anywhere): an add-on's report while the
+    add-on is off, or isn't on for that tenant. Menus, the library, rollups and schedules leave them out."""
+    return frozenset(d.key for d in DECLARED.values() if d.shown is not None and not d.shown(conn, tenant))
+
+
+def grouped(hide: frozenset[str] = frozenset()) -> list[ReportGroup]:
+    """Every detail report, once, under its menu group, but those in ``hide`` (``hidden()``). Read at call
+    time so new reports appear."""
+    seen: set[str] = set(hide)
     groups = []
     for key, title, keys in GROUPS:
         items = [(k, REPORTS[k][0], REPORTS[k][1]) for k in keys if k in REPORTS and k not in seen]

@@ -11,7 +11,7 @@ from flask import Blueprint, abort, current_app, flash, g, redirect, render_temp
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from .. import clouds, endpoints, lifecycle, store, tenant_groups, tenant_health
-from ..collectors import REGISTRY
+from ..collectors import REGISTRY, core, for_tenant
 from ..db import audit, transaction, utcnow
 from ..discovery import tenant_id_for_domain
 from ..entra import admin_consent_url
@@ -84,6 +84,8 @@ def data_health(tenant, latest: dict) -> tuple[str, str, str]:
         return "info", "Paused", "Collection and emailed reports are paused."
     if not tenant["consented_at"]:
         return "info", "Awaiting consent", "A tenant admin needs to grant access."
+    sources = core()  # an add-on's runs show on its own page, not here
+    latest = {k: r for k, r in latest.items() if k in sources}
     if not latest:
         return "info", "Not collected", "No data collected yet."
     failed = [k for k, r in latest.items() if r["status"] == "failed"]
@@ -98,7 +100,7 @@ def data_health(tenant, latest: dict) -> tuple[str, str, str]:
     finished = [r["finished_at"] for r in latest.values() if r["finished_at"]]
     oldest = min(finished) if finished else None
     cutoff = (datetime.now(UTC) - STALE_AFTER).strftime("%Y-%m-%dT%H:%M:%SZ")
-    if len(latest) < len(REGISTRY) or (oldest and oldest < cutoff):
+    if any(k not in latest for k in sources) or (oldest and oldest < cutoff):
         return "warn", "Out of date", "Some data is more than 36 hours old or missing."
     return "ok", "Up to date", ""
 
@@ -163,7 +165,7 @@ def new_tenant():
         cloud = request.form.get("cloud", clouds.DEFAULT)
         if not clouds.valid(cloud):
             abort(400)
-        connection = store.get_connection(g.db, conn_id) if conn_id is not None else None
+        connection = store.get_connection(g.db, conn_id, store.MAIN) if conn_id is not None else None
         if not name or len(name) > 200:
             flash("Enter a display name.", "error")
         elif not (GUID_RE.match(ref) or DOMAIN_RE.match(ref)):
@@ -309,6 +311,7 @@ def collection(tenant_id: int):
         runs=runs,
         latest=latest,
         collectors=REGISTRY,
+        sources=for_tenant(g.db, t),
         health=data_health(t, latest),
         not_connected=not_connected(t),
         setup=tenant_health.assess(g.db, t),
@@ -319,9 +322,10 @@ def collection(tenant_id: int):
 @needs("collect")
 def collect(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    keys = request.form.getlist("collector") or list(REGISTRY)
+    sources = for_tenant(g.db, t)
+    keys = request.form.getlist("collector") or sources
     for key in keys:
-        if key not in REGISTRY:
+        if key not in sources:
             abort(400)
     if reason := not_connected(t):
         flash(reason, "error")
@@ -340,7 +344,7 @@ def collect(tenant_id: int):
 def set_connection(tenant_id: int):
     t = tenant_or_404(tenant_id)
     conn_id = request.form.get("connection_id", type=int)
-    if conn_id is not None and store.get_connection(g.db, conn_id) is None:
+    if conn_id is not None and store.get_connection(g.db, conn_id, store.MAIN) is None:
         abort(400)
     if problem := cloud_mismatch(clouds.of(t).key, store.get_connection(g.db, conn_id) if conn_id else None):
         flash(problem, "error")
@@ -399,12 +403,16 @@ def consent_callback():
     A link an admin opened from Office Sentry comes back to their own signed-in browser (``_consent_return``,
     admins only, which signs in anyone else first). A link sent to a client's administrator
     (``onboarding.client_link``) lands on a public thank-you page that records nothing itself; it only queues
-    a sign-in check, which is what records consent."""
-    from . import onboarding
+    a sign-in check, which is what records consent. The audit log add-on's client link
+    (``audit_addon.client_link``) works the same way, with its own thank-you page."""
+    from . import audit_addon, onboarding
 
     tenant = onboarding.client_link_tenant(request.args.get("state", ""))
     if tenant is not None:
         return onboarding.client_returned(tenant)
+    tenant = audit_addon.client_link_tenant(request.args.get("state", ""))
+    if tenant is not None:
+        return audit_addon.client_returned(tenant)
     return _consent_return()
 
 
@@ -486,7 +494,7 @@ def _consent_return():
             "warning",
         )
     if t["enabled"] and not t["archived_at"]:
-        for key in REGISTRY:  # tenant_profile is first, so licence-dependent collectors see its result
+        for key in core():  # tenant_profile is first, so licence-dependent collectors see its result
             store.enqueue_run(g.db, t["id"], key, requested_by=g.user["username"])
         flash("Consent recorded. A first collection has been queued.", "success")
     else:

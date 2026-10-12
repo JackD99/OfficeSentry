@@ -63,9 +63,20 @@ def entry_capability(entry: library.Entry) -> str:
     return SUMMARY_CAPABILITY.get(entry.kind) or report_capability(entry.key)
 
 
+def hidden_reports(tenant_id: int | None = None) -> frozenset[str]:
+    """Reports that aren't there for this tenant (without one: anywhere), as ``data_reports.hidden``."""
+    tenant = store.get_tenant(g.db, tenant_id) if tenant_id is not None else None
+    return data_reports.hidden(g.db, tenant)
+
+
+def exists(key: str, tenant_id: int | None = None) -> bool:
+    """A detail report that's there for this tenant (without one: for some tenant)."""
+    return key in data_reports.REPORTS and key not in hidden_reports(tenant_id)
+
+
 def report_groups(tenant_id: int | None = None) -> list:
     """The detail report menu, with only the areas this person may open (on this tenant)."""
-    return [gr for gr in data_reports.grouped() if can(area_capability(gr.key), tenant_id)]
+    return [gr for gr in data_reports.grouped(hidden_reports(tenant_id)) if can(area_capability(gr.key), tenant_id)]
 
 
 def _library_href(entry: library.Entry, tenant_id: int | None) -> str:
@@ -94,7 +105,7 @@ def overview():
     if tenant is None and not (staff and tenants):
         tenant = tenants[0] if tenants else None  # clients always look at one of their tenants
     use = next((u for u in library.USES if u.key == request.args.get("use")), None)
-    areas = library.catalogue()
+    areas = library.catalogue(hidden_reports(tenant["id"] if tenant else None))
     for area in areas:
         if use:
             area.entries = [e for e in area.entries if use.key in e.uses]
@@ -259,7 +270,7 @@ def data_index(tenant_id: int):
     if key == "designs":
         return redirect(url_for("designs.tenant_designs", tenant_id=t["id"]))
     groups = report_groups(t["id"])
-    if key not in data_reports.REPORTS or not can(report_capability(key), t["id"]):
+    if not exists(key, t["id"]) or not can(report_capability(key), t["id"]):
         if not groups:
             abort(403)
         key = groups[0].reports[0][0]
@@ -270,7 +281,7 @@ def data_index(tenant_id: int):
 @needs()
 def data_report(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
-    if key not in data_reports.REPORTS:
+    if not exists(key, t["id"]):
         abort(404)
     require(report_capability(key), tenant_id=t["id"])
     groups = report_groups(t["id"])
@@ -309,7 +320,7 @@ def _viewed(report):
 @needs("export")
 def data_report_pdf(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
-    if key not in data_reports.REPORTS:
+    if not exists(key, t["id"]):
         abort(404)
     require(report_capability(key), tenant_id=t["id"])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.pdf")
@@ -325,7 +336,7 @@ def data_report_pdf(tenant_id: int, key: str):
 @needs("export")
 def data_report_xlsx(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
-    if key not in data_reports.REPORTS:
+    if not exists(key, t["id"]):
         abort(404)
     require(report_capability(key), tenant_id=t["id"])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.xlsx")

@@ -20,8 +20,9 @@ isn't set means today's behaviour, so nothing changes on upgrade:
   ``ISSUED_FLOOR_DAYS``, and each tenant's latest file of each report is
   always kept, since month-end reporting compares against it;
 * activity history (``events.py``, the monthly event files): raw sign-ins
-  180 days, daily sign-in summaries 25 months and directory audit events
-  7 years. These are the plan's recommended defaults (decision D18), so they
+  180 days, daily sign-in summaries 25 months, directory audit events
+  7 years and the audit log add-on's file and mailbox events 2 years.
+  These are the plan's recommended defaults (decision D18), so they
   apply from the upgrade on; a month older than its period is deleted as a
   file, and rows of a tenant that no longer exists are swept away.
 
@@ -85,6 +86,7 @@ LIMITS = {
     "history_signin_days": (30, 3650),
     "history_daily_months": (1, 120),
     "history_audit_years": (1, 100),
+    "history_activity_months": (6, 84),
     "state_months": (1, 1200),
 }
 # Which settings may be "keep forever" (or, for sign-in detail, "as long as the snapshot").
@@ -97,6 +99,7 @@ OPEN_ENDED = {
     "issued_days",
     "history_daily_months",
     "history_audit_years",
+    "history_activity_months",
     "state_months",
 }
 FOREVER_MONTHS = 10**6  # snapshots_to_keep's limit for "every month"
@@ -115,6 +118,7 @@ class Policy:
     history_signin_days: int = 180
     history_daily_months: int | None = 25  # None: daily sign-in summaries kept forever
     history_audit_years: int | None = 7  # None: directory audit events kept forever
+    history_activity_months: int | None = 24  # the audit log add-on's file and mailbox events; None: forever
     state_months: int | None = 25  # daily history (state_history.py); None: kept forever
 
 
@@ -187,6 +191,7 @@ LABELS = {
     "history_signin_days": "Sign-in history",
     "history_daily_months": "Daily sign-in summaries",
     "history_audit_years": "Directory audit history",
+    "history_activity_months": "Files and mailbox events",
     "state_months": "Daily history",
 }
 UNITS = {
@@ -194,6 +199,7 @@ UNITS = {
     "keep_monthly": "month",
     "history_daily_months": "month",
     "history_audit_years": "year",
+    "history_activity_months": "month",
     "state_months": "month",
 }
 
@@ -332,10 +338,18 @@ def history_cutoffs(policy: Policy, now: datetime | None = None) -> dict[str, da
         "history_audit_years": None
         if policy.history_audit_years is None
         else _months_ago(now, 12 * policy.history_audit_years),
+        "history_activity_months": None
+        if policy.history_activity_months is None
+        else _months_ago(now, policy.history_activity_months),
     }
 
 
-HISTORY_STORES = {"history_signin_days": "signins", "history_daily_months": "daily", "history_audit_years": "audits"}
+HISTORY_STORES = {
+    "history_signin_days": "signins",
+    "history_daily_months": "daily",
+    "history_audit_years": "audits",
+    "history_activity_months": "activity",
+}
 
 
 def prune_state(conn, months: int | None, now: datetime | None = None, dry_run: bool = False) -> int:

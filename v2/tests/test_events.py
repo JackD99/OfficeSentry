@@ -260,7 +260,7 @@ def test_ranges_microsoft_no_longer_keeps_are_lost_or_move_the_start():
         read_to=now - day,
         gaps=[[floor - 3 * day, floor - day], [floor - 10 * day, floor - 8 * day]],
     )
-    events._extend(cov, now, floor)
+    events.extend(cov, now, floor)
     assert cov.since == floor - 8 * day
     assert cov.lost == [[floor - 3 * day, floor - day]]
     assert cov.gaps == [[now - day - events.OVERLAP, now]]

@@ -2,6 +2,8 @@
 
 The app is multi-tenant and read-only. Each client tenant is added by an admin
 of that tenant opening the admin-consent link; no per-tenant app is created.
+The audit log add-on (``auditlog/``) is a second app made the same way, with
+only ActivityFeed.Read (``AUDIT_PERMISSIONS``).
 
 Each national cloud (GCC High, DoD, China; see ``clouds.py``) is a separate
 Entra ID: an app registered in one can't sign in to another, so a tenant in one
@@ -93,6 +95,15 @@ RESOURCES = (
     Resource(SHAREPOINT_APP_ID, "Office 365 SharePoint Online", "SharePoint ", SHAREPOINT_PERMISSIONS),
 )
 
+# The audit log add-on (auditlog/) is a separate app with exactly one permission, approved per client. It isn't
+# in RESOURCES: the shared app never asks for it, so no client is asked to approve it there.
+MANAGEMENT_APP_ID = "c5393580-f805-4401-95e8-94b7a6ef2fc2"  # Office 365 Management APIs
+AUDIT_PERMISSIONS: dict[str, str] = {
+    "ActivityFeed.Read": "The Microsoft 365 audit log: who deleted, downloaded or shared files, who opened "
+    "someone else's mailbox and who created mail rules",
+}
+AUDIT_RESOURCE = Resource(MANAGEMENT_APP_ID, "Office 365 Management APIs", "", AUDIT_PERMISSIONS)
+
 
 def label(app_id: str, name: str) -> str:
     """How Office Sentry names a permission: Graph's and Exchange's by their own name, SharePoint's as
@@ -182,8 +193,10 @@ def create_app_registration(
     display_name: str = "Office Sentry (read-only)",
     session: requests.Session | None = None,
     cloud: str | None = None,
+    audit: bool = False,
 ) -> dict:
-    """Create the multi-tenant app in the MSP's own tenant (in ``cloud``). Returns the application."""
+    """Create the multi-tenant app in the MSP's own tenant (in ``cloud``). Returns the application. With
+    ``audit``, the audit log add-on's app instead, asking only for ActivityFeed.Read."""
     http = session or requests.Session()
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     base = f"{clouds.get(cloud).graph}/v1.0"
@@ -191,7 +204,7 @@ def create_app_registration(
         "displayName": display_name,
         "signInAudience": "AzureADMultipleOrgs",
         "web": {"redirectUris": [redirect_uri]},
-        "requiredResourceAccess": _wanted_access(http, headers, base),
+        "requiredResourceAccess": _audit_access(http, headers, base) if audit else _wanted_access(http, headers, base),
         "keyCredentials": [key_credential(cert_pem)],
     }
     resp = http.post(f"{base}/applications", headers=headers, json=body, timeout=60)
@@ -199,23 +212,33 @@ def create_app_registration(
     return resp.json()
 
 
+def _resource_sp(http: requests.Session, headers: dict, base: str, app_id: str) -> dict:
+    resp = http.get(
+        f"{base}/servicePrincipals",
+        headers=headers,
+        params={"$filter": f"appId eq '{app_id}'", "$select": "id,appRoles"},
+        timeout=60,
+    )
+    resp.raise_for_status()
+    found = resp.json().get("value") or []
+    if not found:
+        raise ValueError(f"{app_id} isn't in the signed-in tenant")
+    return found[0]
+
+
 def _wanted_access(http: requests.Session, headers: dict, base: str) -> list[dict]:
     """``requiredResourceAccess`` for every permission Office Sentry asks for, from the resources' app roles in
     the signed-in tenant (each permission's ID is the same everywhere, but reading them keeps this honest)."""
-
-    def resource_sp(app_id: str) -> dict:
-        resp = http.get(
-            f"{base}/servicePrincipals",
-            headers=headers,
-            params={"$filter": f"appId eq '{app_id}'", "$select": "id,appRoles"},
-            timeout=60,
-        )
-        resp.raise_for_status()
-        return resp.json()["value"][0]
-
     return required_resource_access(
-        resource_sp(GRAPH_APP_ID), resource_sp(EXCHANGE_APP_ID), resource_sp(SHAREPOINT_APP_ID)
+        _resource_sp(http, headers, base, GRAPH_APP_ID),
+        _resource_sp(http, headers, base, EXCHANGE_APP_ID),
+        _resource_sp(http, headers, base, SHAREPOINT_APP_ID),
     )
+
+
+def _audit_access(http: requests.Session, headers: dict, base: str) -> list[dict]:
+    """The add-on's one permission, ActivityFeed.Read on the Office 365 Management APIs."""
+    return [_resource(_resource_sp(http, headers, base, MANAGEMENT_APP_ID), MANAGEMENT_APP_ID, AUDIT_PERMISSIONS)]
 
 
 @dataclass(frozen=True)

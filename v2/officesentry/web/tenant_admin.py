@@ -146,7 +146,7 @@ def edit(tenant_id: int):
     cloud = request.form.get("cloud", clouds.of(t).key)
     if not clouds.valid(cloud):
         abort(400)
-    connection = store.get_connection(g.db, conn_id) if conn_id is not None else None
+    connection = store.get_connection(g.db, conn_id, store.MAIN) if conn_id is not None else None
     if conn_id is not None and connection is None:
         abort(400)
     moved_without_app = False
