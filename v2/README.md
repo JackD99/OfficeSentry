@@ -247,8 +247,17 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
     checks.
   - *Devices*: operating systems with Windows support dates, Intune devices
     that are non-compliant, unencrypted, out of support or not checking in,
-    every managed device, and every Entra ID device record by last activity.
-    Tenants without Intune still get the Entra records and Windows versions.
+    every managed device, which Windows computers joined to Entra ID have
+    their BitLocker recovery key saved there (never the key itself), and
+    every Entra ID device record by last activity. Tenants without Intune
+    still get the Entra records and Windows versions.
+  - *Intune policies*: which platforms have enrolled devices but no
+    compliance policy, what each compliance policy requires, configuration
+    profiles and Windows update rings (deferrals, restart deadline, paused),
+    endpoint security and settings catalog policies, and app protection for
+    iPhones and Android phones (PIN, sharing, copy and paste, backups), each
+    with who it's assigned to. Policies assigned to nobody and paused update
+    rings are flagged.
   - *Hybrid identity*: whether accounts are synced from on-premises Active
     Directory, when directory sync and password hash sync last ran, which
     domains are federated, admin accounts synced from AD, and synced versus
@@ -386,7 +395,8 @@ links, sites without two owners, guest invitations, stale guest invitations,
 teams and groups without an owner, who can create teams and groups, guests
 owning a team or group, group expiration, device compliance, disk encryption,
 Windows releases out of support, joined computers not in Intune, devices not
-checking in, stale device records, SharePoint storage nearly full, mailboxes
+checking in, stale device records, BitLocker recovery keys saved, a compliance
+policy for every platform in use, SharePoint storage nearly full, mailboxes
 and OneDrives nearly full, licence assignment errors, domain federation
 changes, risky sign-ins that succeeded (Entra ID P2), and subscriptions about
 to lapse (trials in use ending within 30 days, subscriptions in their grace
@@ -458,6 +468,9 @@ These areas have no real recording and are tested with simulated data only:
   registration report comes back empty, as it does on a newly licensed tenant.
 - **Intune device details**: the tenant has no enrolled devices, so the
   device compliance and encryption checks have nothing to read.
+- **Intune policies, BitLocker recovery keys and PIM for groups**: the tenant
+  hasn't approved the 2.2 permissions yet, so the replay covers the waiting
+  state and the policies themselves are simulated.
 - **National clouds** (GCC High, DoD, China): there's no test tenant in
   them; the endpoints come from Microsoft's documentation.
 - **Risky sharing**: the tenant's shared file is shared with one person in the

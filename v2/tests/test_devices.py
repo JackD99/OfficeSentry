@@ -52,6 +52,7 @@ def test_windows_support_by_build():
 def test_collects_entra_and_intune_devices(db, two_tenants, factory):
     alpha, _ = two_tenants
     responses.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
+    responses.get(f"{V1}/informationProtection/bitlocker/recoveryKeys", json={"value": dd.RECOVERY_KEYS})
     responses.get(f"{V1}/deviceManagement/managedDevices", json={"value": dd.MANAGED_DEVICES})
     run_id, status = _run(db, alpha, "devices", factory)
     assert status == "succeeded"
@@ -59,7 +60,9 @@ def test_collects_entra_and_intune_devices(db, two_tenants, factory):
     assert (m["devices.entra_total"], m["devices.entra_stale"]) == (5, 1)
     assert (m["devices.managed"], m["devices.compliant"], m["devices.noncompliant"]) == (3, 2, 1)
     assert (m["devices.unencrypted_computers"], m["devices.not_synced"], m["devices.unsupported_windows"]) == (1, 1, 1)
-    assert "select=id%2CdeviceName" in responses.calls[1].request.url  # only the fields we use
+    assert m["devices.recovery_keys_saved"] == 2  # LAPTOP-ANN and OLD-PC
+    managed = next(c for c in responses.calls if "managedDevices" in c.request.url)
+    assert "select=id%2CdeviceName" in managed.request.url  # only the fields we use
 
 
 @responses.activate
@@ -90,6 +93,7 @@ def test_tenant_without_intune_collects_entra_only(db, two_tenants, factory):
         )
     ]
     responses.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES + servers})
+    responses.get(f"{V1}/informationProtection/bitlocker/recoveryKeys", json={"value": []})
     assert _run(db, alpha, "tenant_profile", factory)[1] == "succeeded"
     assert _run(db, alpha, "devices", factory)[1] == "succeeded"
     assert not any("managedDevices" in c.request.url for c in responses.calls)
@@ -109,6 +113,7 @@ def test_tenant_without_intune_collects_entra_only(db, two_tenants, factory):
 def test_intune_forbidden_is_partial_not_failed(db, two_tenants, factory):
     alpha, _ = two_tenants
     responses.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
+    responses.get(f"{V1}/informationProtection/bitlocker/recoveryKeys", json={"value": dd.RECOVERY_KEYS})
     responses.get(
         f"{V1}/deviceManagement/managedDevices",
         status=403,
@@ -208,7 +213,13 @@ def test_devices_report(db, two_tenants):
     seed_tenant(db, alpha)
     report = data_reports.build(db, store.get_tenant(db, alpha), "devices", datetime.now(UTC))
     sections = {s.title: s for s in report.sections}
-    assert list(sections) == ["Operating systems", "Needs attention", "Managed devices", "Entra ID device records"]
+    assert list(sections) == [
+        "Operating systems",
+        "Needs attention",
+        "Managed devices",
+        "BitLocker recovery keys",
+        "Entra ID device records",
+    ]
     systems = {row[0]: row for row in sections["Operating systems"].rows}
     assert systems["Windows 10"][1:] == [1, "Ended"]
     attention = sections["Needs attention"]
@@ -243,5 +254,6 @@ def test_devices_page_and_xlsx(client, db, two_tenants):
         "Operating systems",
         "Needs attention",
         "Managed devices",
+        "BitLocker recovery keys",
         "Entra ID device records",
     ]

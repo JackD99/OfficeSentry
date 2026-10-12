@@ -12,6 +12,7 @@ from datetime import UTC, date, datetime
 
 STALE_DAYS = 90  # an Entra device not seen for this long is probably gone
 NO_SYNC_DAYS = 30  # an Intune device that hasn't checked in for this long isn't getting policy
+BITLOCKER = "BitLockerKey.ReadBasic.All"  # lists which devices have a recovery key saved (added in 2.2)
 
 
 @dataclass(frozen=True)
@@ -155,6 +156,42 @@ def os_label(device: dict) -> str:
     if release:
         return f"{release.name} ({version})"
     return f"{os_name} {version}".strip()
+
+
+def bitlocker_state(snap) -> str | None:
+    """How the latest Devices run read the BitLocker recovery key list: "read", "waiting" (the client hasn't
+    approved BitLockerKey.ReadBasic.All yet) or "failed"; None from a run before Office Sentry read it."""
+    rows = snap.objects("devices", "bitlocker_status")
+    found = rows[0].get("state") if rows and isinstance(rows[0], dict) else None
+    return found if isinstance(found, str) else None
+
+
+def recovery_keys(snap) -> dict[str, dict]:
+    """Saved BitLocker recovery keys by lower-cased Entra device ID (``deviceId``): how many (``keys``),
+    whether one is for the system drive (``osVolume``) and when the newest was saved (``latest``)."""
+    out = {}
+    for r in snap.objects("devices", "recovery_key") or []:
+        if isinstance(r, dict) and isinstance(r.get("_id"), str):
+            out[r["_id"].lower()] = r
+    return out
+
+
+def has_recovery_key(device_id, keys: dict[str, dict]) -> bool:
+    """Whether a device (by Entra ``deviceId``, or a managed device's ``azureADDeviceId``) has a system drive
+    recovery key saved."""
+    found = keys.get(device_id.lower()) if isinstance(device_id, str) else None
+    return bool(found and found.get("osVolume"))
+
+
+def escrows_keys(device: dict, now: datetime) -> bool:
+    """A Windows computer joined to Entra ID (or hybrid joined), enabled and seen recently: the devices that
+    save their BitLocker recovery key in Entra ID. Registered personal devices don't."""
+    return (
+        (device.get("operatingSystem") or "").lower().startswith("windows")
+        and device.get("trustType") in ("AzureAd", "ServerAd")
+        and bool(device.get("accountEnabled"))
+        and (days_since(device.get("approximateLastSignInDateTime"), now) or 0) <= STALE_DAYS
+    )
 
 
 def _release(version: str | None) -> WindowsRelease | None:
