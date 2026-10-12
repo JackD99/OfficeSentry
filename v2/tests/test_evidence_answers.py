@@ -86,13 +86,14 @@ def test_mfa_is_partly_when_anyone_but_break_glass_is_excluded(db, two_tenants):
     roles = copy.deepcopy(gd.CA_MFA_ALL)
     roles["conditions"]["users"].update(
         excludeUsers=[],
-        excludeRoles=["role-1"],
+        excludeRoles=["role-1", gd.EXCH],
         excludeGuestsOrExternalUsers={"guestOrExternalUserTypes": "b2bCollaborationGuest"},
     )
     seed_tenant(db, bravo, ca=[roles])
     b = _answers(db, bravo)
     assert b["mfa_remote"].suggested == PARTLY
     assert "(role)" in b["mfa_remote"].why and "Guests and external users" in b["mfa_remote"].why
+    assert "Exchange Administrator (role)" in b["mfa_remote"].why  # by name, not its template id
 
 
 def test_security_defaults_answer_yes(db, two_tenants):

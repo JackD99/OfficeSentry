@@ -1668,6 +1668,123 @@ def directory_groups(now: datetime) -> dict:
     return {"GROUPS": rows, "MEMBERS": members}
 
 
+# Built-in admin roles a Conditional Access baseline targets. Their template IDs are the same in every tenant; the
+# fixtures' own Global and Exchange Administrator ids stand in for theirs, so the role holders line up.
+ADMIN_ROLES = {
+    graphdata.GA: "Global Administrator",
+    "194ae4cb-b126-40b2-bd5b-6091b380977d": "Security Administrator",
+    "f28a1f50-f6e7-4571-818b-6a12f2af6b6c": "SharePoint Administrator",
+    graphdata.EXCH: "Exchange Administrator",
+    "b1be1c3e-b65d-4f19-8427-f6fa0d97feb9": "Conditional Access Administrator",
+    "9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3": "Application Administrator",
+    "158c047a-c907-4556-b7ef-446551a6b5f7": "Cloud Application Administrator",
+    "966707d0-3269-4727-9be2-8c3a10f19b9d": "Password Administrator",
+    "7be44c8a-adaf-4e2a-84d6-ab2649e08a13": "Privileged Authentication Administrator",
+    "e8611ab8-c189-46e8-94e1-60213ab1f814": "Privileged Role Administrator",
+    "fe930be7-5e62-47db-91af-98c3a49a38b1": "User Administrator",
+}
+AZURE_MANAGEMENT = "797f4846-ba00-4fd7-ba43-dac1f8f63013"
+
+
+def role_definitions() -> list[dict]:
+    """The fixtures' role definitions plus the rest of the admin roles the policies below name."""
+    known = {r["id"] for r in graphdata.ROLE_DEFINITIONS}
+    extra = [
+        {"id": rid, "displayName": name, "isBuiltIn": True, "templateId": rid}
+        for rid, name in ADMIN_ROLES.items()
+        if rid not in known
+    ]
+    return graphdata.ROLE_DEFINITIONS + extra
+
+
+def ca_policies(t: dict) -> list[dict]:
+    """A numbered Conditional Access baseline like the ones MSPs roll out: admin policies naming a dozen roles,
+    break-glass exclusions, report-only policies part-way through a rollout, and risk policies that need Entra ID P2.
+    Contoso has the whole set enforced; Fabrikam is part-way (legacy sign-in and devices still report-only);
+    Northwind keeps the fixtures' two policies."""
+    if t["base"] == "northwindtraders":
+        return [graphdata.CA_MFA_ALL, graphdata.CA_REPORT_ONLY]
+    rollout = "enabledForReportingButNotEnforced" if t["base"] == "fabrikam" else "enabled"
+    roles = list(ADMIN_ROLES)
+    breakglass = ["u4"]
+
+    def policy(n, name, users, apps=None, grant=("mfa",), state="enabled", **conditions):
+        return {
+            "id": f"ca-{n:03d}",
+            "displayName": f"CA{n:03d} \N{EM DASH} {name}",
+            "state": state,
+            "conditions": {
+                "users": {"excludeUsers": breakglass, **users},
+                "applications": apps or {"includeApplications": ["All"]},
+                "clientAppTypes": ["all"],
+                **conditions,
+            },
+            "grantControls": {"operator": "OR", "builtInControls": list(grant)} if grant else None,
+            "sessionControls": None if grant else {"signInFrequency": {"value": 8, "type": "hours", "isEnabled": True}},
+        }
+
+    return [
+        policy(1, "Admins: Require phishing-resistant MFA", {"includeRoles": roles}),
+        policy(2, "All users: Require MFA", {"includeUsers": ["All"], "excludeRoles": roles}),
+        {
+            **policy(3, "Block legacy authentication", {"includeUsers": ["All"]}, grant=("block",), state=rollout),
+            "conditions": {
+                "users": {"includeUsers": ["All"], "excludeUsers": breakglass},
+                "applications": {"includeApplications": ["All"]},
+                "clientAppTypes": ["exchangeActiveSync", "other"],
+            },
+        },
+        policy(
+            4,
+            "All users: Require compliant or hybrid-joined device",
+            {"includeUsers": ["All"], "excludeUsers": breakglass + ["u1"]},
+            grant=("compliantDevice", "domainJoinedDevice"),
+            state=rollout,
+            platforms={"includePlatforms": ["windows", "macOS"]},
+        ),
+        policy(
+            5,
+            "Block sign-ins from disallowed countries",
+            {"includeUsers": ["All"]},
+            grant=("block",),
+            locations={"includeLocations": ["blocked-countries"]},
+        ),
+        policy(
+            6,
+            "Require MFA for Azure management",
+            {"includeUsers": ["All"]},
+            apps={"includeApplications": [AZURE_MANAGEMENT]},
+        ),
+        policy(7, "Admins: No persistent browser, 8h sign-in frequency", {"includeRoles": roles}, grant=()),
+        policy(8, "All users: 8h sign-in frequency", {"includeUsers": ["All"], "excludeRoles": roles}, grant=()),
+        policy(
+            9,
+            "Require MFA for device registration",
+            {"includeUsers": ["All"]},
+            apps={"includeUserActions": ["urn:user:registerdevice"]},
+        ),
+        policy(10, "Insider risk: Step-up MFA", {"includeUsers": ["All"]}, userRiskLevels=["high"]),
+        policy(11, "High sign-in risk: Block", {"includeUsers": ["All"]}, grant=("block",), signInRiskLevels=["high"]),
+    ]
+
+
+def breakglass(t: dict, now: datetime) -> dict:
+    """The emergency access account the policies exclude (the fixtures' u4, a Global Administrator): cloud only,
+    no licence, signed in once a month to test it."""
+    return {
+        "id": "u4",
+        "displayName": "Emergency access",
+        "userPrincipalName": f"breakglass@{t['base']}.{t['tld']}",
+        "userType": "Member",
+        "accountEnabled": True,
+        "assignedLicenses": [],
+        "licenseAssignmentStates": [],
+        "usageLocation": "GB",
+        "createdDateTime": "2024-03-04T09:00:00Z",
+        "signInActivity": {"lastSignInDateTime": _iso(now - timedelta(days=12))},
+    }
+
+
 def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> None:
     """Collect tenant ``t`` from the renamed fixtures. ``seed`` goes to ``tests.seed.seed_tenant`` as well
     (``mark=``, ``ca=``, ...), as the layout checks' stress client does (tests/layout/stress.py)."""
@@ -1677,7 +1794,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> 
         # The same seed both times: the same people, two of whom join after the first collection.
         rng = random.Random(t["name"])  # noqa: S311 (demo data, not security)
         users, registration, active, apps = staff(t, rng, now, t["mfa"][0 if first else 1], joined_recently=not first)
-        everyone = fixture_users.USERS + users
+        everyone = fixture_users.USERS + [breakglass(t, now)] + users
         bp = sum(1 for u in everyone if {"skuId": "sku-bp"} in u.get("assignedLicenses", []))
         basic = sum(1 for u in everyone if {"skuId": "sku-basic"} in u.get("assignedLicenses", []))
         tenant_skus = skus(t, bp, basic)
@@ -1693,7 +1810,8 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> 
                     **exchange(t, everyone, first, rng),
                     "Get-InboxRule": folders(rules),
                     **mail_extras(t, everyone, now, random.Random(t["name"] + "mail")),  # noqa: S311
-                }
+                },
+                "ROLE_DEFINITIONS": role_definitions(),
             },
             devicedata: {"ENTRA_DEVICES": entra, "MANAGED_DEVICES": managed, "RECOVERY_KEYS": keys},
             sharepoint_data: {**sharepoint(t, everyone, tenant_skus, now, first, rng), **access_extras},
@@ -1709,6 +1827,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> 
                 tenant_id,
                 dns=graphdata.fake_dns,
                 users=everyone,
+                ca=seed.pop("ca", None) or ca_policies(t),
                 skus=tenant_skus,
                 registration=graphdata.REGISTRATION_DETAILS + registration,
                 secure_scores=secure_scores(t["score"][0] - 4, t["score"][0], now)

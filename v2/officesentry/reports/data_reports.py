@@ -185,6 +185,8 @@ def link_pages(sections: list[Section], indexes: list[tuple[dict[str, str], Call
                     row[i] = PageLink(v, href)
                 elif type(v) is Link and not v.page_href and (href := lookups[i].get(v.href.lower().rstrip("/"))):
                     row[i] = replace(v, page_href=href)
+                elif isinstance(v, Many):
+                    v.hrefs |= {p: h for p in v.parts if p not in v.hrefs and (h := lookups[i].get(p.lower()))}
 
 
 def people_index(snap: TenantSnapshot) -> dict[str, str]:
@@ -206,18 +208,40 @@ def link_people(sections: list[Section], tenant_id: int, index: dict[str, str]) 
             for i, v in enumerate(row):
                 if type(v) is str and (uid := index.get(v.lower())):
                     row[i] = UserLink(v, user_path(tenant_id, uid))
+                elif isinstance(v, Many):
+                    v.hrefs |= {p: user_path(tenant_id, uid) for p in v.parts if (uid := index.get(p.lower()))}
 
 
 class Many(str):
-    """A list cell ("A, B, C") that still knows its items, so a value filter can offer each one."""
+    """A list cell ("A, B, C") that still knows its items, so a value filter can offer each one.
+
+    On the page a long list shows ``summary`` ("breakglass@contoso.com + 11 admin roles"), or its first two
+    items and how many more, and opens in place to the whole list; downloads keep every item. ``hrefs``
+    maps items to their pages in Office Sentry (``link_people``)."""
 
     parts: tuple[str, ...] = ()
+    summary: str = ""
+    hrefs: dict[str, str]
 
-    def __new__(cls, items):
+    def __new__(cls, items, summary: str = ""):
         parts = tuple(str(v) for v in items)
         obj = super().__new__(cls, ", ".join(parts))
         obj.parts = parts
+        obj.summary = summary
+        obj.hrefs = {}
         return obj
+
+    @property
+    def short(self) -> str:
+        """What the page shows before the list is opened: "" when the list is short enough to show whole."""
+        if self.summary:
+            return self.summary
+        if len(self.parts) > LIST_WHOLE:
+            return f"{', '.join(self.parts[:2])} + {len(self.parts) - 2} more"
+        return ""
+
+
+LIST_WHOLE = 3  # a list cell with this many items or fewer shows them all
 
 
 @dataclass
@@ -729,7 +753,15 @@ def conditional_access(snap: TenantSnapshot, now: datetime, report: DataReport) 
         row = coverage.describe(p, d, snap.capabilities)
         state = f"{row.state}, but never applies (needs Entra ID P2)" if row.warning else row.state
         pol.add(
-            [row.name, state, row.users, row.excluded, row.apps, row.conditions, row.grant],
+            [
+                row.name,
+                state,
+                Many(row.include, row.include_summary),
+                Many(row.exclude, row.exclude_summary),
+                row.apps,
+                row.conditions,
+                row.grant,
+            ],
             "medium" if row.warning else None,
         )
     report.sections.append(pol)

@@ -7,7 +7,7 @@ import re
 from datetime import UTC, datetime
 
 from ..formatting import capability, day, money, parse, strftime, when
-from ..reports.cells import breakable, display, pdf_cell
+from ..reports.cells import breakable, display, pdf_cell, wrappable
 from ..text import plural, subject_label
 
 _strftime = strftime  # its old name, still used by templates' datefmt and email.py
@@ -84,5 +84,6 @@ def register(app) -> None:
         pdf_cell=pdf_cell,
         readable=display,
         breakable=breakable,
+        wrappable=wrappable,
         subject_label=subject_label,
     )
