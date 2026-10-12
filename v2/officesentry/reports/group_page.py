@@ -25,7 +25,7 @@ from ..collectors.groups import GROUP_LIMIT, MEMBER_IDS_KEPT
 from ..devices import parse_ts
 from ..licences import sku_name
 from ..snapshot import TenantSnapshot
-from ..text import plural
+from ..text import fold, plural
 from .data_reports import PAGE_INDEXES, VISIBILITY, Highlight, Link, PageIndex, PageLink, Section
 from .distribution_lists import MEMBER_TYPES, _activity, _Owners, _recent
 from .distribution_lists import RECENT_DAYS as MAIL_DAYS
@@ -1082,7 +1082,7 @@ def directory(conn, tenant, now: datetime | None = None) -> tuple[list[GroupRow]
                 counts.get(g["_id"], 0),
             )
         )
-    out.sort(key=lambda r: (-r.findings, r.owners_ok, r.type != "Team", r.name.lower()))
+    out.sort(key=lambda r: (-r.findings, r.owners_ok, r.type != "Team", fold(r.name)))
     other = len(rows) - m365
     tiles = [
         Highlight(

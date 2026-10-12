@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 from officesentry import store
-from officesentry.reports import library
+from officesentry.reports import library, views
 from officesentry.reports.data_reports import GROUPS, REPORTS, build
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -34,8 +34,17 @@ def test_recycle_bin_report_lists_days_left_and_flags_what_goes_soon(db, two_ten
     assert groups["Marketing"][0][1] == "Microsoft 365 group" and groups["Marketing"][1] is None
     tiles = {t.label: t for t in report.tiles}
     assert tiles["Deleted users"].value == 3 and tiles["Deleted groups and teams"].value == 2
-    soon = tiles["Permanently deleted within 7 days"]
-    assert soon.value == 3 and soon.tone == "warn" and soon.foot == "2 users, 1 group"
+    # A figure per table, each opening the rows it counts.
+    users_soon, groups_soon = (
+        tiles["Users deleted for good within 7 days"],
+        tiles["Groups deleted for good within 7 days"],
+    )
+    assert users_soon.value == 2 and users_soon.tone == "warn" and users_soon.foot == "1 licensed member among them"
+    assert groups_soon.value == 1 and groups_soon.tone == "warn" and groups_soon.foot == "1 team among them"
+    for tile, names in ((users_soon, {"Dan Leaver", "Old Guest"}), (groups_soon, {"Project Falcon"})):
+        view, _ = views.rows_view(report, tile.rows)
+        shown = next(x for x in views.apply(report, view).sections if x.title == tile.rows.table)
+        assert {r[0] for r in shown.rows} == names
     assert "never restores" in report.footnote
 
 
@@ -46,7 +55,8 @@ def test_recycle_bin_report_before_collection_and_when_unreadable(db, two_tenant
     seed_tenant(db, alpha, deleted_users=[], deleted_groups=[])
     report = build(db, tenant, "deleted-items")
     assert [len(s.rows) for s in report.sections] == [0, 0]
-    assert {t.label: t.tone for t in report.tiles}["Permanently deleted within 7 days"] == "ok"
+    tones = {t.label: t.tone for t in report.tiles}
+    assert tones["Users deleted for good within 7 days"] == tones["Groups deleted for good within 7 days"] == "ok"
 
 
 def test_recycle_bin_report_is_listed_and_renders(client, db, two_tenants):

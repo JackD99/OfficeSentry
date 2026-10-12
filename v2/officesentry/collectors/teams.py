@@ -15,7 +15,7 @@ from ..graph import GraphError, PermissionMissing
 from ..permission_batch import BATCH_OF
 from ..usage import concealed
 from .base import Collector, RunContext, register
-from .connection import awaiting
+from .connection import awaiting, granted
 from .groups import GROUP_FIELDS
 from .usage import JSON
 
@@ -186,9 +186,10 @@ class Teams(Collector):
 
     @staticmethod
     def _missing(ctx: RunContext, parts: dict, part: str, exc: GraphError) -> None:
-        """A part's permission turned out to be missing: a new one is waiting, an original one a warning."""
+        """A part's permission turned out to be missing: a new one the connection check doesn't say is granted
+        is waiting; an original one, or one that is granted, a warning."""
         permission = PARTS[part]
-        if isinstance(exc, PermissionMissing) and permission in BATCH_OF:
+        if isinstance(exc, PermissionMissing) and permission in BATCH_OF and granted(ctx, permission) is not True:
             parts[part] = "waiting"
             ctx.log(f"Teams {part} skipped: {permission} isn't approved yet ({exc.message})")
         else:

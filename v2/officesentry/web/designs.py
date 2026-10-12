@@ -14,7 +14,7 @@ from .. import month_end
 from ..db import audit
 from ..reports import branding, designs
 from ..reports.export import pdf_available
-from .access import needs, tenant_or_404, visible_tenants
+from .access import can, needs, report_capability, tenant_or_404, visible_tenants
 from .printing import pdf_response
 
 bp = Blueprint("designs", __name__)
@@ -35,7 +35,9 @@ def _design_or_404(design_id: int):
 
 
 def _tenants():
-    return [t for t in visible_tenants(g.db, g.user) if not t["archived_at"]]
+    """The tenants a design can be previewed on: every block reads the security review, so ones whose
+    findings the person may open."""
+    return [t for t in visible_tenants(g.db, g.user) if not t["archived_at"] and can("reports.security", t["id"])]
 
 
 def _preview_tenant(tenants):
@@ -46,11 +48,19 @@ def _preview_tenant(tenants):
 
 def _report_context(tenant, row, *, preview: bool = False, period: str | None = None, client_copy=False) -> dict:
     """What ``reports/design.html`` needs, with the month's client-safe commentary and notes, less what the
-    month-end review left out of this client's copy."""
+    month-end review left out of this client's copy. Tables of detail reports the person can't open on this
+    tenant are left out."""
     period = period or month_end.current_period(_cfg().timezone)
     me = month_end.report_context(g.db, tenant["id"], period, staff=False)["month_end"]
     return designs.context(
-        g.db, tenant, row, brand=branding.load(g.db), month_end=me, preview=preview, client_copy=client_copy
+        g.db,
+        tenant,
+        row,
+        brand=branding.load(g.db),
+        month_end=me,
+        preview=preview,
+        client_copy=client_copy,
+        opens=lambda key: can(report_capability(key), tenant["id"]),
     )
 
 

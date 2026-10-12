@@ -322,7 +322,9 @@ def access_for(conn, user) -> Access:
         all_flag = False
     scope = p.ALL_CLIENTS if kind == p.STAFF and (role.scope == p.ALL_CLIENTS or all_flag) else p.GRANTED
     allowed = p.allowed_for(kind, p.KEYS)
-    caps = set(role.capabilities)
+    if scope != p.ALL_CLIENTS:
+        allowed -= p.EVERY_CLIENT  # settings and system status cover every client; see permissions.EVERY_CLIENT
+    caps = set(role.capabilities) & allowed
     allows: dict[int, set[str]] = {}
     denies: dict[int, set[str]] = {}
     denied_everywhere: set[str] = set()

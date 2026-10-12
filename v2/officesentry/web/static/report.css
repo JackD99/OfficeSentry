@@ -227,6 +227,7 @@ svg.chart .value { fill: var(--text); font-size: 12px; font-weight: 700; }
 .col-title { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--muted); margin-bottom: var(--space-1); }
 ul.evidence, .gaps ul { margin: 0; padding-left: 18px; color: var(--text-2); font-size: .92em; }
 ul.evidence li, .gaps li { margin: var(--space-0-5) 0; }
+ul.evidence .goal { display: block; color: var(--muted); font-size: .92em; }
 .gaps li.sub { list-style: circle; margin-left: var(--space-3-5); color: var(--muted); }
 .outside { color: var(--muted); font-size: .92em; margin: var(--space-2) 0 0; }
 

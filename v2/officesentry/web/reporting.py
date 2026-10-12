@@ -21,7 +21,7 @@ from ..db import audit, transaction, utcnow
 from ..reports import branding, designs, monthly_review, summary
 from ..reports.data_reports import grouped as report_groups
 from ..text import plural
-from .access import can, is_staff, needs, tenant_or_404, visible_tenants
+from .access import can, is_staff, needs, report_capability, tenant_or_404, visible_tenants
 from .designs import PREVIEW_CSP
 from .groups import group_aware, scoped_tenants
 
@@ -46,7 +46,7 @@ def report_extras(tenant, *, page: bool) -> dict:
     """Template context for the monthly review page (``page``) or its PDF: this month's commentary,
     recommendations and notes. Staff-only notes only reach staff on the page; clients and PDFs never get them.
     Clients see none of it until the month is approved (or an automatic plan sent it)."""
-    staff = is_staff() and can("month_end.review")
+    staff = is_staff() and can("month_end.review", tenant["id"])
     period = _period_now()
     extras = month_end.report_context(g.db, tenant["id"], period, staff=staff and page, approved_only=not staff)
     if staff and page:
@@ -525,7 +525,16 @@ def preview(period: str, tenant_id: int):
     row = designs.get(g.db, designs.id_of(key) or 0)
     if row is None:
         abort(404)
-    context = designs.context(g.db, t, row, brand=branding.load(g.db), month_end=me, preview=True, client_copy=True)
+    context = designs.context(
+        g.db,
+        t,
+        row,
+        brand=branding.load(g.db),
+        month_end=me,
+        preview=True,
+        client_copy=True,
+        opens=lambda report: can(report_capability(report), t["id"]),
+    )
     return render_template("reports/design.html", **page, **context)
 
 

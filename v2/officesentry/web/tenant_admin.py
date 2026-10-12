@@ -15,7 +15,7 @@ from .. import clouds, lifecycle, store, tenant_groups, tenant_health
 from ..db import audit
 from ..discovery import tenant_id_for_domain
 from ..text import plural
-from .access import can, needs, tenant_or_404, visible_tenants
+from .access import can, manages_groups, needs, refused, tenant_or_404, visible_tenants
 from .groups import group_aware, scope
 from .tenants import DOMAIN_RE, GUID_RE, _cfg, _consent_link, cloud_mismatch, not_connected
 
@@ -89,7 +89,7 @@ def manage(tenant_id: int):
         can_check=_check_problem(t) is None,
         check_problem=_check_problem(t),
         notes_max=NOTES_MAX,
-        groups=tenant_groups.all_groups(g.db),
+        groups=tenant_groups.all_groups(g.db) if manages_groups() else [],
         in_groups=tenant_groups.of_tenants(g.db, [t["id"]])[t["id"]],
     )
 
@@ -110,6 +110,9 @@ def _check_problem(t) -> str | None:
 @needs("clients.manage")
 def set_groups(tenant_id: int):
     t = tenant_or_404(tenant_id)
+    if not manages_groups():
+        refused("tenant groups")
+        abort(403)
     chosen = {int(x) for x in request.form.getlist("groups") if x.isdigit()}
     added, removed = tenant_groups.set_tenant_groups(g.db, t["id"], chosen)
     if added or removed:

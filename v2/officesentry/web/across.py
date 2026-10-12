@@ -38,7 +38,7 @@ RULE_TITLES = {r.key: r.title for r in RULES}
 
 
 def _download(body: bytes, filename: str, ext: str) -> Response:
-    mimetype = XLSX if ext == "xlsx" else "text/csv; charset=utf-8"
+    mimetype = XLSX if ext == "xlsx" else "text/csv"
     return Response(
         body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{filename}.{ext}"'}
     )
@@ -407,6 +407,8 @@ def _tenant_changes(t) -> dict:
         "unchanged": unchanged,
         "titles": RULE_TITLES,
         "areas": _change_areas(report),
+        # A period that ends before today opens each report as it was at the end.
+        "report_query": {"on": period.end.isoformat()} if period and period.end else {},
     }
 
 

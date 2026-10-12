@@ -22,7 +22,7 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 from .. import tenant_groups
 from ..db import audit, transaction
 from ..text import plural
-from .access import is_staff, needs, visible_tenants
+from .access import is_staff, manages_groups, needs, refused, visible_tenants
 
 bp = Blueprint("groups", __name__)
 
@@ -115,7 +115,15 @@ def group_aware(view):
 # -- Admin page ---------------------------------------------------------------------------------
 
 
+def _every_client_or_403() -> None:
+    """The admin pages are for whoever manages clients and sees every one (``access.manages_groups``)."""
+    if not manages_groups():
+        refused("tenant groups")
+        abort(403)
+
+
 def _group_or_404(group_id: int):
+    _every_client_or_403()
     group = tenant_groups.get(g.db, group_id)
     if group is None:
         abort(404)
@@ -140,6 +148,7 @@ def _categories() -> list[str]:
 @bp.get("/admin/groups")
 @needs("clients.manage")
 def index():
+    _every_client_or_403()
     groups = tenant_groups.all_groups(g.db)
     tenants = [t for t in _all_tenants() if not t["archived_at"]]
     grouped = {r[0] for r in g.db.execute("SELECT DISTINCT m.tenant_id FROM tenant_group_members m")}
@@ -163,6 +172,7 @@ def _by_category(groups) -> list[tuple[str, list]]:
 @bp.post("/admin/groups")
 @needs("clients.manage")
 def create():
+    _every_client_or_403()
     f = request.form
     values, problem = tenant_groups.clean(f.get("name", ""), f.get("category", ""), f.get("description", ""))
     if problem is None and tenant_groups.name_taken(g.db, values["name"]):

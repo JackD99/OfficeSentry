@@ -3,15 +3,19 @@
 
 import io
 import json
+from datetime import UTC, datetime
 
 import pytest
 import responses
 from openpyxl import load_workbook
 
 from officesentry import clouds, endpoints, msauth, store
+from officesentry.checks.sharepoint import site_guest_full_control
 from officesentry.collectors import site_permissions as sp
 from officesentry.graph import GraphClient
 from officesentry.reports import data_reports
+from officesentry.reports.data_reports import DataReport
+from officesentry.reports.site_permissions import site_permissions as site_permissions_report
 from officesentry.rules import evaluate
 from officesentry.sharepoint_api import SharePointAccessDenied, SharePointClient, SharePointError, beside
 from officesentry.snapshot import TenantSnapshot
@@ -196,7 +200,7 @@ def test_collector_asks_sharepoint_only_with_get_and_reuses_the_site_list(db, tw
 def test_waiting_for_the_sharepoint_permission(db, two_tenants):
     """Until the client approves the SharePoint permission, the run succeeds quietly and the report says why."""
     alpha, _ = two_tenants
-    seed_tenant(db, alpha, sharepoint_kw={"rest": "consent"})
+    seed_tenant(db, alpha, sharepoint_kw={"rest": "consent"}, our_app={"missing": (sp.SITES_READ,)})
     run = store.latest_run(db, alpha, "site_permissions")
     assert run["status"] == "succeeded" and run["error"] is None
     assert _snap(db, alpha).objects("site_permissions", "permissions_status")[0]["reason"] == "consent"
@@ -231,6 +235,76 @@ def test_a_site_that_refuses_is_counted_not_fatal(db, two_tenants):
     status = _snap(db, alpha).objects("site_permissions", "permissions_status")[0]
     assert status["sites"] == 1 and status["unreadable"] == 1
     assert any("couldn't be read" in n for n in _report(db, alpha).notes)
+
+
+def _collect_answering(db, tenant_id, answers, **kwargs):
+    """The connection check, then site permissions with SharePoint answering ``answers`` (site address ->
+    HTTP status) for those sites and as usual for the others."""
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        mock_tenant(rsps, sharepoint_kw={"rest": False}, **kwargs)
+        sd.mock_sharepoint_rest(rsps, statuses=answers)
+        for key in ("connection", "site_permissions"):
+            store.enqueue_run(db, tenant_id, key)
+            execute_run(db, store.claim_next_run(db), graph_factory)
+    return store.latest_run(db, tenant_id, "site_permissions")
+
+
+def _status(db, tenant_id):
+    return _snap(db, tenant_id).objects("site_permissions", "permissions_status")[0]
+
+
+def test_a_locked_site_is_unreadable_not_waiting_when_the_permission_is_granted(db, two_tenants):
+    """The connection check says the SharePoint permission is granted, so a site refusing the app (sorted first)
+    is that site locked, not the client still to approve."""
+    alpha, _ = two_tenants
+    assert _collect_answering(db, alpha, {sd.FINANCE: 403})["status"] == "partial"
+    status = _status(db, alpha)
+    assert status["available"] and status["sites"] == 1 and status["unreadable"] == 1
+    assert _report(db, alpha).unavailable is None
+    result = {r.key: r for r in evaluate(_snap(db, alpha))}["site_guest_full_control"]
+    assert result.status == "pass" and result.summary == "1 site checked; no guest has full control"
+
+
+def test_refusals_after_another_failure_still_mean_waiting(db, two_tenants):
+    """Not approved yet: the first site fails some other way and the rest refuse the app."""
+    alpha, _ = two_tenants
+    run = _collect_answering(db, alpha, {sd.FINANCE: 503, sd.OLD: 401}, our_app={"missing": (sp.SITES_READ,)})
+    assert run["status"] == "succeeded"
+    assert _status(db, alpha)["reason"] == "consent"
+    assert "Waiting for the client to approve" in _report(db, alpha).unavailable
+
+
+def test_no_site_read_is_unavailable_never_a_pass(db, two_tenants):
+    alpha, bravo = two_tenants
+    _collect_answering(db, alpha, {sd.FINANCE: 403, sd.OLD: 403})  # granted, and SharePoint refuses every site
+    assert {k: v for k, v in _status(db, alpha).items() if not k.startswith("_")} == {
+        "available": False,
+        "reason": "denied",
+        "unreadable": 2,
+    }
+    assert "consent link again won't help" in _report(db, alpha).unavailable
+    _collect_answering(db, bravo, {sd.FINANCE: 503, sd.OLD: 404})
+    assert _status(db, bravo)["reason"] == "unreadable"
+    assert "No site's permissions could be read" in _report(db, bravo).unavailable
+    for tenant_id in (alpha, bravo):
+        result = {r.key: r for r in evaluate(_snap(db, tenant_id))}["site_guest_full_control"]
+        assert result.status == "unavailable"
+
+
+def test_an_older_collection_that_read_no_site_is_unavailable_too():
+    """Older collections stored a run that read no site as available, with every site unreadable."""
+
+    class Stored:
+        tenant = {"id": 1, "name": "Alpha Ltd"}
+
+        def objects(self, collector, kind):
+            status = {"available": True, "sites": 0, "unreadable": 2, "complete": True}
+            return {"permissions_status": [status], "site": []}.get(kind) if collector == "site_permissions" else None
+
+    assert site_guest_full_control(Stored(), datetime.now(UTC))[0] == "unavailable"
+    report = DataReport("site-permissions", "Site permissions", "", Stored.tenant, datetime.now(UTC))
+    site_permissions_report(Stored(), datetime.now(UTC), report)
+    assert "No site's permissions could be read" in report.unavailable and not report.tiles
 
 
 def test_collector_stops_at_its_budget(db, two_tenants, monkeypatch):

@@ -74,6 +74,7 @@ class Section:
     review: bool = True  # False: rows already dealt with (accepted, resolved), so no "<n> to review"
     chart: Chart | None = None  # drawn from the rows the view leaves (views.chart)
     figure: str = ""  # the chart as drawn for a download, set by views.apply()
+    uncut: Section | None = None  # the whole table, when a PDF keeps only its first rows (printing.cap_rows)
 
     def add(self, row: list, flag: str | None = None, key=None) -> None:
         self.rows.append([_cell(v) for v in row])
@@ -312,6 +313,9 @@ class DataReport:
     highlights: list[Highlight] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)  # what couldn't be checked, and why
     filtered: list[str] = field(default_factory=list)  # the table view a download applies, in words
+    # For a report read in parts, what each part held: "read", "waiting" (for the client to approve a new
+    # permission) or "failed". What changed only compares two days that read the same parts.
+    parts: dict[str, str] = field(default_factory=dict)
 
 
 def _cell(value):
@@ -428,15 +432,22 @@ def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             controls.add(
                 [f"Remote domain: {d.get('Name')}", target, "Allowed" if d.get("AutoForwardEnabled") else "Blocked"]
             )
-        report.highlights.append(
-            Highlight(
+        if policies:
+            forwarding = Highlight(
                 "Automatic forwarding",
                 "Allowed" if allowed else "Blocked",
                 "By the outbound spam policy",
                 "warn" if allowed else "ok",
                 Rows("What stops forwarding"),
             )
-        )
+        else:  # every Exchange Online organisation has a default policy, so none means it wasn't read
+            forwarding = Highlight(
+                "Automatic forwarding",
+                "Unknown",
+                "Exchange returned no outbound spam policy",
+                rows=Rows("What stops forwarding"),
+            )
+        report.highlights.append(forwarding)
         sections.append(controls)
     report.sections = sections
 
@@ -1482,10 +1493,22 @@ def build(
     return report
 
 
+def detail_removed(conn, collector: str, run) -> bool:
+    """Retention has removed the sign-in detail ``run`` collected: it keeps it for less time than the daily
+    history, which doesn't record it."""
+    from .. import retention, state_history  # here: the history imports the worker's schedule
+
+    return (
+        collector in retention.SIGNIN_COLLECTORS
+        and not conn.execute(
+            f"SELECT 1 FROM runs WHERE id = ? AND {state_history.HOLDS_OBJECTS}", (run["id"],)
+        ).fetchone()
+    )
+
+
 def _no_longer_held(conn, snap: TenantSnapshot, collectors, report: DataReport) -> None:
     """On a past day, say which data was collected by then but isn't held any more (sign-in detail, which
     retention keeps for less time than the daily history), rather than that it was never collected."""
-    from .. import retention, state_history  # here: the history imports the worker's schedule
 
     def held(collector: str) -> bool:
         run = snap.runs.get(collector)
@@ -1495,9 +1518,7 @@ def _no_longer_held(conn, snap: TenantSnapshot, collectors, report: DataReport) 
                 " AND finished_at <= ? LIMIT 1",
                 (report.tenant["id"], collector, snap.as_of),
             ).fetchone()
-        return collector not in retention.SIGNIN_COLLECTORS or bool(
-            conn.execute(f"SELECT 1 FROM runs WHERE id = ? AND {state_history.HOLDS_OBJECTS}", (run["id"],)).fetchone()
-        )
+        return not detail_removed(conn, collector, run)
 
     gone = [REGISTRY[c].title for c in collectors if not held(c)]
     if not gone:

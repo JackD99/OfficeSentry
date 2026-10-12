@@ -36,7 +36,7 @@ from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..text import plural
 from . import sessions
-from .access import access_of, current, needs, tenant_ids, unseen_client_accounts, visible_tenants
+from .access import current, needs, out_of_reach, unseen_client_accounts, visible_tenants
 from .auth import confirm_password, password_problem
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -89,22 +89,7 @@ def _last_admin(user_id: int) -> bool:
 # can only hand out what they hold themselves and only on the clients they see, can't change an account
 # that holds more than they do, and can't change their own role or access. So nobody raises their own
 # access, directly or by resetting the password of someone who has more, and nobody sees the names of
-# clients outside their own scope on these pages.
-
-
-def _out_of_reach(user) -> str | None:
-    """Why the signed-in person may not change this account, or None."""
-    actor = current()
-    if actor.is_admin:
-        return None
-    target = access_of(user)
-    if target.is_admin:
-        return "Only an Administrator can change an Administrator's account."
-    mine, theirs = tenant_ids(g.db, g.user), tenant_ids(g.db, user)
-    wider = mine is not None and (theirs is None or not theirs <= mine)
-    if wider or target.anywhere() - actor.everywhere():
-        return f"{user['username']} can do or see more than you can, so only an Administrator can change their account."
-    return None
+# clients outside their own scope on these pages (``access.out_of_reach``, which the roles page shares).
 
 
 def _own_access(user) -> str | None:
@@ -207,7 +192,7 @@ def edit_user(user_id: int):
     current_role = roles.role_of(g.db, user)
     actor = current()
     if request.method == "POST":
-        if problem := _out_of_reach(user) or _own_access(user):
+        if problem := out_of_reach(user) or _own_access(user):
             flash(problem, "error")
             return redirect(url_for("admin.edit_user", user_id=user_id))
         if request.form.get("password") and not _admin_password_ok():
@@ -292,7 +277,7 @@ def edit_user(user_id: int):
         roles=all_roles,
         givable={r.id for r in all_roles if _givable(r)},
         actor=actor,
-        out_of_reach=_out_of_reach(user),
+        out_of_reach=out_of_reach(user),
         own_access=_own_access(user),
         grantable=actor.everywhere(),
         capabilities=permissions.CAPABILITIES,
@@ -317,7 +302,7 @@ def user_access(user_id: int):
     """Single capabilities added or taken away for this person: everywhere (one choice per capability) and
     on one client (rows kept, dropped or added). Administrators hold everything, so there's nothing to set."""
     user = _user_or_404(user_id)
-    if problem := _out_of_reach(user) or _own_access(user):
+    if problem := out_of_reach(user) or _own_access(user):
         flash(problem, "error")
         return redirect(url_for("admin.edit_user", user_id=user_id))
     role = roles.role_of(g.db, user)
@@ -367,7 +352,7 @@ def _is_locked(user) -> bool:
 def reset_two_step(user_id: int):
     """For a lost phone: remove their authenticator and sign them out. They set it up again at next sign-in."""
     user = _user_or_404(user_id)
-    if problem := _out_of_reach(user):
+    if problem := out_of_reach(user):
         flash(problem, "error")
         return redirect(url_for("admin.edit_user", user_id=user_id))
     if not _admin_password_ok():
@@ -391,7 +376,7 @@ def reset_two_step(user_id: int):
 @needs("users.manage")
 def sign_out_user(user_id: int):
     user = _user_or_404(user_id)
-    if problem := _out_of_reach(user):
+    if problem := out_of_reach(user):
         flash(problem, "error")
         return redirect(url_for("admin.edit_user", user_id=user_id))
     if not _admin_password_ok():
@@ -406,7 +391,7 @@ def sign_out_user(user_id: int):
 @needs("users.manage")
 def unlock_user(user_id: int):
     user = _user_or_404(user_id)
-    if problem := _out_of_reach(user):
+    if problem := out_of_reach(user):
         flash(problem, "error")
         return redirect(url_for("admin.edit_user", user_id=user_id))
     g.db.execute("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?", (user_id,))
@@ -420,7 +405,7 @@ def unlock_user(user_id: int):
 @needs("users.manage")
 def delete_user(user_id: int):
     user = _user_or_404(user_id)
-    if problem := _out_of_reach(user):
+    if problem := out_of_reach(user):
         flash(problem, "error")
         return redirect(url_for("admin.edit_user", user_id=user_id))
     if user["id"] == g.user["id"]:

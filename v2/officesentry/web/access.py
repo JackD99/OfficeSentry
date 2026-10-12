@@ -32,6 +32,7 @@ from flask import abort, g, has_request_context, redirect, request, url_for
 
 from .. import permissions, roles
 from ..db import audit_counted
+from ..reports.registry import DECLARED
 from . import public_demo, sessions
 
 ROLES = ("admin", "analyst", "client")  # what users.role may say (permissions.ROLE_COLUMN)
@@ -81,6 +82,11 @@ def need_also(*capabilities: str, tenant_id: int | None = None) -> None:
     g.needed = (*g.get("needed", ()), *capabilities)
     g.pop("group_scope", None)
     g.pop("scope_tenants", None)
+
+
+def report_capability(key: str) -> str:
+    """The capability a detail report needs, from its menu group."""
+    return permissions.area_capability(DECLARED[key].group if key in DECLARED else None)
 
 
 def is_staff() -> bool:
@@ -201,6 +207,31 @@ def visible_tenants(conn, user, archived: bool = False):
             _params(user, a),
         ).fetchall()
     return _needed_here(a, rows)
+
+
+def manages_groups() -> bool:
+    """May the signed-in person create, change, fill or delete tenant groups? Groups span every client, and
+    a group granted to an analyst gives them its clients, so only someone who manages clients and sees
+    every client does (a person limited to some clients could otherwise add one they can't see to a group
+    they were granted, or hand a client to someone else's group)."""
+    a = current()
+    return a is not None and a.sees_all and a.can("clients.manage")
+
+
+def out_of_reach(user) -> str | None:
+    """Why the signed-in person may not change this account (or a role it holds), or None: only an
+    Administrator changes an Administrator, or someone who can see or do more than they can."""
+    actor = current()
+    if actor.is_admin:
+        return None
+    target = access_of(user)
+    if target.is_admin:
+        return "Only an Administrator can change an Administrator's account."
+    mine, theirs = tenant_ids(g.db, g.user), tenant_ids(g.db, user)
+    wider = mine is not None and (theirs is None or not theirs <= mine)
+    if wider or target.anywhere() - actor.everywhere():
+        return f"{user['username']} can do or see more than you can, so only an Administrator can change their account."
+    return None
 
 
 def tenant_ids(conn, user) -> set[int] | None:

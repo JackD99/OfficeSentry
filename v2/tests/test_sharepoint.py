@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 import responses
 from openpyxl import load_workbook
 
-from officesentry import store
+from officesentry import state_history, store
 from officesentry.collectors import sharepoint
 from officesentry.collectors.sharepoint import concealed, describe_permissions
 from officesentry.graph import GraphClient
@@ -69,6 +69,25 @@ def test_concealed_names_are_detected(db, two_tenants):
     assert "admin.microsoft.com" in report.notice
     row = _section(report, "Sites shared outside the organisation").rows[0]
     assert str(row[0]) == "Name hidden by Microsoft (group or team site)"
+
+
+def test_hidden_owners_show_as_the_usage_reports_show_people(db, two_tenants, monkeypatch):
+    """A hidden owner is a short code, as in every usage report, never Microsoft's whole 32-character code."""
+    alpha, _ = two_tenants
+    drive = dict(
+        sd._drive("ann@x.com", 1000 * 1024**3),
+        siteUrl=None,
+        ownerPrincipalName="E6F3956464556EB0F7E310CCFAEBE1D1",  # the collector keeps it in lower case
+        ownerDisplayName="8815384BBDE8447FBF5C03DF8E19EBA2",
+    )
+    monkeypatch.setattr(sd, "ONEDRIVE_USAGE", [drive])
+    seed_tenant(db, alpha, sharepoint_kw={"sites": [dict(sd.CONCEALED_SITE, lastActivityDate=sd.days_ago(400))]})
+    sites = _report(db, alpha, "sharepoint")
+    assert [r[2] for r in _section(sites, "All sites").rows] == ["Hidden name (82D288)"]
+    assert [r[2] for r in _section(sites, "Inactive sites").rows] == ["Hidden name (82D288)"]
+    drives = _report(db, alpha, "onedrive")
+    assert [r[0] for r in _section(drives, "All OneDrives").rows] == ["Hidden name (E6F395)"]
+    assert [f.subject for f in _results(db, alpha)["onedrive_quota"].findings] == ["Hidden name (E6F395)"]
 
 
 SHARED = {"Clients", "Budget.xlsx", "Policy.docx", "Internal.docx", "holiday.jpg"}
@@ -437,6 +456,21 @@ def test_site_growth_against_a_month_ago(db, two_tenants):
         (alpha, old, old),
     )
     store.add_objects(db, cur.lastrowid, "site", [(sd.FINANCE, {"storageUsed": 4 * 1024**3})])
+    seed_tenant(db, alpha)
+    row = next(r for r in _section(_report(db, alpha, "sharepoint"), "All sites").rows if str(r[0]) == sd.FINANCE)
+    assert row[4] == "+1.0 GB"
+
+
+def test_site_growth_reads_the_daily_history_once_that_snapshot_is_pruned(db, two_tenants):
+    alpha, _ = two_tenants
+    old = store.enqueue_run(db, alpha, "sharepoint_usage")
+    store.claim_next_run(db)
+    store.add_objects(db, old, "site", [(sd.FINANCE, {"storageUsed": 4 * 1024**3})])
+    store.finish_run(db, old, "succeeded")
+    when = (datetime.now(UTC) - timedelta(days=31)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute("UPDATE runs SET created_at = ?, finished_at = ? WHERE id = ?", (when, when, old))
+    assert state_history.record_run(db, db.execute("SELECT * FROM runs WHERE id = ?", (old,)).fetchone())
+    db.execute("DELETE FROM objects WHERE run_id = ?", (old,))  # as the retention policy does
     seed_tenant(db, alpha)
     row = next(r for r in _section(_report(db, alpha, "sharepoint"), "All sites").rows if str(r[0]) == sd.FINANCE)
     assert row[4] == "+1.0 GB"

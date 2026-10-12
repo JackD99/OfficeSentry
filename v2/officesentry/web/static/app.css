@@ -707,8 +707,7 @@ th.num button.sort { justify-content: flex-end; }
   .change-list li { padding: 9px 14px; }
 }
 td.tenant-col { min-width: 190px; }
-@media (max-width: 640px) { td.tenant-col { min-width: 0; } }
-.connection-form { margin: var(--space-4) 0 0; }
+@media (max-width: 640px) { td.tenant-col { min-width: 0; } }.connection-form { margin: var(--space-4) 0 0; }
 .connection-form > label { flex: 1 1 200px; }
 
 /* -- Reports tab: one report picker (report_picker) above the report ----------------
@@ -1168,6 +1167,11 @@ textarea.commentary { width: 100%; min-height: 9em; }
 @media (max-width: 640px) { .project-cols { grid-template-columns: 1fr; } }
 .project-cols .list .desc { display: block; }
 td .project-status { flex-wrap: nowrap; }
+/* The list of every client's projects fits a laptop: long client and project names and the reasons wrap. */
+@media (min-width: 641px) {
+  #projects-table td.name { max-width: 13em; overflow-wrap: break-word; }
+  #projects-table td.wrap.why { max-width: 18em; }
+}
 
 /* Report tables grouped under collapsible headings (Findings, by check) */
 .subtabs a :is(.n, .count) { margin-left: var(--space-1); font-size: var(--fs-xs); font-weight: 400; color: var(--faint); font-variant-numeric: tabular-nums; }
@@ -1212,10 +1216,13 @@ td.row-action { min-width: 150px; }
 
 /* -- Tenant groups (_groups.html, groups.html) ---------------------------------- */
 /* The group picker in a page head: one compact control, highlighted while a group is chosen. */
-.group-picker { display: inline-flex; align-items: center; gap: var(--space-1-5); margin: 0; padding: var(--space-0-5) var(--space-1) var(--space-0-5) var(--space-2-5); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+/* It never grows past its row: a select is as wide as its longest option, so a long group name would
+   otherwise widen the page on a phone. The select shrinks instead and cuts the name it shows. */
+.group-picker { display: inline-flex; align-items: center; gap: var(--space-1-5); max-width: 100%; margin: 0; padding: var(--space-0-5) var(--space-1) var(--space-0-5) var(--space-2-5); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+.page-head .actions, .month-nav { max-width: 100%; }
 .group-picker label { display: inline-flex; align-items: center; gap: var(--space-1-5); margin: 0; color: var(--muted); font-size: var(--fs-sm); font-weight: 500; white-space: nowrap; }
 .group-picker label .icon { width: 15px; height: 15px; color: var(--decor); }
-.group-picker select { width: auto; max-width: 240px; margin: 0; padding: var(--space-1) var(--space-1-5); border: 0; background: transparent; font-weight: 600; color: var(--text); }
+.group-picker select { width: auto; min-width: 0; max-width: 240px; margin: 0; padding: var(--space-1) var(--space-1-5); border: 0; background: transparent; font-weight: 600; color: var(--text); text-overflow: ellipsis; }
 .group-picker.on { border-color: var(--accent); background: var(--accent-soft); }
 .group-picker.on label, .group-picker.on label .icon { color: var(--accent); }
 .group-picker .clear { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: var(--accent); font-size: 1.05rem; line-height: 1; }

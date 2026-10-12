@@ -23,9 +23,17 @@ from ..reports import (
     views,
 )
 from ..reports.monthly_review import SUMMARY_STEM, build, leave_out, setting
-from ..reports.registry import DECLARED
 from . import as_of
-from .access import can, is_staff, login_required, needs, require, tenant_or_404, visible_tenants
+from .access import (
+    can,
+    is_staff,
+    login_required,
+    needs,
+    report_capability,
+    require,
+    tenant_or_404,
+    visible_tenants,
+)
 from .printing import pdf_response
 from .reporting import report_extras
 from .saved_views import page_url
@@ -49,11 +57,6 @@ SETTINGS_PAGES = (  # what the library's search finds besides reports and tenant
     ("branding.settings", "Branding", "logo colours msp name report footer support contact favicon"),
     ("admin.users", "Users", "people access roles accounts sign-in"),
 )
-
-
-def report_capability(key: str) -> str:
-    """The capability a detail report needs, from its menu group."""
-    return area_capability(DECLARED[key].group if key in DECLARED else None)
 
 
 def entry_capability(entry: library.Entry) -> str:
@@ -462,7 +465,7 @@ def findings_download(tenant_id: int, ext: str, resolved: bool):
     if ext == "xlsx":
         body, mimetype = data_reports.to_xlsx(report, brand=branding.load(g.db)), XLSX
     else:
-        body, mimetype = tables.to_csv(data_reports.section_table(section)), "text/csv; charset=utf-8"
+        body, mimetype = tables.to_csv(data_reports.section_table(section)), "text/csv"
     return Response(body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{name}.{ext}"'})
 
 

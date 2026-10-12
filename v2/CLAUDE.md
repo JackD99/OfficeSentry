@@ -29,9 +29,12 @@ overview and DEPLOY.md for running it on a server.
   `tests/test_roles.py` opens every route as every built-in role and expects
   403 exactly where the role lacks what the view declared, and
   `tests/test_isolation_walk.py` opens every route that takes a tenant (or
-  one of its objects) with another tenant's IDs and expects a refusal. A new
+  one of its objects) with another tenant's IDs and expects a refusal, then
+  opens every GET route with the granted tenant's IDs (every download read
+  inside, PDFs as their page) and posts every form with the other tenant's
+  IDs, and expects nothing of the other tenant. A new
   URL argument fails there until it's listed in `TENANT_ARGS` (seed an object
-  for it in the `world` fixture) or `OTHER_ARGS`. Templates use
+  for it in `_objects`) or `OTHER_ARGS`. Templates use
   `can('<capability>', tenant.id)` to show or hide; never `current_user.role`
   except to tell a client account from staff. Roles live in `roles` (built-in
   ones by `key`, editable except Administrator, custom ones too) and a person's
@@ -40,9 +43,24 @@ overview and DEPLOY.md for running it on a server.
   `user_access_changed`) and `web/roles.py` and `admin.user_access` are their
   pages. Someone with `users.manage` who isn't an Administrator only hands out
   what they hold everywhere, only on clients they see, can't change their own
-  role or access, and can't change an account that holds more than they do
-  (`admin._out_of_reach`, `_givable`; `web/roles._grantable`), so nobody
-  raises their own access. A new capability is a `Capability` in `permissions.CAPABILITIES`,
+  role or access, and can't change an account that holds more than they do,
+  nor a role such an account holds (`access.out_of_reach`, `admin._givable`;
+  `web/roles._grantable`, `_held_by_more`), so nobody raises their own access.
+  A role limited to some clients only uses run capabilities within them: client
+  groups need `access.manages_groups()` (clients.manage and every client), the
+  user list, import preview and activity log leave other clients out, and
+  `permissions.EVERY_CLIENT` (settings, system status) never takes effect
+  without every client (`roles.access_for`); `test_limited_roles.py` covers
+  each. A report area someone can't open on a client stays closed where a
+  page shows or sends a report from inside another: schedules only take
+  reports and saved views the person opens there (`web/email._needs`), and
+  only someone who opens all of a schedule's reports changes it; report
+  history downloads need `export` and the file's area; designs leave out
+  tables the viewer can't open (`designs.Context.opens`); Today
+  (`home.today(shows=)`), the dashboard tiles and the Accounts page count only
+  what the person sees; `test_report_areas_everywhere.py` covers each. A new
+  place that shows a report from inside another page checks its area the same
+  way. A new capability is a `Capability` in `permissions.CAPABILITIES`,
   added to the built-in roles that should hold it (`TEMPLATES`; the
   migration seeded those rows, so a later change to a template needs a
   migration of its own if existing installs should pick it up).
@@ -56,6 +74,9 @@ overview and DEPLOY.md for running it on a server.
   collector key or `"<collector>.<part>"`): the worker warns instead of
   running it, and reports and checks show it as unavailable with that reason.
 - **Credentials never touch disk as files** and are never sent to the browser.
+  `tests/test_no_secrets_downloadable.py` plants one of every kind of secret
+  and searches every page and download, as an admin, an analyst and a client,
+  for any of them; a new kind of secret gets planted there.
 - **Mock Graph with `responses`, never by replacing `GraphClient`.**
 - **Sessions are server-side** (`web/sessions.py`). To sign someone out, bump
   `users.session_version` or delete their `sessions` rows; never trust anything
@@ -155,7 +176,10 @@ as `grants` and drops grants past their expiry from exposure.
   in templates), never "account(s)".
 - A check that calls for work an MSP would sell goes in one project's
   `checks` in `projects.CATALOG` with a rough `Effort` in hours (each check
-  in at most one; `test_projects.py` checks). A project is half a day or more
+  in at most one; `test_projects.py` checks), and in the `when` of the
+  `Cover` lines it calls for, so a proposal lists only the work found. A
+  project's title is what a client buys (you'd put it on a quote); a repair
+  (sync that stopped) is in no project. A project is half a day or more
   (`projects.MIN_HOURS`, counting `OVERHEAD`); `projects.assess` turns the rest
   into quick fixes, and a small critical fix is always a quick fix so it isn't
   held for a sale. Failing checks in no project are quick fixes too.
@@ -231,13 +255,18 @@ as `grants` and drops grants past their expiry from exposure.
   live build (a call with `now=...` never uses them). Rows are per tenant:
   only ever read them for `scoped_tenants()`. The same task keeps each
   tenant's rows in `search_index` (`search_index.py`) for the sidebar search.
-  The change report matches table rows on their first column; set
+  The change report matches table rows on their first column (rows whose key
+  another row shares are compared whole); set
   `Section(compare=False)` for event logs and time series. Columns named
   `Last ...`, `... (UTC)` or containing "change", and the day counts in
   `month_changes.DAY_COUNT_COLUMNS` ("Days", "Days left", ...), are ignored as
-  time-driven; "No check-in for N days" in a cell is compared without its number.
+  time-driven; day counts in a cell ("No check-in for N days",
+  `DAY_COUNT_TEXT`) are compared without their number, and age buckets
+  (`CLOCK_BUCKETS`) only count when their date changed.
   A section names its columns that drift every night with use (sizes, file and
-  item counts) in `Section(drifts=(...))`, and those are ignored too.
+  item counts) in `Section(drifts=(...))`, and those are ignored too. A report
+  isn't compared when one of its data sources has no run at the start of the
+  period, or when its `DataReport.parts` (read, waiting, failed) differ.
 - Downloads go through `reports/tables.py` (`Table`, `to_csv`, `to_xlsx`): CSV
   prefixes formula characters, XLSX never stores formulas (`safe_xlsx`).
 - Report builders in `reports/` return plain data; templates and
@@ -255,7 +284,8 @@ as `grants` and drops grants past their expiry from exposure.
   returns one account's last activity and use per service (keys in
   `usage.SERVICES`), Office apps by platform, installs and activity counts, for
   any page about one person. Usage reports may conceal names (32-character
-  codes); show `usage.label(row)` and `usage.CONCEALED_NOTICE`.
+  codes); show `usage.label(row)` (`usage.owner_label` for SharePoint and
+  OneDrive owners) and `usage.CONCEALED_NOTICE`.
 - `tests/seed.py` runs every collector against `tests/graphdata.py`; use it
   for rule and report tests.
 - Questionnaire answers (`reports/evidence.py`, `build()`, kept for the
@@ -441,7 +471,8 @@ turning each step's `target` into a link.
   (`web/styleguide.py`). A new shared component or state goes there too.
 - `tests/browser` (`pytest tests/browser --ui`, in the pinned Playwright image;
   see its README) screenshots about 34 pages at laptop and phone widths, light
-  and dark, against baselines, fails any page wider than the window, and runs axe-core. CI runs it
+  and dark, against baselines, fails any page wider than the window (the
+  page-scroll check of `tests/layout/audit.js`), and runs axe-core. CI runs it
   (`.github/workflows/ui.yml`) on PRs that touch templates or CSS; refresh the
   baselines with `--update` when a change is meant, and look at them.
 - `tests/layout` (`pytest tests/layout --layout -n 4`; see its README) opens
@@ -678,8 +709,10 @@ recipients, SHA-256). Snapshot pruning doesn't touch it; it's kept until the
 admin's retention setting says otherwise (never under a year, and never a
 tenant's latest file of each report), is backed up with the database and goes with the tenant on delete. The
 tenant's Report history page (`/tenants/<id>/report-history`, linked from
-Emailed reports and the client home) lists and downloads them; clients see
-the files but not who they went to. Archiving never fails a send.
+Emailed reports and the client home) lists and downloads them (only files of
+reports the person opens on that client, downloads with `export`); clients see
+the files but not who they went to, and their delivery history doesn't name who
+on the team sent an email. Archiving never fails a send.
 
 ## Month-end reporting
 
@@ -708,8 +741,10 @@ month's commentary, the tenant's "What we recommend next" items
 (`finding_notes`, client-visible or staff-only). They reach the monthly review
 template as `month_end` from `month_end.report_context()`, passed by the route
 (`web/reporting.report_extras`), not the builder; staff-only notes only ever
-reach staff on the web page, never a client or any PDF. A client's live report shows none
-of it until the month is approved or sent (`report_context(..., approved_only=True)`).
+reach staff on the web page (with `month_end.review` on that client), never a client or any
+PDF. A client's live report shows none of it until the month is approved or sent
+(`report_context(..., approved_only=True)`), and nor does a review attached to any other
+scheduled email of a client whose reports wait for approval (`month_end.needs_approval`).
 
 The reviewer can leave things out of one client's copy of one month
 (`report_hidden`, migration 0042; `month_end.hidden`, `leave_out`, `put_back`,
@@ -857,7 +892,9 @@ only ever narrow lists of tenants someone already sees (`tenant_groups.only`
 over `visible_tenants()`). The one grant is an admin ticking a group for an
 analyst (`user_tenant_groups`): `access._GRANTED` adds its tenants, now and
 later, and ignores it for every other role. Never read group grants anywhere
-else.
+else. Since filling a group hands its tenants to whoever it's granted to,
+creating, changing, filling and deleting groups (the admin page, a tenant's
+groups, a new tenant's and the CSV import's) needs `access.manages_groups()`.
 
 Staff pages that list tenants are `@group_aware` (under `@needs`)
 and read `scoped_tenants()` instead of `visible_tenants()`: the dashboard,
@@ -959,7 +996,9 @@ deduplicated on (tenant, time, id), so reading an event twice stores it once.
   audits 7 years); whole months go as files (`events.prune`). `lifecycle.delete_tenant` deletes the
   tenant's rows from every file after the database delete, and the daily pass sweeps rows whose key is
   gone (`events.sweep`). `backup` mirrors the folder (`backups.mirror_events`) and `restore` puts back
-  missing files.
+  missing files; with none at all, it forgets the restored cursors (`backups._forget_history`), so the next
+  run reads back what Microsoft keeps instead of claiming months that aren't there. `deploy/jobs.sh restore`
+  fetches the `events` copies with the database.
 - Tests that need a fixed "now" patch `events.clock` (the live replay sets it to the recording's time).
 
 ## Logs and the support package
