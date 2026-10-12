@@ -155,7 +155,10 @@ as `grants` and drops grants past their expiry from exposure.
   in templates), never "account(s)".
 - A check that calls for work an MSP would sell goes in one project's
   `checks` in `projects.CATALOG` with a rough `Effort` in hours (each check
-  in at most one; `test_projects.py` checks). A project is half a day or more
+  in at most one; `test_projects.py` checks), and in the `when` of the
+  `Cover` lines it calls for, so a proposal lists only the work found. A
+  project's title is what a client buys (you'd put it on a quote); a repair
+  (sync that stopped) is in no project. A project is half a day or more
   (`projects.MIN_HOURS`, counting `OVERHEAD`); `projects.assess` turns the rest
   into quick fixes, and a small critical fix is always a quick fix so it isn't
   held for a sale. Failing checks in no project are quick fixes too.
