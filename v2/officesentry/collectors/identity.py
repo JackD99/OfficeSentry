@@ -6,6 +6,7 @@ from .. import store
 from ..graph import GraphError, LicenseRequired, PermissionMissing
 from ..text import plural
 from .base import Collector, RunContext, register
+from .connection import awaiting
 
 # Built-in roles treated as privileged. Graph v1.0 has no isPrivileged property
 # (selecting it is a 400), so match by display name, which is stable for built-in roles.
@@ -44,6 +45,9 @@ PER_USER_MFA_LIMIT = 2000
 CA_GROUP_LIMIT = 200
 ROLE_GROUP_LIMIT = 100
 ROLE_GROUP_MEMBER_FIELDS = "id,displayName,userPrincipalName,accountEnabled,userType,appId"
+# People who can activate membership of a group with PIM for groups (added in 2.2, ``permission_batch``).
+PIM_GROUPS = "PrivilegedEligibilitySchedule.Read.AzureADGroup"
+GROUP_ELIGIBILITY = "/identityGovernance/privilegedAccess/group/eligibilitySchedules"
 
 
 def _principal_summary(principal: dict | None, principal_id: str) -> dict:
@@ -64,8 +68,11 @@ def _principal_summary(principal: dict | None, principal_id: str) -> dict:
 class AdminRoles(Collector):
     key = "admin_roles"
     title = "Admin roles"
-    description = "Who holds each directory role, active and PIM-eligible."
-    permissions = ("RoleManagement.Read.Directory",)
+    description = (
+        "Who holds each directory role, active and PIM-eligible, including through groups and people who can "
+        "activate membership of such a group (PIM for groups)."
+    )
+    permissions = ("RoleManagement.Read.Directory", PIM_GROUPS)
 
     def collect(self, ctx: RunContext) -> None:
         definitions = ctx.paged(
@@ -125,8 +132,10 @@ class AdminRoles(Collector):
         except (LicenseRequired, PermissionMissing):
             ctx.log("PIM eligibility not available (needs Entra ID P2); active assignments only")
 
-        rows += _through_groups(ctx, rows)
+        through, pim_state = _through_groups(ctx, rows)
+        rows += through
         ctx.objects("role_assignment", rows)
+        ctx.objects("pim_groups_status", [("status", {"state": pim_state})])
         data = [r for _, r in rows]
         # Groups aren't people: their members are counted through their own rows.
         priv_active = [
@@ -148,8 +157,9 @@ class AdminRoles(Collector):
         )
 
 
-def _through_groups(ctx: RunContext, rows: list[tuple[str, dict]]) -> list[tuple[str, dict]]:
-    """A row per member of every group that holds a role, active or eligible, marked with the group.
+def _through_groups(ctx: RunContext, rows: list[tuple[str, dict]]) -> tuple[list[tuple[str, dict]], str]:
+    """A row per member of every group that holds a role, active or eligible, marked with the group, and the
+    state of reading who can activate membership of those groups (``_eligible_members``).
 
     A role-assignable group passes its roles to its members, so without these an admin who holds
     Global Administrator through a group is invisible to every admin check. Such groups can't
@@ -183,7 +193,57 @@ def _through_groups(ctx: RunContext, rows: list[tuple[str, dict]]) -> list[tuple
                     },
                 )
             )
-    return out
+    eligible, state = _eligible_members(ctx, list(groups)[:ROLE_GROUP_LIMIT])
+    for row_id, r in rows:
+        for e in eligible.get(r["principalId"], []) if r["principalType"] == "group" else []:
+            out.append(
+                (
+                    f"{row_id}:eligible-member:{e['principalId']}",
+                    {
+                        **r,
+                        **e,
+                        # Until they activate it, they hold the group's roles only as eligible.
+                        "assignment": "eligible",
+                        "viaGroupId": r["principalId"],
+                        "viaGroup": r.get("displayName") or r["principalId"],
+                        "viaPim": True,
+                    },
+                )
+            )
+    return out, state
+
+
+def _eligible_members(ctx: RunContext, group_ids: list[str]) -> tuple[dict[str, list[dict]], str]:
+    """By group: the people who can activate membership of a group that holds a role (PIM for groups), and how
+    reading them went: "read", "none" (no group holds a role), "unlicensed" (needs Entra ID P2), "waiting" (the
+    client hasn't approved the permission) or "failed"."""
+    if not group_ids:
+        return {}, "none"
+    if ctx.capabilities.get("entra_p2") is False:
+        return {}, "unlicensed"
+    if awaiting(ctx, PIM_GROUPS):
+        ctx.log(f"Waiting for the client to approve {PIM_GROUPS}; eligible members of role groups are skipped")
+        return {}, "waiting"
+    found: dict[str, list[dict]] = {}
+    for gid in group_ids:
+        try:
+            schedules = ctx.paged(
+                ctx.graph.get_all(GROUP_ELIGIBILITY, params={"$filter": f"groupId eq '{gid}'", "$expand": "principal"})
+            )
+        except LicenseRequired:
+            return {}, "unlicensed"
+        except PermissionMissing as exc:  # a new permission, so a refusal means not approved yet
+            ctx.log(f"Eligible members of role groups skipped: {PIM_GROUPS} isn't approved yet ({exc.message})")
+            return {}, "waiting"
+        except GraphError as exc:
+            ctx.warn(f"Couldn't read who can activate membership of a group that holds an admin role: {exc.message}")
+            return found, "failed"
+        found[gid] = [
+            _principal_summary(s.get("principal"), s["principalId"])
+            for s in schedules
+            if s.get("accessId") == "member" and s.get("principalId")
+        ]
+    return found, "read"
 
 
 @register

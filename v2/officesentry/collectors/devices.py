@@ -1,12 +1,17 @@
-"""Devices: Entra ID device records for every tenant, and Intune managed devices where licensed."""
+"""Devices: Entra ID device records for every tenant, Intune managed devices where licensed, and which
+devices have a BitLocker recovery key saved in Entra ID (never the key itself).
+
+The recovery key list needs BitLockerKey.ReadBasic.All, added in Office Sentry 2.2 (``permission_batch``):
+until the client approves it, it's skipped and stored as waiting, so the run doesn't fail."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ..devices import NO_SYNC_DAYS, STALE_DAYS, days_since, is_computer, windows_support
-from ..graph import LicenseRequired, PermissionMissing
+from ..devices import BITLOCKER, NO_SYNC_DAYS, STALE_DAYS, days_since, is_computer, windows_support
+from ..graph import GraphError, LicenseRequired, PermissionMissing
 from .base import Collector, RunContext, register
+from .connection import awaiting
 
 ENTRA_FIELDS = (
     "id,deviceId,displayName,operatingSystem,operatingSystemVersion,trustType,isCompliant,isManaged,"
@@ -17,6 +22,28 @@ MANAGED_FIELDS = (
     "userPrincipalName,userDisplayName,managedDeviceOwnerType,model,manufacturer,jailBroken,azureADDeviceId,"
     "managementAgent"
 )
+# The list never carries the key itself: Microsoft returns a key only from one key's own GET with
+# ``$select=key``, which Office Sentry never makes.
+RECOVERY_KEYS = "/informationProtection/bitlocker/recoveryKeys"
+# volumeType: Microsoft's documentation shows the number ("1"), the enum name is operatingSystemVolume.
+OS_VOLUME = ("1", "operatingSystemVolume")
+
+
+def recovery_keys(keys: list[dict]) -> dict[str, dict]:
+    """Saved recovery keys by Entra device ID (``deviceId``, not the object ID): how many, whether one is for
+    the system drive, and when the newest was saved."""
+    out: dict[str, dict] = {}
+    for k in keys:
+        device = (k.get("deviceId") or "").lower()
+        if not device:
+            continue
+        entry = out.setdefault(device, {"keys": 0, "osVolume": False, "latest": None})
+        entry["keys"] += 1
+        entry["osVolume"] |= str(k.get("volumeType")) in OS_VOLUME
+        created = k.get("createdDateTime")
+        if isinstance(created, str) and created > (entry["latest"] or ""):
+            entry["latest"] = created
+    return out
 
 
 @register
@@ -24,15 +51,16 @@ class Devices(Collector):
     key = "devices"
     title = "Devices"
     description = (
-        "Devices registered or joined to Entra ID, and Intune compliance, encryption and "
-        "check-in for managed devices (needs Intune)."
+        "Devices registered or joined to Entra ID, which have a BitLocker recovery key saved, and Intune "
+        "compliance, encryption and check-in for managed devices (needs Intune)."
     )
-    permissions = ("Directory.Read.All", "DeviceManagementManagedDevices.Read.All")
+    permissions = ("Directory.Read.All", "DeviceManagementManagedDevices.Read.All", BITLOCKER)
 
     def collect(self, ctx: RunContext) -> None:
         now = datetime.now(UTC)
         entra = ctx.paged(ctx.graph.get_all("/devices", params={"$select": ENTRA_FIELDS, "$top": "999"}))
         ctx.objects("entra_device", [(d["id"], {k: d.get(k) for k in ENTRA_FIELDS.split(",")}) for d in entra])
+        self._recovery_keys(ctx)
         ctx.metric("devices.entra_total", len(entra))
         ctx.metric(
             "devices.entra_stale",
@@ -65,6 +93,29 @@ class Devices(Collector):
                 if (d.get("operatingSystem") or "").lower() == "windows"
             ),
         )
+
+    @staticmethod
+    def _recovery_keys(ctx: RunContext) -> None:
+        """Which devices have a BitLocker recovery key saved, stored with the state of the read ("read",
+        "waiting" for the client to approve the permission, or "failed")."""
+        state, keys = "read", []
+        if awaiting(ctx, BITLOCKER):
+            state = "waiting"
+            ctx.log(f"Waiting for the client to approve {BITLOCKER}; BitLocker recovery keys are skipped")
+        else:
+            try:
+                keys = ctx.paged(ctx.graph.get_all(RECOVERY_KEYS))
+            except PermissionMissing as exc:  # a new permission (BATCH_OF), so a refusal means not approved yet
+                state = "waiting"
+                ctx.log(f"BitLocker recovery keys skipped: {BITLOCKER} isn't approved yet ({exc.message})")
+            except GraphError as exc:
+                state = "failed"
+                ctx.warn(f"BitLocker recovery keys weren't readable: {exc.message}")
+        ctx.objects("bitlocker_status", [("status", {"state": state})])
+        if state == "read":
+            saved = recovery_keys(keys)
+            ctx.objects("recovery_key", list(saved.items()))
+            ctx.metric("devices.recovery_keys_saved", len(saved))
 
     @staticmethod
     def _managed(ctx: RunContext) -> list[dict] | None:

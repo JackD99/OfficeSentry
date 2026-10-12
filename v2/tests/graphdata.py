@@ -140,6 +140,9 @@ ROLE_ELIGIBILITY = [
     },
 ]
 
+# PIM for groups: who can activate membership of each group that holds a role (none in the seed hold one).
+GROUP_ELIGIBILITY: dict[str, list[dict]] = {}
+
 CA_MFA_ALL = {
     "id": "ca1",
     "displayName": "Require MFA for all users",
