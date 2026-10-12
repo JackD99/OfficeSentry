@@ -1574,8 +1574,43 @@ def being_sent(conn, s, default_tz: str, now: datetime | None = None) -> bool:
     return tasks.pending(conn, send_key(s, period)) is not None
 
 
+def _say_nobody_to_email(conn, s, cfg, now: datetime) -> None:
+    """A report plan that sends by itself reached its send time with nobody to send to (the client has no
+    contacts). Say so once in the email history, and the schedule shows its last send failed, rather than skip
+    it without a word. A contact added later joins the plan's email (``month_end.contact_added``), and the
+    month goes out at the next tick."""
+    if s["kind"] != "report" or not _field(s, "plan_id") or not s["enabled"] or _field(s, "on_approval", 0):
+        return
+    period, _ = schedule_slot(s, cfg.timezone, now)
+    if period_done(s["last_period"], period) or recipients(conn, "schedule", s["id"]):
+        return
+    tenant = store.get_tenant(conn, s["tenant_id"])
+    if tenant is None or not tenant["enabled"] or tenant["archived_at"]:
+        return
+    said = conn.execute("SELECT 1 FROM email_deliveries WHERE schedule_id = ? AND period = ?", (s["id"], period))
+    if said.fetchone():
+        return
+    with store.atomic(conn):
+        record(
+            conn,
+            kind="report",
+            email=None,
+            subject=f"{tenant['name']} security report",
+            error=f"Not sent: {tenant['name']} has no contacts to email it to. Add one on the client's Emails page "
+            "and it goes out then.",
+            transport=None,
+            trigger="schedule",
+            user=None,
+            schedule_id=s["id"],
+            tenant_id=s["tenant_id"],
+            period=period,
+        )
+        conn.execute("UPDATE email_schedules SET last_status = 'failed' WHERE id = ?", (s["id"],))
+
+
 def _tick_schedule(app, conn, vault, s, cfg, now: datetime, queue: bool = False) -> bool:
     if not _due(conn, s, cfg, now):
+        _say_nobody_to_email(conn, s, cfg, now)
         return False
     period, due = schedule_slot(s, cfg.timezone, now)
     if queue and tasks.pending(conn, send_key(s, period)):

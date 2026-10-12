@@ -80,6 +80,8 @@
   {% endif %}
   {% elif all_rows %}
   <div class="empty compact"><p>Nothing here with this filter.</p></div>
+  {% elif paused %}
+  <div class="empty compact"><p>Every client on a report plan is paused.</p></div>
   {% elif group_scope and group_scope.group %}
   <div class="empty"><h3>No clients in {{ group_scope.group.name }} are on a report plan</h3>
     <p>Choose another group, or show every client.</p>
@@ -90,5 +92,9 @@
     {% if admin %}<a class="btn primary" href="{{ url_for('reporting.new_plan') }}">{{ icon('plus') }} Create a plan</a>{% endif %}</div>
   {% endif %}
 </section>
+{% if paused %}
+<p class="muted small" id="paused">Paused, so nothing goes out for {{ 'it' if paused|length == 1 else 'them' }} until resumed:
+  {% for r in paused %}<a href="{{ url_for('reporting.review', period=period, tenant_id=r.tenant.id) }}">{{ r.tenant.name }}</a>{{ ', ' if not loop.last }}{% endfor %}.</p>
+{% endif %}
 {% endblock %}
 {% block scripts %}{{ progress_script() }}{% endblock %}

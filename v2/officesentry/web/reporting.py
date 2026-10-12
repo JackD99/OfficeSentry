@@ -242,7 +242,9 @@ def queue(period: str):
     show = request.args.get("show", "")
     if show not in FILTERS:
         show = ""
-    rows = month_end.queue(g.db, scoped_tenants(), period)
+    every = month_end.queue(g.db, scoped_tenants(), period)
+    paused = [r for r in every if _waits_for_resume(r)]
+    rows = [r for r in every if not _waits_for_resume(r)]
     counts = {
         "": len(rows),
         "mine": sum(r.reviewer == g.user["username"] for r in rows),
@@ -263,6 +265,7 @@ def queue(period: str):
         label=month_end.issued.period_label(period),
         rows=shown,
         all_rows=rows,
+        paused=paused,
         show=show,
         filters=FILTERS,
         counts=counts,
@@ -271,9 +274,15 @@ def queue(period: str):
         next=month_end.shift_period(period, 1),
         current=_period_now(),
         admin=can("month_end.approve"),
-        bulk=_bulk_progress(period, rows),
+        bulk=_bulk_progress(period, every),
         worker_running=worker.is_alive(g.db),
     )
+
+
+def _waits_for_resume(row: month_end.QueueRow) -> bool:
+    """Nothing goes out for a paused client, so a month nobody has acted on isn't one to review: it's named
+    under the queue rather than listed with flags that don't matter until the client is resumed."""
+    return row.paused and row.state in ("draft", "in_review") and not row.approving
 
 
 def _bulk_progress(period: str, rows) -> dict | None:

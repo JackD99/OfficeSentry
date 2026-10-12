@@ -418,7 +418,8 @@ On the **Manage** page, people who can manage clients can:
   Nothing is collected (scheduled or manual), no emailed reports or alert
   emails go out, and the client drops out of the team digest. Its data, reports
   and findings stay, and the client still shows (marked *Paused*) in lists and
-  to its client users. **Resume** picks up at the next nightly collection.
+  to its client users. Month-end names it under the queue instead, since
+  nothing goes out for it. **Resume** picks up at the next nightly collection.
 - **Archive** a client you've stopped working with but who may come back. An
   archived client is also paused, and is hidden from the Clients page, All
   clients, What changed, the Reports page, digests and its client users.
