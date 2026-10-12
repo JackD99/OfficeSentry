@@ -82,6 +82,7 @@ Connect with the browser terminal (or Instance Connect) and work in `/opt/office
 - **Updating:** read the [release notes](https://github.com/JackD99/OfficeSentry/releases), run
   `sudo sh /opt/officesentry/install.sh` (it downloads the newest release's `docker-compose.yml` and `Caddyfile`,
   which releases change without always saying so, and keeps your `.env`), set `OFFICESENTRY_VERSION` in `.env`
-  to the new release, then `docker compose pull && docker compose up -d`.
+  to the new release, then `docker compose pull && docker compose up -d`. Or turn on the [Update
+  button](../../DEPLOY.md#the-update-button) once and update from *Settings → Updates*.
 - **Settings:** in `/opt/officesentry/.env` ([When things run](../../DEPLOY.md#when-things-run)), then
   `docker compose up -d`.

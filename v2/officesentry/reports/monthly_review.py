@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from functools import cache
 from pathlib import Path
@@ -305,7 +305,8 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
             "Inactive accounts",
             None if stale.status == "unavailable" else len(stale.findings),
             better="down",
-            note="Needs Entra ID P1" if stale.status == "unavailable" else "",
+            # Why it's missing, in the check's words: users not collected yet, or no Entra ID P1 for sign-ins.
+            note=(stale.summary or "Not available") if stale.status == "unavailable" else "",
         ),
         Kpi(
             "waste",
@@ -355,6 +356,42 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
         months=found_and_fixed(conn, tenant["id"], now, baseline_end),
         fixed=fixed_groups(resolved, results),
     )
+
+
+def leave_out(report: Report, hidden) -> Report:
+    """The report without what a month-end reviewer left out of the client's copy (``month_end.hidden``):
+    ``check:<key>`` drops that check everywhere (lists, counts, the summary, what was fixed and accepted) and
+    ``kpi:<key>`` drops a key figure. Other items (parts of the report, recommendations) are the templates'.
+    Returns the same report when nothing applies; never changes the one it's given."""
+    hidden = set(hidden or ())
+    checks = {item[6:] for item in hidden if item.startswith("check:")}
+    kpis = {item[4:] for item in hidden if item.startswith("kpi:")}
+    if not checks and not kpis:
+        return report
+    results = [r for r in report.results if r.key not in checks]
+    counts = {s: 0 for s in report.counts} if report.counts else {s: 0 for s in SEVERITY_RANK}
+    new_count = 0
+    for r in results:
+        for f in r.findings:
+            counts[f.severity] = counts.get(f.severity, 0) + 1
+            new_count += f.new
+    return replace(
+        report,
+        results=results,
+        kpis=[k for k in report.kpis if k.key not in kpis],
+        counts=counts,
+        new_count=new_count,
+        accepted=[a for a in report.accepted if a[0].key not in checks],
+        resolved=[row for row in report.resolved if _rule_key(row) not in checks],
+        fixed=[g for g in report.fixed if g.key not in checks],
+    )
+
+
+def _rule_key(row) -> str:
+    try:
+        return row["rule_key"]
+    except (KeyError, IndexError, TypeError):
+        return ""
 
 
 def rollup_row(conn, tenant, now: datetime | None = None, cached: bool = False) -> dict:

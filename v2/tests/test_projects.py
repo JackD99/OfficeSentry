@@ -67,11 +67,12 @@ def test_seeded_tenant_gets_projects_and_quick_fixes(db, seeded):
     found = projects.assess(db, store.get_tenant(db, seeded))
     recs = found.projects
     keys = [r.project.key for r in recs]
-    assert keys == ["identity", "email_security"]
+    # Both are high; email security has more failing checks (the seed's mail flow rules and anti-spam policy).
+    assert keys == ["email_security", "identity"]
     assert all(r.hours >= projects.MIN_HOURS for r in recs)
     ranks = [r.weight for r in recs]
     assert ranks == sorted(ranks)
-    identity = recs[0]
+    identity = recs[1]
     assert {r.check for r in identity.reasons} >= {"legacy_auth_blocked", "users_mfa_registered", "guest_admins"}
     assert identity.size.endswith("users") and identity.status == "suggested" and identity.effort == "About 6 hours"
     # A critical fix that's small on its own (an admin without MFA) is done now, not held for the project.

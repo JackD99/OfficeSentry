@@ -429,6 +429,46 @@ EXCHANGE: tuple[Endpoint, ...] = tuple(
         fallback="Undocumented InvokeCommand endpoint; the top spam and phishing recipients are left out without it",
     ),
 )
+# Mail rules and protection: each part is read on its own, and one that fails is shown as unread.
+EXCHANGE += tuple(
+    Endpoint(
+        cmdlet,
+        ("beta",),
+        "Exchange.ManageAsApp and Global Reader",
+        ("exchange",),
+        api="exchange",
+        fallback=fallback,
+    )
+    for fallback, cmdlets in (
+        (
+            "Undocumented InvokeCommand endpoint; without it that part of Mail rules and protection says it couldn't "
+            "be read",
+            (
+                "Get-TransportRule",
+                "Get-InboundConnector",
+                "Get-OutboundConnector",
+                "Get-HostedContentFilterPolicy",
+                "Get-HostedContentFilterRule",
+                "Get-AntiPhishPolicy",
+                "Get-AntiPhishRule",
+                "Get-MalwareFilterPolicy",
+                "Get-MalwareFilterRule",
+                "Get-EOPProtectionPolicyRule",
+            ),
+        ),
+        (
+            "Needs Defender for Office 365; not asked without it",
+            (
+                "Get-SafeLinksPolicy",
+                "Get-SafeLinksRule",
+                "Get-SafeAttachmentPolicy",
+                "Get-SafeAttachmentRule",
+                "Get-ATPProtectionPolicyRule",
+            ),
+        ),
+    )
+    for cmdlet in cmdlets
+)
 
 # SharePoint's own REST API (``sharepoint_api.py``), for what Graph doesn't expose: SharePoint group members,
 # permission levels and inheritance. Paths are what follows a site's ``/_api``. Microsoft counts these against

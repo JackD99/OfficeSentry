@@ -11,16 +11,18 @@ sends, and the queue and review pages show its progress (``progress``). No reque
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 
 from flask import Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .. import delivery, month_end, tasks, worker
 from ..db import audit, transaction, utcnow
-from ..reports import monthly_review, summary
+from ..reports import branding, designs, monthly_review, summary
 from ..reports.data_reports import grouped as report_groups
 from ..text import plural
-from .access import can, is_staff, needs, tenant_or_404, visible_tenants
+from .access import can, is_staff, needs, report_capability, tenant_or_404, visible_tenants
+from .designs import PREVIEW_CSP
 from .groups import group_aware, scoped_tenants
 
 bp = Blueprint("reporting", __name__)
@@ -295,7 +297,9 @@ def _bulk_progress(period: str, rows) -> dict | None:
 @bp.post("/reporting/<period>/approve")
 @needs("month_end.approve")
 def approve_many(period: str):
-    """Queue an approval for each ticked client; the worker freezes and sends them, and the queue shows progress."""
+    """Queue an approval for each ticked client; the worker freezes and sends them, and the queue shows progress.
+    A ticked month that was approved but whose email failed is sent again, the same frozen files, as the review
+    screen's Send again does (after a mail outage that's every failed client at once)."""
     period = _period_or_404(period)
     visible = {t["id"]: t for t in visible_tenants(g.db, g.user)}
     ids = [int(i) for i in request.form.getlist("tenants") if i.isdigit() and int(i) in visible]
@@ -307,8 +311,11 @@ def approve_many(period: str):
     with transaction(g.db, immediate=True):
         for tenant_id in ids:
             t = visible[tenant_id]
+            r = month_end.review(g.db, tenant_id, period)
+            state = month_end.state_of(g.db, tenant_id, period, r)
+            send_again = state == "approved" and r is not None and bool(r["error"])
             if (
-                month_end.state_of(g.db, tenant_id, period) in ("approved", "sent")
+                (state in ("approved", "sent") and not send_again)
                 or not t["enabled"]
                 or not month_end.plan_for(g.db, tenant_id)[0]
             ):
@@ -316,7 +323,7 @@ def approve_many(period: str):
             elif tasks.pending(g.db, month_end.approval_key(tenant_id, period)):
                 busy += 1
             else:
-                month_end.queue_approval(g.db, t, period, g.user["username"], batch=batch)
+                month_end.queue_approval(g.db, t, period, g.user["username"], send_only=send_again, batch=batch)
                 queued += 1
     if busy:
         flash(f"{plural(busy, 'client')} {'was' if busy == 1 else 'were'} already being approved.", "warning")
@@ -427,7 +434,108 @@ def review(period: str, tenant_id: int):
         months=[month_end.shift_period(period, i) for i in range(0, 7)],
         admin=can("month_end.approve"),
         period_label=month_end.issued.period_label,
+        left_out=month_end.hidden(g.db, t["id"], period),
+        parts=month_end.PARTS,
+        contents=_contents(plan),
     )
+
+
+def _contents(plan) -> list[dict]:
+    """The plan's reports the review screen previews and lists the parts of: the monthly review (or its
+    summary) and report designs. Other files (the evidence pack, spreadsheets) aren't drawn here."""
+    known = delivery.catalog_map(g.db)
+    out = []
+    for key in json.loads(plan["reports"] or "[]") if plan else []:
+        if key in ("review", monthly_review.SUMMARY_KEY):
+            out.append({"key": key, "title": known[key].title, "review": True})
+        elif (design_id := designs.id_of(key)) is not None and (row := designs.get(g.db, design_id)) is not None:
+            doc = designs.document(row)
+            blocks = [
+                (designs.block_item(row["id"], b["id"]), designs.WIDGETS[b["kind"]].title, b["settings"].get("heading"))
+                for b in doc["blocks"]
+                if b["kind"] != "page_break"
+            ]
+            out.append(
+                {
+                    "key": key,
+                    "title": row["name"],
+                    "design": row["id"],
+                    "blocks": blocks,
+                    "notes": doc["settings"]["notes"],
+                }
+            )
+    return out or [{"key": "review", "title": known["review"].title, "review": True}]
+
+
+@bp.post("/reporting/<period>/<int:tenant_id>/leave-out")
+@needs("month_end.review")
+def leave_out(period: str, tenant_id: int):
+    """Leave things out of this client's copy of the month, or put them back. ``op`` is ``out`` or ``back``
+    with an ``item``, ``set`` with every ``scope`` item of a list and the ones still ``shown``, or ``all`` to put
+    everything back. The shared design and other months stay as they are. Answers JSON to the page's script."""
+    period = _period_or_404(period)
+    t = tenant_or_404(tenant_id)
+    op = request.form.get("op", "")
+    if op not in ("out", "back", "set", "all"):
+        abort(400)
+    items = request.form.getlist("scope" if op == "set" else "item")[:200]
+    if op != "all" and (not items or not all(month_end.valid_item(g.db, t["id"], i) for i in items)):
+        abort(400)
+    shown = set(request.form.getlist("shown"))
+    with transaction(g.db):
+        before = month_end.hidden(g.db, t["id"], period)
+        if op == "all":
+            month_end.put_back(g.db, t["id"], period)
+        for item in items if op != "all" else ():
+            if op == "out" or (op == "set" and item not in shown):
+                month_end.leave_out(g.db, t["id"], period, item, g.user["username"])
+            else:
+                month_end.put_back(g.db, t["id"], period, item)
+        after = month_end.hidden(g.db, t["id"], period)
+        if after != before:
+            month_end.start_review(g.db, t["id"], period, g.user["username"])
+            # Item keys name checks, parts and blocks, never anything the client's people wrote.
+            for item in sorted(after - before):
+                audit(g.db, g.user["username"], "report_item_left_out", t["id"], f"{period}: {item}")
+            for item in sorted(before - after):
+                audit(g.db, g.user["username"], "report_item_put_back", t["id"], f"{period}: {item}")
+    if request.accept_mimetypes.best == "application/json":
+        return jsonify(left_out=sorted(after))
+    anchor = request.form.get("anchor", "")
+    return _review_url(t["id"], period, anchor if re.fullmatch(r"[a-z0-9_-]{1,100}", anchor) else "")
+
+
+@bp.get("/reporting/<period>/<int:tenant_id>/preview")
+@needs("month_end.review")
+def preview(period: str, tenant_id: int):
+    """One of the plan's reports as the client would get it if the month were approved now (client-visible
+    notes only, less what's left out), for the review screen's preview pane. ``?report=`` is ``review``,
+    ``review-summary`` or ``design:<id>``."""
+    period = _period_or_404(period)
+    t = tenant_or_404(tenant_id)
+    key = request.args.get("report", "review")
+    me = month_end.report_context(g.db, t["id"], period, staff=False)["month_end"]
+    page = {"pdf": False, "paper": True, "css_href": url_for("static", filename="report.css")}
+    g.csp_override = PREVIEW_CSP
+    if key in ("review", monthly_review.SUMMARY_KEY):
+        report = monthly_review.leave_out(monthly_review.build(g.db, t), me["hidden"])
+        return render_template(
+            "reports/monthly_review.html", report=report, appendix=key == "review", preview=True, month_end=me, **page
+        )
+    row = designs.get(g.db, designs.id_of(key) or 0)
+    if row is None:
+        abort(404)
+    context = designs.context(
+        g.db,
+        t,
+        row,
+        brand=branding.load(g.db),
+        month_end=me,
+        preview=True,
+        client_copy=True,
+        opens=lambda report: can(report_capability(report), t["id"]),
+    )
+    return render_template("reports/design.html", **page, **context)
 
 
 @bp.post("/reporting/<period>/<int:tenant_id>/commentary")

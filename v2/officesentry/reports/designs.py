@@ -31,6 +31,8 @@ MAX_BLOCKS = 60
 TEXT_MAX = 200
 LONG_TEXT_MAX = 4000
 WIDTHS = ("full", "half")
+# The cover: a page of its own (with the contents), or a header band on the first page for short reports.
+COVERS = ("full", "compact")
 SEVERITIES = (("critical", "Critical"), ("high", "High"), ("medium", "Medium"), ("low", "Low"))
 KPI_OPTIONS = (
     ("secure_score.pct", "Secure Score"),
@@ -94,6 +96,7 @@ class Rendered:
     data: dict | None
     empty: str = ""  # nothing to show for this tenant (left out of the report, named in the preview)
     error: bool = False  # the widget broke: the report says so instead of crashing
+    left_out: bool = False  # the month-end reviewer left it out of this client's copy (named in the preview)
 
     @property
     def heading(self) -> str:
@@ -124,6 +127,8 @@ class Context:
         self.now = now or datetime.now(UTC)
         self.brand = brand
         self.month_end = month_end or {}  # month_end.report_context(...)["month_end"], client-safe
+        # What the month-end reviewer left out of this client's copy (checks, figures, blocks, setup notes).
+        self.hidden = set(self.month_end.get("hidden") or ())
         # Whether the person viewing may open a detail report on this tenant (None: anyone, as in an email).
         self.opens = opens or (lambda key: True)
         self._review = None
@@ -135,7 +140,7 @@ class Context:
     @property
     def review(self) -> monthly_review.Report:
         if self._review is None:
-            self._review = monthly_review.build(self.conn, self.tenant, self.now)
+            self._review = monthly_review.leave_out(monthly_review.build(self.conn, self.tenant, self.now), self.hidden)
         return self._review
 
     @property
@@ -818,8 +823,12 @@ def clean(document: dict) -> dict:
     settings = {
         "title": str(raw_settings.get("title") or "").strip()[:120],
         "subtitle": str(raw_settings.get("subtitle") or "").strip()[:TEXT_MAX],
+        "cover": raw_settings.get("cover") if raw_settings.get("cover") in COVERS else "full",
         "cover_verdict": bool(raw_settings.get("cover_verdict", True)),
         "contents": bool(raw_settings.get("contents", True)),
+        # Setup notes written for the MSP ("Microsoft is hiding people's names... sign in as a Global Admin")
+        # go in the client's copy only when this is on; the portal and the previews always show them.
+        "notes": bool(raw_settings.get("notes", False)),
     }
     blocks, seen = [], set()
     raw_blocks = document.get("blocks") if isinstance(document.get("blocks"), list) else []
@@ -946,9 +955,9 @@ STARTERS: dict[str, tuple[str, str, dict]] = {
     "blank": ("Blank", "Start from nothing and add blocks.", {"settings": {}, "blocks": []}),
     "executive": (
         "Executive summary",
-        "One page for a business owner: verdict, figures, next steps and who to call.",
+        "A short read for a business owner: verdict, figures, next steps and who to call.",
         {
-            "settings": {"title": "Microsoft 365 executive summary", "subtitle": "{month}"},
+            "settings": {"title": "Microsoft 365 executive summary", "subtitle": "{month}", "cover": "compact"},
             "blocks": [
                 _b("summary_text"),
                 _b("kpis", keys=["secure_score.pct", "mfa.registered_pct", "stale", "waste"], columns=4),
@@ -1021,19 +1030,30 @@ STARTERS: dict[str, tuple[str, str, dict]] = {
 # -- Rendering ------------------------------------------------------------------------------------------
 
 
-def render(ctx: Context, doc: dict) -> list[list[Rendered]]:
-    """Each block built for the tenant, in rows: two half-width blocks side by side make one row."""
+def block_item(design_id, block_id: str) -> str:
+    """The ``report_hidden`` item for one block of one design (``month_end.leave_out``)."""
+    return f"block:{design_id}:{block_id}"
+
+
+def render(ctx: Context, doc: dict, design_id: int | None = None) -> list[list[Rendered]]:
+    """Each block built for the tenant, in rows: two half-width blocks side by side make one row. A block the
+    month-end reviewer left out of this client's copy isn't built (``left_out``)."""
     rows: list[list[Rendered]] = []
     for raw in doc["blocks"]:
         block = Block(raw["kind"], raw["settings"], raw["width"], raw["id"])
         widget = WIDGETS[block.kind]
+        if design_id is not None and block_item(design_id, block.id) in ctx.hidden:
+            item = Rendered(block, widget, None, left_out=True)
+            rows.append([item])
+            continue
         try:
             data = widget.build(ctx, block.settings) or {}
             item = Rendered(block, widget, None if "empty" in data else data, empty=str(data.get("empty") or ""))
         except Exception:  # a widget's own bug never takes the report down (the robustness contract)
             log.exception("Report design block %s failed for tenant %s", block.kind, ctx.tenant["id"])
             item = Rendered(block, widget, None, error=True)
-        if block.width == "half" and rows and len(rows[-1]) == 1 and rows[-1][0].block.width == "half":
+        beside = rows[-1][0] if rows and len(rows[-1]) == 1 else None
+        if block.width == "half" and beside and beside.block.width == "half" and not beside.left_out:
             rows[-1].append(item)
         else:
             rows.append([item])
@@ -1054,13 +1074,16 @@ def context(
     brand=None,
     month_end: dict | None = None,
     preview: bool = False,
+    client_copy: bool = False,
     opens: Callable[[str], bool] | None = None,
 ) -> dict:
-    """Template context for ``reports/design.html``. ``opens`` leaves out tables of detail reports the
-    person viewing can't open (``Context.opens``)."""
+    """Template context for ``reports/design.html``. ``preview`` is the editor's pane (blocks with nothing to
+    show are named); ``client_copy`` draws a page exactly as the client's PDF has it (the month-end review's
+    preview), where the PDF itself always is one. ``opens`` leaves out tables of detail reports the person
+    viewing can't open (``Context.opens``)."""
     doc = document(row)
     ctx = Context(conn, tenant, now, brand=brand, month_end=month_end, opens=opens)
-    rows = render(ctx, doc)
+    rows = render(ctx, doc, row["id"])
     settings = doc["settings"]
     return {
         "design": row,
@@ -1070,8 +1093,13 @@ def context(
         "tenant": tenant,
         "title": ctx.fill(settings["title"]) or row["name"],
         "subtitle": ctx.fill(settings["subtitle"]),
+        "cover_style": settings["cover"],
         "cover_verdict": ctx.summary.verdict if settings["cover_verdict"] else None,
         "show_contents": settings["contents"],
+        # Setup notes reach the client's copy when the design includes them and the reviewer didn't leave
+        # them out for this client and month.
+        "client_notes": settings["notes"] and f"notes:{row['id']}" not in ctx.hidden,
+        "client_copy": client_copy,
         "generated_at": ctx.now,
         "preview": preview,
         "report_currency": ctx.review.currency,

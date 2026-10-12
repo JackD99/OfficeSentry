@@ -140,6 +140,16 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
     addresses). Domains where more than 5% of mail fails are flagged. Also
     Microsoft's top 20 spam and phishing recipients for the last 30 days
     (`Get-MailTrafficSummaryReport`).
+  - *Mail rules and protection*: every mail flow (transport) rule in the order
+    it runs, with what it picks mail out by, what it does and its exceptions
+    in plain words; inbound and outbound connectors (servers, domains,
+    encryption); and the anti-spam, anti-phishing and anti-malware policies,
+    with Safe Links and Safe Attachments where Defender for Office 365 is
+    licensed, each with whom it applies to and whether a Standard or Strict
+    preset covers them (`Get-TransportRule`, `Get-InboundConnector`,
+    `Get-OutboundConnector` and the policy and rule cmdlets of each kind).
+    Rules that skip spam filtering or send mail outside, sender domains allowed
+    past the spam filter and protection turned off come first.
   - *Legacy sign-ins*: SMTP AUTH, IMAP, POP and other basic-auth sign-ins from
     the last 30 days of the sign-in log (Entra ID P1), and which mailboxes
     still allow SMTP AUTH, POP and IMAP.
@@ -412,8 +422,10 @@ page. Drag a block in from the list (a status verdict, key figures, checks by se
 trend, recommended next steps, failing checks, what changed, licences, a table from any detail report,
 the insurance questionnaire answers, this month's commentary, headings, your own text, a contact card, a
 page break), set it up in its panel (which severities, how many rows, the heading), put two blocks side
-by side, and watch the preview on a real client update as you go. Start from an executive summary, a
-full security review, a licensing review, a quarterly review (three months of Secure Score and findings,
+by side, and watch the preview on a real client update as you go. The preview is drawn at the printed
+page's width, so it lays out as the PDF does; click a block in it to change that block, and Undo (Ctrl+Z)
+takes back any change. The cover is a page of its own, or a band on page one for a short report. Start
+from an executive summary, a full security review, a licensing review, a quarterly review (three months of Secure Score and findings,
 what was fixed, the projects on the table and where each stands, licence spend, and what's coming up in
 the next 90 days) or a blank page.
 
@@ -423,6 +435,15 @@ Custom reports** lists every design as a page and a PDF, and a report plan or a 
 can send a design (as a PDF) alongside or instead of the monthly review. Text blocks take `{client}`,
 `{month}`, `{quarter}`, `{msp}` and `{date}`. Anyone who can *Design custom reports* makes and edits designs; removing
 one also needs *Settings*, since it comes out of any plan or schedule that sent it.
+
+Setup notes written for your team (a detail report saying Microsoft is hiding people's names, and how to
+sign in as a Global Admin to show them) stay out of the client's copy unless the design's **Include setup
+notes in the client's copy** is ticked; the portal and the previews show them, marked "Only your team sees
+this". On the month-end review screen, **What's in the report** leaves any block of a design, any part of
+the monthly review or any key figure out of one client's copy for that month, and **Leave out** does the
+same for one check or recommendation. The design and other clients stay as they are, the preview beside
+it shows the client's copy, and the sent PDFs, spreadsheet, email and portal copy never have what was left
+out.
 
 ### Exchange data
 
@@ -460,6 +481,10 @@ These areas have no real recording and are tested with simulated data only:
 - **Intune policies, BitLocker recovery keys and PIM for groups**: the tenant
   hasn't approved the 2.2 permissions yet, so the replay covers the waiting
   state and the policies themselves are simulated.
+- **Mail rules and protection**: the recording was made before Office Sentry
+  read mail flow rules, connectors and filtering policies, so the replay
+  answers those commands with a new tenant's defaults, and rules, connectors
+  and changed policies are simulated.
 - **National clouds** (GCC High, DoD, China): there's no test tenant in
   them; the endpoints come from Microsoft's documentation.
 - **Risky sharing**: the tenant's shared file is shared with one person in the
@@ -640,7 +665,9 @@ docker compose --profile https up -d
 That runs the published release image. To run this folder's code instead,
 add `docker-compose.build.yml` (`-f docker-compose.yml -f
 docker-compose.build.yml up -d --build`). [DEPLOY.md](DEPLOY.md) has the full
-steps: HTTPS, schedule and retention settings, backups and updating.
+steps: HTTPS, schedule and retention settings, backups and updating, by hand
+or with the optional Update button (*Settings → Updates*, `updates.py`, and
+the `updater` container, `updater.py`).
 
 Create the first admin:
 
@@ -830,5 +857,8 @@ officesentry/
   search_index.py  the sidebar search's index, kept by the worker
   logs.py        rolling logs in <data dir>/logs, with request, run and task context
   support.py     the support package, with secrets and client names taken out
+  updates.py     the daily release check, and the files the portal and the updater share
+  updater.py     the updater container: checks a release's signature, installs it, goes back if it fails
+  docker_api.py  the updater's client for the server's Docker engine
   web/           Flask app: access.py is the single authorization gate
 ```

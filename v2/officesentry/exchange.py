@@ -58,6 +58,21 @@ READ_ONLY_CMDLETS = frozenset(
         "Get-DistributionGroupMember",
         "Get-MessageTraceV2",
         "Get-MailTrafficSummaryReport",
+        "Get-TransportRule",
+        "Get-InboundConnector",
+        "Get-OutboundConnector",
+        "Get-HostedContentFilterPolicy",
+        "Get-HostedContentFilterRule",
+        "Get-AntiPhishPolicy",
+        "Get-AntiPhishRule",
+        "Get-MalwareFilterPolicy",
+        "Get-MalwareFilterRule",
+        "Get-SafeLinksPolicy",
+        "Get-SafeLinksRule",
+        "Get-SafeAttachmentPolicy",
+        "Get-SafeAttachmentRule",
+        "Get-EOPProtectionPolicyRule",
+        "Get-ATPProtectionPolicyRule",
     }
 )
 

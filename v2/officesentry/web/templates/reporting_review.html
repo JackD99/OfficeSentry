@@ -13,6 +13,20 @@
   {% if value and value not in months %}<option value="{{ value }}" selected>{{ period_label(value) }}</option>{% endif %}
 </select>
 {%- endmacro %}
+{#- Leave an item out of this client's copy of the month, or put it back (month_end.leave_out). review.js sends
+    these with fetch and updates the page and the preview in place; without it they post and come back here. -#}
+{% macro leave(item, anchor, what) -%}
+{%- set out = item in left_out -%}
+<form method="post" action="{{ url_for('reporting.leave_out', period=period, tenant_id=tenant.id) }}" class="leave-form" data-leave-out>
+  {{ csrf() }}<input type="hidden" name="item" value="{{ item }}"><input type="hidden" name="anchor" value="{{ anchor }}">
+  <button class="sm ghost" name="op" value="{{ 'back' if out else 'out' }}" data-what="{{ what }}" aria-label="{{ ('Put back: ' if out else 'Leave out: ') ~ what }}"
+    title="{{ 'Put it back in this month\'s report' if out else 'Leave it out of this month\'s report. Nothing else changes.' }}">{{ 'Put back' if out else 'Leave out' }}</button>
+</form>
+{%- endmacro %}
+{% macro box(item, label, sub='') -%}
+<label class="check"><input type="hidden" name="scope" value="{{ item }}"><input type="checkbox" name="shown" value="{{ item }}" {% if item not in left_out %}checked{% endif %}>
+  <span>{{ label }}{% if sub %} <span class="faint">· {{ sub }}</span>{% endif %}</span></label>
+{%- endmacro %}
 {% macro suggestion(s) -%}
 <li><form method="post" action="{{ url_for('reporting.add_action', tenant_id=tenant.id) }}">
   {{ csrf() }}<input type="hidden" name="period" value="{{ period }}"><input type="hidden" name="rule_key" value="{{ s.rule_key }}">
@@ -40,8 +54,12 @@
 {% if flags and editable %}
 <div class="callout warn">{{ icon('alert') }}<div><strong>Needs your eyes:</strong> {{ flags|join(', ') }}.</div></div>
 {% endif %}
+<div class="callout" id="left-out" {% if not left_out %}hidden{% endif %}>{{ icon('hide') }}
+  <div class="grow"><strong data-left-out-count>{{ left_out|length|plural('thing') }}</strong> left out of {{ tenant.name }}'s report this month. They stay on this page, greyed out; the client's PDF, email and portal don't have them.</div>
+  <form method="post" action="{{ url_for('reporting.leave_out', period=period, tenant_id=tenant.id) }}" data-leave-out>{{ csrf() }}<button class="sm" name="op" value="all">Put everything back</button></form>
+</div>
 
-<div class="grid-main">
+<div class="grid-main review-grid">
 <div>
   <section class="card" id="commentary">
     <div class="card-head"><h2>Verdict and commentary</h2><span class="pill {{ TONES.get(verdict.tone, '') }}">{{ verdict.label }}</span></div>
@@ -59,17 +77,19 @@
     <div class="card-head toolbar"><h2>What we recommend next</h2><span class="meta">Kept from month to month</span></div>
     {% if not actions %}<p class="intro">None yet, so the report suggests its own from the failing checks. Add your own to replace them.</p>{% endif %}
     {% for a in actions %}
-    <div class="action-row">
-      <div class="grow"><div class="strong">{{ loop.index }}. {{ a.title }}</div>{% if a.detail %}<div class="small muted">{{ a.detail }}</div>{% endif %}</div>
+    {% set item = 'action:' ~ a.id %}
+    <div class="action-row{% if item in left_out %} left-out{% endif %}" id="action-{{ a.id }}" data-item="{{ item }}">
+      <div class="grow"><div class="strong">{{ loop.index }}. {{ a.title }} <span class="pill left-out-tag">Left out this month</span></div>{% if a.detail %}<div class="small muted">{{ a.detail }}</div>{% endif %}</div>
       <form method="post" action="{{ url_for('reporting.update_action', action_id=a.id) }}">
         {{ csrf() }}<input type="hidden" name="period" value="{{ period }}">
         <select name="status" aria-label="Status">{% for k, v in statuses.items() %}<option value="{{ k }}" {% if a.status == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
         {{ month_select('target_month', a.target_month) }}
         <button class="sm" name="op" value="save">Save</button>
-        <button class="sm ghost" name="op" value="up" aria-label="Move up" {% if loop.first %}disabled{% endif %}>&uarr;</button>
-        <button class="sm ghost" name="op" value="down" aria-label="Move down" {% if loop.last %}disabled{% endif %}>&darr;</button>
-        <button class="sm ghost danger" name="op" value="delete">Remove</button>
+        <button class="sm ghost icon-btn" name="op" value="up" aria-label="Move up" title="Move up" {% if loop.first %}disabled{% endif %}>{{ icon('up') }}</button>
+        <button class="sm ghost icon-btn" name="op" value="down" aria-label="Move down" title="Move down" {% if loop.last %}disabled{% endif %}>{{ icon('down') }}</button>
+        <button class="sm ghost danger" name="op" value="delete" title="Take it off the list for good">Remove</button>
       </form>
+      {{ leave(item, 'action-' ~ a.id, a.title) }}
     </div>
     {% endfor %}
     <div class="action-row">
@@ -97,14 +117,45 @@
     {% endif %}
   </section>
 
+  <section class="card" id="contents">
+    <div class="card-head"><h2>What's in the report</h2><span class="meta">{{ tenant.name }}, {{ label }} only</span></div>
+    <p class="small muted">Untick what {{ tenant.name }} shouldn't get this month. The design, other clients and next month stay as they are. To leave out one check, use Findings below.</p>
+    {% set ns = namespace(review=false) %}
+    {% for c in contents if (c.review and not ns.review) or c.design %}
+    {% if c.review %}{% set ns.review = true %}{% endif %}
+    <form method="post" action="{{ url_for('reporting.leave_out', period=period, tenant_id=tenant.id) }}" class="contents-form" data-leave-out data-autosave>
+      {{ csrf() }}<input type="hidden" name="op" value="set"><input type="hidden" name="anchor" value="contents">
+      <fieldset class="contents-list"><legend>{{ 'Monthly review' if c.review else c.title }}</legend>
+        {% if c.review %}
+          {% for key, text in parts.items() %}{{ box('part:' ~ key, text) }}{% endfor %}
+        {% else %}
+          {% for item, title, heading in c.blocks %}{{ box(item, heading or title, title if heading and heading != title else '') }}{% endfor %}
+          {% if c.notes %}{{ box('notes:' ~ c.design, 'Setup notes for your team', 'like "sign in as a Global Admin"') }}{% endif %}
+        {% endif %}
+      </fieldset>
+      {% if c.design and not c.notes %}<p class="small muted m0">Setup notes for your team, like "sign in as a Global Admin", are left out of this design for every client. <a href="{{ url_for('designs.edit', design_id=c.design) }}">Change that in the design</a>.</p>{% endif %}
+      <button class="sm" data-save>Save</button>
+    </form>
+    {% endfor %}
+    <form method="post" action="{{ url_for('reporting.leave_out', period=period, tenant_id=tenant.id) }}" class="contents-form" data-leave-out data-autosave>
+      {{ csrf() }}<input type="hidden" name="op" value="set"><input type="hidden" name="anchor" value="contents">
+      <fieldset class="contents-list"><legend>Key figures <span class="faint">· in every report</span></legend>
+        {% for k in report.kpis %}{{ box('kpi:' ~ k.key, k.label) }}{% endfor %}
+      </fieldset>
+      <button class="sm" data-save>Save</button>
+    </form>
+  </section>
+
   <section class="card flush" id="notes">
-    <div class="card-head toolbar"><h2>Notes on findings</h2><span class="meta">Shown under the check on the report</span></div>
+    <div class="card-head toolbar"><h2>Findings</h2><span class="meta">Notes show under the check on the report</span></div>
     {% set failing = report.failing %}
     {% if not failing %}<p class="intro">No failing checks this month.</p>{% endif %}
     {% for r in failing %}
     {% set mine = notes|selectattr('rule_key', 'equalto', r.key)|list %}
-    <div class="review-check" id="check-{{ r.key }}">
-      <div><span class="pill {{ TONES.get(r.severity, '') }}">{{ r.severity }}</span> <span class="strong">{{ r.summary|trim('.') }}</span></div>
+    {% set item = 'check:' ~ r.key %}
+    <div class="review-check{% if item in left_out %} left-out{% endif %}" id="check-{{ r.key }}" data-item="{{ item }}">
+      <div class="review-check-head"><span class="pill {{ TONES.get(r.severity, '') }}">{{ r.severity }}</span> <span class="strong grow">{{ r.summary|trim('.') }} <span class="pill left-out-tag">Left out</span></span>
+        {{ leave(item, 'check-' ~ r.key, r.summary|trim('.')) }}</div>
       {% if mine %}<ul class="note-list">{% for n in mine %}<li><span class="pill {{ 'warn' if n.visibility == 'staff' else 'info' }}">{{ visibility[n.visibility] }}</span>
         <span class="grow">{% if n.subject %}<strong>{{ n.subject }}:</strong> {% endif %}{{ n.body }} <span class="muted small">· {{ n.created_by }}</span></span>
         <form method="post" action="{{ url_for('reporting.delete_note', note_id=n.id) }}">{{ csrf() }}<input type="hidden" name="period" value="{{ period }}"><button class="sm ghost" aria-label="Remove note">Remove</button></form></li>{% endfor %}</ul>{% endif %}
@@ -183,6 +234,20 @@
     {% endif %}
   </section>
   {% endif %}
+
+  {#- What the client gets if the month is approved now, redrawn as things are left out or put back. -#}
+  {% set first = url_for('reporting.preview', period=period, tenant_id=tenant.id, report=contents[0].key) %}
+  <section class="card review-preview" id="preview-card">
+    <div class="card-head">
+      <h2>The client's copy</h2>
+      {% if contents|length > 1 %}<select id="preview-report" aria-label="Report to preview">
+        {% for c in contents %}<option value="{{ c.key }}">{{ c.title }}</option>{% endfor %}
+      </select>{% endif %}
+      <a class="small" id="preview-open" href="{{ first }}" target="_blank" rel="noopener">Open full size {{ icon('external') }}</a>
+    </div>
+    <div class="paper" data-paper><iframe id="review-preview" title="Preview of {{ tenant.name }}'s report" src="{{ first }}" data-base="{{ url_for('reporting.preview', period=period, tenant_id=tenant.id) }}" data-report="{{ contents[0].key }}" loading="lazy"></iframe></div>
+    <p class="small muted m0">As it goes out if you approve now: client-visible notes only, without what's left out.</p>
+  </section>
 </div>
 </div>
 {#- Phones: the right-hand column comes after every note form, so the main action also sits in a bar
@@ -194,4 +259,5 @@
 </div>
 {% endif %}
 {% endblock %}
-{% block scripts %}{{ progress_script() }}{% endblock %}
+{% block scripts %}{{ progress_script() }}
+<script src="{{ url_for('static', filename='review.js') }}" nonce="{{ csp_nonce }}"></script>{% endblock %}

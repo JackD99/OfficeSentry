@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from tests import exchangedata, mailflowdata
+from tests import exchangedata, mailflowdata, mailprotectiondata
 
 GA = "role-ga"
 EXCH = "role-exch"
@@ -671,6 +671,7 @@ EXCHANGE = {
     "Get-Recipient": [],
 }
 EXCHANGE.update(exchangedata.EXCHANGE)  # mobile devices and distribution lists
+EXCHANGE.update(mailprotectiondata.EXCHANGE)  # mail flow rules, connectors and protection policies
 EXCHANGE["Get-MessageTraceV2"] = mailflowdata.message_trace(exchangedata.MESSAGE_TRACE, mailflowdata.TRACE)
 EXCHANGE["Get-MailTrafficSummaryReport"] = mailflowdata.traffic_summary(mailflowdata.TOP)
 # Sign-ins happen in the last few days, whenever the tests run: the activity history keeps the

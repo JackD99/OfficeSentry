@@ -5,6 +5,12 @@
 {% import "reports/_components.html" as ui with context %}
 {% set WHOLE_ORG = ('Tenant', 'Organisation') %}
 
+{#- True where the page is what the client gets: the PDF (or the browser-made one) and the month-end review's
+    preview of it. The portal page and the editor's preview are for the MSP's team. -#}
+{% macro for_client() -%}
+{{- 'yes' if pdf or (print_view is defined and print_view) or (client_copy is defined and client_copy) else '' -}}
+{%- endmacro %}
+
 {% macro head(item) -%}
 {% if item.heading %}<h2>{{ item.heading }}</h2>{% endif %}
 {%- endmacro %}
@@ -182,7 +188,13 @@
 {{ head(item) }}
 {% set d = item.data %}
 {% if not item.heading %}<h2>{{ d.report.title }}</h2>{% endif %}
-{% if d.report.notice %}<div class="callout warn">{{ d.report.notice }}</div>{% endif %}
+{#- A setup note is written for the MSP ("sign in as a Global Admin..."): the client's copy has it only when
+    the design includes setup notes (client_notes); the portal and the previews always show it. -#}
+{% if d.report.notice %}
+  {% if not for_client() %}<div class="callout warn setup-note"><div>{{ d.report.notice }}</div>
+    {% if not (client_notes is defined and client_notes) %}<div class="team-only">Only your team sees this. It's left out of the client's copy.</div>{% endif %}</div>
+  {% elif client_notes is defined and client_notes %}<div class="callout warn">{{ d.report.notice }}</div>{% endif %}
+{% endif %}
 {% if d.figures and d.tiles %}
 {% call ui.figures(d.tiles|length) %}{% for t in d.tiles %}{{ ui.figure(t.label, t.value, t.foot, t.tone) }}{% endfor %}{% endcall %}
 {% endif %}
@@ -345,12 +357,15 @@
 
 {#- One block: its section, or in the preview a note on why it's empty or broken. -#}
 {% macro draw(item, preview=false) -%}
-{% if item.error %}
-  {% if preview %}<section class="block block-empty"><div class="block-note">{{ item.widget.title }}: couldn't be built for this client. The log has the details.</div></section>{% endif %}
+{% set anchor %}{% if item.anchor %} id="{{ item.anchor }}"{% endif %}{% endset %}
+{% if item.left_out %}
+  {% if not for_client() %}<section class="block block-empty"{{ anchor }}><div class="block-note"><strong>{{ item.widget.title }}</strong>{% if item.heading and item.heading != item.widget.title %} ({{ item.heading }}){% endif %} is left out of {{ tenant.name }}'s copy this month, in the month-end review.</div></section>{% endif %}
+{% elif item.error %}
+  {% if preview %}<section class="block block-empty"{{ anchor }}><div class="block-note">{{ item.widget.title }}: couldn't be built for this client. The log has the details.</div></section>{% endif %}
 {% elif item.data is none %}
-  {% if preview %}<section class="block block-empty"><div class="block-note"><strong>{{ item.widget.title }}</strong> has nothing to show for this client, so it's left out: {{ item.empty }}</div></section>{% endif %}
+  {% if preview %}<section class="block block-empty"{{ anchor }}><div class="block-note"><strong>{{ item.widget.title }}</strong> has nothing to show for this client, so it's left out: {{ item.empty }}</div></section>{% endif %}
 {% elif item.block.kind == 'page_break' %}
-  {% if preview %}<div class="block-note page-break-note">Page break</div>{% endif %}{{ w_page_break(item) }}
+  {% if preview %}<div class="block-note page-break-note"{{ anchor }}>Page break</div>{% endif %}{{ w_page_break(item) }}
 {% else %}
 <section class="block block-{{ item.block.kind }}{% if item.block.width == 'half' %} half{% endif %}{% if item.block.kind in ('verdict', 'kpis', 'breakdown', 'secure_score', 'passing', 'contact', 'text', 'heading') %} keep{% endif %}"{% if item.anchor %} id="{{ item.anchor }}"{% endif %}>
   {{ DRAW[item.block.kind](item) }}

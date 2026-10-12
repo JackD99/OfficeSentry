@@ -17,6 +17,14 @@
 {%- set urgent = report.failing|selectattr('severity', 'in', ['critical', 'high'])|list -%}
 {%- set other = report.failing|rejectattr('severity', 'in', ['critical', 'high'])|list -%}
 {%- set paid = report.licences.lines|rejectattr('free')|list -%}
+{#- Parts the month-end reviewer left out of this client's copy (part:<key>, month_end.PARTS). Checks and key
+    figures they left out are already gone from report (monthly_review.leave_out). -#}
+{%- set off = me.hidden if me and me.hidden else [] -%}
+{%- set glance = 'part:summary' not in off or 'part:kpis' not in off or ('part:breakdown' not in off and report.failing) -%}
+{%- set did_on = 'part:did' not in off -%}
+{%- set next_on = 'part:next' not in off and (open_actions or auto_actions) -%}
+{%- set chart_on = 'part:month_chart' not in off and report.months_chart -%}
+{%- set this_month = chart_on or did_on or next_on -%}
 {%- macro tl_notes(key) -%}
 {%- set ns = me.notes.get(key, []) if me else [] -%}
 {%- if ns %}<ul class="tl-notes">{% for n in ns %}<li class="{{ n.visibility }}">{% if n.visibility == 'staff' %}<span class="who">Staff only:</span> {% endif %}{% if n.subject %}<span class="who">{{ n.subject|subject_label }}:</span> {% endif %}{{ n.body }}</li>{% endfor %}</ul>{% endif %}
@@ -45,25 +53,31 @@
 {%- endif %}{% endblock %}
 {% block contents %}
   <li class="toc-group">Summary</li>
-  <li><a href="#summary">At a glance</a></li>
-  <li><a href="#month">This month, and what we recommend next</a></li>
+  {% if glance %}<li><a href="#summary">At a glance</a></li>{% endif %}
+  {% if this_month %}<li><a href="#month">{{ 'This month, and what we recommend next' if next_on else 'This month' }}</a></li>{% endif %}
   {% if with_appendix %}
   <li class="toc-group">Appendix: the detail</li>
-  <li><a href="#changes">What changed since {{ since }}</a></li>
+  {% if 'part:changes' not in off %}<li><a href="#changes">What changed since {{ since }}</a></li>{% endif %}
   {% if urgent %}<li><a href="#fix-first">Fix first</a></li>{% endif %}
   {% if other %}<li><a href="#also">{{ 'Also worth fixing' if urgent else 'What needs attention' }}</a></li>{% endif %}
-  {% if open_actions|length > 3 %}<li><a href="#all-recommendations">Every recommendation</a></li>{% endif %}
-  {% if paid %}<li><a href="#licences">Licences</a></li>{% endif %}
-  {% if report.passing %}<li><a href="#passing">In good shape</a></li>{% endif %}
-  {% if report.accepted %}<li><a href="#accepted">Accepted risks</a></li>{% endif %}
-  {% if report.unavailable %}<li><a href="#not-checked">Not checked</a></li>{% endif %}
+  {% if next_on and open_actions|length > 3 %}<li><a href="#all-recommendations">Every recommendation</a></li>{% endif %}
+  {% if paid and 'part:licences' not in off %}<li><a href="#licences">Licences</a></li>{% endif %}
+  {% if report.passing and 'part:passing' not in off %}<li><a href="#passing">In good shape</a></li>{% endif %}
+  {% if report.accepted and 'part:accepted' not in off %}<li><a href="#accepted">Accepted risks</a></li>{% endif %}
+  {% if report.unavailable and 'part:not_checked' not in off %}<li><a href="#not-checked">Not checked</a></li>{% endif %}
   {% endif %}
 {% endblock %}
 
 {% block body %}
+{% if me and me.staff and off %}
+<div class="callout warn staff-note">{{ off|length|plural('thing') }} {{ 'is' if off|length == 1 else 'are' }} left out of {{ report.tenant.name }}'s copy this month, so this page doesn't show {{ 'it' if off|length == 1 else 'them' }} either.
+  {% if review_href is defined and review_href %}<a href="{{ review_href }}#left-out">Change what's left out</a>{% endif %}</div>
+{% endif %}
+{% if glance %}
 <section id="summary" class="exec">
   <h2>At a glance</h2>
-  <div class="summary-text">{% for p in es.paragraphs %}<p>{{ p }}</p>{% endfor %}</div>
+  {% if 'part:summary' not in off %}<div class="summary-text">{% for p in es.paragraphs %}<p>{{ p }}</p>{% endfor %}</div>{% endif %}
+  {% if 'part:kpis' not in off and report.kpis %}
   <h3 class="sub-head">Key figures</h3>
   <div class="kpis">
     {% for k in report.kpis %}
@@ -79,18 +93,21 @@
       {{ ui.kpi(k.label, value, delta_text, trend, k.note, k.value if k.unit == '%' else none, k.spark, k.spark_label) }}
     {% endfor %}
   </div>
+  {% endif %}
   {% set failing = report.failing %}
-  {% if failing %}
+  {% if failing and 'part:breakdown' not in off %}
   {% set items = [] %}
   {% for key, label in ui.SEVERITIES %}{% set n = failing|selectattr('severity', 'equalto', key)|list|length %}{% if n %}{% set _ = items.append((label, n, key)) %}{% endif %}{% endfor %}
   {{ ui.breakdown(failing|length ~ ' of ' ~ (report.results|length - report.unavailable|length) ~ ' checks need attention', items) }}
   {% endif %}
 </section>
+{% endif %}
 
-<section class="page-break exec" id="month">
+{% if this_month %}
+<section class="{{ 'page-break ' if glance }}exec" id="month">
   <h2>This month</h2>
   {% set chart = report.months_chart %}
-  {% if chart %}
+  {% if chart_on %}
   {%- set shown = report.months|selectattr('found', 'ne', none)|list -%}
   <div class="chart-card keep month-chart">
     <div class="chart-head"><span class="chart-title">Findings found and fixed each month</span>
@@ -100,6 +117,7 @@
   </div>
   {% endif %}
 
+  {% if did_on %}
   <h3 class="sub-head">What we did</h3>
   {% if report.fixed or done_actions %}
   <ul class="did">
@@ -112,8 +130,9 @@
   {% else %}
   <p class="muted">Nothing was fixed since {{ since }}.</p>
   {% endif %}
+  {% endif %}
 
-  {% if open_actions or auto_actions %}
+  {% if next_on %}
   <h3 class="sub-head" id="next">What we recommend next</h3>
   {% if open_actions %}
   <ol class="actions">
@@ -129,6 +148,7 @@
   {% endif %}
   {% endif %}
 </section>
+{% endif %}
 
 {% if with_appendix %}
 <div class="appendix-start page-break" id="appendix">
@@ -137,6 +157,7 @@
   <p class="section-intro">Everything behind the summary: what changed, each finding with the accounts or settings it affects, and licences line by line. The XLSX export has every row.</p>
 </div>
 
+{% if 'part:changes' not in off %}
 <section id="changes">
   <h2>What changed since {{ since }}</h2>
   {% if report.first_report and not report.changes and not report.resolved and not report.new_count %}
@@ -164,8 +185,9 @@
   {% endif %}
   {% endif %}
 </section>
+{% endif %}
 
-{% if report.secure_score_chart %}
+{% if report.secure_score_chart and 'part:secure_score' not in off %}
 <section class="keep">
   <h2>Microsoft Secure Score</h2>
   <p class="section-intro">Microsoft's own measure of how many recommended security settings are turned on. Higher is better.</p>
@@ -214,7 +236,7 @@
 </section>
 {% endif %}
 
-{% if open_actions|length > 3 %}
+{% if next_on and open_actions|length > 3 %}
 <section id="all-recommendations">
   <h2>Every recommendation</h2>
   <ol class="actions">
@@ -227,7 +249,7 @@
 </section>
 {% endif %}
 
-{% if paid %}
+{% if paid and 'part:licences' not in off %}
 <section id="licences">
   <h2>Licences</h2>
   {% if report.licences.monthly_waste %}
@@ -255,7 +277,7 @@
 </section>
 {% endif %}
 
-{% if report.passing %}
+{% if report.passing and 'part:passing' not in off %}
 <section class="keep" id="passing">
   <h2>In good shape <span class="count">{{ report.passing|length }}</span></h2>
   <ul class="passing">
@@ -264,7 +286,7 @@
 </section>
 {% endif %}
 
-{% if report.accepted %}
+{% if report.accepted and 'part:accepted' not in off %}
 <section class="keep" id="accepted">
   <h2>Accepted risks <span class="count">{{ report.accepted|length }}</span></h2>
   <p class="section-intro">Exceptions that have been reviewed and agreed. They come back into the report when the acceptance ends.</p>
@@ -279,7 +301,7 @@
 </section>
 {% endif %}
 
-{% if report.unavailable %}
+{% if report.unavailable and 'part:not_checked' not in off %}
 <section class="keep" id="not-checked">
   <h2>Not checked <span class="count">{{ report.unavailable|length }}</span></h2>
   <p class="section-intro">These checks need data or a Microsoft licence that isn't available, so they're neither a pass nor a fail.</p>

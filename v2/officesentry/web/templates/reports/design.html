@@ -1,8 +1,10 @@
-{#- A report design rendered for one tenant (reports/designs.py), as the page, the editor's preview and the
-    PDF. The blocks come in rows: two half-width blocks share a row. -#}
+{#- A report design rendered for one tenant (reports/designs.py), as the page, the editor's preview, the
+    month-end review's preview (client_copy) and the PDF. The blocks come in rows: two half-width blocks
+    share a row. cover_style 'compact' puts the cover in a band on the first page. -#}
 {% extends "reports/_layout.html" %}
 {% import "reports/_components.html" as ui with context %}
 {% import "reports/_widgets.html" as widgets with context %}
+{% set compact_cover = cover_style == 'compact' %}
 
 {% block doc_title %}{{ title }}{% endblock %}
 {% block client %}{{ tenant.name }}{% endblock %}
@@ -22,20 +24,23 @@
 {% endblock %}
 {% block cover_status %}{% if cover_verdict %}{{ ui.verdict(cover_verdict) }}{% endif %}{% endblock %}
 {% block contents %}
-  {% if show_contents %}{% for anchor, heading in contents %}<li><a href="#{{ anchor }}">{{ heading }}</a></li>{% endfor %}{% endif %}
+  {% if show_contents and not compact_cover %}{% for anchor, heading in contents %}<li><a href="#{{ anchor }}">{{ heading }}</a></li>{% endfor %}{% endif %}
 {% endblock %}
 
 {% block body %}
-{% if preview and not rows %}
+{#- The editor's preview names what isn't shown; the month-end review's preview (client_copy) is the client's PDF. -#}
+{% set notes_on = preview and not client_copy %}
+{% if notes_on and not compact_cover %}<div class="block-note page-break-note">The cover is a page of its own in the PDF</div>{% endif %}
+{% if notes_on and not rows %}
 <div class="block-note">This report has no blocks yet. Drag one in from the list on the left.</div>
 {% endif %}
 {% for row in rows %}
 {% if row|length == 2 %}
-<div class="block-row">{% for item in row %}{{ widgets.draw(item, preview) }}{% endfor %}</div>
+<div class="block-row">{% for item in row %}{{ widgets.draw(item, notes_on) }}{% endfor %}</div>
 {% elif row[0].block.width == 'half' and row[0].data is not none %}
-<div class="block-row">{{ widgets.draw(row[0], preview) }}</div>
+<div class="block-row">{{ widgets.draw(row[0], notes_on) }}</div>
 {% else %}
-{{ widgets.draw(row[0], preview) }}
+{{ widgets.draw(row[0], notes_on) }}
 {% endif %}
 {% endfor %}
 {% endblock %}

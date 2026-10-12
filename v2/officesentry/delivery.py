@@ -578,21 +578,30 @@ def _attachments(
     app, conn, tenant, keys, include_xlsx, now, review=None, review_context: dict | None = None, chosen_views=()
 ) -> list[tuple[str, str, bytes]]:
     """Build every file a bundle attaches. ``review_context`` is extra template context for the review PDF
-    (the month-end commentary, recommendations and notes, see ``month_end.report_context``). Saved views
-    (``chosen_views``) come after the reports."""
+    (the month-end commentary, recommendations and notes, see ``month_end.report_context``), and what the
+    reviewer left out of this client's month is left out of every file. Saved views (``chosen_views``) come
+    after the reports."""
     files, built = [], {}
     brand = branding.load(conn)
+    me = (review_context or {}).get("month_end") or {}
+
+    def monthly():
+        if "review" not in built:
+            built["review"] = monthly_review.leave_out(
+                review or monthly_review.build(conn, tenant, now), me.get("hidden")
+            )
+        return built["review"]
+
     for key, filename in attachment_plan(tenant, keys, include_xlsx, conn):
         if key == "review":
-            report = built.setdefault(key, review or monthly_review.build(conn, tenant, now))
+            report = monthly()
             data = (
                 _pdf(app, "reports/monthly_review.html", report=report, **(review_context or {}))
                 if filename.endswith(".pdf")
                 else export.to_xlsx(report, brand=brand)
             )
         elif key == monthly_review.SUMMARY_KEY:
-            report = built.setdefault("review", review or monthly_review.build(conn, tenant, now))
-            data = _pdf(app, "reports/monthly_review.html", report=report, appendix=False, **(review_context or {}))
+            data = _pdf(app, "reports/monthly_review.html", report=monthly(), appendix=False, **(review_context or {}))
         elif key == "evidence":
             result = built.setdefault(key, schemes.assess(conn, tenant, "insurance", now))
             data = (
@@ -602,7 +611,6 @@ def _attachments(
             )
         elif (design_id := designs.id_of(key)) is not None:
             row = designs.get(conn, design_id)
-            me = (review_context or {}).get("month_end") or {}
             data = _pdf(
                 app, "reports/design.html", **designs.context(conn, tenant, row, now, brand=brand, month_end=me)
             )
@@ -651,7 +659,15 @@ def build_report_email(
     else:
         month = period
     label = period_label(period)
-    review = monthly_review.build(conn, tenant, now)
+    from . import month_end  # imports this module
+
+    # The month's commentary, recommendations and client-visible notes go in the PDF too: for a client whose
+    # reports wait for approval, only once the month is approved (approving sends its own files). What the
+    # reviewer left out of this client's month is left out of the email as well as the files either way.
+    context = month_end.report_context(
+        conn, tenant["id"], month, staff=False, approved_only=month_end.needs_approval(conn, tenant["id"])
+    )
+    review = monthly_review.leave_out(monthly_review.build(conn, tenant, now), context["month_end"]["hidden"])
     known = catalog_map(conn)
     plan = attachment_plan(tenant, keys, bool(schedule["include_xlsx"]), conn)
     chosen = schedule_views(conn, schedule["id"])
@@ -710,13 +726,6 @@ def build_report_email(
     to, bcc = split_recipients(contacts)
     attachments = []
     if attach:
-        from . import month_end  # imports this module
-
-        # The month's commentary, recommendations and client-visible notes go in the PDF too: for a client
-        # whose reports wait for approval, only once the month is approved (approving sends its own files).
-        context = month_end.report_context(
-            conn, tenant["id"], month, staff=False, approved_only=month_end.needs_approval(conn, tenant["id"])
-        )
         attachments = _attachments(
             app,
             conn,
