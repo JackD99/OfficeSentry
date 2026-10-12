@@ -78,22 +78,23 @@
   <section class="card">
     <div class="card-head"><h2>Since {{ report.period_start|datefmt('%-d %B') }}</h2>
       <a class="small" href="{{ url_for('across.tenant_changes', tenant_id=tenant.id) }}">Everything that changed</a></div>
+    {% set findings = can('reports.security', tenant.id) %}
     {% if report.first_report and not report.new_count and not report.resolved %}
     <p class="muted small">Collection for this client started in this period, so its first findings are the starting point rather than new. New and fixed findings are tracked from here on.</p>
     {% else %}
     <div class="mini-stats">
-      <div><span class="value">{{ report.new_count }}</span><span class="label">new findings</span></div>
-      <div><span class="value">{{ report.resolved|length }}</span><span class="label">fixed</span></div>
-      <div><span class="value">{{ report.changes|length }}</span><span class="label">key {{ 'change' if report.changes|length == 1 else 'changes' }}</span></div>
+      {% if findings %}<div><span class="value">{{ report.new_count }}</span><span class="label">new findings</span></div>
+      <div><span class="value">{{ report.resolved|length }}</span><span class="label">fixed</span></div>{% endif %}
+      <div><span class="value">{{ key_changes|length }}</span><span class="label">key {{ 'change' if key_changes|length == 1 else 'changes' }}</span></div>
     </div>
     {% endif %}
-    {% if report.changes %}
+    {% if key_changes %}
     <ul class="list compact">
-      {% for c in report.changes[:5] %}
+      {% for c in key_changes[:5] %}
       <li>{{ change_tag(c.kind) }}<div class="grow"><span class="title">{{ c.area }}</span> <span class="desc">{{ c.subject }}: {{ c.detail }}</span></div></li>
       {% endfor %}
     </ul>
-    {% if report.changes|length > 5 %}<p class="footnote">{{ report.changes|length - 5 }} more on the <a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id) }}">Changes</a> tab.</p>{% endif %}
+    {% if key_changes|length > 5 %}<p class="footnote">{{ key_changes|length - 5 }} more on the <a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id) }}">Changes</a> tab.</p>{% endif %}
     {% elif not report.first_report %}
     <p class="muted small">No configuration changes spotted. Change tracking needs two collections at least 4 weeks apart.</p>
     {% endif %}

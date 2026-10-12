@@ -60,7 +60,10 @@ overview and DEPLOY.md for running it on a server.
   history downloads need `export` and the file's area; designs leave out
   tables the viewer can't open (`designs.Context.opens`); Today
   (`home.today(shows=)`), the dashboard tiles and the Accounts page count only
-  what the person sees; `test_report_areas_everywhere.py` covers each. A new
+  what the person sees; What changed shows each key change, figure and report's
+  changes only to someone who opens its report there, and findings only with
+  findings (`month_changes.only`, `narrowed`, `CHANGE_REPORTS`, `access.opens_on`);
+  `test_report_areas_everywhere.py` covers each. A new
   place that shows a report from inside another page checks its area the same
   way. A new capability is a `Capability` in `permissions.CAPABILITIES`,
   added to the built-in roles that should hold it (`TEMPLATES`; the

@@ -1,5 +1,5 @@
 """What a role can't open on a client stays closed wherever that client's data goes: scheduled emails and
-their previews, the report history, report designs, month-end notes and the home pages.
+their previews, the report history, report designs, month-end notes, the home pages and What changed.
 
 A role holds report areas (``reports.identity``, ``reports.security``, ...), and an admin can take one away
 from a person on one client. ``tests/test_roles.py`` checks each page's own gate; these are the places that
@@ -301,3 +301,99 @@ def test_a_client_home_leaves_out_areas_taken_away(client, db, vault, alpha, two
     assert "<h2>Recommendations</h2>" not in page and "Checks needing attention" not in page
     assert f"/tenants/{alpha}/findings" not in page and "Users with MFA" in page and "Bravo Inc" not in page
     assert client.get(f"/tenants/{bravo}/findings").status_code == 404
+
+
+# -- What changed ------------------------------------------------------------------------------------------
+
+
+def _a_month_of_changes(db, tenant_id: int) -> None:
+    """Collected again 40 days on, with the guest account deleted: an Accounts change (identity) among
+    others, such as admin activity (tenant)."""
+    from tests.test_collectors import USERS
+    from tests.test_rollups import _backdate
+
+    _backdate(db, tenant_id, 40)
+    seed_tenant(db, tenant_id, mark=MARK, users=[u for u in USERS if u["id"] != "u3"])
+
+
+GUEST = "g#EXT#@x.com"  # the deleted account
+ON_PAGE = f'<span class="strong">Accounts</span> {GUEST}'  # its key change on the Changes tab
+IN_CSV = f"Accounts,,Removed,{GUEST}"
+ON_OVERVIEW = '<span class="title">Accounts</span>'
+
+
+def _sheets(client, url: str) -> list[str]:
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    return load_workbook(BytesIO(client.get(url).data)).sheetnames
+
+
+def test_what_changed_shows_only_the_areas_the_person_opens(client, db, alpha):
+    _a_month_of_changes(db, alpha)
+    make_user(db, "admin")
+    login(client, "admin")
+    assert ON_PAGE in client.get(f"/tenants/{alpha}/changes").data.decode()
+    assert IN_CSV in client.get(f"/tenants/{alpha}/changes.csv").data.decode()
+    assert ON_OVERVIEW in client.get(f"/tenants/{alpha}").data.decode()
+
+    # An account manager holds findings and tenant reports, but no identity, email, files or devices reports.
+    role_user(db, "am", "account_manager", tenants=[alpha])
+    _switch(client, "am")
+    page = client.get(f"/tenants/{alpha}/changes").data.decode()
+    assert ON_PAGE not in page and "Users with MFA" not in page and '<div class="label">New findings</div>' in page
+    assert "can&#39;t open them for this client: Identity and access, Email" in page
+    csv = client.get(f"/tenants/{alpha}/changes.csv").data.decode()
+    assert IN_CSV not in csv and "Admin activity," in csv  # their own areas stay
+    overview = client.get(f"/tenants/{alpha}").data.decode()
+    assert ON_OVERVIEW not in overview and '<span class="title">Admin activity</span>' in overview
+
+    # First line opens identity reports but not findings.
+    role_user(db, "fl", "first_line", tenants=[alpha])
+    _switch(client, "fl")
+    page = client.get(f"/tenants/{alpha}/changes").data.decode()
+    assert ON_PAGE in page and "Left out: you can't open findings for this client." in page
+    assert '<div class="label">New findings</div>' not in page
+    assert '<div class="label">Secure Score</div>' not in page  # the Secure Score trend is a tenant report
+    assert "can&#39;t open them for this client: Findings, Files and Teams, Tenant and licences." in page
+    assert "New findings" not in _sheets(client, f"/tenants/{alpha}/changes.xlsx")
+    assert "new findings" not in client.get(f"/tenants/{alpha}").data.decode()
+
+    # Taken away on one client only.
+    uid = role_user(db, "sl", "second_line", tenants=[alpha])
+    _deny(db, uid, "reports.identity", alpha)
+    _switch(client, "sl")
+    assert ON_PAGE not in client.get(f"/tenants/{alpha}/changes").data.decode()
+
+
+def test_what_changed_across_clients_counts_only_the_areas_the_person_opens(client, db, alpha):
+    _a_month_of_changes(db, alpha)
+    make_user(db, "admin")
+    login(client, "admin")
+    (everything,) = [r for r in client.get("/changes.csv").data.decode().splitlines() if r.startswith("Alpha Ltd")]
+    assert "Accounts" in everything
+    role_user(db, "am", "account_manager", tenants=[alpha])
+    _switch(client, "am")
+    for _ in range(2):  # built, then from the stored row, which holds every area's counts
+        (row,) = [r for r in client.get("/changes.csv").data.decode().splitlines() if r.startswith("Alpha Ltd")]
+        cells = row.split(",")
+        assert "Accounts" not in row and "Admin activity" in row
+        assert int(cells[2]) < int(everything.split(",")[2])  # fewer changes
+        assert cells[8] == ""  # no Users with MFA figure without identity reports
+    assert "Accounts" not in client.get("/changes").data.decode()
+
+
+def test_every_change_feed_and_figure_names_the_report_it_comes_from():
+    """What changed leaves out a key change or figure whose report isn't named, so each one must be."""
+    from pathlib import Path
+
+    from officesentry import changes
+    from officesentry.reports import data_reports, month_changes
+
+    source = Path(changes.__file__).read_text(encoding="utf-8")
+    areas = set(re.findall(r'Change\(\s*"([^"]+)"', source))
+    assert areas and areas <= set(month_changes.CHANGE_REPORTS)
+    assert {key for key, *_ in month_changes.FIGURES} <= set(month_changes.FIGURE_REPORTS)
+    named = {*month_changes.CHANGE_REPORTS.values(), *month_changes.FIGURE_REPORTS.values()}
+    assert named <= set(data_reports.REPORTS)
