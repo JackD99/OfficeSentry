@@ -9,46 +9,6 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
-## [2.4.0] - Unreleased
-
-### New Microsoft permissions
-
-None for the shared app, so no client is asked to approve anything again. The new audit log add-on is a
-separate app with one permission, `ActivityFeed.Read` on the Office 365 Management APIs, and is only ever
-approved by clients you ask.
-
-### Database upgrade
-
-Yes, applied on start as usual, after a copy of the database is made: migration 44 marks each app connection
-as the shared app or the audit log add-on's, and adds a table for each client the add-on was asked for. Nothing
-changes for existing clients.
-
-### Added
-
-- **Audit log add-on: who deleted, downloaded or shared a file, who opened someone else's mailbox, and who
-  created that inbox rule.** An optional second app, "Office Sentry audit log add-on", reads each approving
-  client's Microsoft 365 audit log for SharePoint, OneDrive and Exchange through Microsoft's Office 365
-  Management Activity feed, every night, and keeps about 70 kinds of record in the activity history (files
-  opened or edited and mail read by its owner are left out; email subjects are never stored). A new **Files
-  and mailbox access** report leads with figures for the last 30 days and a **Needs attention** list (an admin
-  opening someone else's mailbox, forwarding, rules that forward or delete mail, anyone links, auditing turned
-  off, mailbox exports, malware, mass deletes), then a table per kind of activity; each person's Timeline and
-  the client's Activity history page show the records too. It's off until an admin creates the add-on's app
-  under *Settings → App connection → Audit log add-on* (a device sign-in, or by hand), then each client is
-  asked from its *Settings → Audit log add-on* page with a link, email text and a one-page pack, and the
-  onboarding tracker has an **Audit log add-on** column (Not sent, Sent, Approved, On, Off). Every request it
-  makes reads, apart from the feed's own *start* and *stop*, sent only once a client an admin asked for has
-  approved, and when the add-on is switched off for a client or the client is deleted; neither changes
-  anything in the client's tenant. Records are kept for 2 years by default (*Files and mailbox events* under
-  *Settings → Data retention*). See [v2/docs/audit-log-addon.md](v2/docs/audit-log-addon.md).
-
-- **Is the client's audit log on?** The onboarding tracker has an **Audit log** column saying whether each
-  client's Microsoft 365 audit log is recording, and a new check, *The Microsoft 365 audit log is on*, fails
-  (high) when it isn't, with where to turn it on in Microsoft Purview. Without it nobody can find out who
-  deleted or shared a file, opened someone else's mailbox or created an inbox rule. It's read with one more
-  read-only Exchange command, `Get-AdminAuditLogConfig`, under the Global Reader role clients already gave,
-  and the CIS benchmark pack judges its audit log search recommendation from it.
-
 ## [2.3.1] - Unreleased
 
 ## [2.3.0] - 2026-10-12
@@ -1109,7 +1069,6 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
-[2.4.0]: https://github.com/JackD99/OfficeSentry/compare/v2.3.1...HEAD
 [2.3.1]: https://github.com/JackD99/OfficeSentry/compare/v2.3.0...HEAD
 [2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
