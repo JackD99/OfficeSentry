@@ -11,7 +11,9 @@ import pytest
 from officesentry import backups, store, worker
 from officesentry import db as db_module
 from officesentry.__main__ import main
+from officesentry.config import SETUP_TOKEN_FILE, setup_token
 from officesentry.db import connect, migrate
+from tests.conftest import make_user
 
 
 @pytest.fixture
@@ -220,12 +222,24 @@ def test_backups_are_compressed_private_and_rotate_with_older_plain_ones(env, db
 
 
 def test_a_plain_backup_still_restores(env, db, two_tenants, tmp_path):
-    plain = tmp_path / "officesentry-20260101-000000.db"
+    plain = tmp_path / "copies" / "officesentry-20260101-000000.db"
     backups.copy_database(db, plain)
     assert plain.read_bytes()[:6] == b"SQLite"
+    main(["check-backup", str(plain)])
+    assert [p.name for p in plain.parent.iterdir()] == [plain.name]  # no -shm or -wal left beside it
     db.execute("DELETE FROM tenants WHERE name = 'Alpha Ltd'")
     main(["restore", str(plain)])
     assert _tenants(env.db_path) == ["Alpha Ltd", "Bravo Inc"]
+    assert [p.name for p in plain.parent.iterdir()] == [plain.name]
+
+
+def test_a_restore_onto_a_new_server_forgets_its_setup_link(env, db, tmp_path):
+    make_user(db, "admin")
+    saved = backups.copy_database(db, tmp_path / "copies" / "officesentry-20260101-000000.db")
+    db.execute("DELETE FROM users")  # a new server, waiting for its first admin
+    setup_token(env.data_dir)
+    main(["restore", str(saved)])
+    assert not (env.data_dir / SETUP_TOKEN_FILE).exists()
 
 
 def test_restore_refuses_a_damaged_compressed_backup(env, db, two_tenants):

@@ -317,6 +317,9 @@ def cmd_restore(args, cfg):
         result = restore(cfg.db_path, Path(args.file), worker_running=running, force=args.force)
     except RestoreError as exc:
         sys.exit(f"Not restored: {exc}")
+    with closing(connect(cfg.db_path)) as conn:
+        if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+            clear_setup_token(cfg.data_dir)  # made while the new server had no admin; the backup has one
     if result.get("damaged"):
         print(
             f"The database it replaced was damaged, so it couldn't be copied: it was moved aside whole as "

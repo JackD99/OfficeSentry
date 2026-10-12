@@ -718,6 +718,8 @@ def set_client_id(conn_id: int):
         with transaction(g.db):
             g.db.execute("UPDATE app_connections SET client_id = ? WHERE id = ?", (client_id, conn_id))
             audit(g.db, g.user["username"], "connection_client_id_set", detail=client_id)
+            if not old:  # made by hand from this page's steps, which list every permission this release asks for
+                permission_batch.mark_app(g.db, conn_id, g.user["username"], "by hand, with the client ID")
             again = _consent_again(conn_id, old, client_id) if old and old != client_id else 0
         if not home:
             flash("Client ID saved.", "success")
