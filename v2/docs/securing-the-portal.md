@@ -71,8 +71,8 @@ The defaults are the secure ones. Nothing below needs switching on.
   can still manage clients, users or the activity log, but only within those
   clients: its holders don't see other clients' names, accounts or activity,
   and can't change client groups or a role held by someone who sees or does
-  more. *Settings* and *System status* cover every client, so they only work
-  for someone who sees every client.
+  more. *Settings*, *System status* and *Install updates* cover every client,
+  so they only work for someone who sees every client.
 - **A report area taken away stays away.** Someone who can't open a report
   area on a client (a role without it, or taken away with *Customise*) can't
   schedule it by email, download it from the report history or see it in a

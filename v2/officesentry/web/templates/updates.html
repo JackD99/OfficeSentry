@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf, ts %}
+{% block title %}Updates · Office Sentry{% endblock %}
+{% set STEP = {'done': 'done', 'running': 'current', 'failed': 'failed', 'skipped': 'skipped'} %}
+{% set OUTCOME = {'done': ('ok', 'check', 'Updated'), 'rolled_back': ('warn', 'alert', 'Rolled back'),
+                  'failed': ('bad', 'alert', 'Failed'), 'refused': ('warn', 'alert', 'Not started')} %}
+{% set target = plan.target %}
+{% macro steps(job) -%}
+<ol class="setup-steps flush-steps update-steps">
+  {% for s in job.steps %}<li class="{{ STEP.get(s.state, '') }}"><div class="step-title">{{ s.title }}{% if s.state == 'failed' %} <span class="pill bad">Failed</span>{% elif s.state == 'skipped' %} <span class="muted small">skipped</span>{% endif %}</div>
+    {% if s.detail %}<div class="step-body">{{ s.detail }}</div>{% endif %}</li>{% endfor %}
+</ol>
+{%- endmacro %}
+{% block content %}
+<div class="page-head"><div><h1>Updates</h1>
+  <div class="sub">Office Sentry {{ version }} is running. New releases show here with what each one asks of you{% if docker %}, and the Update button installs them{% endif %}.</div></div>
+  {% if plan.reason == 'current' %}<span class="pill ok">Up to date</span>{% elif target %}<span class="pill accent">{{ target.version }} available</span>{% endif %}</div>
+
+{% if busy %}
+<section class="card wizard update-progress" data-update-progress="{{ url_for('updates.progress') }}" data-signature="{{ signature }}">
+  <div class="card-head"><h2>{% if state.running_job %}Updating to {{ state.running_job.target }}{% else %}Waiting for the updater{% endif %}</h2><span class="pill accent">In progress</span></div>
+  <div class="callout" role="status" data-restarting hidden>{{ icon('refresh') }}<span><strong>The portal is restarting.</strong> This page reconnects by itself once it's back; nobody is signed out.</span></div>
+  {% if state.running_job %}{{ steps(state.running_job) }}
+  {% else %}<p class="muted m0">{{ waiting.by or 'Someone' }} asked for {{ waiting.version }} {{ ts(waiting.at) }}. The updater looks for requests every few seconds.</p>{% endif %}
+  <div class="card-foot small muted">You can leave this page: the update carries on without it, and the activity log records how it ends.</div>
+</section>
+{% elif job and just_finished %}
+{% set o = OUTCOME.get(job.state, ('warn', 'alert', job.state)) %}
+<div class="callout {{ o[0] }} lead-answer" role="status">{{ icon(o[1]) }}<span class="grow"><strong>{{ job.message }}</strong>
+  <div class="small">{{ o[2] }} {{ ts(job.finished_at) }}{% if job.requested_by %}, asked for by {{ job.requested_by }}{% endif %}.
+  {% if job.state == 'failed' %}<a href="{{ deploy_rollback }}">Rolling back an update</a> has the steps by hand, and <a href="{{ url_for('support.index') }}">Support</a> makes a package to ask for help with.{% endif %}</div></span></div>
+{% endif %}
+{% if missed %}
+<div class="callout warn" role="status">{{ icon('alert') }}<span><strong>The updater didn't pick up the request for {{ missed.version }}</strong> made {{ ts(missed.at) }}, so nothing was installed. Check it's running (below), then press Update again.</span></div>
+{% endif %}
+
+<div class="grid-main">
+<div class="stack">
+{% if target %}
+<section class="card update-offer" id="release">
+  <div class="card-head"><h2>{{ icon('download') }} Office Sentry {{ target.version }}</h2>{% if target.published_at %}<span class="meta">released {{ target.published_at|day }}</span>{% endif %}</div>
+  {% if plan.brings|length > 1 %}<p class="muted small">{{ plan.brings|length }} releases since {{ version }}. Updating to {{ target.version }} brings them all, so read what each one asks of you.</p>{% endif %}
+  {% for r in plan.brings %}
+  <article class="release-notes">
+    {% if plan.brings|length > 1 %}<h3>{{ r.version }}{% if r.published_at %} <span class="muted small">{{ r.published_at|day }}</span>{% endif %}</h3>{% endif %}
+    {% if r.summary %}<div class="notes">{{ notes(r.summary, r) }}</div>{% endif %}
+    {% if r.action %}<div class="callout warn">{{ icon('alert') }}<div class="grow notes"><strong>Action required</strong>{{ notes(r.action, r) }}</div></div>{% endif %}
+    {% for key, title in (('permissions', 'New Microsoft permissions'), ('database', 'Database upgrade'), ('security', 'Security')) %}{% if r.sections.get(key) %}
+    <h4>{{ title }}</h4><div class="notes">{{ notes(r.sections[key], r) }}</div>{% endif %}{% endfor %}
+    <p class="small m0"><a href="{{ r.url }}">Everything in {{ r.version }}</a> (on GitHub)</p>
+  </article>
+  {% endfor %}
+
+  <div class="update-action">
+  {% if plan.button %}
+  <form method="post" action="{{ url_for('updates.start') }}">
+    {{ csrf() }}<input type="hidden" name="version" value="{{ target.version }}">
+    <h3>Pressing Update</h3>
+    <ol class="steps small">
+      <li>checks {{ target.version }} is a genuine release, signed by Office Sentry's release workflow on GitHub, and downloads it;</li>
+      <li>restarts the portal and the worker on it. The portal is unavailable for a minute or so{% if plan.upgrades_database %}, longer while the database is upgraded (a copy of it is made first){% endif %};</li>
+      <li>goes back to {{ version }} by itself{% if plan.upgrades_database %}, database included,{% endif %} if the new version doesn't start healthy.</li>
+    </ol>
+    {% if plan.asks %}<label class="check"><input type="checkbox" name="read" value="1" required><span>I've read <strong>Action required</strong> above</span></label>{% endif %}
+    <div class="form-actions wrap"><button class="primary">Update to {{ target.version }}</button>
+      <span class="muted small">Recorded in the activity log.</span></div>
+  </form>
+  {% elif plan.reason == 'running' %}
+  <p class="muted m0">An update is under way (above).</p>
+  {% elif plan.reason == 'demo' %}
+  <p class="muted m0">Updates aren't installed from the demo.</p>
+  {% elif plan.reason == 'major' %}
+  <div class="callout">{{ icon('alert') }}<span><strong>{{ target.version }} is a new major version,</strong> so it's installed by hand: read its notes first, since a major version can need new files next to <span class="mono">docker-compose.yml</span>. <a href="{{ deploy_updating }}">Updating</a> has the steps.</span></div>
+  {% elif plan.reason == 'not_ready' %}
+  <div class="callout warn">{{ icon('alert') }}<span><strong>The updater can't install releases here.</strong> {{ state.problem }}</span></div>
+  {% elif plan.reason == 'updater_gone' %}
+  <div class="callout warn">{{ icon('alert') }}<span><strong>The updater isn't running.</strong> It last checked in {{ ts(state.seen_at) }}. Start it again on the server with <span class="mono nowrap">docker compose up -d updater</span>, then come back to this page.</span></div>
+  {% elif plan.reason == 'updater_off' %}
+  <h3>Turn on the Update button</h3>
+  <p class="small">Installing a release is done by the <strong>updater</strong>, a small extra container you turn on once. It is the only part of Office Sentry given access to Docker; the portal never is.</p>
+  <ol class="steps small">
+    <li>In the folder with <span class="mono">docker-compose.yml</span>, add <span class="mono nowrap">COMPOSE_PROFILES=updater</span> to <span class="mono">.env</span> (with a comma between profiles if you use others, such as <span class="mono nowrap">updater,https</span>).</li>
+    <li>If your <span class="mono">docker-compose.yml</span> came with a release before 2.3.0, download the one attached to the newest release, which has the updater in it.</li>
+    <li>Run <span class="mono nowrap">docker compose up -d</span>. This page offers the button within a minute.</li>
+  </ol>
+  <p class="small muted m0"><a href="{{ deploy_button }}">The Update button</a> has the details. Running it under Portainer, another container manager, a NAS or Kubernetes? The button isn't for those: update the way <a href="{{ deploy_guides }}">its guide</a> says.</p>
+  {% elif plan.reason == 'no_docker' %}
+  <p class="muted small m0">This server doesn't run Office Sentry in Docker, so update it by hand: stop both services, replace the <span class="mono">v2</span> folder, run <span class="mono nowrap">.venv\Scripts\pip install .</span> again and start them.</p>
+  {% endif %}
+  </div>
+</section>
+{% if later %}<p class="footnote">Also out: {% for r in later %}<a href="{{ r.url }}">{{ r.version }}</a>{{ ', ' if not loop.last }}{% endfor %}, a new major version installed by hand.</p>{% endif %}
+{% else %}
+<section class="card">
+  {% if plan.reason == 'development' %}
+  <div class="card-head"><h2>{{ icon('settings') }} A development build</h2></div>
+  <p class="muted m0">{{ version }} isn't a release, so no update is offered. Update it the way it was built.</p>
+  {% elif check.checked_at %}
+  <div class="card-head"><h2>{{ icon('check') }} You're up to date</h2></div>
+  <p class="muted m0">{{ version }} is the newest release. Office Sentry looked {{ ts(check.checked_at) }}.</p>
+  {% else %}
+  <div class="card-head"><h2>{{ icon('download') }} Not checked yet</h2></div>
+  <p class="muted m0">Office Sentry hasn't asked GitHub about new releases yet. <strong>Check now</strong> does, or see every release on <a href="{{ releases_page }}">GitHub</a>.</p>
+  {% endif %}
+</section>
+{% endif %}
+</div>
+
+<div class="stack">
+<section class="card">
+  <div class="card-head"><h2>{{ icon('refresh') }} New releases</h2>{% if check.on %}<span class="pill ok">Checked daily</span>{% else %}<span class="pill">Off</span>{% endif %}</div>
+  <p class="muted small">{% if check.on %}Once a day{% else %}When you press Check now{% endif %}, Office Sentry reads the list of releases on GitHub. Nothing about this server is sent, and nothing installs itself.</p>
+  {% if check.error %}<div class="callout warn">{{ icon('alert') }}<span>{{ check.error }}</span></div>{% endif %}
+  <dl class="kv"><dt>Last checked</dt><dd>{{ ts(check.checked_at) }}</dd></dl>
+  <div class="form-actions wrap">
+    <form method="post" action="{{ url_for('updates.check_now') }}">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Check now</button></form>
+    <form method="post" action="{{ url_for('updates.settings') }}">{{ csrf() }}
+      {% if check.on %}<button class="sm ghost">Turn the daily check off</button>{% else %}<input type="hidden" name="check" value="on"><button class="sm ghost">Check daily</button>{% endif %}</form>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>{{ icon('shield') }} The updater</h2>
+    {% if state.connected and state.ready %}<span class="pill ok">Ready</span>{% elif state.connected %}<span class="pill warn">Can't update</span>{% elif state.seen_at %}<span class="pill warn">Not running</span>{% else %}<span class="pill">Off</span>{% endif %}</div>
+  {% if state.seen_at %}
+  <dl class="kv">
+    <dt>Checked in</dt><dd>{{ ts(state.seen_at) }}</dd>
+    {% if state.install.folder %}<dt>Folder</dt><dd class="mono">{{ state.install.folder }}</dd>{% endif %}
+    {% if state.version %}<dt>Version</dt><dd>{{ state.version }}</dd>{% endif %}
+  </dl>
+  {% if state.problem %}<p class="small">{{ state.problem }}</p>{% endif %}
+  {% else %}
+  <p class="muted small m0">An optional container that installs a release when someone with <em>Install updates</em> presses Update. It checks the release's signature first and puts the old version back if the new one doesn't start.</p>
+  {% endif %}
+  {% if job and not busy %}
+  {% set o = OUTCOME.get(job.state, ('', 'alert', job.state)) %}
+  <details class="last-update">
+    <summary>Last update: {{ job.current or '?' }} to {{ job.target }}, <span class="pill {{ o[0] }}">{{ o[2] }}</span> {{ ts(job.finished_at or job.started_at) }}</summary>
+    <p class="small">{{ job.message }}</p>
+    {{ steps(job) }}
+  </details>
+  {% endif %}
+</section>
+
+<details class="card add-another">
+  <summary>{{ icon('doc') }} Updating by hand</summary>
+  <p class="small">Always works, with or without the updater. In the folder with <span class="mono">docker-compose.yml</span>:</p>
+  <ol class="steps small">
+    <li>read the release's notes, above all <strong>Action required</strong>;</li>
+    <li>set the version in <span class="mono">.env</span>: <span class="mono nowrap">OFFICESENTRY_VERSION={{ target.version if target else '<version>' }}</span>;</li>
+    <li>run <span class="mono nowrap">docker compose pull</span> and <span class="mono nowrap">docker compose up -d</span>.</li>
+  </ol>
+  <p class="footnote"><a href="{{ deploy_updating }}">Updating</a> and <a href="{{ deploy_rollback }}">Rolling back an update</a> have the details.</p>
+</details>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}
+{% if busy %}
+<script nonce="{{ csp_nonce }}">
+/* Follow the update: redraw <main> in place when the updater moves on, and keep trying while the portal
+   restarts. Only a page that answered and no longer shows the update is loaded whole (the menu's version
+   changes too), so the browser never lands on its own error page while the portal is down. */
+(function () {
+  var main = document.querySelector('main');
+  var box = main && main.querySelector('[data-update-progress]');
+  if (!box || !window.fetch || !window.DOMParser) return;
+  var progress = box.dataset.updateProgress;
+  function restarting(on) {
+    var note = box.querySelector('[data-restarting]');
+    if (note) note.hidden = !on;
+  }
+  function redraw() {
+    return fetch(location.href, {credentials: 'same-origin', cache: 'no-store'})
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status);
+        return r.text();
+      })
+      .then(function (html) {
+        var page = new DOMParser().parseFromString(html, 'text/html');
+        var next = page.querySelector('main');
+        if (!next || !next.querySelector('[data-update-progress]')) { location.reload(); return false; }
+        main.innerHTML = next.innerHTML;
+        box = main.querySelector('[data-update-progress]');
+        return true;
+      });
+  }
+  function poll() {
+    fetch(progress, {headers: {'Accept': 'application/json'}, credentials: 'same-origin', cache: 'no-store'})
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status);
+        if ((r.headers.get('Content-Type') || '').indexOf('json') < 0) return null;  // signed out: redraw finds out
+        return r.json();
+      })
+      .then(function (d) {
+        if (d && d.signature === box.dataset.signature) return true;
+        return redraw();
+      })
+      .then(function (more) {
+        if (!more) return;
+        restarting(false);
+        setTimeout(poll, 2000);
+      })
+      .catch(function () { restarting(true); setTimeout(poll, 3000); });
+  }
+  setTimeout(poll, 2000);
+})();
+</script>
+{% endif %}
+{% endblock %}

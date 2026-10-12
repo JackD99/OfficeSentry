@@ -140,6 +140,16 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
     addresses). Domains where more than 5% of mail fails are flagged. Also
     Microsoft's top 20 spam and phishing recipients for the last 30 days
     (`Get-MailTrafficSummaryReport`).
+  - *Mail rules and protection*: every mail flow (transport) rule in the order
+    it runs, with what it picks mail out by, what it does and its exceptions
+    in plain words; inbound and outbound connectors (servers, domains,
+    encryption); and the anti-spam, anti-phishing and anti-malware policies,
+    with Safe Links and Safe Attachments where Defender for Office 365 is
+    licensed, each with whom it applies to and whether a Standard or Strict
+    preset covers them (`Get-TransportRule`, `Get-InboundConnector`,
+    `Get-OutboundConnector` and the policy and rule cmdlets of each kind).
+    Rules that skip spam filtering or send mail outside, sender domains allowed
+    past the spam filter and protection turned off come first.
   - *Legacy sign-ins*: SMTP AUTH, IMAP, POP and other basic-auth sign-ins from
     the last 30 days of the sign-in log (Entra ID P1), and which mailboxes
     still allow SMTP AUTH, POP and IMAP.
@@ -471,6 +481,10 @@ These areas have no real recording and are tested with simulated data only:
 - **Intune policies, BitLocker recovery keys and PIM for groups**: the tenant
   hasn't approved the 2.2 permissions yet, so the replay covers the waiting
   state and the policies themselves are simulated.
+- **Mail rules and protection**: the recording was made before Office Sentry
+  read mail flow rules, connectors and filtering policies, so the replay
+  answers those commands with a new tenant's defaults, and rules, connectors
+  and changed policies are simulated.
 - **National clouds** (GCC High, DoD, China): there's no test tenant in
   them; the endpoints come from Microsoft's documentation.
 - **Risky sharing**: the tenant's shared file is shared with one person in the
@@ -651,7 +665,9 @@ docker compose --profile https up -d
 That runs the published release image. To run this folder's code instead,
 add `docker-compose.build.yml` (`-f docker-compose.yml -f
 docker-compose.build.yml up -d --build`). [DEPLOY.md](DEPLOY.md) has the full
-steps: HTTPS, schedule and retention settings, backups and updating.
+steps: HTTPS, schedule and retention settings, backups and updating, by hand
+or with the optional Update button (*Settings → Updates*, `updates.py`, and
+the `updater` container, `updater.py`).
 
 Create the first admin:
 
@@ -841,5 +857,8 @@ officesentry/
   search_index.py  the sidebar search's index, kept by the worker
   logs.py        rolling logs in <data dir>/logs, with request, run and task context
   support.py     the support package, with secrets and client names taken out
+  updates.py     the daily release check, and the files the portal and the updater share
+  updater.py     the updater container: checks a release's signature, installs it, goes back if it fails
+  docker_api.py  the updater's client for the server's Docker engine
   web/           Flask app: access.py is the single authorization gate
 ```

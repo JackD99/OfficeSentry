@@ -38,6 +38,8 @@ ALLOWED = {
     "the sign-in app in the MSP's own tenant from the setup wizard, and letting that same app accept other "
     "organisations' accounts for client sign-in (its supported account types, in the MSP's tenant only)",
     "recording.py": "live-test's recording session passes on whatever method the caller used (GET)",
+    "docker_api.py": "the updater container's calls to this server's own Docker engine (pull a checked release, "
+    "restart the portal and worker), never to Microsoft",
 }
 
 

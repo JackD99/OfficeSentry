@@ -278,6 +278,40 @@ def test_a_second_process_upgrading_at_once_does_not_copy_again(cfg, monkeypatch
     conn.close()
 
 
+def test_a_retry_after_going_back_gets_a_copy_of_its_own(cfg, monkeypatch):
+    """An upgrade rolled back and tried again within the hour: the first attempt's copy is missing what was
+    written since, so going back with it would lose that."""
+    every = db_module.migration_files()
+    monkeypatch.setattr(db_module, "migration_files", lambda: every[:-1])
+    conn = connect(cfg.db_path)
+    migrate(conn)
+    monkeypatch.setattr(backups, "_stamp", lambda: "20261102-090000")
+    first = backups.before_upgrade(cfg.db_path, every[-2][0], every[-1][0])
+    conn.execute("INSERT INTO settings (key, value) VALUES ('written_after_going_back', '1')")
+    monkeypatch.setattr(backups, "_stamp", lambda: "20261102-090500")
+    second = backups.before_upgrade(cfg.db_path, every[-2][0], every[-1][0])
+    assert second is not None and second != first
+    with closing(sqlite3.connect(second)) as copy:
+        assert copy.execute("SELECT value FROM settings WHERE key = 'written_after_going_back'").fetchone() == ("1",)
+    conn.close()
+
+
+def test_no_copy_once_another_process_has_upgraded(cfg, monkeypatch):
+    every = db_module.migration_files()
+    conn = connect(cfg.db_path)
+    migrate(conn)  # the other process got there first
+    assert backups.before_upgrade(cfg.db_path, every[-2][0], every[-1][0]) is None
+    assert not list((cfg.data_dir / "backups").glob(f"{backups.PRE_UPGRADE_PREFIX}*"))
+    conn.close()
+
+
+def test_reading_a_copys_version_leaves_nothing_beside_it(db, tmp_path):
+    copy = backups.copy_database(db, tmp_path / "copies" / "pre-upgrade-v1-to-v2-20260101-000000.db")
+    assert backups.copy_version(copy) == db.execute("PRAGMA user_version").fetchone()[0]
+    assert [p.name for p in copy.parent.iterdir()] == [copy.name]
+    assert backups.copy_version(copy.parent / "missing.db") is None
+
+
 def _corrupt(db, path, how):
     """Damage the live database the way a failing disk or a half-copied file does."""
     db.execute("PRAGMA wal_checkpoint(TRUNCATE)")

@@ -73,6 +73,56 @@ STAND_INS: dict[str, dict] = {
     # Mail flow (2.2): the whole message trace a day at a time, and Microsoft's top spam and phishing recipients.
     "Get-MessageTraceV2(EndDate,ResultSize,StartDate)": {"value": []},
     "Get-MailTrafficSummaryReport": {"value": []},
+    # Mail rules and protection (2.3): a tenant as Microsoft sets it up, with no rules or connectors, the
+    # default policies, and Defender for Office 365's built-in protection (Business Premium has it).
+    "Get-TransportRule": {"value": []},
+    "Get-InboundConnector": {"value": []},
+    "Get-OutboundConnector": {"value": []},
+    "Get-HostedContentFilterPolicy": {
+        "value": [
+            {
+                "Name": "Default",
+                "IsDefault": True,
+                "BulkThreshold": 7,
+                "SpamAction": "MoveToJmf",
+                "HighConfidenceSpamAction": "MoveToJmf",
+                "PhishSpamAction": "MoveToJmf",
+                "HighConfidencePhishAction": "Quarantine",
+                "BulkSpamAction": "MoveToJmf",
+                "AllowedSenderDomains": [],
+                "SpamZapEnabled": True,
+                "PhishZapEnabled": True,
+            }
+        ]
+    },
+    "Get-HostedContentFilterRule": {"value": []},
+    "Get-AntiPhishPolicy": {
+        "value": [
+            {
+                "Name": "Office365 AntiPhish Default",
+                "IsDefault": True,
+                "Enabled": True,
+                "EnableSpoofIntelligence": True,
+                "HonorDmarcPolicy": True,
+                "EnableUnauthenticatedSender": True,
+                "EnableMailboxIntelligenceProtection": False,
+                "EnableTargetedUserProtection": False,
+            }
+        ]
+    },
+    "Get-AntiPhishRule": {"value": []},
+    "Get-MalwareFilterPolicy": {
+        "value": [{"Name": "Default", "IsDefault": True, "EnableFileFilter": True, "FileTypes": ["exe", "iso"]}]
+    },
+    "Get-MalwareFilterRule": {"value": []},
+    "Get-SafeLinksPolicy": {
+        "value": [{"Name": "Built-In Protection Policy", "IsBuiltInProtection": True, "EnableSafeLinksForEmail": True}]
+    },
+    "Get-SafeLinksRule": {"value": []},
+    "Get-SafeAttachmentPolicy": {"value": [{"Name": "Built-In Protection Policy", "IsBuiltInProtection": True}]},
+    "Get-SafeAttachmentRule": {"value": []},
+    "Get-EOPProtectionPolicyRule": {"value": []},
+    "Get-ATPProtectionPolicyRule": {"value": []},
 }
 NEW_FIELDS: frozenset[str] = frozenset()
 
