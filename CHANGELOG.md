@@ -17,15 +17,6 @@ Yes, applied on start as usual: migration 41 adds a count of wrong passwords to 
 
 ### Changed
 
-- **Report tables fit the page.** A long list in a cell shows a short form you can open in place to see
-  every item, one a line: who a Conditional Access policy covers reads "breakglass@contoso.com + 11 admin
-  roles" rather than a paragraph of role names, and other lists show their first two and "+ N more".
-  Downloads keep every item. Columns get room by how long their values are, long email addresses wrap after
-  the "@", and headings no longer break at a hyphen. A table that still doesn't fit scrolls inside its card,
-  with its scrollbar in view and its first column pinned, instead of pushing the page sideways.
-- Every client page leads with the client's name, as the Overview does. Recommended projects, Report
-  history and Offboard put their own title under the tabs, and Evidence and certifications and each
-  evidence pack put theirs under the report picker with their downloads beside it, as detail reports do.
 - **All clients opens reports from the All reports menu**, the same one as a client's Reports tab: every
   report in columns with a search box, Monthly review, Insurance evidence and Checks included, instead of a
   drop-down list as tall as the screen. One row per client and Every row sit beside it; phones keep a list.
@@ -46,13 +37,6 @@ Yes, applied on start as usual: migration 41 adds a count of wrong passwords to 
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
-- Long names and addresses no longer run off the screen: on phones, Delete buttons that name a client,
-  group or person wrap, a headline figure such as "+3.8 GB a month" wraps inside its tile instead of over the
-  next one, evidence pages show every download format and their whole answers, and long sign-in
-  addresses in What changed and the Activity history break onto the next line. Settings > Users fits a
-  laptop, with Add a user beside the two-step sign-in policy under the list.
-- Evidence packs name the admin roles a Conditional Access policy leaves out of MFA ("Exchange Administrator
-  (role)") instead of showing their Microsoft IDs.
 - Pages no longer scroll sideways past the edge of the window: the All clients Checks page and Projects
   (hidden text in their tables widened the page), and on phones the monthly review's buttons and the
   History list on person, mailbox, group and site pages, where a long address now wraps.
