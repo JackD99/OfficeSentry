@@ -11,23 +11,11 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.3.0] - Unreleased
 
-### Added
+### Changed
 
-- **Settings → Updates** lists every release newer than yours with its notes, what each asks of you first
-  (Action required, New Microsoft permissions, Database upgrade, Security), and an **Update** button that
-  installs it. The button checks the release is genuine, with build provenance signed by Office Sentry's
-  release workflow on GitHub, downloads exactly that image, restarts the portal and the worker on it and, if
-  the new version doesn't start healthy, goes back to the old one by itself, database included. The page
-  follows the update through the portal's restart, and the activity log records who asked and how it ended.
-  Nothing installs unless an admin presses the button. Office Sentry asks GitHub for the list of releases
-  once a day (nothing about your server is sent, and the page can turn it off), and the foot of the menu
-  says when one is out.
-- The button needs the **updater**, a small container that is off until you turn it on with
-  `COMPOSE_PROFILES=updater` in `.env`, using this release's `docker-compose.yml`. It is the only part of
-  Office Sentry given the Docker socket; the portal never is. It only changes the image, so a release that
-  changes `docker-compose.yml` or `Caddyfile` says so and is updated by hand. Updating by hand works as
-  before, with or without it ([v2/DEPLOY.md, "The Update button"](v2/DEPLOY.md#the-update-button)).
-- A capability for it, *Install updates*, held by Administrators and available to custom roles.
+- **All clients opens reports from the All reports menu**, the same one as a client's Reports tab: every
+  report in columns with a search box, Monthly review, Insurance evidence and Checks included, instead of a
+  drop-down list as tall as the screen. One row per client and Every row sit beside it; phones keep a list.
 
 ### Fixed
 
@@ -42,12 +30,12 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   never granted isn't approved and sent a report with that part missing. A client that removed the app,
   whose report could only say "Nothing has been collected, so no security checks could run", is flagged
   "No checks could run": it was marked Ready and sent in bulk before.
-- An upgrade tried again within an hour of going back to the old version now copies the database again
-  first. Before, it reused the first attempt's copy, so going back a second time lost what was written in
-  between.
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
+- Pages no longer scroll sideways past the edge of the window: the All clients Checks page and Projects
+  (hidden text in their tables widened the page), and on phones the monthly review's buttons and the
+  History list on person, mailbox, group and site pages, where a long address now wraps.
 
 ## [2.2.0] - 2026-10-11
 
