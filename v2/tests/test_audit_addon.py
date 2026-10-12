@@ -163,6 +163,9 @@ def test_from_the_link_to_the_feed_and_off_again(app, client, db, vault, cfg, tw
     assert query["client_id"] == [CLIENT_ID]  # the add-on's own app, not the shared one
     assert client.post(f"/tenants/{alpha}/audit-addon/sent", data={"sent": "1"}).status_code == 302
     assert addon.state(addon.row_for(db, alpha)).key == "sent"
+    tracker = client.get("/admin/onboarding?show=all").get_data(as_text=True)
+    assert f'Add-on: <a href="/tenants/{alpha}/audit-addon">Sent</a>' in tracker
+    assert f'Add-on: <a href="/tenants/{bravo}/audit-addon">Not asked</a>' in tracker
 
     # The client's Global Administrator comes back from Microsoft, not signed in to Office Sentry.
     resp = app.test_client().get(

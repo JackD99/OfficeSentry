@@ -77,10 +77,9 @@ cloud too (**More options** before signing in).
    subscriptions (one GET), checking every hour until it can, or now with **Check now**. Once it's
    confirmed, it starts the feed and queues the first collection.
 
-The onboarding tracker has an **Audit log add-on** column (Not sent, Sent, Approved, On, Off) so you can
-see where each client has got. The tracker's **Audit log** column says whether the client's audit log is
-recording at all; if it's off, the add-on has nothing to read, so have the client turn it on in Microsoft
-Purview first.
+The onboarding tracker's **Audit log** column says whether each client's audit log is recording at all,
+and under it where the client has got with the add-on (Not asked, Sent, Approved, On, Off). If the audit
+log is off, the add-on has nothing to read, so have the client turn it on in Microsoft Purview first.
 
 Microsoft can take up to 12 hours after the feed starts to make the first records available, and doesn't
 give the past through the feed: the report fills from the day the feed started.

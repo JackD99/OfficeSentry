@@ -52,7 +52,7 @@
   <form method="post" action="{{ url_for('onboarding.bulk') }}" id="bulk">{{ csrf() }}<input type="hidden" name="show" value="{{ show }}"></form>
   <div class="scroll-x">
   <table class="stack-sm onboarding-table" id="onboarding-table">
-    <thead><tr><th><input type="checkbox" data-check-all aria-label="Select every client shown"></th><th>Client</th><th>Contact</th><th>State</th><th>Audit log</th>{% if addon %}<th>Audit log add-on</th>{% endif %}<th>Consent link</th><th><span class="sr-only">Actions</span></th></tr></thead>
+    <thead><tr><th><input type="checkbox" data-check-all aria-label="Select every client shown"></th><th>Client</th><th>Contact</th><th>State</th><th>Audit log</th><th>Consent link</th><th><span class="sr-only">Actions</span></th></tr></thead>
     <tbody>
     {% for e in entries %}{% set t = e.tenant %}{% set link = links.get(t.id) %}
     <tr>
@@ -63,11 +63,9 @@
         <span class="sub">{{ e.state.detail }}{% if e.state.key in ('sent', 'new_sent') and e.sent_at %} Sent {{ ts(e.sent_at) }}.{% endif %}</span></td>
       <td data-label="Audit log" class="wrap">{% if e.audit_log %}<span class="pill ok">On</span>
         {% elif e.audit_log is sameas false %}<span class="pill warn">Off</span><span class="sub">Turn it on in Microsoft Purview: Audit, then Start recording.</span>
-        {% else %}<span class="faint">Not known yet</span>{% endif %}</td>
-      {% if addon %}{% set a = addon[t.id] %}
-      <td data-label="Audit log add-on" class="wrap">{% if a.key == 'not_sent' %}<span class="faint">Not asked</span>{% else %}<span class="pill {{ a.tone }}">{{ a.label }}</span>{% endif %}
-        {% if t.consented_at %}<span class="sub"><a href="{{ url_for('audit_addon.client', tenant_id=t.id) }}">{{ 'Send the add-on link' if a.key == 'not_sent' else 'Open' }}</a></span>{% endif %}</td>
-      {% endif %}
+        {% else %}<span class="faint">Not known yet</span>{% endif %}
+        {% if addon %}{% set a = addon[t.id] %}{% set words = 'Not asked' if a.key == 'not_sent' else a.label %}
+        <span class="sub">Add-on: {% if t.consented_at %}<a href="{{ url_for('audit_addon.client', tenant_id=t.id) }}">{{ words }}</a>{% else %}{{ words }}{% endif %}</span>{% endif %}</td>
       <td data-label="Consent link">{% if not e.needs_link %}<span class="faint">Not needed</span>
         {% elif link %}<button type="button" class="sm" data-copy-text="{{ link }}">Copy link</button>
         {% else %}<span class="small bad-text">{{ e.problem }}</span>{% endif %}</td>
