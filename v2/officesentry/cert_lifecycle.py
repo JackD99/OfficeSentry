@@ -321,10 +321,10 @@ def _mark_warned(conn, e: Expiry) -> None:
 def fix_steps(e: Expiry) -> str:
     if e.kind == "sign_in":
         return (
-            "Open Settings → Staff sign-in in Office Sentry and press Make a new certificate. Upload its .cer to "
+            "Open Settings → Microsoft sign-in in Office Sentry and press Make a new certificate. Upload its .cer to "
             "the sign-in app in Entra, then switch to it."
             if not e.replacing
-            else "A replacement is ready. Open Settings → Staff sign-in, check its .cer is on the app in Entra and "
+            else "A replacement is ready. Open Settings → Microsoft sign-in, check its .cer is on the app in Entra and "
             "switch to it."
         )
     if e.kind == "mail":

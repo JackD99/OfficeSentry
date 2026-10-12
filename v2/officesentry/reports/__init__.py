@@ -13,6 +13,7 @@ from . import (  # noqa: F401
     group_page,
     group_structure,
     identity_reports,
+    intune_policies,
     licence_changes,
     mail_compliance,
     mail_flow,

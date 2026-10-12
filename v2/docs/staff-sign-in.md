@@ -2,7 +2,7 @@
 
 Your team can sign in to Office Sentry with the Microsoft account they already use at work, protected by
 your own Conditional Access and MFA, instead of a separate username, password and authenticator code. An
-admin sets it up once under **Settings → Staff sign-in**; it takes about two minutes.
+admin sets it up once under **Settings → Microsoft sign-in**; it takes about two minutes.
 
 What it is and isn't:
 
@@ -13,12 +13,13 @@ What it is and isn't:
 - Roles come from Entra: the app has an app role for each Office Sentry role, and you assign people (or a
   group) to one in the Entra admin centre. Which clients someone sees is still granted in Office Sentry, so
   tenant isolation works exactly as before.
-- Client accounts keep signing in with a password and two-step code.
+- Client accounts sign in with a password and two-step code, unless you also turn on
+  [client sign-in](client-sign-in.md): then your clients' people can use their own work account too.
 - Passwords stay as the way in for staff if Microsoft is ever down, until you turn them off.
 
 ## Setting it up
 
-1. Sign in to Office Sentry as an admin and open **Settings → Staff sign-in**.
+1. Sign in to Office Sentry as an admin and open **Settings → Microsoft sign-in**.
 2. Press **Sign in to Microsoft**. The page shows a code and a link to Microsoft's sign-in page.
 3. Open the link, enter the code and sign in as a Global Administrator of your own (the MSP's) tenant.
    Microsoft may ask you to let *Microsoft Graph Command Line Tools* (Microsoft's own app) manage apps for
@@ -81,11 +82,14 @@ in with Microsoft any more. The role on their user page follows Entra, so change
 
 **Custom roles** (made under *Settings → Users → Roles*) are reached the same way: create an app role on the
 sign-in app (*App registrations → Office Sentry sign-in → App roles*) with a value such as `ServiceDesk`, then
-type that value next to the role under *Who can sign in → Custom roles from Entra* on the Staff sign-in page.
+type that value next to the role under *Who can sign in → Custom roles from Entra* on the Microsoft sign-in page.
 They come after the built-in roles in the order above. Deleting a custom role removes its value too.
 
 New staff don't need an account made for them: their account appears on **Settings → Users** at their first
 sign-in. Then grant them clients on their user page as usual (or tick *Every client, including ones added later*, or a client group).
+To grant clients before their first sign-in, add them on **Settings → Users** with *Microsoft* under *How
+they sign in* and their sign-in name as the username: the account has no password, is connected at their
+first sign-in, and takes its role from Entra then.
 
 Existing accounts are linked to a Microsoft account in one of two ways:
 
@@ -96,8 +100,22 @@ Existing accounts are linked to a Microsoft account in one of two ways:
   verify), the two are linked automatically and their client grants are kept.
 
 A linked account shows its role as *set in Entra* on its user page; capabilities added or taken away for the
-person there still apply on top. An admin can **Disconnect** it there,
-after which the person signs in with a password again; the person can do the same on their Account page.
+person there still apply on top. Someone who manages users can **Disconnect** it there (an Administrator's
+account only by an Administrator), after which the person signs in with a password again; the person can do
+the same on their Account page.
+
+Signing in with Microsoft never asks for Office Sentry's own two-step sign-in, whatever
+`OFFICESENTRY_REQUIRE_MFA` says: it relies on Entra's MFA and Conditional Access, so require MFA for the
+sign-in app there.
+
+## Confirming a change without a password
+
+Some changes ask for your password again first, so a stolen session can't make them: setting someone's
+password, signing someone out everywhere and resetting their two-step sign-in. An account that signs in only
+with Microsoft has no password to type, so those forms show **Confirm with Microsoft** instead. It signs you in
+to Microsoft again (Microsoft asks for your password and MFA, whatever your session), and for the next ten
+minutes the change goes through on that browser. Confirming with a different Microsoft account than the one
+connected to yours confirms nothing.
 
 ## Turning passwords off for staff
 
@@ -132,6 +150,7 @@ old one in Entra.
 | *doesn't recognise Office Sentry's certificate* (AADSTS700027) | Upload the current `.cer` from the settings page to the app registration, or make a new certificate and upload that. |
 | *hasn't been given consent* (AADSTS65001) | Grant admin consent under *Permissions* on the enterprise app. |
 | *belongs to another tenant* (AADSTS50020) | The person signed in with an account outside your tenant (a client's, or a personal account). Guests aren't supported. |
+| *only accepts accounts from the MSP's own tenant* (AADSTS50194) | Client sign-in is on but the sign-in app wasn't changed to accept other organisations ([client sign-in](client-sign-in.md#setting-it-up), step 1). Staff can use the *Sign in with Microsoft as staff* link meanwhile. |
 | *Your Conditional Access policies blocked this sign-in* | Check the policy that applies to the sign-in app or the person. |
 
 Every refused sign-in is in **Settings → Activity log** with the reason.

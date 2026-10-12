@@ -1,0 +1,5 @@
+# Tools CI installs outside the project's own dependencies. requirements-ci.txt is made from this with
+# pip-compile (CONTRIBUTING.md, "Dependencies"), pinned with hashes like the project's own locks, so a run means
+# the same thing twice and a new release of one of the tools' own dependencies can't slip into CI. Dependabot
+# keeps both current (.github/dependabot.yml).
+pip-audit==2.10.1

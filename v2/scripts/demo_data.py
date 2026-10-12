@@ -860,6 +860,23 @@ def folders(rules: dict) -> dict:
     }
 
 
+def recovery_keys(managed: list[dict]) -> list[dict]:
+    """A saved BitLocker recovery key for each encrypted demo PC, except every seventh, whose key was never
+    saved (the Devices report flags those)."""
+    keys = list(devicedata.RECOVERY_KEYS)
+    for i, d in enumerate(m for m in managed if m["id"].startswith("md-d") and m["isEncrypted"]):
+        if i % 7 != 3:
+            keys.append(
+                {
+                    "id": f"key-{d['id']}",
+                    "createdDateTime": d["enrolledDateTime"],
+                    "deviceId": d["azureADDeviceId"],
+                    "volumeType": "1",
+                }
+            )
+    return keys
+
+
 def devices(users: list[dict], rng: random.Random) -> tuple[list[dict], list[dict]]:
     """A Windows PC per person: mostly current builds, a few on Windows 10, some not checking in or unencrypted."""
     entra, managed = list(devicedata.ENTRA_DEVICES), list(devicedata.MANAGED_DEVICES)
@@ -1783,6 +1800,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> 
         tenant_skus = skus(t, bp, basic)
         rng = random.Random(t["name"] + "extras")  # noqa: S311
         entra, managed = devices(everyone, rng)
+        keys = recovery_keys(managed)
         rules = inbox_rules(everyone)
         group_extras, access_extras = site_people(t, everyone, random.Random(t["name"] + "sites"))  # noqa: S311
         directory = directory_groups(now)
@@ -1795,7 +1813,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> 
                 },
                 "ROLE_DEFINITIONS": role_definitions(),
             },
-            devicedata: {"ENTRA_DEVICES": entra, "MANAGED_DEVICES": managed},
+            devicedata: {"ENTRA_DEVICES": entra, "MANAGED_DEVICES": managed, "RECOVERY_KEYS": keys},
             sharepoint_data: {**sharepoint(t, everyone, tenant_skus, now, first, rng), **access_extras},
             groupdata: {
                 "GROUPS": directory["GROUPS"] + group_extras["GROUPS"],

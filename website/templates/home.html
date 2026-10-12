@@ -94,7 +94,7 @@
     <article class="feature">
       <div class="feature-copy">
         <h3>47 detail reports you can filter, save and export</h3>
-        <p>Identity, email, files and Teams, devices and licences: MFA coverage, mail forwarding, mailbox permissions, mail flow per domain, sign-ins, Conditional Access, administrative units, Teams channels and their guests, who can reach each SharePoint site, licence changes month by month, licence right-sizing and more.</p>
+        <p>Identity, email, files and Teams, devices and licences: MFA coverage, mail forwarding, mailbox permissions, mail flow per domain, sign-ins, Conditional Access, administrative units, Teams channels and their guests, who can reach each SharePoint site, Intune policies and BitLocker recovery keys, licence changes month by month, licence right-sizing and more.</p>
         <ul class="ticks">
           <li>{{ check() }}Filter by any value or date, sort and hide columns</li>
           <li>{{ check() }}Save a view and reuse it on any client</li>
@@ -238,6 +238,8 @@
       <h3>Also included</h3>
       <ul class="security-list">
         <li><strong>Mail flow by domain</strong> Mail received and sent per domain, quarantined and failed mail, and who gets the most spam and phishing.</li>
+        <li><strong>Intune policies</strong> Which platforms have devices but no compliance policy, what each policy requires, paused update rings, and app protection for phones, with who each applies to.</li>
+        <li><strong>BitLocker recovery keys</strong> Which Windows computers have their recovery key saved in Entra ID, read without ever reading the key.</li>
         <li><strong>A support package</strong> One zip of versions, settings, health checks and logs to attach to a bug report, with keys, tokens, addresses and client names taken out.</li>
       </ul>
     </div>
@@ -325,6 +327,7 @@
     <details><summary>Can it change anything in a client's tenant?</summary><p>No. It only asks your clients' tenants for read permissions, and its code can't write to Microsoft Graph or run Exchange commands other than ones that read. The one thing it sends is your own email: reports and alerts, through your mail server or a separate app in your own tenant that can only send mail.</p></details>
     <details><summary>Does it read anyone's email?</summary><p>No. It reads settings, mailbox details such as size, forwarding and permissions, and inbox rules, never message contents. <a href="/docs/what-it-reads/">What Office Sentry reads</a> lists every permission, written for your clients.</p></details>
     <details><summary>Can my team sign in with their Microsoft accounts?</summary><p>Yes. Office Sentry creates a small sign-in app in your own tenant, with no access to anything else, and your staff sign in under your Conditional Access and MFA. Their role comes from Entra at every sign-in; which clients they see is still set in Office Sentry. <a href="/docs/staff-sign-in/">Staff sign-in</a> has the steps.</p></details>
+    <details><summary>Can my clients sign in with their own Microsoft accounts?</summary><p>Yes. Add each client's contacts by their work address and they sign in with the account they already use, under their own organisation's MFA, from their own company's tenant only. Nobody is invited into your tenant as a guest, and they only ever see their own company's reports. <a href="/docs/client-sign-in/">Client sign-in</a> has the steps.</p></details>
     <details><summary>Where is the data kept?</summary><p>On your own server, in one database you can back up and restore. Office Sentry has no telemetry, so nothing is sent to us.</p></details>
     <details><summary>How is it different from Microsoft's own admin centres?</summary><p>Microsoft shows one tenant at a time, in its own words, with little history. Office Sentry keeps every night's results for every client, compares them month by month and across clients, and turns them into branded reports.</p></details>
   </div>

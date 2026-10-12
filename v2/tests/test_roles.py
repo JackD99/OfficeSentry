@@ -34,6 +34,7 @@ ANYONE = {
     "home.choose",
     "sso.connect",
     "sso.disconnect",
+    "sso.confirm",
     "reports.overview",
     "tenants.dashboard",
     "tenants.tenant",

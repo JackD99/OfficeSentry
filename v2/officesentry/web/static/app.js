@@ -127,7 +127,8 @@
   else start();
 })();
 
-/* Copy buttons: data-copy="#id" copies that element's text (a textarea's value) to the clipboard and says so. */
+/* Copy buttons: data-copy="#id" copies that element's text (a textarea's value) to the clipboard and says so;
+ * data-copy-text="..." copies the attribute's own text (a link). */
 (function () {
   function fallback(text) {
     var box = document.createElement('textarea');
@@ -146,11 +147,14 @@
   // read from the page is ever parsed as HTML.
   var labels = new WeakMap();
   document.addEventListener('click', function (e) {
-    var button = e.target.closest && e.target.closest('[data-copy]');
+    var button = e.target.closest && e.target.closest('[data-copy], [data-copy-text]');
     if (!button) return;
-    var source = document.querySelector(button.getAttribute('data-copy'));
-    if (!source) return;
-    var text = source.value !== undefined ? source.value : source.textContent;
+    var text = button.getAttribute('data-copy-text');
+    if (text === null) {
+      var source = document.querySelector(button.getAttribute('data-copy'));
+      if (!source) return;
+      text = source.value !== undefined ? source.value : source.textContent;
+    }
     var done = navigator.clipboard && window.isSecureContext ? navigator.clipboard.writeText(text) : fallback(text);
     if (!labels.has(button)) labels.set(button, Array.prototype.slice.call(button.childNodes));
     var label = labels.get(button);
@@ -218,7 +222,7 @@
       .then(function (d) {
         if (!d) { setTimeout(check, 10000); return; }
         if (d.status !== 'waiting' && d.status !== 'working') { location.reload(); return; }
-        text.textContent = d.status === 'working' ? 'Signed in. Creating the app…'
+        text.textContent = d.status === 'working' ? (box.dataset.working || 'Signed in. Creating the app…')
           : (d.note || 'Waiting for you to sign in. This page moves on by itself.');
         if (left) { left.textContent = minutes(d.seconds_left); }
         setTimeout(check, Math.max(d.wait || 5, 2) * 1000);

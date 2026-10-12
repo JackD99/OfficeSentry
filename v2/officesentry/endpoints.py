@@ -181,6 +181,22 @@ GRAPH: tuple[Endpoint, ...] = (
         ("directory",),
         fallback="Needs Entra ID P2; skipped without it",
     ),
+    Endpoint(
+        "/identityGovernance/privilegedAccess/group/eligibilitySchedules",
+        V1,
+        "PrivilegedEligibilitySchedule.Read.AzureADGroup",
+        ("directory",),
+        fallback="One call per group that holds a role; needs Entra ID P2, and skipped until the client approves "
+        "the permission (2.2)",
+    ),
+    Endpoint(
+        "/informationProtection/bitlocker/recoveryKeys",
+        V1,
+        "BitLockerKey.ReadBasic.All",
+        ("directory",),
+        fallback="Never the key itself; skipped, and the Devices report says so, until the client approves the "
+        "permission (2.2)",
+    ),
     # Policies.
     Endpoint("/policies/authorizationPolicy", V1, "Policy.Read.All", ("directory",)),
     Endpoint("/policies/adminConsentRequestPolicy", V1, "Policy.Read.All", ("directory",)),
@@ -294,6 +310,31 @@ GRAPH: tuple[Endpoint, ...] = (
         "DeviceManagementManagedDevices.Read.All",
         ("intune",),
         fallback="Needs Intune; shown as unavailable without it",
+    ),
+    # Intune policies (permissions added in 2.2; skipped while the client hasn't approved them).
+    *(
+        Endpoint(
+            path,
+            V1,
+            permission,
+            ("intune",),
+            fallback="Needs Intune; skipped, and the Intune policies report says so, until the client approves "
+            "the permission",
+        )
+        for path, permission in (
+            ("/deviceManagement/deviceCompliancePolicies", "DeviceManagementConfiguration.Read.All"),
+            ("/deviceManagement/deviceConfigurations", "DeviceManagementConfiguration.Read.All"),
+            ("/deviceAppManagement/iosManagedAppProtections", "DeviceManagementApps.Read.All"),
+            ("/deviceAppManagement/androidManagedAppProtections", "DeviceManagementApps.Read.All"),
+        )
+    ),
+    Endpoint(
+        "/deviceManagement/configurationPolicies",
+        BETA,
+        "DeviceManagementConfiguration.Read.All",
+        ("intune",),
+        fallback="Needs Intune; skipped until the client approves the permission",
+        beta="Settings catalog and endpoint security policies (firewall, antivirus, disk encryption) are only in beta",
     ),
     # Mailbox settings.
     Endpoint("/users/{id}/mailFolders/inbox/messageRules", V1, "MailboxSettings.Read", ("outlook",)),

@@ -122,3 +122,12 @@ MANAGED_DEVICES = [
         "azureADDeviceId": "d-phone",
     },
 ]
+
+# Saved BitLocker recovery keys (the list never carries the key). LAPTOP-ANN has two for its system drive;
+# DESK-RECEPTION, hybrid joined and outside Intune, has none; OLD-PC's is left from long ago.
+RECOVERY_KEYS = [
+    {"id": "k1", "createdDateTime": days_ago(290), "deviceId": "d-ann", "volumeType": "1"},
+    {"id": "k2", "createdDateTime": days_ago(20), "deviceId": "d-ann", "volumeType": "1"},
+    {"id": "k3", "createdDateTime": days_ago(20), "deviceId": "d-ann", "volumeType": "2"},
+    {"id": "k4", "createdDateTime": days_ago(1400), "deviceId": "d-old", "volumeType": "1"},
+]

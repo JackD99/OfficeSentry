@@ -297,14 +297,17 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: v2/pyproject.toml
-      - run: pip install -r ../.github/requirements-ci.txt
+          cache-dependency-path: .github/requirements-ci.txt
+      # pip-audit and everything it needs, from their own hash-pinned lock.
+      - run: pip install --require-hashes -r ../.github/requirements-ci.txt
       # Every hash-pinned lock, without resolving anything: what the Docker image installs, what CI tests
-      # with, the browser tests and the website build.
+      # with, the browser and nightly tests, the website build and CI's own tools.
       - run: pip-audit --strict --disable-pip -r requirements.txt
       - run: pip-audit --strict --disable-pip -r requirements-dev.txt
       - run: pip-audit --strict --disable-pip -r tests/browser/requirements.txt
+      - run: pip-audit --strict --disable-pip -r tests/nightly/requirements.txt
       - run: pip-audit --strict --disable-pip -r ../website/requirements.txt
+      - run: pip-audit --strict --disable-pip -r ../.github/requirements-ci.txt
 
   # Developer Certificate of Origin (CONTRIBUTING.md, "Signing off"): every commit in a pull request from
   # outside the project carries a Signed-off-by line with its author's email. The maintainer's own pull

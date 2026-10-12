@@ -27,7 +27,14 @@ jobs:
       issues: write  # labels are managed through the issues API
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
+        with:
+          persist-credentials: false
+      # PyYAML as the dev lock pins it, with its hashes, rather than whatever is newest, since this job's token
+      # can change the repository's labels.
+      - name: Install PyYAML from the dev lock
+        run: |
+          awk '/^pyyaml==/ {p = 1} p {print} p && !/\\$/ {exit}' v2/requirements-dev.txt > "$RUNNER_TEMP/pyyaml.txt"
+          python3 -m pip install --quiet --disable-pip-version-check --require-hashes --no-deps -r "$RUNNER_TEMP/pyyaml.txt"
       - name: Sync (dry run on pull requests)
         env:
           GH_TOKEN: ${{ github.token }}

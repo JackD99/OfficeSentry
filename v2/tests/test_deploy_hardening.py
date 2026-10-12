@@ -131,6 +131,17 @@ def test_compose_keeps_the_containers_fenced_in():
     assert "header -Server" in (V2 / "Caddyfile").read_text(encoding="utf-8")
 
 
+def test_the_image_ships_without_pip():
+    """Nothing runs pip once the image is built, and the base image's copy trails pip's security fixes, so the
+    last build step removes it; the public demo, which installs more on top, brings Python's bundled copy back."""
+    dockerfile = (V2 / "Dockerfile").read_text(encoding="utf-8")
+    build, _, after = dockerfile.partition("pip uninstall --yes --quiet pip")
+    assert after and "RUN pip install --no-cache-dir --no-deps --no-build-isolation ." in build
+    assert "pip install" not in after and "\nRUN " not in after.split("USER sentry")[0]
+    demo = (V2 / "deploy" / "public" / "Dockerfile").read_text(encoding="utf-8")
+    assert demo.index("python -m ensurepip") < demo.index("pip install")
+
+
 def test_a_slow_upgrade_is_given_time_before_the_deploy_gives_up():
     """A database upgrade copies the whole database before the portal answers, which takes minutes on a large
     one: the health check's start period, the start script's wait and Docker's live-restore allow for it."""
@@ -266,8 +277,9 @@ def test_deploy_keeps_the_settings_files_out_of_the_demo_and_closes_ssh_after_a_
 
 
 def test_the_hetzner_token_and_the_backup_keys_stay_away_from_the_code_the_deploy_builds():
-    """The deploy job checks out code and builds the website with it (installing what that needs), so its
-    secrets go only to the steps that use them, and nothing is written into every later step's environment."""
+    """The deploy job checks out code and runs scripts from it on the server, so its secrets go only to the steps
+    that use them, and nothing is written into every later step's environment. The website, whose build installs
+    and runs the test tools and a browser, is built by a job of its own that holds no secrets."""
     workflow = (V2.parent / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
     server = yaml.safe_load(workflow)["jobs"]["server"]
     steps, names = server["steps"], [step.get("name") for step in server["steps"]]
@@ -284,9 +296,16 @@ def test_the_hetzner_token_and_the_backup_keys_stay_away_from_the_code_the_deplo
     assert closing["name"] == "Close SSH again"
     assert closing["if"] == "always() && steps.open-ssh.outputs.firewall_id != ''"
     assert closing["env"]["FIREWALL_ID"] == "${{ steps.open-ssh.outputs.firewall_id }}"
-    # The backup password and storage keys reach the disk only once the website's build has finished.
-    built = max(names.index("Take the website's screenshots and example reports"), names.index("Build the website"))
-    assert names.index("Write the server's settings files") > built
+    # Nothing is installed or downloaded to run on the runner that gets the SSH key, the Hetzner token and the
+    # backup keys: the website job builds the site and the server job only fetches the files.
+    website = yaml.safe_load(workflow)["jobs"]["website"]
+    assert "secrets." not in yaml.safe_dump(website) and website["permissions"] == {"contents": "read"}
+    # It runs whichever ref the deploy names, so it saves no cache that main's own runs would restore.
+    assert not [step for step in website["steps"] if "cache" in step.get("with", {})]
+    assert website["steps"][0]["with"]["ref"] == "${{ inputs.ref || github.sha }}"
+    assert "website" in server["needs"] and "Fetch the website" in names
+    assert not [step for step in steps if re.search(r"pip install|playwright", step.get("run", ""))]
+    assert not [step for step in steps if step.get("uses", "").startswith("actions/setup-python@")]
 
 
 def test_the_server_address_and_portal_name_stay_out_of_public_run_logs():
