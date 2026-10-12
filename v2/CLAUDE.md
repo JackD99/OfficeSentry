@@ -515,12 +515,15 @@ turning each step's `target` into a link.
   in a stacked table on a phone.
 - Report tables fit their card on a laptop: each column gets a width class from its longest value
   (`views._width`: `w-s` stays on one line, `w-m` and `w-l` wrap within limits), and long addresses may
-  wrap after their "@" (`wrappable`). A table that still doesn't fit scrolls inside its card, never the
+  wrap after their "@", and a long part of one (a long name before the "@", a mail server's host name)
+  after its dots too (`wrappable`). A table that still doesn't fit scrolls inside its card, never the
   page, with the sideways scrollbar in view and its first column pinned (`tables.js`, `edges`).
 - A report table that doesn't fit a 1366 px laptop opens on its default columns: the `Section` names the
   rest in `optional`, the Columns menu shows "7/11" and offers them (`show=` in the view, or a filter by
   one), and downloads keep them. Pick the columns that answer the report's question; leave out dates
-  created, second sizes and details a person's page has. The Users lists (people, mailboxes, groups,
+  created, second sizes and details a person's page has. A table that fits its own page but not Every row,
+  where the Client column takes its room, names the columns only Every row leaves out in
+  `optional_across` (`rollups.all_rows`). The Users lists (people, mailboxes, groups,
   sites) use the same `.table-scroll` box and width classes, and the person and object pages draw their
   cells with `_report_table.html`'s `cell`.
 - The menu folds to its icons on laptops (`.menu-folded` on `<html>`, `[data-fold]` in `app.js`,

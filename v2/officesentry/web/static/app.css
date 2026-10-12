@@ -975,6 +975,7 @@ details.menu[open] > summary { margin: 0; background: var(--sunken); }
   .table-scroll.snug td.w-m { min-width: 6em; }
   .table-scroll.snug td.w-l { min-width: 10em; }
   .table-scroll.snug td.wrap:first-child, .table-scroll.snug .flagcol + td.wrap { min-width: 10em; }
+  .table-scroll.snug td.tenant-col { min-width: 9em; }
   .table-scroll.snug :is(td, th):not(:first-child):not(:last-child) { padding-left: var(--space-2); padding-right: var(--space-2); }
   /* Too wide to fit (tables.js): it keeps to the screen's height, so its sideways scrollbar is never far away.
      Far too wide, its columns take the room they need, up to the widths above, rather than being squeezed for

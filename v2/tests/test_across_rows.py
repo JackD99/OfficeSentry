@@ -64,6 +64,28 @@ def test_all_rows_stacks_each_tenants_rows_with_a_tenant_column(db, two_tenants,
     assert not data.truncated("Widgets")
 
 
+def test_every_row_leaves_out_what_the_client_column_has_no_room_for(client, db, two_tenants, widgets, monkeypatch):
+    """A column a table names in optional_across starts under Columns on Every row only: the tenant's own page
+    has the room the Client column takes, and downloads keep it."""
+    builder = data_reports.REPORTS["widgets"][3]
+
+    def narrower(snap, now, report):
+        builder(snap, now, report)
+        report.sections[0].optional_across = ("Count",)
+
+    monkeypatch.setitem(data_reports.REPORTS, "widgets", ("Widgets", "Test widgets", (), narrower))
+    data = rollups.all_rows(db, _tenants(db), "widgets")
+    assert data.report.sections[0].optional == ("Count",)
+    make_user(db, "admin")
+    login(client, "admin")
+    alpha = _tenants(db)[0]["id"]
+    rows = client.get("/across/widgets/rows/widgets").get_data(as_text=True)
+    own = client.get(f"/tenants/{alpha}/data/widgets").get_data(as_text=True)
+    assert ">Count<" not in rows.split("<thead>", 1)[1].split("</thead>", 1)[0]
+    assert ">Count<" in own.split("<thead>", 1)[1].split("</thead>", 1)[0]
+    assert "Count" in _csv(client.get("/across/widgets/rows/widgets.csv").data)[0]
+
+
 def test_all_rows_caps_the_rows_and_says_so(client, db, two_tenants, widgets, monkeypatch):
     monkeypatch.setattr(rollups, "MAX_ROWS", 3)
     data = rollups.all_rows(db, _tenants(db), "widgets")

@@ -170,6 +170,7 @@ def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
         "didn't make them, make sure MFA is enforced for the account and check any success "
         "that followed.",
         empty=f"No account failed to sign in {REPEATED_FAILURES} or more times.",
+        optional_across=("Addresses",),
     )
     for a in sorted(accounts, key=lambda a: (-_n(a.get("failed")), _text(a.get("user")).lower())):
         if _n(a.get("failed")) < REPEATED_FAILURES:

@@ -484,7 +484,7 @@ def all_rows(conn, tenants, key: str, now: datetime | None = None, href=None, la
                     empty=s.empty,
                     compare=s.compare,
                     chart=s.chart,
-                    optional=s.optional,
+                    optional=s.optional + s.optional_across,
                 )
             cell = UserLink(t["name"], f"{href(t)}#{views.anchor(slug)}") if href else t["name"]
             totals[s.title] += len(s.rows)
