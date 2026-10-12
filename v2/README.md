@@ -470,6 +470,10 @@ These areas have no real recording and are tested with simulated data only:
 - **Intune policies, BitLocker recovery keys and PIM for groups**: the tenant
   hasn't approved the 2.2 permissions yet, so the replay covers the waiting
   state and the policies themselves are simulated.
+- **Mail rules and protection**: the recording was made before Office Sentry
+  read mail flow rules, connectors and filtering policies, so the replay
+  answers those commands with a new tenant's defaults, and rules, connectors
+  and changed policies are simulated.
 - **National clouds** (GCC High, DoD, China): there's no test tenant in
   them; the endpoints come from Microsoft's documentation.
 - **Risky sharing**: the tenant's shared file is shared with one person in the
