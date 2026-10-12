@@ -9,20 +9,267 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
-## [2.3.0] - Unreleased
+## [2.3.0] - 2026-10-12
+
+### Action required
+
+- **Updated to 2.2.0 without downloading its `docker-compose.yml` and `Caddyfile`, or without
+  `--profile https`?** Download both from the release and run `docker compose --profile https up -d`. Until
+  then the portal keeps 2.1.0's 30 seconds to start instead of 15 minutes, and Caddy keeps running without
+  2.2.0's hardening (responses still carry a `Server` header). [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating)
+  now says to download both every time, since releases change them without always saying so.
+- **Off-site backups set up by hand** ([v2/DEPLOY.md, "Off-site backups"](v2/DEPLOY.md#off-site-backups),
+  step 5): copy `deploy/jobs.sh` from this release's source over your copy, so a restore from the off-site
+  copy brings back the activity history too.
+- **Client sign-in with Microsoft** needs nothing on upgrade: it's off until an admin turns it on. Turning it
+  on makes the staff sign-in app accept other organisations' accounts (one setting on the app in your own
+  tenant, done by **Sign in to Microsoft** under *Settings → Microsoft sign-in*); who can sign in is still
+  decided by Office Sentry ([v2/docs/client-sign-in.md](v2/docs/client-sign-in.md)).
+
+### New Microsoft permissions
+
+None. The Intune policies report, BitLocker recovery keys and PIM for groups use the permissions clients were
+asked to approve with 2.2, and the mail rules and protection report uses read-only Exchange cmdlets under the
+access clients already gave.
 
 ### Database upgrade
 
-Yes, applied on start as usual: migration 41 adds a count of wrong passwords to each signed-in browser.
+Yes, applied on start as usual, after a copy of the database is made: migration 41 adds a count of wrong
+passwords to each signed-in browser, migration 42 records which Microsoft tenant each account signs in from,
+when each client's people first signed in with Microsoft and when a session last confirmed a change with
+Microsoft, and migration 43 adds a small table for what the month-end review leaves out of each client's
+month. Nobody's access changes.
+
+### Added
+
+- **Client sign-in with Microsoft.** A client's people can sign in with the work account they already use,
+  under their own organisation's MFA and Conditional Access, instead of a password from you. Each client's
+  **Settings → Client sign-in** page lists who there can sign in and how, adds their primary contacts by work
+  address (found in the client's directory as Office Sentry last collected it; report contacts without an
+  account are a click away), gives each person a sign-in link with their address filled in, and has a
+  message to send them and an approval link for their Microsoft 365 administrator, which asks for nothing but
+  sign-in. Office Sentry only lets them in from their own company's tenant, into their own client account,
+  matched on Microsoft's ID for that person and never on a name or address: never as staff, never into a new
+  account, whatever roles their own tenant gives them, and only ever to clients in their own organisation.
+  Nobody is invited into your tenant as a guest.
+- **Settings → Microsoft sign-in** (was *Staff sign-in*) has a *Your clients' people* card: let the sign-in
+  app accept clients' accounts with one Microsoft sign-in (or by hand), turn client sign-in on, and each
+  client's people and approval at a glance.
+- **Confirm with Microsoft.** An admin who signs in only with Microsoft has no password to type before a
+  security change (setting someone's password, signing someone out, resetting their two-step sign-in), so
+  those forms sign them in to Microsoft again instead; it counts for ten minutes.
+- **Adding staff who sign in with Microsoft** on *Settings → Users*: no password, the username is their
+  sign-in address, and the account is connected at their first sign-in. Staff can be granted clients before
+  they first sign in.
+- **Settings → Updates** lists every release newer than yours with its notes, what each asks of you first
+  (Action required, New Microsoft permissions, Database upgrade, Security), and an **Update** button that
+  installs it. The button checks the release is genuine, with build provenance signed by Office Sentry's
+  release workflow on GitHub, downloads exactly that image, restarts the portal and the worker on it and, if
+  the new version doesn't start healthy, goes back to the old one by itself, database included. The page
+  follows the update through the portal's restart, and the activity log records who asked and how it ended.
+  Nothing installs unless an admin presses the button. Office Sentry asks GitHub for the list of releases
+  once a day (nothing about your server is sent, and the page can turn it off), and the foot of the menu
+  says when one is out.
+- The button needs the **updater**, a small container that is off until you turn it on with
+  `COMPOSE_PROFILES=updater` in `.env`, using this release's `docker-compose.yml`. It is the only part of
+  Office Sentry given the Docker socket; the portal never is. It only changes the image, so a release that
+  changes `docker-compose.yml` or `Caddyfile` says so and is updated by hand. Updating by hand works as
+  before, with or without it ([v2/DEPLOY.md, "The Update button"](v2/DEPLOY.md#the-update-button)).
+- A capability for it, *Install updates*, held by Administrators and available to custom roles that see
+  every client (like *Settings* and *System status*, it does nothing for a role limited to some clients).
+- **Intune policies report** (Devices menu). Which platforms have devices enrolled but no compliance policy,
+  what each compliance policy requires in plain words, configuration profiles and Windows update rings
+  (deferral days, restart deadline, paused or not), endpoint security and settings catalog policies, and app
+  protection for iPhones and Android phones (PIN, sharing, copy and paste, backups), each with who it's
+  assigned to. Needs attention lists policies assigned to nobody, paused update rings, compliance policies
+  that require nothing and app protection without a PIN. It reads the Intune permissions clients approved
+  with 2.2; until a client has, the report says it's waiting.
+- **BitLocker recovery keys** in the Devices report: every Windows computer joined to Entra ID, whether its
+  recovery key is saved there, how many keys and when the newest was saved. Office Sentry reads only that a
+  key exists, never the key. A computer Intune reports as encrypted with no saved key is flagged, since it
+  can't be unlocked if it asks for its key.
+- **Two device checks**: *Windows computers have their BitLocker recovery key saved* and *Every platform in
+  use has a compliance policy*, both in the Device management with Intune project.
+- **PIM for groups in the Admins report**: people who can make themselves a member of a group that holds an
+  admin role are listed with that role as eligible, marked "(eligible member)" beside the group.
+- **Mail rules and protection report** (Email menu). Every mail flow (transport) rule in the order it runs,
+  with what it picks mail out by, what it does and its exceptions in plain words; inbound and outbound
+  connectors with their servers, domains and encryption; and the anti-spam, anti-phishing and anti-malware
+  policies, plus Safe Links and Safe Attachments where Defender for Office 365 is licensed, each with whom it
+  applies to and whether a Standard or Strict preset covers them. Needs attention lists rules that let mail
+  skip spam filtering or send copies outside the organisation, sender domains allowed past the spam filter,
+  spoof protection or the attachment filter turned off, and a filtering service's connector without
+  enhanced filtering.
+- **Five email checks**, all in the Email security project: *No mail flow rule lets mail skip spam
+  filtering*, *No mail flow rule sends mail outside the organisation*, *No sender domains are allowed past
+  the spam filter*, *Spoof protection is on* and *Risky attachment types are blocked*.
+- **Leave things out of one client's month-end report.** On the review screen, a failing check, a key
+  figure, a recommendation, a part of the monthly review (Licences, What changed, Accepted risks and the
+  rest) or a block of a report design can be left out of that client's copy for that month, and put back.
+  The design, other clients and next month stay as they are. Left-out items stay on the review screen,
+  greyed out with **Put back**, and the top of the page counts them with **Put everything back**; the sent
+  PDFs, the spreadsheet, the email and the client's portal copy never have them.
+- **A preview of the client's copy on the review screen**, beside the commentary and findings, switchable
+  between the plan's reports, and drawn again as things are left out or put back.
+- **Send failed months again from the queue.** After a mail outage, tick the clients whose email failed and
+  press **Approve and send selected**: each gets the same frozen files again, without opening it.
+- In the report designer: the preview is drawn at the printed page's width, so it lays out as the PDF does
+  (four key figures to a row, half-width blocks side by side); clicking a block in the preview opens its
+  settings; **Undo** and **Redo** (and Ctrl+Z); proper icons for move, half width, duplicate and remove; a
+  search box over the blocks; and a **Band on page one** cover for short reports, which the Executive summary
+  starter now uses.
+- **The menu folds away.** "Fold the menu" at the bottom of the sidebar shrinks it to its icons, giving
+  reports more room on a laptop, and it stays folded until you unfold it. Hover over an icon for its name.
 
 ### Changed
 
+- The users page's two-step advice no longer counts client accounts that sign in with Microsoft, and their
+  user page says their organisation's MFA applies instead.
+- Setup notes written for your team, like "Microsoft is hiding people's names… sign in to
+  admin.microsoft.com as a Global Admin", are left out of the client's copy of a report design. The portal
+  and the previews still show them, marked "Only your team sees this". A design can include them again
+  (**Include setup notes in the client's copy**), and the review can leave them out for one client and month.
+- **Wide reports open on the columns that matter.** All users, Sign-in activity, Distribution lists, Teams
+  channels, guests and apps, Licences and subscriptions, Automatic replies, Devices, Admin activity, Shared
+  mailboxes, Mailbox size trend and Mobile devices leave a few secondary columns (dates created, older sizes,
+  model) out of the page, so they fit a laptop. Columns shows how many are in view ("7/11") and brings the
+  rest back; filtering by one shows it, and downloads still have every column.
+- The Users lists (people, mailboxes, groups and sites) look and behave like report tables: long lists
+  scroll inside their card with the headings in view, dates stay on one line and long addresses wrap. On a
+  person's page, a long list of Conditional Access policies reads "7 policies" and opens in place.
+- **Report tables fit the page.** A long list in a cell shows a short form you can open in place to see
+  every item, one a line: who a Conditional Access policy covers reads "breakglass@contoso.com + 11 admin
+  roles" rather than a paragraph of role names, and other lists show their first two and "+ N more".
+  Downloads keep every item. Columns get room by how long their values are, long email addresses wrap after
+  the "@", and headings no longer break at a hyphen. A table that still doesn't fit scrolls inside its card,
+  with its scrollbar in view and its first column pinned, instead of pushing the page sideways.
+- Every client page leads with the client's name, as the Overview does. Recommended projects, Report
+  history and Offboard put their own title under the tabs, and Evidence and certifications and each
+  evidence pack put theirs under the report picker with their downloads beside it, as detail reports do.
+- **Recommended projects read like something you'd quote.** Directory sync that has stopped is now a quick fix,
+  a repair rather than something to sell, and the old *Directory sync health* project is replaced by **Move to
+  cloud-only accounts**: for a business of 50 users or fewer still syncing accounts from an office server, moving
+  the accounts and domain-joined computers to the cloud so the server can go. *App and consent governance* is now
+  *Third-party app review*, *Sharing, guests and Teams governance* is *File sharing and guest access*,
+  *SharePoint storage and archiving* is *Storage and archiving* and *Licence and account clean-up* is *Licence
+  savings and leaver clean-up*; statuses and notes you set on those are kept. A status set on *Directory sync
+  health* doesn't carry over to the new project, since it was about the repair.
+- **A proposal lists only the work the client needs.** "What the project covers", on the client's page and in the
+  proposal PDF, now lists the parts their findings call for, so it no longer offers risky sign-in handling to a
+  client with no risky sign-ins.
+- **Site owners, guests with full control of a site and outside people who can edit shared files** are part of
+  the File sharing and guest access project instead of separate quick fixes.
+- The line under each finding on a client's Projects page now reads "Goal: every site has at least two owners",
+  so it no longer looks like it contradicts "3 sites with no owner" above it. A failing directory sync check says
+  "Not syncing: last sync 19 hours ago".
+- A project picked in the month-end review lands on the client's report as "Project: Email security" rather than
+  "Email security project".
 - **All clients opens reports from the All reports menu**, the same one as a client's Reports tab: every
   report in columns with a search box, Monthly review, Insurance evidence and Checks included, instead of a
   drop-down list as tall as the screen. One row per client and Every row sit beside it; phones keep a list.
 
 ### Fixed
 
+- An upgrade tried again within an hour of going back to the old version now copies the database again
+  first. Before, it reused the first attempt's copy, so going back a second time lost what was written in
+  between.
+- The monthly review said a client's Microsoft 365 was "In good shape" when most checks couldn't run, for
+  example while only the tenant profile had been collected. It now says **Partly checked**, and how many of
+  the checks ran.
+- **Inactive accounts** said "Needs Entra ID P1" whatever the reason it had no figure. It now gives the
+  reason, such as "User data hasn't been collected yet".
+- In a report design, the headings of two half-width blocks side by side line up, on the page and in the PDF.
+- A report design previewed in dark mode drew its contact card dark on the light page; previews are light, as
+  the PDF is.
+- On phones, a table cell with more than one part keeps them together beside its label: a renewal's
+  "in 20 days" no longer drops to the far side of the next line, and a project count no longer sits in the
+  middle of the row.
+- Long names and addresses no longer run off the screen: on phones, Delete buttons that name a client,
+  group or person wrap, a headline figure such as "+3.8 GB a month" wraps inside its tile instead of over the
+  next one, evidence pages show every download format and their whole answers, and long sign-in
+  addresses in What changed and the Activity history break onto the next line. Settings > Users fits a
+  laptop, with Add a user beside the two-step sign-in policy under the list.
+- Evidence packs name the admin roles a Conditional Access policy leaves out of MFA ("Exchange Administrator
+  (role)") instead of showing their Microsoft IDs.
+- The Projects list fits a laptop screen: long client and project names wrap instead of pushing the Status
+  column out of view.
+- Restoring the off-site copy (`deploy/jobs.sh restore`) brings back the activity history as well as the
+  database. Before, a new server got the database only, so every sign-in and audit event older than the 30
+  days Microsoft keeps was gone, although the off-site copy held them.
+- A backup restored without its activity history (a database file moved on its own) now says so, and the next
+  collection reads back the 30 days Microsoft still keeps. Before, it said nothing, the Activity history page
+  claimed months it no longer had, and those 30 days weren't read again. [v2/DEPLOY.md, "Moving to a new
+  server"](v2/DEPLOY.md#moving-to-a-new-server) now moves the whole backups folder, history included.
+- **Check connection now**, saving the client ID and the other connection checks say when Office Sentry can't
+  reach Microsoft, or when Microsoft doesn't know the tenant (a mistyped domain or ID), instead of showing an
+  error page. A collection that can't reach Microsoft fails with that reason, not as a bug.
+- `restore` of a file the portal can't read (one put in with `docker compose cp`, which leaves it owned by
+  root) says so instead of failing with a traceback, and restoring or checking a `.db.gz` no longer leaves
+  `restore-*.db.part-shm` and `-wal` files behind. The activity history's backup manifest is readable by its
+  owner only, like the copies.
+- The Deploy workflow restarts Caddy after starting the portal, so a deploy that changes only a `Caddyfile`
+  takes effect (Caddy reads it only when it starts, and compose doesn't recreate it for that). The project
+  server's Caddy drops the portal's `Server` header too, as the bundled one does.
+- [v2/DEPLOY.md](v2/DEPLOY.md): *Rolling back an update* copies the key back before 2.0.0 runs anything, and
+  *Running your own build* keeps `docker-compose.override.yml` (the `/backups` folder) when `COMPOSE_FILE` is
+  set, since Docker stops reading it by itself then.
+- Spreadsheet downloads no longer fail when a tenant's text holds a control character (an inbox rule
+  name with a vertical tab, say); evidence documents drop them the same way.
+- Spreadsheets keep changes such as +4.6%, +2.2 and -1.5 GB, and dates written as "6 Feb 2026", as numbers
+  and dates Excel can sort, and 29% no longer reads 29.0%. Person, mailbox, group and site spreadsheets
+  open without Excel offering to repair them (they had a sheet called History, a name Excel keeps for
+  itself), and the summary sheet's links reach sheets whose names have an apostrophe.
+- CSV downloads show signed numbers such as +2, -1 and +4.6% without an apostrophe in front; anything
+  that could be read as a formula still gets one. CSV and text downloads name their character set once.
+- Change columns (30-day change, Growth a month) sort by size, so +21.1 GB comes above +7.7 GB, and names
+  with accented letters sort in place (Åsa with the As, Émile with the Es) instead of after Z.
+- A PDF of a report long enough to be cut at 2,000 rows counts every row in its figures and headings, as
+  the page and spreadsheet do.
+- The All clients review download marks its percentage columns with % and writes counts as whole numbers.
+- Headline figures now open exactly the rows they count: Replying outside the organisation (replies on now,
+  not scheduled ones), Admins with a gap, Global Administrators and Privileged accounts, No mail in 90
+  days, Signed in with an old protocol (sign-ins that worked), and Not synced in 90 days and Password over
+  a year old, which now count calendar days as their links do.
+- Deleted users and groups gives separate figures for users and for groups about to go for good, each
+  opening its own table, on the report and on All clients.
+- Shared mailboxes over 50 GB are no longer flagged as disabled accounts wasting a licence. The check read
+  mailbox sizes from the wrong place and never saw them.
+- Licence right-sizing matches a mailbox to its account when the mailbox address differs from the sign-in
+  name, so someone with a 48 GB mailbox and an archive isn't told Plan 1 will do. When Microsoft hides
+  names in usage reports it no longer suggests removing licences, which Licence waste already counts, and
+  a note says why.
+- When Microsoft hides names in usage reports, OneDrive and SharePoint show hidden owners as "Hidden name
+  (E6F395)", as the usage reports do, instead of a 32-character code.
+- Mail flow shows "Not read" instead of green zeros when Microsoft refuses the message trace, says why at
+  the top, and stays out of the All clients totals.
+- Site permissions no longer waits for the client's approval forever because one locked site answered
+  first while the permission is granted, and no longer passes "no guest has full control" when it couldn't
+  read a single site.
+- Teams no longer says it's waiting for the client's approval when the permissions are granted; a part
+  Microsoft refuses is reported as failed. Site access only says the SharePoint permission is awaited while
+  it is.
+- A tenant with no outbound spam policy reads Unknown for automatic forwarding instead of Blocked, and the
+  forwarding check can't run instead of passing.
+- Sign-in retention now removes legacy sign-ins (accounts, addresses and countries) too; they were kept
+  for good. A past day whose sign-in detail is gone says so instead of leaving its tables out.
+- What changed no longer lists a report's data as new when one of its sources hadn't been collected at the
+  start of the period, its sign-in detail was removed by retention, or the client approved a permission it
+  needs in between (every Teams channel and guest read as added). It says why it didn't compare them, and
+  no longer keeps saying a report is waiting for approval once the client has approved.
+- What changed ignores what moves only with the clock (Not synced for 201 days, No mail in 90 days, Inactive
+  for 6 to 12 months, Last 30 days), and a changed row shows as changed when another row has the same name
+  (two groups called Marketing) instead of as added and removed.
+- On a past day, What changed since then starts after the day shown. On a Changes page for chosen dates,
+  Open report shows each report as it was at the end date, and the spreadsheet names that date instead of
+  "Now".
+- Automatic replies keep their First seen on date, and mailbox and site growth keep their figures, once
+  older snapshots are pruned.
+- **Quick fixes in a report design's Projects block** (the Quarterly review has one) no longer carry a green
+  tick, which made a fix still to do look done. Each reads as it does on the Projects pages: what was found, with
+  "Goal: ..." under it, and a quick fix that isn't a check, like "No Defender for Office 365", leads with its name
+  instead of its explanation. In the PDF a quick fix no longer splits across two pages.
+- On phones the Group picker fits its row when a group has a long name: it cuts the name it shows instead
+  of widening Today, Clients, What changed, the All clients pages and the month-end queue.
 - **A large month-end no longer loses emails to Microsoft's sending limit.** Exchange Online takes 30
   messages a minute from one mailbox; approving more clients than that at once had the rest refused ("429
   ApplicationThrottled") and left Approved with "Send failed", to be sent again one by one. Approvals and
@@ -43,6 +290,54 @@ Yes, applied on start as usual: migration 41 adds a count of wrong passwords to 
 
 ### Security
 
+- Disconnecting someone's Microsoft account from their user page now needs the right to manage users, and
+  only an Administrator can do it to an Administrator. It needed only the right to change settings.
+- With staff passwords turned off, a staff account's right password now gets the same answer as a wrong one,
+  and counts as a failed attempt.
+- **Roles limited to some clients stay within them.** A custom role that sees only some clients, or a
+  person given a capability for themselves, could reach other clients through what runs Office Sentry:
+  client groups, editing a role held by someone with more access, the client import preview and team-wide
+  settings. Now client groups can only be changed by someone who manages clients and sees every one; a role
+  held by anyone who sees or does more than you can only be changed by an Administrator; the import preview
+  leaves out other clients; and *Settings* and *System status* only work for someone who sees every client.
+  The built-in roles were never affected.
+- **A report area someone can't open stays closed everywhere.** A role without a report area (an Account
+  manager has no identity reports, for example), or someone with an area taken away on one client, could
+  still get that area's reports through a scheduled email, the report history or a report design, and the
+  home pages counted findings they couldn't open. Now a schedule only sends reports its maker can open on
+  that client, and only someone who can open everything a schedule sends can change it; the report history
+  lists only reports the person can open and downloads need *Download files*; designs leave out tables the
+  viewer can't open; and the Clients, Today and Accounts pages and a client's home page count and show only
+  what the person may see. Every report email opens with the client's security summary, so setting one up,
+  changing it or previewing it, and previewing alerts, now needs *Security findings and reviews*: First line
+  no longer previews emails.
+- **Draft commentary waits for approval in every email.** For a client whose month-end reports wait for
+  approval, a monthly review attached to another scheduled email carried the month's commentary while it was
+  still in review. It now carries it once the month is approved. Clients also no longer see which member of
+  your team sent an email by hand, and staff-only notes follow *Review month-end reports* on each client.
+- **Release images you can check by their version tag.** Each release's multi-platform image, the one its
+  version tags point at and `docker pull` fetches, now has a signed build provenance of its own, so
+  `gh attestation verify oci://ghcr.io/jackd99/officesentry:<version> --repo JackD99/OfficeSentry` passes
+  ([SECURITY.md, "Checking a release"](SECURITY.md#checking-a-release)). Until now only each platform's build
+  was signed. The release notes give the image's digest.
+- The image no longer includes pip, which nothing uses once it's built and whose bundled copy trailed pip's
+  own security fixes.
+- The project's own GitHub workflows: the tools CI installs for itself come from a hash-pinned lock, and the
+  jobs that publish images or deploy no longer leave their token in the checked-out code or build the website
+  on the runner that holds the server's keys.
+- The support package also sweeps the System status checks it includes, whose messages can quote a run's or a
+  backup's error, and hides the portal's own address, the names a client or account had before it was renamed
+  or deleted, the data folder's path, IPv6 addresses and ranges, and secrets written in quotes or as a header
+  in printed data.
+- Behind a reverse proxy the portal no longer takes a path prefix from the forwarded headers, and sends HSTS only
+  when the visitor came over HTTPS, so a proxy that doesn't pass `X-Forwarded-Proto` shows by its absence
+  ([Securing the portal](v2/docs/securing-the-portal.md#behind-a-reverse-proxy)). The brand colours and logo
+  may be kept by the visitor's browser only, never a shared cache. The page that refuses a form sent with a
+  stale token keeps its script, and email previews also refuse links to other base addresses and form targets.
+- New tests attack client sign-in with Microsoft: a client's token can't reach another client, a staff
+  account or a new account, and staff limited to some clients can't connect or disconnect anyone outside
+  them. The isolation walk, the report area tests and the secrets crawl also run as a client signed in with
+  Microsoft.
 - Someone who manages users without being an Administrator, and has a capability taken away on one client,
   no longer counts as holding it everywhere: they can't give it to anyone, put it in a role, or change an
   account that holds it.
@@ -772,7 +1067,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
-[2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
+[2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0

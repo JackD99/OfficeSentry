@@ -737,7 +737,7 @@ Then install it with the **Update button** (below), or by hand:
    gave the keys their own volume, 2.2.0 gave the portal longer to start and
    hardened Caddy). Keep changes of your own in `docker-compose.override.yml`,
    which a new download doesn't touch.
-2. Set the new version in `.env` (`OFFICESENTRY_VERSION=2.2.0`).
+2. Set the new version in `.env` (`OFFICESENTRY_VERSION=2.3.0`).
 3. Run:
 
    ```bash
