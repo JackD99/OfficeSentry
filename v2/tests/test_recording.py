@@ -192,6 +192,26 @@ def test_names_emails_and_domains_get_consistent_placeholders(fixture):
     assert fixture["entries"][-1]["name"] == users["userPrincipalName"].split("@")[1]
 
 
+def test_names_microsoft_hides_stay_hidden():
+    """A tenant that hides names in usage reports sends 32-character codes; they stay codes in the fixture, so
+    the replay still shows hidden names."""
+    upn, name = "E6F3956464556EB0F7E310CCFAEBE1D1", "8815384BBDE8447FBF5C03DF8E19EBA2"
+    log = raw_log() + [
+        _graph(
+            "/beta/reports/getOffice365ActiveUserDetail(period='D30')",
+            {"value": [{"userPrincipalName": upn, "displayName": name}]},
+        ),
+        _graph(
+            "/beta/reports/getOneDriveUsageAccountDetail(period='D30')",
+            {"value": [{"ownerPrincipalName": upn.lower(), "ownerDisplayName": name}]},
+        ),
+    ]
+    entries = scrub(log, TENANT, CLIENT)["entries"]
+    assert entries[-2]["body"]["value"] == [{"userPrincipalName": upn, "displayName": name}]
+    assert entries[-1]["body"]["value"] == [{"ownerPrincipalName": upn.lower(), "ownerDisplayName": name}]
+    assert entries[1]["body"]["value"][0]["displayName"] == "Test User 1"  # real names are still replaced
+
+
 def test_guids_are_consistent_and_known_ids_are_kept(fixture):
     user_id = fixture["entries"][1]["body"]["value"][0]["id"]
     assert re.fullmatch(r"5e[0-9a-f]{6}-0000-4000-8000-[0-9a-f]{12}", user_id)

@@ -18,9 +18,15 @@ DATE_CELL = re.compile(
     r"^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?Z?)?"
     r"(?: \((\d+)d\)| \((expired)\))?$"
 )
-PERCENT = re.compile(r"^(-?\d+(?:\.\d+)?)%$")
-SIGNED = re.compile(r"^[+-]\d{1,9}$")
+# 6 Feb 2026, as identity reports and account pages write dates.
+PROSE_DATE = re.compile(r"^(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4})$")
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+PERCENT = re.compile(r"^([+-]?\d+(?:\.\d+)?)%$")
+SIGNED = re.compile(r"^[+-]\d{1,9}(\.\d+)?$")  # a change: "+4", "-1.5"
 WHOLE = re.compile(r"^(0|[1-9]\d{0,8})$")
+# Control characters XML can't hold (openpyxl's ILLEGAL_CHARACTERS_RE): tenant text can carry them (an inbox
+# rule named with a vertical tab), and a spreadsheet or Word document refuses them. Tab and newlines stay.
+CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 # Long unbroken text (addresses, URLs, paths) gets break opportunities after these characters.
 BREAK_AFTER = re.compile(r"([@/\\._=&?:-])")
 LONG_TOKEN = 16
@@ -31,6 +37,11 @@ def parse_date(value) -> tuple[date | datetime, str] | None:
     """``(when, suffix)`` for a date-shaped string, else None. ``suffix`` is "", "45" (days) or "expired"."""
     if not isinstance(value, str) or len(value) > 40:
         return None
+    if m := PROSE_DATE.match(value):
+        try:
+            return date(int(m[3]), MONTHS.index(m[2]) + 1, int(m[1])), ""
+        except ValueError:
+            return None
     m = DATE_CELL.match(value)
     if not m:
         return None
@@ -84,6 +95,11 @@ def pdf_cell(value) -> Markup:
     return breakable(display(value))
 
 
+def printable(text: str) -> str:
+    """``text`` without the control characters a spreadsheet or Word document can't hold."""
+    return CONTROL.sub("", text)
+
+
 def xlsx_value(value):
     """A cell for a spreadsheet: real dates and numbers where the text is one, never a formula."""
     if value is None:
@@ -93,13 +109,15 @@ def xlsx_value(value):
     if isinstance(value, (int, float, date)):
         return value
     if isinstance(value, (list, tuple, set)):
-        return ", ".join(str(v) for v in value)
-    text = str(value)
+        return printable(", ".join(str(v) for v in value))
+    text = printable(str(value))
     parsed = parse_date(text)
     if parsed is not None:
         return parsed[0]
     if m := PERCENT.match(text):
         return float(m.group(1)) / 100
-    if SIGNED.match(text) or WHOLE.match(text):
+    if m := SIGNED.match(text):
+        return float(text) if m[1] else int(text)
+    if WHOLE.match(text):
         return int(text)
     return text

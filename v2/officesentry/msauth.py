@@ -29,19 +29,35 @@ def _check_resource(resource: str, cloud: str | None) -> None:
         raise ValueError(f"{resource} isn't a {c.label} resource")
 
 
-def secret_token_provider(
-    tenant_ref: str, client_id: str, secret: str, resource: str, cloud: str | None = None
-) -> Callable[[], str]:
-    """Client-secret variant, used by the ``live-test`` command and the MSP's own mail app."""
-    import msal
+def _client_token(tenant_ref: str, client_id: str, credential, resource: str, cloud: str | None) -> Callable[[], str]:
+    """A token provider signing in as the app with ``credential``. Every failure is a ``TokenError``.
 
-    _check_resource(resource, cloud)
-    app = msal.ConfidentialClientApplication(
-        client_id=client_id, authority=authority(tenant_ref, cloud), client_credential=secret
-    )
+    MSAL looks the tenant up with Microsoft when the app is made, so it's made on the first token request, not
+    here: a server that can't reach Microsoft, or a tenant Microsoft doesn't know, is then a sign-in failure the
+    caller explains, and a provider kept between runs tries again next time.
+    """
+    import msal
+    import requests
+
+    app = None
+    lock = threading.Lock()
 
     def token() -> str:
-        result = app.acquire_token_for_client(scopes=[f"{resource}/.default"])
+        nonlocal app
+        try:
+            with lock:
+                if app is None:
+                    try:
+                        app = msal.ConfidentialClientApplication(
+                            client_id=client_id, authority=authority(tenant_ref, cloud), client_credential=credential
+                        )
+                    except ValueError as exc:
+                        # The tenant lookup failed. Microsoft's answer (AADSTS90002 for a tenant it doesn't know)
+                        # is in the error MSAL raised this one from.
+                        raise TokenError("invalid_tenant", str(exc.__context__ or exc)) from exc
+            result = app.acquire_token_for_client(scopes=[f"{resource}/.default"])
+        except requests.RequestException as exc:
+            raise TokenError("network_error", f"Couldn't reach Microsoft's sign-in service: {exc}") from exc
         if "access_token" not in result:
             raise TokenError(
                 result.get("error", "auth_failed"), result.get("error_description", "token request failed")
@@ -49,6 +65,14 @@ def secret_token_provider(
         return result["access_token"]
 
     return token
+
+
+def secret_token_provider(
+    tenant_ref: str, client_id: str, secret: str, resource: str, cloud: str | None = None
+) -> Callable[[], str]:
+    """Client-secret variant, used by the ``live-test`` command and the MSP's own mail app."""
+    _check_resource(resource, cloud)
+    return _client_token(tenant_ref, client_id, secret, resource, cloud)
 
 
 def federated_token_provider(
@@ -56,22 +80,8 @@ def federated_token_provider(
 ) -> Callable[[], str]:
     """Federated-credential variant: ``assertion`` returns a token another identity provider issued (GitHub
     Actions' OIDC token, for the live canary), which the app trusts instead of holding a secret."""
-    import msal
-
     _check_resource(resource, cloud)
-    app = msal.ConfidentialClientApplication(
-        client_id=client_id, authority=authority(tenant_ref, cloud), client_credential={"client_assertion": assertion}
-    )
-
-    def token() -> str:
-        result = app.acquire_token_for_client(scopes=[f"{resource}/.default"])
-        if "access_token" not in result:
-            raise TokenError(
-                result.get("error", "auth_failed"), result.get("error_description", "token request failed")
-            )
-        return result["access_token"]
-
-    return token
+    return _client_token(tenant_ref, client_id, {"client_assertion": assertion}, resource, cloud)
 
 
 def certificate_token_provider(
@@ -83,24 +93,8 @@ def certificate_token_provider(
     cloud's Graph or Exchange root, or one of its SharePoint hosts. MSAL caches the token in memory and
     renews it before expiry.
     """
-    import msal
-
     _check_resource(resource, cloud)
-    app = msal.ConfidentialClientApplication(
-        client_id=client_id,
-        authority=authority(tenant_ref, cloud),
-        client_credential={"private_key": key_pem, "thumbprint": thumbprint},
-    )
-
-    def token() -> str:
-        result = app.acquire_token_for_client(scopes=[f"{resource}/.default"])
-        if "access_token" not in result:
-            raise TokenError(
-                result.get("error", "auth_failed"), result.get("error_description", "token request failed")
-            )
-        return result["access_token"]
-
-    return token
+    return _client_token(tenant_ref, client_id, {"private_key": key_pem, "thumbprint": thumbprint}, resource, cloud)
 
 
 # Token providers kept between runs, so a tenant's nightly runs sign in once per

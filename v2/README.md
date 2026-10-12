@@ -356,14 +356,17 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
   with *Recommended projects*): each client's failing checks and missing
   licences grouped into the projects that fix them (Identity and Conditional
   Access, Device management, Email security, Windows upgrade, Security licence
-  upgrade and more), worst first, with the findings behind each, the size of
-  the job and a rough estimate. Only work of half a day or more is a project;
-  smaller jobs (and urgent small ones, like one admin without MFA) are listed
-  as quick fixes on the client's page and offered separately in the month-end
-  review. Account managers mark each project Proposed, Agreed or Declined with
-  a note (XLSX and CSV of the list), and download a client-facing proposal PDF
-  without the notes or estimates. Accepted risks don't count, and a project
-  drops off once its findings are fixed.
+  upgrade, Move to cloud-only accounts for small businesses still syncing from
+  an office server, and more), worst first, with the findings behind each, the
+  parts of the project those findings call for, the size of the job and a
+  rough estimate. Only work of half a day or more is a project; smaller jobs
+  (and urgent small ones, like one admin without MFA) and repairs (directory
+  sync that has stopped) are listed as quick fixes on the client's page and
+  offered separately in the month-end review. Account managers mark each
+  project Proposed, Agreed or Declined with a note (XLSX and CSV of the list),
+  and download a client-facing proposal PDF without the notes or estimates.
+  Accepted risks don't count, and a project drops off once its findings are
+  fixed.
 - **Client view**: client users land on a page that leads with their latest
   monthly review (page and PDF), then open recommendations with their status,
   key numbers, the other reports and who to contact at the MSP; they don't see

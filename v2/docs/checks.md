@@ -110,7 +110,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
 | **Every licence assignment works**<br>`licence_assignment_errors` | `groups`, `tenant_profile`, `users` |  | Fix each failed licence from the group's Licenses page in the Entra admin center: buy more licences when there aren't enough, remove licences that conflict, and correct usage locations. The Licences and subscriptions report explains each error. |
-| **No licences on disabled accounts**<br>`licensed_disabled` | `mailboxes`, `users` |  | Remove licences from disabled accounts, or convert leavers' mailboxes to shared mailboxes (free up to 50 GB) before removing the licence. |
+| **No licences on disabled accounts**<br>`licensed_disabled` | `mailbox_usage`, `mailboxes`, `users` |  | Remove licences from disabled accounts, or convert leavers' mailboxes to shared mailboxes (free up to 50 GB) before removing the licence. |
 | **No subscriptions are about to lapse**<br>`subscriptions_lapsing` | `tenant_profile` |  | Renew subscriptions in their grace period, buy or cancel trials people use before they end, and move people off suspended subscriptions. Billing > Your products in the Microsoft 365 admin center (or Partner Center for subscriptions you sell) shows each one. |
 | **No paid licences sit unassigned**<br>`unassigned_licences` | `tenant_profile` |  | Reduce the subscription quantity at the next renewal, or assign the spare licences. |
 

@@ -1,7 +1,7 @@
 {#- One tenant's recommended projects (projects.recommend). Staff only. -#}
 {% extends "base.html" %}
 {% from "_macros.html" import icon, tenant_header, downloads with context %}
-{% from "_projects.html" import status_pill, status_form with context %}
+{% from "_projects.html" import reason, status_pill, status_form with context %}
 {% block title %}Projects · {{ tenant.name }}{% endblock %}
 {% block content %}
 {{ tenant_header(tenant, 'projects', title='Recommended projects') }}
@@ -22,11 +22,10 @@
   <div class="project-cols">
     <div><h3 class="col-title">What we found</h3>
       <ul class="list compact">{% for r in rec.reasons %}
-        <li><span class="sevtext {{ r.severity }}">{{ r.severity }}</span><span class="grow">{% if r.check %}<a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}#check-{{ r.check }}">{{ r.summary }}</a>{% else %}{{ r.summary }}{% endif %}
-          <span class="desc">{{ r.title }}</span></span></li>{% endfor %}
+        <li><span class="sevtext {{ r.severity }}">{{ r.severity }}</span><span class="grow">{{ reason(tenant, r) }}</span></li>{% endfor %}
       </ul></div>
     <div><h3 class="col-title">What the project covers</h3>
-      <ul class="covers">{% for c in p.covers %}<li>{{ c }}</li>{% endfor %}</ul></div>
+      <ul class="covers">{% for c in rec.covers %}<li>{{ c }}</li>{% endfor %}</ul></div>
   </div>
   {{ status_form(tenant, rec, statuses) }}
   {% if rec.updated_by %}<p class="footnote">Last changed by {{ rec.updated_by }}, {{ rec.updated_at|ago }}.</p>{% endif %}
@@ -41,14 +40,14 @@
 {% if quick %}
 <section class="card flush" id="quick-fixes">
   <div class="card-head toolbar"><div><h2>Quick fixes <span class="count-badge">{{ quick|length }}</span></h2>
-    <p class="muted small">Smaller jobs to just do, worst first ({{ quick_hours|lower }} in all). Critical ones are here even when a project covers the rest, so they don't wait on a sale.</p></div></div>
+    <p class="muted small">Smaller jobs and repairs to just do, worst first ({{ quick_hours|lower }} in all). Critical ones are here even when a project covers the rest, so they don't wait on a sale.</p></div></div>
   <div class="table-scroll">
   <table class="stack-sm">
     <thead><tr><th>What we found</th><th>Priority</th><th>What to do</th><th>Estimate</th></tr></thead>
     <tbody>
     {% for r in quick %}
     <tr>
-      <td>{% if r.check %}<a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}#check-{{ r.check }}">{{ r.summary }}</a>{% else %}{{ r.summary }}{% endif %}<span class="sub muted">{{ r.title }}</span></td>
+      <td>{{ reason(tenant, r, 'sub muted') }}</td>
       <td data-label="Priority"><span class="sevtext {{ r.severity }}">{{ r.severity }}</span></td>
       <td data-label="What to do" class="wrap small">{{ r.action }}</td>
       <td data-label="Estimate" class="nowrap small">{{ r.effort }}</td>

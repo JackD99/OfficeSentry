@@ -49,7 +49,7 @@ def signins_csv(tenant_id: int, period: str):
     filename = f"sign-ins-{period}-{tables.slug(t['name'])}.csv"
     return Response(
         rows(),
-        mimetype="text/csv; charset=utf-8",
+        mimetype="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
