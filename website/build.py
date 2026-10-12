@@ -294,11 +294,11 @@ GUIDES = "Guides"  # v2/docs/*.md not listed above
 # main. `icon` is one of the icons in templates/home.html.
 WHATS_NEW = {
     "version": "2.3.0",
-    "title": "Your clients sign in with Microsoft, and Intune gets its own report",  # the band's heading
+    "title": "Your clients sign in with Microsoft, and updates take one click",  # the band's heading
     # a sentence under it
-    "summary": "Your clients' people sign in with the account they already use, Intune policies and BitLocker "
-    "keys are reported, and recommended projects read like something you'd quote.",
-    "chip": "Client sign-in with Microsoft",  # a few words for the link at the top of the page
+    "summary": "Your clients' people sign in with the account they already use, new releases install from the "
+    "portal, and each client's month-end report is yours to finish.",
+    "chip": "Client sign-in, one-click updates",  # a few words for the link at the top of the page
     "items": [  # {"icon", "title", "text", "href", "link"}: "link" names the page "href" opens
         {
             "icon": "sign-in",
@@ -309,11 +309,28 @@ WHATS_NEW = {
             "link": "Client sign-in",
         },
         {
+            "icon": "update",
+            "title": "Update from the portal",
+            "text": "Settings → Updates lists each new release and what it asks of you first. With the optional "
+            "updater on, Update checks the release is genuine, installs it and goes back to the old version by "
+            "itself if the new one doesn't start.",
+            "href": "/docs/install/#the-update-button",
+            "link": "The Update button",
+        },
+        {
+            "icon": "review",
+            "title": "Each client's month-end report, your way",
+            "text": "Leave a check, a key figure or a whole part of the report out of one client's copy for one "
+            "month, with a preview of what they'll get beside you, and send failed emails again in one go.",
+            "href": "/docs/reference/#report-designs-your-own-client-reports",
+            "link": "Report designs and the review",
+        },
+        {
             "icon": "device",
-            "title": "Intune policies and BitLocker keys",
-            "text": "A new Intune policies report shows platforms with no compliance policy, paused update rings and "
-            "phones without app protection. The Devices report shows which computers have their BitLocker key "
-            "saved, without reading the key.",
+            "title": "Intune policies and mail rules",
+            "text": "Two new reports: Intune policies, with platforms that have no compliance policy and paused "
+            "update rings, and Mail rules and protection, with rules that let mail skip the spam filter. Devices "
+            "shows which computers have their BitLocker key saved, without reading the key.",
             "href": "/docs/reference/#reports",
             "link": "See every report",
         },
@@ -331,9 +348,12 @@ WHATS_NEW = {
         },
     ],
     "also": [  # smaller changes, a few words each
+        "five more email checks",
+        "report designs previewed at the printed page's size, with undo and redo",
+        "setup notes for your team left out of the client's copy",
         "release images with a signed build record you can check",
         "roles limited to some clients stay within them everywhere",
-        "month-end emails sent at Microsoft's pace, however many clients you approve at once",
+        "month-end emails sent at Microsoft's pace, however many go at once",
         "PIM for groups in the Admins report",
         "sign-in and sessions tested harder, on every page",
     ],

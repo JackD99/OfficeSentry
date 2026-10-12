@@ -79,6 +79,7 @@
           <li>{{ check() }}At a glance: what was checked, what changed and the key figures</li>
           <li>{{ check() }}This month: findings found and fixed, what was done and what to do next</li>
           <li>{{ check() }}Each failing check, Secure Score and licence waste in money</li>
+          <li>{{ check() }}Leave anything out of one client's copy for a month, with a preview of what they'll get</li>
           <li>{{ check() }}A web page, a branded PDF, a two-page summary PDF and a spreadsheet</li>
         </ul>
         <a class="more" href="/examples/monthly-security-licensing-review.pdf">Open the example PDF</a>
@@ -96,7 +97,7 @@
         <ul class="ticks">
           <li>{{ check() }}Blocks for everything a report needs: a verdict, key figures, failing checks, what changed, licence spend, a table from any detail report and your own text</li>
           <li>{{ check() }}Drag blocks in, set each one up and put two side by side</li>
-          <li>{{ check() }}Preview it on any client and download the PDF in one click</li>
+          <li>{{ check() }}Preview it on any client at the printed page's size, with undo and redo, and download the PDF in one click</li>
           <li>{{ check() }}<span>Start from an executive summary, a full review, a licensing review or the Quarterly review (<a href="/examples/quarterly-review.pdf">example PDF</a>)</span></li>
         </ul>
         <a class="more" href="{{ demo_url }}/reporting/designs/1">See the designer in the demo</a>
@@ -326,7 +327,7 @@
       <li><strong>Every client kept apart.</strong> People see only the clients they're given, and only what their role opens there. Clients see only their own reports, and when they sign in with Microsoft, only from their own organisation's tenant.</li>
       <li><strong>Your team signs in your way.</strong> Staff sign in with a password and a code from an authenticator app, or with their Microsoft work account under your own Conditional Access and MFA, through a sign-in app in your tenant that has no access to anything else.</li>
       <li><strong>Runs on your own server.</strong> Your clients' data stays with you. There's no telemetry: nothing is sent to us.</li>
-      <li><strong>Releases you can check.</strong> Each release image carries a signed record of how it was built, so you can check it came from this project's code before you run it.</li>
+      <li><strong>Releases you can check.</strong> Each release image carries a signed record of how it was built, so you can check it came from this project's code before you run it. The Update button checks it before it installs anything.</li>
     </ul>
   </div>
 </section>
@@ -370,6 +371,7 @@
     <details><summary>Does it read anyone's email?</summary><p>No. It reads settings, mailbox details such as size, forwarding and permissions, and inbox rules, never message contents. <a href="/docs/what-it-reads/">What Office Sentry reads</a> lists every permission, written for your clients.</p></details>
     <details><summary>Can my team sign in with their Microsoft accounts?</summary><p>Yes. Office Sentry creates a small sign-in app in your own tenant, with no access to anything else, and your staff sign in under your Conditional Access and MFA. Their role comes from Entra at every sign-in; which clients they see is still set in Office Sentry. <a href="/docs/staff-sign-in/">Staff sign-in</a> has the steps.</p></details>
     <details><summary>Can my clients sign in with their own Microsoft accounts?</summary><p>Yes. Add each client's contacts by their work address and they sign in with the account they already use, under their own organisation's MFA, from their own company's tenant only. Nobody is invited into your tenant as a guest, and they only ever see their own company's reports. <a href="/docs/client-sign-in/">Client sign-in</a> has the steps.</p></details>
+    <details><summary>How do I update it?</summary><p><em>Settings → Updates</em> lists every newer release with its notes and anything to do first. Turn on the optional updater and its Update button installs a release, after checking it's genuine, and goes back to the old version by itself if the new one doesn't start. Updating by hand with Docker works as well. <a href="/docs/install/#updating">Updating</a> has both.</p></details>
     <details><summary>Where is the data kept?</summary><p>On your own server, in one database you can back up and restore. Office Sentry has no telemetry, so nothing is sent to us.</p></details>
     <details><summary>How is it different from Microsoft's own admin centres?</summary><p>Microsoft shows one tenant at a time, in its own words, with little history. Office Sentry keeps every night's results for every client, compares them month by month and across clients, and turns them into branded reports.</p></details>
   </div>
