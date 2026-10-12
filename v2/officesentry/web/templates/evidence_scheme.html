@@ -7,7 +7,7 @@
 {% set here = {'tenant_id': tenant.id, 'scheme': scheme.key} %}
 {% set here_since = dict(here, since=since) if since else here %}
 {% block content %}
-{{ tenant_header(tenant, 'evidence', title=scheme.title) }}
+{{ tenant_header(tenant, 'evidence') }}
 <div class="report-layout">
 {{ report_picker(tenant, 'evidence') }}
 <div class="report-main" id="report" tabindex="-1">
@@ -18,13 +18,18 @@
   {% for title, found in groups if scheme in found %}{% for s in found %}<a href="{{ url_for('evidence.scheme_page', tenant_id=tenant.id, scheme=s.key) }}"{% if s.key == scheme.key %} class="active" aria-current="page"{% endif %}>{{ s.short }}</a>{% endfor %}{% endfor %}
 </nav>
 
-<div class="toolbar">
-  <p class="muted small m0 intro-line">{{ scheme.intro }}</p>
+<div class="toolbar report-title">
+  <div>
+    <h2 class="section-title">{{ scheme.title }}</h2>
+    <p class="muted small m0">{{ scheme.intro }}</p>
+  </div>
+  <div class="toolbar-actions">
   {{ downloads([('PDF', url_for('evidence.scheme_pdf', **here), 'Evidence pack with the verdicts, fixes and answers'),
                 ('Word', url_for('evidence.scheme_docx', **here), 'To paste from or send on'),
                 ('Text', url_for('evidence.scheme_text', **here), 'Plain text to paste from'),
                 ('XLSX', url_for('evidence.scheme_xlsx', **here), ''),
                 ('CSV', url_for('evidence.scheme_csv', **here), '')]) }}
+  </div>
 </div>
 
 <div class="callout verdict-callout {{ HEAD_TONE[r.headline.tone] }}" role="status">

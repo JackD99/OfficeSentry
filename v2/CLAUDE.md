@@ -32,7 +32,9 @@ overview and DEPLOY.md for running it on a server.
   one of its objects) with another tenant's IDs and expects a refusal, then
   opens every GET route with the granted tenant's IDs (every download read
   inside, PDFs as their page) and posts every form with the other tenant's
-  IDs, and expects nothing of the other tenant. A new
+  IDs, and expects nothing of the other tenant (clients included, with a
+  password and signed in with Microsoft; `tests/test_client_sign_in_attacks.py`
+  attacks that sign-in itself). A new
   URL argument fails there until it's listed in `TENANT_ARGS` (seed an object
   for it in `_objects`) or `OTHER_ARGS`. Templates use
   `can('<capability>', tenant.id)` to show or hide; never `current_user.role`
@@ -75,8 +77,9 @@ overview and DEPLOY.md for running it on a server.
   running it, and reports and checks show it as unavailable with that reason.
 - **Credentials never touch disk as files** and are never sent to the browser.
   `tests/test_no_secrets_downloadable.py` plants one of every kind of secret
-  and searches every page and download, as an admin, an analyst and a client,
-  for any of them; a new kind of secret gets planted there.
+  and searches every page and download, as an admin, an analyst and a client
+  (with a password and signed in with Microsoft), for any of them; a new kind
+  of secret gets planted there.
 - **Mock Graph with `responses`, never by replacing `GraphClient`.**
 - **Sessions are server-side** (`web/sessions.py`). To sign someone out, bump
   `users.session_version` or delete their `sessions` rows; never trust anything
@@ -496,9 +499,15 @@ turning each step's `target` into a link.
   a named one (Severity, Priority) keeps its column. A table showing `views.NOTES_FROM` columns or more
   draws the ones in `views.NOTE_COLUMNS` ("What it means", "Why" ...) as a `tr.row-note` line under each
   row; `tables.js` keeps it with its row in search and row caps. Downloads keep both as columns.
-- A list cell (`Many`) of more than three items shows two and "and N more"
-  (`_report_table.html`); a cell of 32 characters or fewer gets class
-  `short` and sits beside its label in a stacked table on a phone.
+- A list cell (`Many`) of more than three items shows a short form that opens in place to every item, one
+  a line (`_report_table.html`): its `summary` when the builder gives one (`Many(items, "breakglass + 11
+  admin roles")`, as `coverage.summarise` does for who a policy covers), else the first two and "+ N more".
+  Downloads keep every item. A cell of 32 characters or fewer gets class `short` and sits beside its label
+  in a stacked table on a phone.
+- Report tables fit their card on a laptop: each column gets a width class from its longest value
+  (`views._width`: `w-s` stays on one line, `w-m` and `w-l` wrap within limits), and long addresses may
+  wrap after their "@" (`wrappable`). A table that still doesn't fit scrolls inside its card, never the
+  page, with the sideways scrollbar in view and its first column pinned (`tables.js`, `edges`).
 - The person page and `object_page.html` open with a summary (`.grid-main`:
   Needs attention and Open findings, the facts card beside them), then each
   part as `<details class="card part" open>` at full width; `app.js` folds
@@ -506,7 +515,9 @@ turning each step's `target` into a link.
 - Downloads on a page sit in one `downloads([(label, href, title)])` control
   from `_macros.html`, PDF first.
 - Every tenant page starts with `tenant_header(tenant, '<tab>')` from
-  `_macros.html` (import it `with context`). There are seven tabs (Overview,
+  `_macros.html` (import it `with context`). Its heading is always the client's name; a page its tabs
+  don't name passes `title=` for a heading under them, and a page in the Reports tab puts its title in
+  the `toolbar report-title` under the picker, as detail reports do. There are seven tabs (Overview,
   Findings, Changes, Reports, Users, Emails, Settings); a page that belongs
   under one gets its own key, mapped to that tab in `TAB_OF`, and a link in
   the tab's second row (`.tab-pages`), rather than a new tab. On laptops its tab bar stays pinned to the

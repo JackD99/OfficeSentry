@@ -3,7 +3,9 @@ their previews, the report history, report designs, month-end notes and the home
 
 A role holds report areas (``reports.identity``, ``reports.security``, ...), and an admin can take one away
 from a person on one client. ``tests/test_roles.py`` checks each page's own gate; these are the places that
-show or send a report from inside another page, each with the request that used to get through.
+show or send a report from inside another page, each with the request that used to get through. The client
+cases run for a client account with a password and for one signed in with its own Microsoft account (granted
+another organisation's client too, which must count for nothing).
 """
 
 from __future__ import annotations
@@ -16,9 +18,11 @@ import pytest
 
 from officesentry import delivery, month_end, roles
 from officesentry.reports import designs
+from tests import test_client_sign_in as csi
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_email import _smtp_ready, fake_smtp, sends  # noqa: F401 (autouse fixture)
+from tests.test_isolation_walk import microsoft_client, sign_in_with_microsoft
 from tests.test_roles import role_user, store_user
 
 MARK = "Zebedee"  # in every name of the seeded tenant's people
@@ -40,9 +44,25 @@ def _deny(db, uid: int, capability: str, tenant_id: int) -> None:
     roles.set_overrides(db, "admin", store_user(db, uid), [roles.Override(capability, tenant_id, False)])
 
 
-def _switch(client, username: str) -> None:
+def _switch(client, username: str, how: str = "password") -> None:
     client.post("/logout")
-    login(client, username)
+    if how == "microsoft":
+        sign_in_with_microsoft(client, username)
+    else:
+        login(client, username)
+
+
+# A client's person signs in with a password, or with their own work account from Alpha's tenant.
+HOW = ["password", "microsoft"]
+
+
+def _client_account(db, vault, username: str, alpha: int, bravo: int, how: str) -> int:
+    """Alpha's client account. One signing in with Microsoft is granted Bravo too (Bravo's Directory ID known,
+    another organisation's), which must count for nothing."""
+    if how == "password":
+        return make_user(db, username, role="client", tenants=[alpha])
+    db.execute("UPDATE tenants SET tenant_ref = ? WHERE id = ?", (csi.BRAVO, bravo))
+    return microsoft_client(db, vault, username, alpha, [alpha, bravo])
 
 
 def _schedule(db, tenant_id: int, reports: list[str], email: str = "it@alpha.example") -> int:
@@ -101,7 +121,8 @@ def test_a_schedule_sending_more_than_you_open_only_changes_for_someone_who_can(
     assert client.get(f"/schedules/{sid}/edit").status_code == 200
 
 
-def test_report_history_needs_the_report_area_and_downloads(client, db, alpha):
+@pytest.mark.parametrize("how", HOW)
+def test_report_history_needs_the_report_area_and_downloads(client, db, vault, alpha, two_tenants, how):
     sid = _schedule(db, alpha, ["data:all-users", "data:licences"])
     make_user(db, "admin")
     login(client, "admin")
@@ -119,12 +140,13 @@ def test_report_history_needs_the_report_area_and_downloads(client, db, alpha):
     assert client.get(f"/tenants/{alpha}/report-history/{files['data:all-users']}").status_code == 403
     assert client.get(f"/tenants/{alpha}/report-history/{files['data:licences']}").status_code == 200
     # Downloads taken away on this client: the files are listed, not downloadable.
-    viewer = make_user(db, "it@alpha.example", role="client", tenants=[alpha])
+    viewer = _client_account(db, vault, "it@alpha.example", alpha, two_tenants[1], how)
     _deny(db, viewer, "export", alpha)
-    _switch(client, "it@alpha.example")
+    _switch(client, "it@alpha.example", how)
     page = client.get(f"/tenants/{alpha}/report-history").data.decode()
-    assert "report-history/" not in page and "All users" in page
+    assert "report-history/" not in page and "All users" in page and "Bravo Inc" not in page
     assert client.get(f"/tenants/{alpha}/report-history/{files['data:licences']}").status_code == 403
+    assert client.get(f"/tenants/{two_tenants[1]}/report-history").status_code == 404
 
 
 def test_email_previews_need_security_findings(client, db, alpha):
@@ -179,16 +201,18 @@ def test_draft_commentary_stays_out_of_emails_while_reports_wait_for_approval(cl
     assert any("Still being written." in p for p in pages)
 
 
-def test_clients_never_see_who_on_the_team_sent_an_email(client, db, alpha):
+@pytest.mark.parametrize("how", HOW)
+def test_clients_never_see_who_on_the_team_sent_an_email(client, db, vault, alpha, two_tenants, how):
     sid = _schedule(db, alpha, ["data:mailboxes"])
     make_user(db, "jane.admin", role="admin")
     login(client, "jane.admin")
     client.post(f"/schedules/{sid}/send")
     assert b"sent by jane.admin" in client.get(f"/tenants/{alpha}/schedules").data
-    make_user(db, "it@alpha.example", role="client", tenants=[alpha])
-    _switch(client, "it@alpha.example")
+    _client_account(db, vault, "it@alpha.example", alpha, two_tenants[1], how)
+    _switch(client, "it@alpha.example", how)
     page = client.get(f"/tenants/{alpha}/schedules").data.decode()
-    assert "it@alpha.example" in page and "jane.admin" not in page
+    assert "it@alpha.example" in page and "jane.admin" not in page and "Bravo Inc" not in page
+    assert client.get(f"/tenants/{two_tenants[1]}/schedules").status_code == 404
 
 
 def test_staff_notes_follow_month_end_review_on_each_client(client, db, two_tenants):
@@ -263,12 +287,17 @@ def test_home_pages_count_only_what_the_person_sees(client, db, two_tenants):
     assert _tile(today, "New critical and high") == "0" and "Failing:" not in today
 
 
-def test_a_client_home_leaves_out_areas_taken_away(client, db, alpha):
-    uid = make_user(db, "it@alpha.example", role="client", tenants=[alpha])
-    login(client, "it@alpha.example")
-    assert b"<h2>Recommendations</h2>" in client.get("/").data
+@pytest.mark.parametrize("how", HOW)
+def test_a_client_home_leaves_out_areas_taken_away(client, db, vault, alpha, two_tenants, how):
+    bravo = two_tenants[1]
+    seed_tenant(db, bravo)
+    uid = _client_account(db, vault, "it@alpha.example", alpha, bravo, how)
+    _switch(client, "it@alpha.example", how)
+    page = client.get("/").data.decode()
+    assert "<h2>Recommendations</h2>" in page and "Bravo Inc" not in page
     _deny(db, uid, "reports.security", alpha)  # which signs them out
-    _switch(client, "it@alpha.example")
+    _switch(client, "it@alpha.example", how)
     page = client.get("/").data.decode()
     assert "<h2>Recommendations</h2>" not in page and "Checks needing attention" not in page
-    assert f"/tenants/{alpha}/findings" not in page and "Users with MFA" in page
+    assert f"/tenants/{alpha}/findings" not in page and "Users with MFA" in page and "Bravo Inc" not in page
+    assert client.get(f"/tenants/{bravo}/findings").status_code == 404

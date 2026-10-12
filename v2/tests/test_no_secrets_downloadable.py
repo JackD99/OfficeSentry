@@ -5,10 +5,10 @@ waiting to replace it, the mail app's key, client secret and SMTP password, the 
 keys, the alert webhook's address and signing secret, the monitoring token, a device code in flight,
 someone else's two-step secret, recovery codes, password hash and session, the session and encryption keys,
 and every encrypted value as stored; private keys as PEM text and as DER). Then every GET route in the URL
-map is opened, each download in every format, as an Administrator, an analyst and a client account, and
-every byte of every answer is searched: the page, its headers, each file inside a spreadsheet, Word file or
-zip, and the page a PDF is made from. So are the log files the crawl wrote. The support package has its own
-test of this (``test_support.py``).
+map is opened, each download in every format, as an Administrator, an analyst, a client account and a client
+account signed in with its own Microsoft account, and every byte of every answer is searched: the page, its
+headers, each file inside a spreadsheet, Word file or zip, and the page a PDF is made from. So are the log
+files the crawl wrote. The support package has its own test of this (``test_support.py``).
 """
 
 from __future__ import annotations
@@ -25,7 +25,13 @@ from officesentry import alerts, cert_lifecycle, logs, sso, store, system_health
 from officesentry.certs import generate_certificate
 from officesentry.db import utcnow
 from tests.conftest import PASSWORD, PASSWORD_HASH, login, make_user
-from tests.test_isolation_walk import _a_urls, _pdf_as_page, world  # noqa: F401  (fixtures)
+from tests.test_isolation_walk import (  # noqa: F401  (fixtures)
+    _a_urls,
+    _pdf_as_page,
+    microsoft_client,
+    sign_in_with_microsoft,
+    world,
+)
 
 MAIL_SECRET = "MailClientSecretQ8~zLmN3pXv"
 SMTP_PASSWORD = "SmtpPassw0rdKx93hdQQ"
@@ -187,12 +193,18 @@ def _urls(app, db, alpha: int, ids: dict):
             yield url + "?which=next"
 
 
-@pytest.mark.parametrize("who", ["admin", "analyst", "client"])
-def test_no_secret_on_any_page_or_download(app, client, db, cfg, planted, _pdf_as_page, who):  # noqa: F811
+@pytest.mark.parametrize("who", ["admin", "analyst", "client", "client-by-microsoft"])
+def test_no_secret_on_any_page_or_download(app, client, db, cfg, vault, planted, _pdf_as_page, who):  # noqa: F811
     alpha, bravo, ids, secrets = planted
-    if who != "admin":
-        make_user(db, who, role=who, tenants=[alpha, bravo])
-    assert login(client, who).status_code == 302
+    if who == "client-by-microsoft":
+        # One of A's people, signed in with their own work account (granted B too, which counts for nothing),
+        # through the sign-in app whose keys were planted.
+        microsoft_client(db, vault, who, alpha, [alpha, bravo])
+        sign_in_with_microsoft(client, who)
+    else:
+        if who != "admin":
+            make_user(db, who, role=who, tenants=[alpha, bravo])
+        assert login(client, who).status_code == 302
     with client.session_transaction() as session:
         secrets = {**secrets, "their own session token": session["sid"]}
     leaks, opened = [], 0
@@ -206,7 +218,7 @@ def test_no_secret_on_any_page_or_download(app, client, db, cfg, planted, _pdf_a
             (f"{process} log", 0, label)
             for label in _carries(logs.tail(cfg.data_dir, process, 10**7).encode(), secrets)
         ]
-    assert opened >= {"admin": 270, "analyst": 230, "client": 60}[who], opened
+    assert opened >= {"admin": 270, "analyst": 230, "client": 60, "client-by-microsoft": 60}[who], opened
     assert not leaks, "\n".join(map(str, leaks))
 
 

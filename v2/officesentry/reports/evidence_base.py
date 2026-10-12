@@ -195,6 +195,8 @@ def _mfa_everyone(snap: TenantSnapshot, results: dict[str, RuleResult]):
             "Defaults are off." + (f" {left_out}" if left_out else "") + tail + registered
         )
     names, users = _names(snap), _users(snap)
+    d = coverage.directory(snap)
+    role_names = d.role_names if d else {}  # policies name roles by template id
     people, groups = {}, {}
     for p in covering:
         spec = (p.get("conditions") or {}).get("users") or {}
@@ -203,7 +205,7 @@ def _mfa_everyone(snap: TenantSnapshot, results: dict[str, RuleResult]):
         for gid in spec.get("excludeGroups") or []:
             groups.setdefault(gid, f"{names.get(gid, gid)} (group)")
         for rid in spec.get("excludeRoles") or []:
-            groups.setdefault(rid, f"{names.get(rid, rid)} (role)")
+            groups.setdefault(rid, f"{role_names.get(rid) or names.get(rid, rid)} (role)")
         if spec.get("excludeGuestsOrExternalUsers"):
             groups.setdefault("guests", "Guests and external users")
     by = f"Enforced by Conditional Access ({_quoted(coverage.policy_name(p) for p in covering)})"

@@ -121,7 +121,32 @@
       if (all) { all.setAttribute('aria-expanded', 'false'); all.querySelector('span').textContent = 'Expand all'; }
     });
   }
-  function init(root) { sortable(root); rowSearch(root); reportSearch(root); autosubmit(root); foldOnPhones(root); }
+  /* Wide tables (.table-scroll). A table first tries to fit its card with its text wrapped, then with its
+   * columns a little narrower (.snug). Still too wide, it scrolls sideways (.wide); far too wide, its columns
+   * also take the room they need (.natural), since squeezing them saves no scrolling. .scrolled once it has
+   * moved sideways, so the pinned first column shows its edge and nothing seems to slide under it unseen. */
+  var NATURAL = 0.15;  // too wide by more than this share of the card
+  function edges(box) {
+    function over() { return box.scrollWidth - box.clientWidth; }
+    box.classList.remove('wide', 'snug', 'natural');
+    if (over() > 1) box.classList.add('snug');
+    var left = over();
+    if (left > 1) box.classList.add('wide');
+    if (left > box.clientWidth * NATURAL) box.classList.replace('snug', 'natural');
+    box.classList.toggle('scrolled', box.scrollLeft > 0);
+  }
+  function wide(root) { root.querySelectorAll('.table-scroll').forEach(edges); }
+  document.addEventListener('scroll', function (e) {
+    var box = e.target;
+    if (box.classList && box.classList.contains('table-scroll')) box.classList.toggle('scrolled', box.scrollLeft > 0);
+  }, true);
+  document.addEventListener('toggle', function (e) {  // a list opened in a cell can widen its table
+    var box = e.target.closest && e.target.closest('.table-scroll');
+    if (box) edges(box);
+  }, true);
+  window.addEventListener('resize', function () { wide(document); });
+
+  function init(root) { sortable(root); rowSearch(root); reportSearch(root); autosubmit(root); foldOnPhones(root); wide(root); }
   init(document);
 
   /* Row groups fold to their heading. Delegated, so groups loaded in place by a view work too. */
