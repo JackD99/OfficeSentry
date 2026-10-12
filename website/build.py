@@ -342,9 +342,10 @@ WHATS_NEW = {
         },
         {
             "icon": "table",
-            "title": "Tables that fit the page",
-            "text": "Long lists fold into a short form you can open in place, columns get room by what's in them, "
-            "and All clients opens any report from the All reports menu.",
+            "title": "Reports that fit a laptop",
+            "text": "Wide reports open on the columns that matter, with the rest a click away, and the menu folds "
+            "away to its icons. Long lists fold into a short form you open in place, and All clients opens any "
+            "report from the All reports menu.",
         },
     ],
     "also": [  # smaller changes, a few words each
