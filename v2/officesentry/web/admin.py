@@ -323,6 +323,7 @@ def edit_user(user_id: int):
         return redirect(url_for("admin.edit_user", user_id=user_id))
     granted = {r["tenant_id"] for r in g.db.execute("SELECT tenant_id FROM user_tenants WHERE user_id = ?", (user_id,))}
     all_roles = roles.all_roles(g.db)
+    beyond = out_of_reach(user)
     return render_template(
         "user_edit.html",
         user=user,
@@ -333,7 +334,7 @@ def edit_user(user_id: int):
         roles=all_roles,
         givable={r.id for r in all_roles if _givable(r)},
         actor=actor,
-        out_of_reach=out_of_reach(user),
+        out_of_reach=beyond,
         own_access=_own_access(user),
         grantable=actor.everywhere(),
         capabilities=permissions.CAPABILITIES,
@@ -344,7 +345,7 @@ def edit_user(user_id: int):
         tenant_names={t["id"]: t["name"] for t in tenants},
         groups=tenant_groups.all_groups(g.db) if actor.sees_all else [],
         granted_groups=tenant_groups.user_groups(g.db, user_id),
-        sessions=sessions.list_for(user_id),
+        sessions=[] if beyond else sessions.list_for(user_id),  # an Administrator's are for Administrators
         locked=_is_locked(user),
         failures=throttle.recent_failures(g.db, user["username"]),
         two_step_required=current_app.extensions["officesentry.config"].mfa_required(user["role"], g.db),
