@@ -18,7 +18,7 @@ body:
     attributes:
       label: Office Sentry version
       description: At the foot of the menu once you're signed in.
-      placeholder: "2.2.0"
+      placeholder: "2.3.0"
     validations:
       required: true
   - type: dropdown
