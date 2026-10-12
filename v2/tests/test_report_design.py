@@ -139,6 +139,22 @@ def test_monthly_summary_when_all_pass():
     es = summary.monthly(R())
     assert es.verdict.label == "Not checked yet" and not any("passed" in p for p in es.paragraphs)
 
+    # Most checks couldn't run (only the tenant profile collected so far): never "in good shape".
+    R.results, R.unavailable = ["mfa_enforced", "admin_count"] + ["x"] * 59, ["x"] * 59
+    es = summary.monthly(R())
+    assert es.verdict.label == "Partly checked" and es.verdict.tone == "medium"
+    assert (
+        es.verdict.headline == "Only 2 of 61 security checks could run for Tidy Co, so this isn't the full picture yet."
+    )
+
+
+def test_a_figure_that_is_missing_says_why(db, two_tenants):
+    alpha, bravo = two_tenants
+    seed_tenant(db, alpha)
+    stale = {k.key: k for k in build(db, store.get_tenant(db, bravo)).kpis}["stale"]
+    assert stale.value is None and stale.note == "User data hasn't been collected yet"  # not "Needs Entra ID P1"
+    assert {k.key: k for k in build(db, store.get_tenant(db, alpha)).kpis}["stale"].note == ""
+
 
 def test_evidence_summary(db, two_tenants):
     alpha, _ = two_tenants

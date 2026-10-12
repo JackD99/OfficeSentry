@@ -711,6 +711,34 @@ def test_approving_with_nobody_to_email_is_not_called_sent(client, db, two_tenan
     assert month_end.state_of(db, alpha, PERIOD) == "sent" and month_end.review(db, alpha, PERIOD)["error"] is None
 
 
+def test_failed_sends_go_again_from_the_queue_in_one_go(client, db, two_tenants, monkeypatch):
+    alpha, bravo = two_tenants
+    for t in (alpha, bravo):
+        seed_tenant(db, t)
+    pdfs = []
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: pdfs.append(html) or b"%PDF-1.7 frozen")
+    _smtp_ready(db)
+    _admin(client, db)
+    _plan(client, [alpha, bravo], include_xlsx="")
+    client.post(f"/reporting/{PERIOD}/approve", data={"tenants": [str(alpha), str(bravo)]})
+    work(client)
+    assert sends() == [] and len(pdfs) == 2  # nobody to email yet: both Approved, Send failed
+    queue = client.get(f"/reporting/{PERIOD}").get_data(as_text=True)
+    assert queue.count('name="tenants"') == 2 and "Send failed" in queue
+
+    for t, email in ((alpha, "it@alpha.com"), (bravo, "it@bravo.com")):
+        client.post(f"/tenants/{t}/contacts", data={"name": "IT", "email": email})
+    client.post(f"/reporting/{PERIOD}/approve", data={"tenants": [str(alpha), str(bravo)]})
+    work(client)
+    assert sorted(to[0] for _, _, _, to in sends()) == ["it@alpha.com", "it@bravo.com"]
+    assert len(pdfs) == 2  # the frozen files, not new ones
+    assert all(month_end.state_of(db, t, PERIOD) == "sent" for t in (alpha, bravo))
+    assert 'name="tenants"' not in client.get(f"/reporting/{PERIOD}").get_data(as_text=True)
+    # A month that went out isn't sent again by ticking it (that's a re-issue, with a reason, one at a time).
+    client.post(f"/reporting/{PERIOD}/approve", data={"tenants": [str(alpha)]})
+    assert work(client) == 0 and len(sends()) == 2
+
+
 def test_reissue_form_says_the_client_sees_the_reason(client, db, two_tenants, monkeypatch):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)

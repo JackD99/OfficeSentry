@@ -34,6 +34,7 @@ from flask import abort, g, has_request_context, redirect, request, url_for
 
 from .. import permissions, roles, sso
 from ..db import audit_counted
+from ..reports.registry import DECLARED
 from . import public_demo, sessions
 
 ROLES = ("admin", "analyst", "client")  # what users.role may say (permissions.ROLE_COLUMN)
@@ -83,6 +84,11 @@ def need_also(*capabilities: str, tenant_id: int | None = None) -> None:
     g.needed = (*g.get("needed", ()), *capabilities)
     g.pop("group_scope", None)
     g.pop("scope_tenants", None)
+
+
+def report_capability(key: str) -> str:
+    """The capability a detail report needs, from its menu group."""
+    return permissions.area_capability(DECLARED[key].group if key in DECLARED else None)
 
 
 def is_staff() -> bool:

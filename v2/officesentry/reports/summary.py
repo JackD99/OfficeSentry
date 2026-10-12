@@ -77,6 +77,16 @@ def monthly(report) -> ExecSummary:
         verdict = Verdict(
             "critical", "Action needed", f"{whose} Microsoft 365 has a critical security gap that should be fixed now."
         )
+    elif len(report.unavailable) > ran:
+        # Most checks couldn't run (a first collection still going, or most data missing): saying it's in good
+        # shape would be a claim the data can't back, so say how much was checked instead.
+        found = f" {plural(len(failing), 'of them needs', 'of them need')} attention." if failing else ""
+        verdict = Verdict(
+            "high" if by_sev["high"] else "medium",
+            "Partly checked",
+            f"Only {ran} of {len(report.results)} security checks could run for {name}, so this isn't the full "
+            f"picture yet.{found}",
+        )
     elif by_sev["high"]:
         verdict = Verdict(
             "high", "Needs attention", f"{whose} Microsoft 365 is broadly working, with some important gaps to close."

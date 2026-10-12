@@ -412,8 +412,10 @@ page. Drag a block in from the list (a status verdict, key figures, checks by se
 trend, recommended next steps, failing checks, what changed, licences, a table from any detail report,
 the insurance questionnaire answers, this month's commentary, headings, your own text, a contact card, a
 page break), set it up in its panel (which severities, how many rows, the heading), put two blocks side
-by side, and watch the preview on a real client update as you go. Start from an executive summary, a
-full security review, a licensing review, a quarterly review (three months of Secure Score and findings,
+by side, and watch the preview on a real client update as you go. The preview is drawn at the printed
+page's width, so it lays out as the PDF does; click a block in it to change that block, and Undo (Ctrl+Z)
+takes back any change. The cover is a page of its own, or a band on page one for a short report. Start
+from an executive summary, a full security review, a licensing review, a quarterly review (three months of Secure Score and findings,
 what was fixed, the projects on the table and where each stands, licence spend, and what's coming up in
 the next 90 days) or a blank page.
 
@@ -423,6 +425,15 @@ Custom reports** lists every design as a page and a PDF, and a report plan or a 
 can send a design (as a PDF) alongside or instead of the monthly review. Text blocks take `{client}`,
 `{month}`, `{quarter}`, `{msp}` and `{date}`. Anyone who can *Design custom reports* makes and edits designs; removing
 one also needs *Settings*, since it comes out of any plan or schedule that sent it.
+
+Setup notes written for your team (a detail report saying Microsoft is hiding people's names, and how to
+sign in as a Global Admin to show them) stay out of the client's copy unless the design's **Include setup
+notes in the client's copy** is ticked; the portal and the previews show them, marked "Only your team sees
+this". On the month-end review screen, **What's in the report** leaves any block of a design, any part of
+the monthly review or any key figure out of one client's copy for that month, and **Leave out** does the
+same for one check or recommendation. The design and other clients stay as they are, the preview beside
+it shows the client's copy, and the sent PDFs, spreadsheet, email and portal copy never have what was left
+out.
 
 ### Exchange data
 

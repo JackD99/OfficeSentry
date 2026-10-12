@@ -31,8 +31,9 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from . import delivery, issued, mailer, projects, store, tasks
+from .checks import RULES
 from .db import audit, transaction, utcnow
-from .reports import monthly_review, summary
+from .reports import designs, monthly_review, summary
 from .reports.precomputed import Rows, stored_rows
 from .text import plural
 
@@ -615,16 +616,103 @@ def notes(conn, tenant_id: int, staff: bool) -> list:
     return conn.execute(f"SELECT * FROM finding_notes WHERE tenant_id = ?{where} ORDER BY id", (tenant_id,)).fetchall()
 
 
+# -- Leaving things out of one client's month --------------------------------------------------------
+
+# Parts of the monthly review a reviewer can leave out (``part:<key>``), in the order the report has them.
+PARTS = {
+    "summary": "At a glance: the plain-English summary",
+    "kpis": "Key figures",
+    "breakdown": "Checks by severity",
+    "month_chart": "Findings found and fixed each month",
+    "did": "What we did",
+    "next": "What we recommend next",
+    "changes": "What changed",
+    "secure_score": "Secure Score chart",
+    "licences": "Licences",
+    "passing": "In good shape",
+    "accepted": "Accepted risks",
+    "not_checked": "Not checked",
+}
+ITEM_RE = re.compile(
+    r"check:[a-z0-9_]{1,80}|kpi:[a-z0-9_.]{1,80}|action:\d{1,12}|part:[a-z_]{1,40}|block:\d{1,12}:[a-z0-9]{1,16}"
+    r"|notes:\d{1,12}"
+)
+
+
+def hidden(conn, tenant_id: int, period: str) -> set[str]:
+    """What's left out of the client's copy of ``period`` (``report_hidden``)."""
+    return {
+        r[0]
+        for r in conn.execute("SELECT item FROM report_hidden WHERE tenant_id = ? AND period = ?", (tenant_id, period))
+    }
+
+
+def valid_item(conn, tenant_id: int, item: str) -> bool:
+    """An item a reviewer may leave out of this client's report: well formed, and naming a part, figure,
+    check, design or this client's own recommendation."""
+    if not ITEM_RE.fullmatch(item or ""):
+        return False
+    kind, _, rest = item.partition(":")
+    if kind == "part":
+        return rest in PARTS
+    if kind == "kpi":
+        return rest in {k for k, _ in designs.KPI_OPTIONS}
+    if kind == "check":
+        return rest in {r.key for r in RULES}
+    if kind == "action":
+        return (
+            conn.execute(
+                "SELECT 1 FROM report_actions WHERE id = ? AND tenant_id = ?", (int(rest), tenant_id)
+            ).fetchone()
+            is not None
+        )
+    design_id, _, block_id = rest.partition(":")
+    row = designs.get(conn, int(design_id))
+    if row is None:
+        return False
+    return kind == "notes" or any(b["id"] == block_id for b in designs.document(row)["blocks"])
+
+
+def leave_out(conn, tenant_id: int, period: str, item: str, user: str) -> None:
+    conn.execute(
+        "INSERT INTO report_hidden (tenant_id, period, item, created_by, created_at) VALUES (?, ?, ?, ?, ?)"
+        " ON CONFLICT(tenant_id, period, item) DO NOTHING",
+        (tenant_id, period, item, user, utcnow()),
+    )
+
+
+def put_back(conn, tenant_id: int, period: str, item: str | None = None) -> int:
+    """Put one item back in the report, or every one (``item`` None). Returns how many came back."""
+    if item is None:
+        return conn.execute(
+            "DELETE FROM report_hidden WHERE tenant_id = ? AND period = ?", (tenant_id, period)
+        ).rowcount
+    return conn.execute(
+        "DELETE FROM report_hidden WHERE tenant_id = ? AND period = ? AND item = ?", (tenant_id, period, item)
+    ).rowcount
+
+
 def report_context(conn, tenant_id: int, period: str, *, staff: bool, approved_only: bool = False) -> dict:
     """What the monthly review template shows on top of the built report, as ``month_end``.
 
     ``staff`` False for anything a client sees: their page and every PDF. Staff-only notes are then left out.
     ``approved_only`` (a client opening their live report) shows nothing until the month is approved or sent,
-    so work in progress isn't read before it's signed off.
+    so work in progress isn't read before it's signed off. What the reviewer left out (``hidden``) is left
+    out either way, and callers drop the checks and figures with ``monthly_review.leave_out``.
     """
     r = review(conn, tenant_id, period)
+    left_out = hidden(conn, tenant_id, period)
     if approved_only and state_of(conn, tenant_id, period, r) not in ("approved", "sent"):
-        return {"month_end": {"commentary": "", "actions": [], "notes": {}, "staff": False, "period": period}}
+        return {
+            "month_end": {
+                "commentary": "",
+                "actions": [],
+                "notes": {},
+                "staff": False,
+                "period": period,
+                "hidden": left_out,
+            }
+        }
     recent = period_start(shift_period(period, -1))
     items = [
         dict(
@@ -633,7 +721,7 @@ def report_context(conn, tenant_id: int, period: str, *, staff: bool, approved_o
             target_label=issued.period_label(a["target_month"]) if a["target_month"] else "",
         )
         for a in actions(conn, tenant_id)
-        if a["status"] != "done" or (a["done_at"] or "") >= recent
+        if (a["status"] != "done" or (a["done_at"] or "") >= recent) and f"action:{a['id']}" not in left_out
     ]
     by_rule: dict[str, list] = {}
     for n in notes(conn, tenant_id, staff):
@@ -645,6 +733,7 @@ def report_context(conn, tenant_id: int, period: str, *, staff: bool, approved_o
             "notes": by_rule,
             "staff": staff,
             "period": period,
+            "hidden": left_out,
         }
     }
 
