@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, csrf, ts %}
 {% from "_device_code.html" import device_code %}
-{% block title %}Staff sign-in · Office Sentry{% endblock %}
+{% block title %}Microsoft sign-in · Office Sentry{% endblock %}
 {% block content %}
 {% set status = sign_in.status if sign_in else none %}
 {% set active = status in ('waiting', 'working') %}
 {% set c = cloud_of({'cloud': s.sso_cloud or 'commercial'}) %}
-<div class="page-head"><div><h1>Staff sign-in</h1>
-  <div class="sub">How your team signs in to Office Sentry. Client accounts always use a password and a two-step code.</div></div>
+<div class="page-head"><div><h1>Microsoft sign-in</h1>
+  <div class="sub">How your team, and your clients' people if you like, sign in to Office Sentry with their Microsoft work account.</div></div>
   {% if enabled %}<div class="actions"><a class="btn" href="{{ admin_centre }}" target="_blank" rel="noopener noreferrer">Assign people in Entra {{ icon('arrow') }}</a></div>{% endif %}</div>
 
 {% if configured %}
@@ -18,6 +18,8 @@
     <div class="foot">{{ 'Accounts linked to a Microsoft account.' if staff else 'No staff accounts yet.' }}</div></div>
   <div class="tile"><div class="label">Passwords for staff</div><div class="value small-value">{% if s.sso_passwords == 'off' %}<span class="pill warn">Off</span>{% else %}<span class="pill ok">Allowed</span>{% endif %}</div>
     <div class="foot">{{ 'Staff must use Microsoft.' if s.sso_passwords == 'off' else 'The break-glass way in if Microsoft is down.' }}</div></div>
+  <div class="tile"><div class="label">Client sign-in</div><div class="value small-value">{% if clients_enabled %}<span class="pill ok">On</span>{% else %}<span class="pill">Off</span>{% endif %}</div>
+    <div class="foot">{% if clients_enabled %}Clients' people use their own work account.{% else %}Client accounts use a password. <a href="#clients">Set it up</a>{% endif %}</div></div>
 </div>
 {% endif %}
 
@@ -216,9 +218,74 @@
 </section>
 </div>
 
+{% set app_name = s.sso_app_name or default_app_name %}
+{% set updating = update and update.status in ('waiting', 'working') %}
+<section class="card" id="clients" aria-labelledby="clients-title">
+  <div class="card-head"><h2 id="clients-title">Your clients' people</h2>{% if clients_enabled %}<span class="pill ok">On</span>{% elif updating %}<span class="pill accent">Waiting for sign-in</span>{% else %}<span class="pill">Off</span>{% endif %}</div>
+  <p class="muted">Let people at your clients sign in with the work Microsoft account they already use, under their own organisation's MFA and Conditional Access, instead of a password from you. Each person still needs a client account here, granted their own company only, and Office Sentry only lets them in from that company's own tenant.</p>
+  <ol class="setup-steps flush-steps">
+    <li class="{{ 'done' if multi_tenant else 'current' }}">
+      <div class="step-title">Let the sign-in app accept your clients' accounts</div>
+      <div class="step-body">
+      {% if multi_tenant %}
+        Done{% if s.sso_multi_tenant_by %} by {{ s.sso_multi_tenant_by }}{% endif %}. The app takes work accounts from other organisations; who gets in is still up to Office Sentry.
+      {% elif updating %}
+        {{ device_code(update, url_for('sso.check_update'), url_for('sso.cancel_update'), update_seconds_left,
+            "Sign in as a Global Administrator of your own (the MSP's) tenant, or someone who can change app registrations. Office Sentry uses this sign-in once and doesn't keep it.", working='Signed in. Changing the app…') }}
+      {% else %}
+        {% if update and update.status == 'failed' %}
+        <div class="callout bad" role="alert">{{ icon('alert') }}<div><strong>The sign-in app wasn't changed.</strong> {{ update.error }}</div></div>
+        {% endif %}
+        Office Sentry changes one setting on “{{ app_name }}”: its supported account types, to accounts in any organisation's directory. It gets no permissions and nothing else changes.
+        <form method="post" action="{{ url_for('sso.start_update') }}" class="step-form">{{ csrf() }}
+          <div class="form-actions"><button class="primary">{{ icon('shield') }} Sign in to Microsoft</button></div></form>
+        <details class="by-hand small">
+          <summary>Change it by hand instead</summary>
+          <p>In the Entra admin centre: <em>App registrations → {{ app_name }} → Authentication → Supported account types</em>, choose <em>Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant)</em> and save. Then tell Office Sentry:</p>
+          <form method="post" action="{{ url_for('sso.clients_by_hand') }}">{{ csrf() }}<button class="sm">I've changed it</button></form>
+        </details>
+      {% endif %}
+      </div>
+    </li>
+    <li class="{{ 'done' if clients_enabled else ('current' if multi_tenant else '') }}">
+      <div class="step-title">Turn on client sign-in</div>
+      <div class="step-body">
+        <form method="post" action="{{ url_for('sso.save_clients') }}" class="step-form">{{ csrf() }}
+          <input type="hidden" name="clients" value="{{ '' if clients_enabled else '1' }}">
+          {% if clients_enabled %}
+          <p class="m0">Client accounts can sign in with Microsoft. Turning it off sends them back to passwords; anyone without one can't sign in until you set one.</p>
+          <div class="form-actions"><button class="sm">Turn off client sign-in</button></div>
+          {% else %}
+          <p class="m0">The sign-in page's <em>Sign in with Microsoft</em> then works for client accounts too, and each client's Settings tab gets a <em>Client sign-in</em> page.</p>
+          <div class="form-actions"><button{% if multi_tenant %} class="primary"{% else %} disabled{% endif %}>Turn on client sign-in</button></div>
+          {% endif %}
+        </form>
+      </div>
+    </li>
+    <li class="{{ 'current' if clients_enabled else '' }}">
+      <div class="step-title">Add each client's people</div>
+      <div class="step-body">On each client's <em>Settings → Client sign-in</em> page, add their primary contacts by the address they sign in to Microsoft with, then send them the message there. If their organisation doesn't let people approve apps themselves, send their Microsoft 365 administrator the approval link from the same page; it lets their people sign in, and Office Sentry learns only each person's name and sign-in address.</div>
+    </li>
+  </ol>
+  {% if clients_enabled and client_rows %}
+  <table class="stack-sm small">
+    <thead><tr><th>Client</th><th>People</th><th>With Microsoft</th><th>Approved</th><th><span class="sr-only">Page</span></th></tr></thead>
+    <tbody>
+    {% for r in client_rows %}
+    <tr><td><a href="{{ url_for('client_access.page', tenant_id=r.tenant.id) }}">{{ r.tenant.name }}</a></td>
+      <td data-label="People">{{ r.people }}</td>
+      <td data-label="With Microsoft">{% if not r.same_cloud %}<span class="muted">Another cloud</span>{% elif not r.known %}<span class="muted">Tenant ID not known yet</span>{% else %}{{ r.microsoft }}{% endif %}</td>
+      <td data-label="Approved">{% if r.approved %}{{ ts(r.approved) }}{% else %}<span class="muted">Not yet</span>{% endif %}</td>
+      <td class="num"><a class="btn sm ghost" href="{{ url_for('client_access.page', tenant_id=r.tenant.id) }}">Client sign-in</a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
 <section class="card danger-zone">
   <h2>Remove Microsoft sign-in</h2>
-  <p class="muted small">Everyone goes back to passwords. Accounts stay connected to their Microsoft accounts in case you set it up again; an account that never had a password needs one set on its user page. The app registration stays in Entra until you delete it there.</p>
+  <p class="muted small">Everyone goes back to passwords, staff and clients' people alike. Accounts stay connected to their Microsoft accounts in case you set it up again; an account that never had a password needs one set on its user page. The app registration stays in Entra until you delete it there.</p>
   <form method="post" action="{{ url_for('sso.remove') }}">{{ csrf() }}<button class="danger" data-confirm="Remove Microsoft sign-in? Staff will need passwords.">Remove Microsoft sign-in</button></form>
 </section>
 {% endif %}

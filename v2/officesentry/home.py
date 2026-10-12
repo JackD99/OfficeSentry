@@ -13,6 +13,7 @@ which one opens as their home page in Account settings (``users.home``); permiss
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -234,9 +235,11 @@ def _due(items: list) -> list[Reason]:
     return out
 
 
-def today(conn, tenants, now: datetime | None = None) -> Today:
-    """What needs someone today across ``tenants`` (paused and archived ones are left out)."""
+def today(conn, tenants, now: datetime | None = None, shows: Callable[[str, int], bool] | None = None) -> Today:
+    """What needs someone today across ``tenants`` (paused and archived ones are left out). ``shows(kind,
+    tenant id)`` says which kinds of reason the person may see on each client; the rest aren't counted."""
     now = now or datetime.now(UTC)
+    shows = shows or (lambda kind, tenant_id: True)
     since = now - NEW_SINCE
     active = _active(tenants)
     found = _new_findings(conn, [t["id"] for t in active], since.strftime(_ISO), now.strftime(_ISO))
@@ -248,7 +251,7 @@ def today(conn, tenants, now: datetime | None = None) -> Today:
     rows, totals = [], {"new": 0, "critical": 0, "failing": 0, "stale": 0, "waiting": 0, "due": 0}
     for t in active:
         row = TodayRow(t)
-        news = found.get(t["id"], [])
+        news = found.get(t["id"], []) if shows("findings", t["id"]) else []
         if news:
             n = sum(r["n"] for r in news)
             critical = sum(r["n"] for r in news if r["severity"] == "critical")
@@ -265,12 +268,13 @@ def today(conn, tenants, now: datetime | None = None) -> Today:
             )
             totals["new"] += n
             totals["critical"] += critical
-        if (state := _collection(conn, t, now)) is not None:
+        if (state := _collection(conn, t, now)) is not None and shows(state.kind, t["id"]):
             row.reasons.append(state)
             key = {"access": "waiting", "collection": "failing" if state.tone == "bad" else "stale"}[state.kind]
             totals[key] += 1
-        row.reasons += _due(soon.get(t["id"], []))
-        totals["due"] += len(soon.get(t["id"], []))
+        if shows("due", t["id"]):
+            row.reasons += _due(soon.get(t["id"], []))
+            totals["due"] += len(soon.get(t["id"], []))
         if row.reasons:
             for r in row.reasons:
                 r.tenant_id = t["id"]

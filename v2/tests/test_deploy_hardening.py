@@ -131,6 +131,17 @@ def test_compose_keeps_the_containers_fenced_in():
     assert "header -Server" in (V2 / "Caddyfile").read_text(encoding="utf-8")
 
 
+def test_the_image_ships_without_pip():
+    """Nothing runs pip once the image is built, and the base image's copy trails pip's security fixes, so the
+    last build step removes it; the public demo, which installs more on top, brings Python's bundled copy back."""
+    dockerfile = (V2 / "Dockerfile").read_text(encoding="utf-8")
+    build, _, after = dockerfile.partition("pip uninstall --yes --quiet pip")
+    assert after and "RUN pip install --no-cache-dir --no-deps --no-build-isolation ." in build
+    assert "pip install" not in after and "\nRUN " not in after.split("USER sentry")[0]
+    demo = (V2 / "deploy" / "public" / "Dockerfile").read_text(encoding="utf-8")
+    assert demo.index("python -m ensurepip") < demo.index("pip install")
+
+
 def test_a_slow_upgrade_is_given_time_before_the_deploy_gives_up():
     """A database upgrade copies the whole database before the portal answers, which takes minutes on a large
     one: the health check's start period, the start script's wait and Docker's live-restore allow for it."""
@@ -145,12 +156,14 @@ def test_a_slow_upgrade_is_given_time_before_the_deploy_gives_up():
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
-def test_start_script_starts_the_worker_once_the_portal_is_healthy(tmp_path):
+@pytest.mark.parametrize("profiles", ["", "https"])
+def test_start_script_starts_the_worker_once_the_portal_is_healthy(tmp_path, profiles):
     """When "compose up" gives up waiting for the portal (an upgrade slower than its health check allows), the
-    worker is created but not started: the script waits for the portal itself, then brings the rest up."""
+    worker is created but not started: the script waits for the portal itself, then brings the rest up. With
+    Caddy, it then restarts Caddy, which reads its Caddyfile only when it starts."""
     folder = tmp_path / "v2"
     (folder / "deploy").mkdir(parents=True)
-    (folder / ".env").write_text("COMPOSE_PROFILES=\n", encoding="utf-8")
+    (folder / ".env").write_text(f"COMPOSE_PROFILES={profiles}\n", encoding="utf-8")
     shutil.copy(V2 / "deploy" / "start.sh", folder / "deploy" / "start.sh")
     shutil.copy(V2 / "deploy" / "jobs.sh", folder / "deploy" / "jobs.sh")
     tools = tmp_path / "bin"
@@ -187,6 +200,10 @@ def test_start_script_starts_the_worker_once_the_portal_is_healthy(tmp_path):
     second = lines.index("compose up -d --remove-orphans", first + 1)  # once the portal was seen healthy
     assert lines.count("compose up -d --remove-orphans") == 2
     assert first < lines.index("inspect -f {{.State.Health.Status}} cid-web") < second
+    if profiles:
+        assert lines.index("compose restart caddy") > second
+    else:
+        assert "compose restart caddy" not in lines
 
 
 def test_offsite_and_drill_record_their_status(env_cfg):
@@ -260,8 +277,9 @@ def test_deploy_keeps_the_settings_files_out_of_the_demo_and_closes_ssh_after_a_
 
 
 def test_the_hetzner_token_and_the_backup_keys_stay_away_from_the_code_the_deploy_builds():
-    """The deploy job checks out code and builds the website with it (installing what that needs), so its
-    secrets go only to the steps that use them, and nothing is written into every later step's environment."""
+    """The deploy job checks out code and runs scripts from it on the server, so its secrets go only to the steps
+    that use them, and nothing is written into every later step's environment. The website, whose build installs
+    and runs the test tools and a browser, is built by a job of its own that holds no secrets."""
     workflow = (V2.parent / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
     server = yaml.safe_load(workflow)["jobs"]["server"]
     steps, names = server["steps"], [step.get("name") for step in server["steps"]]
@@ -278,9 +296,16 @@ def test_the_hetzner_token_and_the_backup_keys_stay_away_from_the_code_the_deplo
     assert closing["name"] == "Close SSH again"
     assert closing["if"] == "always() && steps.open-ssh.outputs.firewall_id != ''"
     assert closing["env"]["FIREWALL_ID"] == "${{ steps.open-ssh.outputs.firewall_id }}"
-    # The backup password and storage keys reach the disk only once the website's build has finished.
-    built = max(names.index("Take the website's screenshots and example reports"), names.index("Build the website"))
-    assert names.index("Write the server's settings files") > built
+    # Nothing is installed or downloaded to run on the runner that gets the SSH key, the Hetzner token and the
+    # backup keys: the website job builds the site and the server job only fetches the files.
+    website = yaml.safe_load(workflow)["jobs"]["website"]
+    assert "secrets." not in yaml.safe_dump(website) and website["permissions"] == {"contents": "read"}
+    # It runs whichever ref the deploy names, so it saves no cache that main's own runs would restore.
+    assert not [step for step in website["steps"] if "cache" in step.get("with", {})]
+    assert website["steps"][0]["with"]["ref"] == "${{ inputs.ref || github.sha }}"
+    assert "website" in server["needs"] and "Fetch the website" in names
+    assert not [step for step in steps if re.search(r"pip install|playwright", step.get("run", ""))]
+    assert not [step for step in steps if step.get("uses", "").startswith("actions/setup-python@")]
 
 
 def test_the_server_address_and_portal_name_stay_out_of_public_run_logs():

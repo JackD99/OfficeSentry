@@ -35,7 +35,7 @@ from ..devices import parse_ts
 from ..licences import last_sign_in
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .data_reports import Chart, DataReport, Highlight, Rows, Section
+from .data_reports import Chart, DataReport, Highlight, Many, Rows, Section
 from .identity_reports import P1, Registration, _label, _roles
 from .registry import report
 
@@ -356,8 +356,8 @@ def _strengths(snap: TenantSnapshot, report: DataReport) -> Section | None:
                     states.get(p.get("state"), p.get("state") or ""),
                     s.get("displayName") or "Custom strength",
                     strength_is_phishing_resistant(s),
-                    described.users if described else "",
-                    described.excluded if described else "",
+                    Many(described.include, described.include_summary) if described else "",
+                    Many(described.exclude, described.exclude_summary) if described else "",
                 ],
             )
         )
@@ -450,7 +450,8 @@ def _passwords(users: list[dict], reg: Registration, now: datetime) -> tuple[Sec
         registered = reg.registered(uid)
         last = last_sign_in(u)
         never = bool(u.get("signInActivityAvailable")) and last is None
-        old = bool(changed and changed < now - timedelta(days=OLD_DAYS))
+        # By calendar day, as the table's "Older than a year" filter counts, so the figure opens these rows.
+        old = bool(changed and (now.date() - changed.date()).days > OLD_DAYS)
         stats["never_expires"] += bool(u.get("passwordNeverExpires"))
         stats["old"] += old
         flag, meaning = None, ""

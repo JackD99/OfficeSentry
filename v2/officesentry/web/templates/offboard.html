@@ -4,7 +4,7 @@
 {% block content %}
 {% set r = health.result or {} %}
 {% set app = r.app_name or 'the Office Sentry app (usually "Office Sentry (read-only)")' %}
-{{ tenant_header(tenant, 'manage', title='Offboard ' ~ tenant.name) }}
+{{ tenant_header(tenant, 'manage', title='Offboard') }}
 
 <p class="intro-line">Offboarding removes {{ tenant.name }} from Office Sentry for good. Work through the steps, then delete. If the client might come back, <strong>archive</strong> it instead: that hides it and keeps its data.</p>
 

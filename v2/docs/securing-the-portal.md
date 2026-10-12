@@ -16,11 +16,11 @@ The defaults are the secure ones. Nothing below needs switching on.
 
 | | What |
 |---|---|
-| Sign-in | Passwords hashed with scrypt; 12 characters at least, and the 20,000 most common long passwords, the username and the product name are refused. Two-step codes from an authenticator app, required for everyone on a new install. Wrong passwords slow down the address they come from, never lock the account ([Sign-in protection](../DEPLOY.md#sign-in-protection)). Once an admin sets it up, staff can sign in with Microsoft instead, under your own Conditional Access and MFA ([Staff sign-in with Microsoft](staff-sign-in.md)). |
+| Sign-in | Passwords hashed with scrypt; 12 characters at least, and the 20,000 most common long passwords, the username and the product name are refused. Two-step codes from an authenticator app, required for everyone on a new install. Wrong passwords slow down the address they come from, never lock the account ([Sign-in protection](../DEPLOY.md#sign-in-protection)). Once an admin sets it up, staff can sign in with Microsoft instead, under your own Conditional Access and MFA ([Staff sign-in with Microsoft](staff-sign-in.md)), and so can your clients' people, from their own company's tenant only ([Client sign-in with Microsoft](client-sign-in.md)). |
 | Sessions | Kept on the server: the cookie holds a random token. Two hours idle and eight in total, ended on sign-out and on any change to the account. `__Host-` cookie, HttpOnly, SameSite, Secure over HTTPS. |
 | Who sees what | Every page and download checks on the server what the signed-in person's role and capabilities allow, and on which clients. Clients see their own organisation only. Certificates, private keys and the encryption key can't be downloaded by anyone. |
 | Forms | Every form and autosave carries an anti-forgery token. A missing or stale one is refused, explained, and counted in the activity log. |
-| Browser headers | A nonce-based Content-Security-Policy with no external scripts, styles or fonts, HSTS, `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: same-origin`, a Permissions-Policy, cross-origin opener and resource policies of `same-origin`, `X-Permitted-Cross-Domain-Policies: none`, and `Cache-Control: no-store` on every page. |
+| Browser headers | A nonce-based Content-Security-Policy with no external scripts, styles or fonts, HSTS over HTTPS, `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: same-origin`, a Permissions-Policy, cross-origin opener and resource policies of `same-origin`, `X-Permitted-Cross-Domain-Policies: none`, and `Cache-Control: no-store` on every page and download. |
 | Uploads | Requests over 1 MB are refused, which covers the only uploads: a logo and a tenant list to import. |
 | Activity log | Every sign-in, refused page, change and download, with the address it came from. Admins read and export it under *Settings → Activity log*. |
 | Secrets | The session key and the encryption key for stored certificates, two-step secrets and mail credentials are generated into `secrets.json` (mode `0600`) in a volume of its own, apart from the data and its backups. |
@@ -67,6 +67,18 @@ The defaults are the secure ones. Nothing below needs switching on.
   giving them a bigger role; taking away always wins. Grant a client group to
   someone who looks after several clients rather than all of them. Remove
   accounts the day someone leaves: disabling one ends their sessions at once.
+- **Limited roles stay limited.** A custom role that sees only some clients
+  can still manage clients, users or the activity log, but only within those
+  clients: its holders don't see other clients' names, accounts or activity,
+  and can't change client groups or a role held by someone who sees or does
+  more. *Settings* and *System status* cover every client, so they only work
+  for someone who sees every client.
+- **A report area taken away stays away.** Someone who can't open a report
+  area on a client (a role without it, or taken away with *Customise*) can't
+  schedule it by email, download it from the report history or see it in a
+  report design, and the home pages leave it out of their counts. Every report
+  email opens with the client's security summary, so setting up, changing or
+  previewing one needs *Security findings and reviews* on that client.
 
 ## Behind a reverse proxy
 
@@ -74,6 +86,8 @@ The portal expects a proxy in front of it that ends TLS and passes two headers:
 `X-Forwarded-For` with the visitor's address and `X-Forwarded-Proto` with
 `https`. With `OFFICESENTRY_TRUSTED_PROXIES=1` the portal trusts the last hop
 of those headers and ignores anything the visitor put there themselves.
+The portal always runs at the root of its address, so it never takes a path
+prefix from `X-Forwarded-Prefix`.
 
 **Caddy** (the bundled `Caddyfile`, started with `--profile https`) does all
 of this by itself, including the certificate. Nothing to configure beyond

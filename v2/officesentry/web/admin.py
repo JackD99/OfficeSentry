@@ -28,6 +28,7 @@ from .. import (
     permission_batch,
     permissions,
     roles,
+    sso,
     store,
     tenant_groups,
     throttle,
@@ -36,7 +37,7 @@ from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..text import plural
 from . import sessions
-from .access import access_of, current, needs, tenant_ids, unseen_client_accounts, visible_tenants
+from .access import current, needs, out_of_reach, unseen_client_accounts, visible_tenants
 from .auth import confirm_password, password_problem
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -89,22 +90,7 @@ def _last_admin(user_id: int) -> bool:
 # can only hand out what they hold themselves and only on the clients they see, can't change an account
 # that holds more than they do, and can't change their own role or access. So nobody raises their own
 # access, directly or by resetting the password of someone who has more, and nobody sees the names of
-# clients outside their own scope on these pages.
-
-
-def _out_of_reach(user) -> str | None:
-    """Why the signed-in person may not change this account, or None."""
-    actor = current()
-    if actor.is_admin:
-        return None
-    target = access_of(user)
-    if target.is_admin:
-        return "Only an Administrator can change an Administrator's account."
-    mine, theirs = tenant_ids(g.db, g.user), tenant_ids(g.db, user)
-    wider = mine is not None and (theirs is None or not theirs <= mine)
-    if wider or target.anywhere() - actor.everywhere():
-        return f"{user['username']} can do or see more than you can, so only an Administrator can change their account."
-    return None
+# clients outside their own scope on these pages (``access.out_of_reach``, which the roles page shares).
 
 
 def _own_access(user) -> str | None:
@@ -146,8 +132,11 @@ def users():
     two_step = {
         "policy": cfg.mfa_policy(g.db),
         "from_env": cfg.require_mfa_explicit,
+        # Client accounts with no password sign in with Microsoft, and their organisation's MFA.
         "clients_without": sum(
-            1 for u in rows if u["role"] == "client" and not u["totp_enabled_at"] and not u["disabled"]
+            1
+            for u in rows
+            if u["role"] == "client" and not u["totp_enabled_at"] and not u["disabled"] and sso.has_password(u)
         ),
     }
     group_grants = dict(g.db.execute("SELECT user_id, COUNT(*) FROM user_tenant_groups GROUP BY user_id").fetchall())
@@ -166,13 +155,34 @@ def users():
     )
 
 
+SIGN_IN_ADDRESS_RE = re.compile(r"^[^@\s]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$")
+
+
+def _microsoft_problem(username: str, role: roles.Role) -> str | None:
+    """Why a staff account that signs in with Microsoft (no password) can't be added like this, or None. It's
+    linked at its first sign-in in the MSP's own tenant by its sign-in address, so the username must be that
+    address. A client's person is found in their own directory instead (``client_access.add``)."""
+    s = sso.settings(g.db)
+    if role.kind == permissions.CLIENT:
+        return (
+            "Add a client's people who sign in with Microsoft on the client's Settings → Client sign-in page, which "
+            "finds them in the client's own directory."
+        )
+    if not sso.enabled(s):
+        return "Staff sign-in with Microsoft is off, so this account needs a password."
+    if not SIGN_IN_ADDRESS_RE.match(username):
+        return "For Microsoft sign-in, the username is the address they sign in to Microsoft with, like jo@example.com."
+    return None
+
+
 @bp.post("/users")
 @needs("users.manage")
 def create_user():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
-    problem = password_problem(password, username=username)
+    microsoft = request.form.get("signs_in") == "microsoft"
     role = _role_from_form()
+    problem = _microsoft_problem(username, role) if microsoft else password_problem(password, username=username)
     if not _givable(role):
         problem = _NOT_GIVABLE
     if not username or len(username) > 64:
@@ -183,19 +193,39 @@ def create_user():
         flash(problem, "error")
         return redirect(url_for("admin.users"))
     cur = g.db.execute(
-        # The admin chose this password, so they replace it at first sign-in.
+        # The admin chose this password, so they replace it at first sign-in. Microsoft sign-in has none.
         "INSERT INTO users (username, password_hash, role, role_id, created_at, must_change_password)"
-        " VALUES (?, ?, ?, ?, ?, 1)",
-        (username, generate_password_hash(password), role.column, role.id, utcnow()),
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            username,
+            sso.NO_PASSWORD if microsoft else generate_password_hash(password),
+            role.column,
+            role.id,
+            utcnow(),
+            int(not microsoft),
+        ),
     )
-    audit(g.db, g.user["username"], "user_created", detail=f"{username} ({role.name})")
+    audit(
+        g.db,
+        g.user["username"],
+        "user_created",
+        detail=f"{username} ({role.name}){', signs in with Microsoft' if microsoft else ''}",
+    )
     return redirect(url_for("admin.edit_user", user_id=cur.lastrowid))
 
 
 # Someone who signs in with Microsoft gets their role from Entra at each sign-in (sso.account_for).
 _SET_IN_ENTRA = (
     "{username} signs in with Microsoft, so their role is the app role assigned to them in Entra. Change it "
-    "there; Settings → Staff sign-in says which app role gives which role."
+    "there; Settings → Microsoft sign-in says which app role gives which role."
+)
+_CLIENT_STAYS = (
+    "{username} signs in with a client's own Microsoft account, so they can only have a client role. Add staff "
+    "as a new account."
+)
+_OTHER_ORGANISATION = (
+    "{username} signs in with their Microsoft account at another organisation, so they can't be given {names}: "
+    "a client's people only see clients in their own organisation."
 )
 
 
@@ -207,14 +237,18 @@ def edit_user(user_id: int):
     current_role = roles.role_of(g.db, user)
     actor = current()
     if request.method == "POST":
-        if problem := _out_of_reach(user) or _own_access(user):
+        if problem := out_of_reach(user) or _own_access(user):
             flash(problem, "error")
             return redirect(url_for("admin.edit_user", user_id=user_id))
         if request.form.get("password") and not _admin_password_ok():
             return redirect(url_for("admin.edit_user", user_id=user_id))
         role = _role_from_form(current_role)
-        if user["entra_oid"] and role.id != current_role.id:
+        if user["entra_oid"] and role.id != current_role.id and current_role.kind != permissions.CLIENT:
             flash(_SET_IN_ENTRA.format(username=user["username"]), "error")
+            return redirect(url_for("admin.edit_user", user_id=user_id))
+        if user["entra_oid"] and current_role.kind == permissions.CLIENT and role.kind != permissions.CLIENT:
+            # A client's Microsoft account never becomes staff (sso.account_for refuses it too).
+            flash(_CLIENT_STAYS.format(username=user["username"]), "error")
             return redirect(url_for("admin.edit_user", user_id=user_id))
         if role.id != current_role.id and not _givable(role):
             flash(_NOT_GIVABLE, "error")
@@ -237,6 +271,13 @@ def edit_user(user_id: int):
         # Grants on clients the signed-in person doesn't see stay as they were.
         before = {r[0] for r in g.db.execute("SELECT tenant_id FROM user_tenants WHERE user_id = ?", (user_id,))}
         grants |= before - valid_ids
+        if user["entra_tid"] and role.kind == permissions.CLIENT:
+            # A client's person signing in with their own Microsoft account only ever sees clients in that
+            # organisation (access._organisation), so a grant elsewhere would do nothing: say so instead.
+            added = (store.get_tenant(g.db, t) for t in sorted(grants - before))
+            if elsewhere := [t["name"] for t in added if t and sso.directory_id(g.db, t) != user["entra_tid"]]:
+                flash(_OTHER_ORGANISATION.format(username=user["username"], names=", ".join(elsewhere)), "error")
+                return redirect(url_for("admin.edit_user", user_id=user_id))
         # Only staff can be granted a whole group (access.visible_tenants ignores it for clients). A group can
         # hold clients outside the signed-in person's scope, so only someone who sees every client grants them.
         if actor.sees_all:
@@ -292,7 +333,7 @@ def edit_user(user_id: int):
         roles=all_roles,
         givable={r.id for r in all_roles if _givable(r)},
         actor=actor,
-        out_of_reach=_out_of_reach(user),
+        out_of_reach=out_of_reach(user),
         own_access=_own_access(user),
         grantable=actor.everywhere(),
         capabilities=permissions.CAPABILITIES,
@@ -317,7 +358,7 @@ def user_access(user_id: int):
     """Single capabilities added or taken away for this person: everywhere (one choice per capability) and
     on one client (rows kept, dropped or added). Administrators hold everything, so there's nothing to set."""
     user = _user_or_404(user_id)
-    if problem := _out_of_reach(user) or _own_access(user):
+    if problem := out_of_reach(user) or _own_access(user):
         flash(problem, "error")
         return redirect(url_for("admin.edit_user", user_id=user_id))
     role = roles.role_of(g.db, user)
@@ -367,7 +408,7 @@ def _is_locked(user) -> bool:
 def reset_two_step(user_id: int):
     """For a lost phone: remove their authenticator and sign them out. They set it up again at next sign-in."""
     user = _user_or_404(user_id)
-    if problem := _out_of_reach(user):
+    if problem := out_of_reach(user):
         flash(problem, "error")
         return redirect(url_for("admin.edit_user", user_id=user_id))
     if not _admin_password_ok():
@@ -391,7 +432,7 @@ def reset_two_step(user_id: int):
 @needs("users.manage")
 def sign_out_user(user_id: int):
     user = _user_or_404(user_id)
-    if problem := _out_of_reach(user):
+    if problem := out_of_reach(user):
         flash(problem, "error")
         return redirect(url_for("admin.edit_user", user_id=user_id))
     if not _admin_password_ok():
@@ -406,7 +447,7 @@ def sign_out_user(user_id: int):
 @needs("users.manage")
 def unlock_user(user_id: int):
     user = _user_or_404(user_id)
-    if problem := _out_of_reach(user):
+    if problem := out_of_reach(user):
         flash(problem, "error")
         return redirect(url_for("admin.edit_user", user_id=user_id))
     g.db.execute("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?", (user_id,))
@@ -420,7 +461,7 @@ def unlock_user(user_id: int):
 @needs("users.manage")
 def delete_user(user_id: int):
     user = _user_or_404(user_id)
-    if problem := _out_of_reach(user):
+    if problem := out_of_reach(user):
         flash(problem, "error")
         return redirect(url_for("admin.edit_user", user_id=user_id))
     if user["id"] == g.user["id"]:

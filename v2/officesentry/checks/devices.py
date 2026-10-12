@@ -1,10 +1,11 @@
-"""Checks on devices: Intune compliance, encryption, Windows support and stale records."""
+"""Checks on devices: Intune compliance and its policies, encryption and BitLocker recovery keys, Windows support
+and stale records."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from .. import devices
+from .. import devices, intune
 from ..snapshot import TenantSnapshot
 from ..text import every, plural, verb
 from .base import Finding, _all_are, _unavailable, rule
@@ -241,4 +242,105 @@ def stale_devices(snap: TenantSnapshot, now: datetime):
         )
         if findings
         else ("pass", f"No stale devices among {plural(len(entra), 'record')}", [])
+    )
+
+
+@rule(
+    "bitlocker_keys",
+    "Windows computers have their BitLocker recovery key saved",
+    "Devices",
+    "Make Intune's disk encryption policy (Endpoint security > Disk encryption) require the recovery key to be "
+    "saved in Entra ID before BitLocker turns on, and on computers already encrypted run "
+    "BackupToAAD-BitLockerKeyProtector (or re-run the policy). Without the key, a computer that asks for it after a "
+    "firmware or hardware change can't be unlocked, and its data is lost.",
+)
+def bitlocker_keys(snap: TenantSnapshot, now: datetime):
+    entra = devices.objects(snap, "entra_device")
+    if entra is None:
+        return _unavailable("Device data hasn't been collected yet")
+    state = devices.bitlocker_state(snap)
+    if state == "waiting":
+        return _unavailable(f"Waiting for the client to approve {devices.BITLOCKER}")
+    if state != "read":
+        return _unavailable(
+            "BitLocker recovery keys couldn't be read" if state else "BitLocker recovery keys haven't been read yet"
+        )
+    computers = [d for d in entra if devices.escrows_keys(d, now)]
+    if not computers:
+        return _unavailable("No Windows computers are joined to Entra ID")
+    keys = devices.recovery_keys(snap)
+    status = devices.objects(snap, "intune_status") or []
+    managed = (devices.objects(snap, "managed_device") or []) if status and status[0].get("available") else []
+    encrypted = {(d.get("azureADDeviceId") or "").lower(): d.get("isEncrypted") for d in managed}
+    findings = []
+    for d in computers:
+        device_id = (d.get("deviceId") or "").lower()
+        if devices.has_recovery_key(device_id, keys):
+            continue
+        is_encrypted = encrypted.get(device_id)
+        if is_encrypted is False:
+            continue  # not encrypted at all: device_encryption says so
+        name = d.get("displayName") or d["_id"]
+        if is_encrypted:
+            findings.append(Finding("medium", name, "Encrypted, but no recovery key saved in Entra ID", d["_id"]))
+        else:
+            findings.append(Finding("low", name, "No recovery key saved in Entra ID (encryption not known)", d["_id"]))
+    if findings:
+        return (
+            "fail",
+            f"{len(findings)} of {plural(len(computers), 'joined Windows computer')} without a saved recovery key",
+            findings,
+        )
+    return ("pass", _all_are(len(computers), "joined Windows computer") + " covered by a saved recovery key", [])
+
+
+@rule(
+    "intune_compliance_coverage",
+    "Every platform in use has a compliance policy",
+    "Devices",
+    "In Intune (Devices > Compliance), create and assign a compliance policy for each platform with enrolled "
+    "devices, requiring at least encryption, a screen lock and a minimum OS version, and set devices with no "
+    "policy to show as not compliant (Compliance settings). Until then those devices count as compliant, so "
+    "Conditional Access that requires a compliant device lets them through.",
+)
+def intune_compliance_coverage(snap: TenantSnapshot, now: datetime):
+    status = intune.status(snap)
+    if status is None:
+        return _unavailable("Intune policies haven't been collected yet")
+    if status.get("available") is False:
+        return _unavailable("The tenant has no Intune licence")
+    part = intune.parts(snap).get("compliance")
+    if part == "waiting":
+        return _unavailable("Waiting for the client to approve DeviceManagementConfiguration.Read.All")
+    if part != "read":
+        return _unavailable("Intune compliance policies couldn't be read")
+    managed, reason = _managed_devices(snap)
+    if managed is None:
+        return _unavailable(reason)
+    enrolled: dict[str, int] = {}
+    for d in managed:
+        platform = intune.device_platform(d)
+        if platform:
+            enrolled[platform] = enrolled.get(platform, 0) + 1
+    if not enrolled:
+        return _unavailable("No enrolled devices run Windows, macOS, iOS, Android or Linux")
+    covered = intune.compliance_platforms(snap)
+    findings = [
+        Finding(
+            "medium",
+            platform,
+            f"{plural(n, 'enrolled device')}, no compliance policy assigned",
+            f"platform:{platform}",
+        )
+        for platform, n in sorted(enrolled.items())
+        if not covered.get(platform)
+    ]
+    if findings:
+        names = ", ".join(f.subject for f in findings)
+        return ("fail", f"No compliance policy for {names}", findings)
+    return (
+        "pass",
+        f"{every(len(enrolled), 'platform', start=True)} in use {verb(len(enrolled), 'has', 'have')} a "
+        "compliance policy",
+        [],
     )

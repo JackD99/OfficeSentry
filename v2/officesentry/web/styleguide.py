@@ -17,7 +17,7 @@ from flask import Blueprint, render_template, request, url_for
 
 from ..reports import summary, views
 from ..reports.branding import contrast
-from ..reports.data_reports import Chart, DataReport, Highlight, Link, Section, Tile, Trend
+from ..reports.data_reports import Chart, DataReport, Highlight, Link, Many, Section, Tile, Trend
 from .access import needs
 from .printing import pdf_response
 
@@ -124,6 +124,9 @@ def _tenant() -> SimpleNamespace:
     )
 
 
+_PEOPLE = ["Adele Vance", "Ben Walters", "Dev Patel", "accountant@partner.example"]
+
+
 def _report() -> DataReport:
     """A small detail report: two tables (one flagged and grouped), tiles and highlights."""
     now = datetime.now(UTC)
@@ -148,11 +151,13 @@ def _report() -> DataReport:
         ["Site", "File", "Shared with"],
         rows=[
             ["Finance", Link("Budget 2027.xlsx", "https://contoso.example/budget"), "Anyone with the link"],
-            ["Finance", "Payroll.csv", "accountant@partner.example"],
-            ["Clinical", "Rota.docx", "Everyone in the organisation"],
+            ["Finance", "Payroll.csv", Many(["accountant@partner.example", "payroll@bureau.example"])],
+            ["Clinical", "Rota.docx", Many(["Clinical", "Reception", "Locums", "Managers", "Dental nurses", "IT"])],
+            ["Clinical", "Policies.pdf", Many(_PEOPLE, "3 people + 1 guest")],
         ],
-        flags=["medium", "high", None],
+        flags=["medium", "high", None, None],
         group="Site",
+        intro="Lists of three or fewer show whole; longer ones show their first two, or a summary, and open in place.",
     )
     return DataReport(
         key="styleguide",

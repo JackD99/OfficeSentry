@@ -98,6 +98,13 @@ def waits_for_approval(plan) -> bool:
     return plan["mode"] == "approval" or plan["delivery"] == "portal"
 
 
+def needs_approval(conn, tenant_id: int) -> bool:
+    """Whether the tenant's month-end reports wait for approval: then any other email of theirs only carries
+    a month's commentary once it's approved."""
+    plan, _ = plan_for(conn, tenant_id)
+    return plan is not None and waits_for_approval(plan)
+
+
 PLAN_COLUMNS = (
     "name",
     "reports",
@@ -581,7 +588,7 @@ def suggestions(conn, tenant) -> list[dict]:
         {
             "rule_key": f"project:{rec.project.key}",
             "kind": "project",
-            "title": f"{rec.project.title} project",
+            "title": f"Project: {rec.project.title}",
             "detail": rec.project.pitch,
             "severity": rec.severity,
             "effort": rec.effort,

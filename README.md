@@ -258,11 +258,13 @@ Microsoft 365 can't answer; one written answer fills every pack.
 
 **Projects** turns each client's findings into the projects an account manager can sell: no Conditional Access
 becomes an *Identity and Conditional Access* project, unencrypted laptops a *Device management* one, missing
-Business Premium features a *Security licence upgrade*, and so on. A project is half a day's work or more; anything
-smaller, like registering MFA for one admin, is a quick fix the team just does, listed on the client's page. Every
-client's recommendations sit in one list, worst first, with what was found, how big the job is, a rough estimate
-and where it stands (suggested, proposed, agreed or declined, with a note). Each client's page downloads a branded
-proposal PDF to send them. A project drops off by itself once its findings are fixed.
+Business Premium features a *Security licence upgrade*, a small business still syncing accounts from an office
+server *Move to cloud-only accounts*, and so on. A project is half a day's work or more; anything smaller, like
+registering MFA for one admin, and repairs, like directory sync that has stopped, are quick fixes the team just
+does, listed on the client's page. Every client's recommendations sit in one list, worst first, with what was
+found, how big the job is, a rough estimate and where it stands (suggested, proposed, agreed or declined, with a
+note). Each client's page downloads a branded proposal PDF to send them, listing only the work their findings call
+for. A project drops off by itself once its findings are fixed.
 
 <table>
   <tr>
@@ -278,7 +280,9 @@ proposal PDF to send them. A project drops off by itself once its findings are f
 ### A view for clients
 
 Client users can sign in too. They see only their own organisation's reports, key numbers and downloads, never
-collection internals, run logs or other clients.
+collection internals, run logs or other clients. They can sign in with their own work Microsoft account, under
+their organisation's own MFA, from their own tenant only: no guest accounts in yours and no passwords to hand
+out ([Client sign-in](v2/docs/client-sign-in.md)).
 
 ![What a client sees when they sign in](docs/screenshots/client-view.png)
 
@@ -382,7 +386,8 @@ docker compose --profile https up -d
 
 The image is [`ghcr.io/jackd99/officesentry`](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry),
 public, for amd64 (Intel and AMD) servers and, from 2.1.0, arm64 ones. It is built and
-scanned by GitHub Actions from a tagged release, with a signed build provenance. Each release lists what changed,
+scanned by GitHub Actions from a tagged release, with a signed build provenance you can check
+([SECURITY.md, "Checking a release"](SECURITY.md#checking-a-release)). Each release lists what changed,
 and anything to do before updating, in [CHANGELOG.md](CHANGELOG.md).
 
 Leave out `--profile https` if you already have a reverse proxy, and point it at `http://127.0.0.1:8000`. Then:
@@ -414,6 +419,8 @@ from there.
 - [Deploy guides](v2/docs/deploy/README.md): Portainer and other container managers, Unraid, Synology and
   TrueNAS, Kubernetes, Azure, AWS, other clouds and Cloudflare
 - [Staff sign-in with Microsoft](v2/docs/staff-sign-in.md): let your team sign in with their Entra ID account
+- [Client sign-in with Microsoft](v2/docs/client-sign-in.md): let your clients' people sign in with their own
+  work account
 - [Onboarding a client](v2/docs/onboarding-a-client.md): consent, Global Reader, the first collection, connection
   health and offboarding
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access

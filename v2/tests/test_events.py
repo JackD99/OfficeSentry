@@ -4,6 +4,8 @@ daily summaries, retention, tenant deletion and isolation, backups, and the Acti
 import csv
 import io
 import json
+import os
+import shutil
 import sqlite3
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
@@ -378,6 +380,37 @@ def test_backups_copy_the_history_and_a_restore_puts_it_back(db, two_tenants, cf
         events._remove(path)
     assert backups.restore_events(dest, source) == copied
     assert len(_stored(db, alpha)) == 20
+
+
+@responses.activate
+def test_a_backup_moved_without_its_history_reads_back_what_microsoft_keeps(db, two_tenants, cfg, tmp_path):
+    alpha, _ = two_tenants
+    _fake_log(_signins(20))
+    _ingest(db, alpha)
+    saved, _ = backups.backup(cfg.db_path, tmp_path / "old-server", keep=3)
+    if os.name != "nt":
+        assert oct((tmp_path / "old-server" / "events" / "manifest.json").stat().st_mode & 0o777) == "0o600"
+    for path in list(events.root(db).rglob("*.db")):  # the new server's data folder has no history yet
+        events._remove(path)
+
+    # With the events folder beside it, the history comes back and the cursor still says how far it was read.
+    done = backups.restore(cfg.db_path, saved, worker_running=False)
+    assert done["events"] > 0 and done["history_forgotten"] == 0
+    assert len(_stored(db, alpha)) == 20 and events.coverage(db, alpha, "signins").read_to is not None
+
+    # The database file alone: the cursor would claim months that aren't there, so it's forgotten, and the
+    # next collection reads back as far as Microsoft keeps the log.
+    for path in list(events.root(db).rglob("*.db")):
+        events._remove(path)
+    alone = tmp_path / "moved" / saved.name
+    alone.parent.mkdir()
+    shutil.copy(saved, alone)
+    done = backups.restore(cfg.db_path, alone, worker_running=False)
+    assert done["events"] == 0 and done["history_forgotten"] == 1
+    assert events.coverage(db, alpha, "signins").read_to is None
+    _ingest(db, alpha)
+    assert len(_stored(db, alpha)) == 20
+    assert not list(cfg.data_dir.glob("restore-*"))  # the unpacked copy is gone, with SQLite's files beside it
 
 
 # -- The page ---------------------------------------------------------------------------------------

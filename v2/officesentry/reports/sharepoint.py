@@ -9,12 +9,12 @@ from __future__ import annotations
 import math
 from datetime import date, datetime, timedelta
 
-from .. import store
 from ..collectors.sharepoint_lookup import DENIED_TEXT
 from ..devices import parse_day
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
 from ..text import plural
+from ..usage import owner_label
 from .charts import line_chart
 from .data_reports import Chart, DataReport, Link, Rows, Section, Tile, _date, metric_trend
 from .registry import report
@@ -101,7 +101,10 @@ def site_cell(row: dict):
 
 
 def _objects_before(snap: TenantSnapshot, collector: str, kind: str, before: datetime) -> dict[str, dict] | None:
-    """Objects from the latest successful run at or before ``before`` (for growth)."""
+    """Objects from the latest successful run at or before ``before`` (for growth), read from the daily history
+    once retention has removed its snapshot."""
+    from .. import state_history  # here: the history imports the worker's schedule
+
     row = snap.conn.execute(
         "SELECT id FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded', 'partial')"
         " AND finished_at <= ? ORDER BY finished_at DESC, id DESC LIMIT 1",
@@ -109,7 +112,7 @@ def _objects_before(snap: TenantSnapshot, collector: str, kind: str, before: dat
     ).fetchone()
     if row is None:
         return None
-    return {o["_id"]: o for o in store.run_objects(snap.conn, row["id"], kind)}
+    return {o["_id"]: o for o in state_history.objects_of(snap.conn, row["id"], kind)}
 
 
 def storage_points(snap: TenantSnapshot, area: str) -> list[tuple[date, float]]:
@@ -304,7 +307,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             [
                 site_cell(r),
                 site_type(r),
-                r.get("ownerPrincipalName") or r.get("owner"),
+                owner_label(r),
                 _date(r.get("lastActivityDate")) or "None recorded",
                 size(r["storageUsed"]),
                 r["files"],
@@ -336,7 +339,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             [
                 site_cell(r),
                 site_type(r),
-                r.get("ownerPrincipalName") or r.get("owner"),
+                owner_label(r),
                 size(r["storageUsed"]),
                 _signed_size(r["storageUsed"] - prev["storageUsed"]) if prev else "",
                 r["files"],
@@ -383,9 +386,6 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         if u is None:
             return "Deleted" if users else "Unknown"
         return "Enabled" if u.get("accountEnabled") else "Disabled"
-
-    def person(r):
-        return r.get("ownerPrincipalName") or ("Name hidden by Microsoft" if r.get("concealed") else r.get("owner"))
 
     shared = _shared_items(snap)
     personal = [s for s in shared or [] if s.get("personal")]
@@ -434,7 +434,7 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     for r in sorted(left, key=lambda r: -r["storageUsed"]):
         gone.add(
             [
-                person(r),
+                owner_label(r),
                 account(r),
                 size(r["storageUsed"]),
                 r["files"],
@@ -479,7 +479,7 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         quota = "" if pct is None else ("Under 1%" if 0 < pct < 1 else f"{pct:.0f}%")
         every.add(
             [
-                person(r),
+                owner_label(r),
                 account(r),
                 size(r["storageUsed"]),
                 quota,

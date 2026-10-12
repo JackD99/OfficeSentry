@@ -14,7 +14,8 @@
 `audit.js` does the looking, in the page: it measures what is actually drawn (each line of text and each
 control, after every ancestor that clips it), so a column clipped by its neighbour or a menu pushed off the
 edge is caught even when the HTML looks fine. Hidden things (closed `<details>`, `display: none`,
-screen-reader text) are left out.
+screen-reader text) are left out. The browser tests (`tests/browser/test_pages.py`) run its page-scroll
+check alone on each of their pages, where it already blocks a merge.
 
 ## Which pages, with what data
 

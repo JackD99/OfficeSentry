@@ -178,8 +178,13 @@ def _cells(text: str) -> list[list[str]]:
     return [row for row in csv.reader(io.StringIO(text), dialect) if any(c.strip() for c in row)]
 
 
-def parse(conn, text: str) -> Parsed:
-    """Rows to show before importing, each with its problems in plain words. Nothing is written."""
+def parse(conn, text: str, sees: set[int] | None = None, groups_allowed: bool = True) -> Parsed:
+    """Rows to show before importing, each with its problems in plain words. Nothing is written.
+
+    ``sees`` is the tenant ids the person importing may see (None: every client): a client already added
+    that they can't see is only said to be there, never named. Without ``groups_allowed`` (someone who
+    doesn't manage groups, ``access.manages_groups``) a row naming a group is refused, since a group can
+    hand its clients to the analysts it's granted to."""
     if len(text.encode("utf-8", errors="replace")) > MAX_BYTES:
         return Parsed(error="That file is over 400 kB. Split it into smaller files.")
     try:
@@ -200,7 +205,10 @@ def parse(conn, text: str) -> Parsed:
     if len(body) > MAX_ROWS:
         return Parsed(error=f"That's {len(body):,} rows; import up to {MAX_ROWS:,} at a time.")
 
-    existing = {r["tenant_ref"].lower(): r["name"] for r in conn.execute("SELECT tenant_ref, name FROM tenants")}
+    existing = {
+        r["tenant_ref"].lower(): r["name"] if sees is None or r["id"] in sees else None
+        for r in conn.execute("SELECT id, tenant_ref, name FROM tenants")
+    }
     groups = {gr["name"].lower(): gr["name"] for gr in tenant_groups.all_groups(conn)}
     new_groups: dict[str, str] = {}
     seen: dict[str, int] = {}
@@ -224,7 +232,7 @@ def parse(conn, text: str) -> Parsed:
         elif ref in seen:
             row.problems.append(f"The same client as line {seen[ref]}.")
         elif ref in existing:
-            row.skip = f"Already in Office Sentry as {existing[ref]}."
+            row.skip = f"Already in Office Sentry as {existing[ref]}." if existing[ref] else "Already in Office Sentry."
         if ref:
             seen.setdefault(ref, i)
 
@@ -244,6 +252,11 @@ def parse(conn, text: str) -> Parsed:
             group = " ".join(raw.split())[: tenant_groups.NAME_MAX]
             if not group:
                 continue
+            if not groups_allowed:
+                row.problems.append(
+                    "Only someone who sees every client puts clients in groups. Leave the group column empty."
+                )
+                break
             known = groups.get(group.lower()) or new_groups.get(group.lower())
             if known is None:
                 new_groups[group.lower()] = known = group

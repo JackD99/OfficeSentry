@@ -19,6 +19,7 @@ from tests import exchangedata as xd
 from tests import graphdata as gd
 from tests import groupdata as grp
 from tests import hybriddata as hd
+from tests import intunedata as idata
 from tests import licencedata as ld
 from tests import tenantsettingsdata as tsd
 from tests.sharepoint_data import mock_sharepoint
@@ -207,6 +208,8 @@ def mock_tenant(
     audits=None,
     admin_units=None,
     teams_kw=None,
+    intune_kw=None,
+    recovery_keys=None,
     **phase4,
 ):
     paged(rsps, f"{V1}/organization", [gd.ORGANIZATION])
@@ -251,6 +254,13 @@ def mock_tenant(
     )
     paged(rsps, f"{V1}/devices", dd.ENTRA_DEVICES)
     paged(rsps, f"{V1}/deviceManagement/managedDevices", dd.MANAGED_DEVICES)
+    paged(
+        rsps,
+        f"{V1}/informationProtection/bitlocker/recoveryKeys",
+        dd.RECOVERY_KEYS if recovery_keys is None else recovery_keys,
+    )
+    mock_intune(rsps, **(intune_kw or {}))
+    mock_group_eligibility(rsps, gd.GROUP_ELIGIBILITY)
     paged(rsps, f"{V1}/groups", grp.GROUPS if groups is None else groups)
 
     def people(request):  # /v1.0/groups/<id>/owners or /members
@@ -304,6 +314,41 @@ def mock_tenant(
     mock_sharepoint(rsps, **(sharepoint_kw or {}))
     mock_usage(rsps, **(usage_kw or {}))
     mock_teams(rsps, **(teams_kw or {}))
+
+
+def mock_intune(rsps, *, compliance=None, configurations=None, settings=None, ios=None, android=None, status=None):
+    """Intune's policy lists (``intunedata``). ``status`` maps a list's last path segment
+    (``deviceCompliancePolicies``) to an (HTTP status, body) answer instead, as Microsoft gives one before the
+    client approves the permission or without an Intune licence."""
+    status = status or {}
+    given = {
+        f"{V1}/deviceManagement/deviceCompliancePolicies": (compliance, idata.COMPLIANCE_POLICIES),
+        f"{V1}/deviceManagement/deviceConfigurations": (configurations, idata.CONFIGURATIONS),
+        f"{BETA}/deviceManagement/configurationPolicies": (settings, idata.SETTINGS_POLICIES),
+        f"{V1}/deviceAppManagement/iosManagedAppProtections": (ios, idata.IOS_APP_PROTECTION),
+        f"{V1}/deviceAppManagement/androidManagedAppProtections": (android, idata.ANDROID_APP_PROTECTION),
+    }
+    for url, (items, seeded) in given.items():
+        answer = status.get(url.rsplit("/", 1)[-1])
+        if answer:
+            rsps.get(url, status=answer[0], json=answer[1])
+        else:
+            paged(rsps, url, seeded if items is None else items)
+
+
+def mock_group_eligibility(rsps, by_group: dict[str, list[dict]]) -> None:
+    """PIM for groups: who can activate membership of each group, by the ``groupId`` in the ``$filter``."""
+
+    def callback(request):
+        group = parse_qs(urlsplit(request.url).query).get("$filter", ["''"])[0].split("'")[1]
+        return 200, {}, json.dumps(page_of(request.url, by_group.get(group, []), _page(request)))
+
+    rsps.add_callback(
+        responses.GET,
+        f"{V1}/identityGovernance/privilegedAccess/group/eligibilitySchedules",
+        callback=callback,
+        content_type="application/json",
+    )
 
 
 def graph_factory(tenant, connection):

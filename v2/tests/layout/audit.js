@@ -1,4 +1,5 @@
 // The layout audit, run in the page by test_layout.py: page.evaluate(<this file>, {desktop: true|false}).
+// tests/browser/test_pages.py runs the page-scroll check alone, before each screenshot: {only: "page-scroll"}.
 //
 // It looks at what is actually drawn (text line boxes and controls, after every ancestor that clips them)
 // and returns a list of problems:
@@ -172,54 +173,6 @@
     return false;
   }
 
-  // Pieces of what is drawn: each line of text, and each control, image or icon as one box.
-  const atoms = [];
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
-    acceptNode(node) {
-      if (node.nodeType === 1) {
-        if (SKIP_TAGS.has(node.tagName)) return NodeFilter.FILTER_REJECT;
-        if (node.namespaceURI === "http://www.w3.org/2000/svg" && node.tagName !== "svg") {
-          return NodeFilter.FILTER_REJECT; // a chart or icon is one box: what's inside it is drawn by design
-        }
-        if (node.tagName === "IFRAME") return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      }
-      return /\S/.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
-    },
-  });
-  const range = document.createRange();
-  const hiddenCache = new Map();
-  const isHidden = (el) => {
-    if (!hiddenCache.has(el)) hiddenCache.set(el, invisible(el) || srOnly(el));
-    return hiddenCache.get(el);
-  };
-  const controls = [];
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (node.nodeType === 1) {
-      const el = node;
-      const box = el.matches(CONTROL) || ["IMG", "svg", "VIDEO", "CANVAS", "PROGRESS", "METER"].includes(el.tagName);
-      if (!box || isHidden(el)) continue;
-      // A link that wraps onto a second line is two boxes, not the rectangle around both.
-      const rects = style(el).display === "inline" ? [...el.getClientRects()] : [el.getBoundingClientRect()];
-      for (const r of rects) {
-        if (r.width < 1 || r.height < 1) continue;
-        const a = { el, owner: el, x0: r.left, x1: r.right, y0: r.top, y1: r.bottom, control: el.matches(CONTROL) };
-        atoms.push(a);
-        if (a.control) controls.push(a);
-      }
-      continue;
-    }
-    const owner = node.parentElement;
-    if (!owner || isHidden(owner)) continue;
-    if (owner.closest("svg")) continue;
-    if (owner.tagName === "DETAILS" && !owner.open) continue; // text straight inside a closed <details>, not its summary
-    range.selectNodeContents(node);
-    for (const r of range.getClientRects()) {
-      if (r.width < 1 || r.height < 1) continue;
-      atoms.push({ el: owner, owner, text: node, x0: r.left, x1: r.right, y0: r.top, y1: r.bottom });
-    }
-  }
-
   const found = new Map(); // merged problems
   function report(kind, el, text, extra = "") {
     const w = where(el);
@@ -271,6 +224,56 @@
       count: 1,
     });
     culprits.forEach((el) => (el.dataset.layoutProblem = "page-scroll"));
+  }
+  // The browser tests want only this one, and nothing below should run on a page about to be screenshotted.
+  if (options.only === "page-scroll") return [...found.values()];
+
+  // Pieces of what is drawn: each line of text, and each control, image or icon as one box.
+  const atoms = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode(node) {
+      if (node.nodeType === 1) {
+        if (SKIP_TAGS.has(node.tagName)) return NodeFilter.FILTER_REJECT;
+        if (node.namespaceURI === "http://www.w3.org/2000/svg" && node.tagName !== "svg") {
+          return NodeFilter.FILTER_REJECT; // a chart or icon is one box: what's inside it is drawn by design
+        }
+        if (node.tagName === "IFRAME") return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+      return /\S/.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    },
+  });
+  const range = document.createRange();
+  const hiddenCache = new Map();
+  const isHidden = (el) => {
+    if (!hiddenCache.has(el)) hiddenCache.set(el, invisible(el) || srOnly(el));
+    return hiddenCache.get(el);
+  };
+  const controls = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node.nodeType === 1) {
+      const el = node;
+      const box = el.matches(CONTROL) || ["IMG", "svg", "VIDEO", "CANVAS", "PROGRESS", "METER"].includes(el.tagName);
+      if (!box || isHidden(el)) continue;
+      // A link that wraps onto a second line is two boxes, not the rectangle around both.
+      const rects = style(el).display === "inline" ? [...el.getClientRects()] : [el.getBoundingClientRect()];
+      for (const r of rects) {
+        if (r.width < 1 || r.height < 1) continue;
+        const a = { el, owner: el, x0: r.left, x1: r.right, y0: r.top, y1: r.bottom, control: el.matches(CONTROL) };
+        atoms.push(a);
+        if (a.control) controls.push(a);
+      }
+      continue;
+    }
+    const owner = node.parentElement;
+    if (!owner || isHidden(owner)) continue;
+    if (owner.closest("svg")) continue;
+    if (owner.tagName === "DETAILS" && !owner.open) continue; // text straight inside a closed <details>, not its summary
+    range.selectNodeContents(node);
+    for (const r of range.getClientRects()) {
+      if (r.width < 1 || r.height < 1) continue;
+      atoms.push({ el: owner, owner, text: node, x0: r.left, x1: r.right, y0: r.top, y1: r.bottom });
+    }
   }
 
   // -- 2. Cut off by an ancestor -------------------------------------------------------------------------

@@ -5,14 +5,17 @@ width, in light and dark, and:
 
 - compares a screenshot with its baseline in `baselines/` (the top 2,400 px on a laptop and 3,200 px on a
   phone; the style guide pages whole);
-- fails if the page is wider than the window, naming the smallest thing past the edge (a wide table
-  scrolls in its own box; the usual culprits are hidden text a scroll box doesn't clip and words that can't
-  wrap);
+- fails if the page is wider than the window, naming what sticks out past the edge (a wide table scrolls
+  in its own box; the usual culprits are hidden text a scroll box doesn't clip and words that can't wrap).
+  It is the layout tests' page-scroll check (`tests/layout/audit.js`), so the two never disagree;
 - runs [axe-core](https://github.com/dequelabs/axe-core) (kept in `vendor/`, never loaded from a CDN) at the
   laptop width, failing on "serious" and "critical" WCAG 2.1 A and AA problems.
 
 The pages come from the fictional demo site in `scripts/screenshots.py` with the clock stopped at
-5 October 2026, so dates and "3 days ago" read the same on every run.
+5 October 2026, so dates and "3 days ago" read the same on every run. The demo data has to come out the
+same on every run too: its choices come from a seeded `random.Random` or a checksum such as `zlib.crc32`,
+never `hash()`, which Python seeds differently in every process (a site's owners once changed from run to
+run that way, and What changed's counts with them).
 
 ## Running them
 

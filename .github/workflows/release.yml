@@ -9,7 +9,8 @@ name: Release
 #      check it reports its version;
 #   3. it is scanned for known vulnerabilities that have a fix (high or critical stops the release);
 #   4. only then does it get its version tags (2.1.0, 2.1, 2 and latest; a candidate gets only its own), on
-#      one multi-platform image when there is an arm64 build;
+#      one multi-platform image when there is an arm64 build, whose provenance is signed too, since that is the
+#      digest the tags name and servers pull;
 #   5. the GitHub release is created, with the tag (when it doesn't exist yet), the changelog section and the
 #      files needed to install it (a candidate is a pre-release), and images older than the last three
 #      releases are removed from GHCR.
@@ -96,7 +97,10 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
+      # The job's token can push images, so it isn't left in the checkout for the build to find.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - name: Stamp the version into the code
         env:
           PY_VERSION: ${{ needs.check.outputs.python_version }}
@@ -164,8 +168,14 @@ jobs:
       digest: ${{ steps.build.outputs.digest }}
       version: ${{ steps.meta.outputs.version }}
       platforms: ${{ steps.tags.outputs.platforms }}
+      # What the version tags point at, and what `docker pull` records: the multi-platform image when there is
+      # an arm64 build.
+      tag_digest: ${{ steps.tags.outputs.digest }}
     steps:
+      # The job's token can push images, so it isn't left in the checkout for the build to find.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       # A candidate cut from the development version (2.1.0.dev0) reports its own version (2.1.0rc1).
       - name: Stamp the version into the code
         env:
@@ -243,13 +253,29 @@ jobs:
           fi
           # With two sources this makes one multi-platform image; Docker pulls the right one for each server.
           docker buildx imagetools create "${tags[@]/#/--tag=}" "${sources[@]}"
+          # That image has a digest of its own, different from each build's, and it is what the tags name, what
+          # `docker pull` records and what a server pinned by digest runs, so it is signed below too.
+          tag_digest=$(docker buildx imagetools inspect "${tags[0]}" --format '{{json .Manifest}}' | jq -r .digest)
+          [[ "$tag_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::Couldn't read the digest of ${tags[0]}"; exit 1; }
+          echo "digest=$tag_digest" >> "$GITHUB_OUTPUT"
           echo "platforms=$platforms" >> "$GITHUB_OUTPUT"
           {
             echo "### Published"
             for tag in "${tags[@]}"; do echo "- \`$tag\`"; done
-            echo "- amd64 digest \`$DIGEST\`"
-            if [ -n "$ARM64_DIGEST" ]; then echo "- arm64 digest \`$ARM64_DIGEST\`"; fi
+            echo "- digest \`$tag_digest\`"
+            echo "- amd64 build \`$DIGEST\`"
+            if [ -n "$ARM64_DIGEST" ]; then echo "- arm64 build \`$ARM64_DIGEST\`"; fi
           } >> "$GITHUB_STEP_SUMMARY"
+      # Each build's provenance is signed above, but the version tags name the image just made from them, so
+      # `gh attestation verify oci://ghcr.io/jackd99/officesentry:<version>` (SECURITY.md, "Checking a release")
+      # and the in-app updater find nothing unless that digest is signed as well.
+      - name: Sign the provenance of what the tags point at
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.tags.outputs.digest }}
+          push-to-registry: true
 
   release:
     name: Create the GitHub release
@@ -264,10 +290,13 @@ jobs:
     env:
       TAG: ${{ needs.check.outputs.tag }}
       VERSION: ${{ needs.image.outputs.version }}
-      DIGEST: ${{ needs.image.outputs.digest }}
+      DIGEST: ${{ needs.image.outputs.tag_digest }}
       PLATFORMS: ${{ needs.image.outputs.platforms }}
+      SIGNED: ${{ !github.event.repository.private }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - name: Write the notes and the install files
         run: |
           python3 v2/scripts/release_notes.py "$TAG" > "$RUNNER_TEMP/notes.md"
@@ -275,7 +304,12 @@ jobs:
             echo
             echo "### Install or update"
             echo
-            echo "Image: \`$IMAGE:$VERSION\`, for $PLATFORMS servers (amd64 digest \`$DIGEST\`)."
+            echo "Image: \`$IMAGE:$VERSION\`, for $PLATFORMS servers (digest \`$DIGEST\`)."
+            if [ "$SIGNED" = true ]; then
+              echo "To check it was built by this repository's release workflow from the \`$TAG\` tag:"
+              echo "\`gh attestation verify oci://$IMAGE:$VERSION --repo $GITHUB_REPOSITORY\`"
+              echo "([SECURITY.md, \"Checking a release\"](https://github.com/$GITHUB_REPOSITORY/blob/$TAG/SECURITY.md#checking-a-release))."
+            fi
             echo
             echo "Download \`docker-compose.yml\`, \`Caddyfile\` and \`env.example\` below (they run this version"
             echo "unless \`OFFICESENTRY_VERSION\` in \`.env\` says otherwise), then follow"

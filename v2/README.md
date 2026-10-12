@@ -247,8 +247,17 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
     checks.
   - *Devices*: operating systems with Windows support dates, Intune devices
     that are non-compliant, unencrypted, out of support or not checking in,
-    every managed device, and every Entra ID device record by last activity.
-    Tenants without Intune still get the Entra records and Windows versions.
+    every managed device, which Windows computers joined to Entra ID have
+    their BitLocker recovery key saved there (never the key itself), and
+    every Entra ID device record by last activity. Tenants without Intune
+    still get the Entra records and Windows versions.
+  - *Intune policies*: which platforms have enrolled devices but no
+    compliance policy, what each compliance policy requires, configuration
+    profiles and Windows update rings (deferrals, restart deadline, paused),
+    endpoint security and settings catalog policies, and app protection for
+    iPhones and Android phones (PIN, sharing, copy and paste, backups), each
+    with who it's assigned to. Policies assigned to nobody and paused update
+    rings are flagged.
   - *Hybrid identity*: whether accounts are synced from on-premises Active
     Directory, when directory sync and password hash sync last ran, which
     domains are federated, admin accounts synced from AD, and synced versus
@@ -347,14 +356,17 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
   with *Recommended projects*): each client's failing checks and missing
   licences grouped into the projects that fix them (Identity and Conditional
   Access, Device management, Email security, Windows upgrade, Security licence
-  upgrade and more), worst first, with the findings behind each, the size of
-  the job and a rough estimate. Only work of half a day or more is a project;
-  smaller jobs (and urgent small ones, like one admin without MFA) are listed
-  as quick fixes on the client's page and offered separately in the month-end
-  review. Account managers mark each project Proposed, Agreed or Declined with
-  a note (XLSX and CSV of the list), and download a client-facing proposal PDF
-  without the notes or estimates. Accepted risks don't count, and a project
-  drops off once its findings are fixed.
+  upgrade, Move to cloud-only accounts for small businesses still syncing from
+  an office server, and more), worst first, with the findings behind each, the
+  parts of the project those findings call for, the size of the job and a
+  rough estimate. Only work of half a day or more is a project; smaller jobs
+  (and urgent small ones, like one admin without MFA) and repairs (directory
+  sync that has stopped) are listed as quick fixes on the client's page and
+  offered separately in the month-end review. Account managers mark each
+  project Proposed, Agreed or Declined with a note (XLSX and CSV of the list),
+  and download a client-facing proposal PDF without the notes or estimates.
+  Accepted risks don't count, and a project drops off once its findings are
+  fixed.
 - **Client view**: client users land on a page that leads with their latest
   monthly review (page and PDF), then open recommendations with their status,
   key numbers, the other reports and who to contact at the MSP; they don't see
@@ -383,7 +395,8 @@ links, sites without two owners, guest invitations, stale guest invitations,
 teams and groups without an owner, who can create teams and groups, guests
 owning a team or group, group expiration, device compliance, disk encryption,
 Windows releases out of support, joined computers not in Intune, devices not
-checking in, stale device records, SharePoint storage nearly full, mailboxes
+checking in, stale device records, BitLocker recovery keys saved, a compliance
+policy for every platform in use, SharePoint storage nearly full, mailboxes
 and OneDrives nearly full, licence assignment errors, domain federation
 changes, risky sign-ins that succeeded (Entra ID P2), and subscriptions about
 to lapse (trials in use ending within 30 days, subscriptions in their grace
@@ -444,6 +457,9 @@ These areas have no real recording and are tested with simulated data only:
   registration report comes back empty, as it does on a newly licensed tenant.
 - **Intune device details**: the tenant has no enrolled devices, so the
   device compliance and encryption checks have nothing to read.
+- **Intune policies, BitLocker recovery keys and PIM for groups**: the tenant
+  hasn't approved the 2.2 permissions yet, so the replay covers the waiting
+  state and the policies themselves are simulated.
 - **National clouds** (GCC High, DoD, China): there's no test tenant in
   them; the endpoints come from Microsoft's documentation.
 - **Risky sharing**: the tenant's shared file is shared with one person in the
@@ -466,6 +482,9 @@ These areas have no real recording and are tested with simulated data only:
 - [Staff sign-in with Microsoft](docs/staff-sign-in.md): setting up the
   sign-in app, assigning roles in Entra, linking accounts, and turning
   passwords off and back on.
+- [Client sign-in with Microsoft](docs/client-sign-in.md): letting your
+  clients' people sign in with their own work account, adding them, and their
+  administrator's approval.
 - [Deploy guides](docs/deploy/README.md): Portainer and other container
   managers, Unraid, Synology and TrueNAS, Kubernetes, Azure, AWS, other clouds
   and Cloudflare.
@@ -535,7 +554,7 @@ These areas have no real recording and are tested with simulated data only:
 
 - **Sign in with Microsoft** (optional, off until an admin sets it up): staff sign
   in with their own Microsoft Entra ID account through OpenID Connect, under the
-  MSP's own Conditional Access and MFA. *Settings → Staff sign-in* creates a
+  MSP's own Conditional Access and MFA. *Settings → Microsoft sign-in* creates a
   small single-tenant app in the MSP's tenant with the same device-code wizard
   as the app connection (`sso.py`, `app_setup.py`); the read-only client app and
   its permissions are untouched. The app has an app role for each built-in role
@@ -547,10 +566,29 @@ These areas have no real recording and are tested with simulated data only:
   matching username; new staff get an account at their first sign-in. Passwords
   stay as the break-glass route until an admin signed in with Microsoft turns
   them off (`python -m officesentry staff-sign-in --passwords on` turns them
-  back on from the server). Client accounts always use passwords.
+  back on from the server). An admin with no password confirms a security
+  change (setting a password, signing someone out, resetting two-step) by
+  signing in to Microsoft again (`prompt=login`), which counts for ten minutes.
   [docs/staff-sign-in.md](docs/staff-sign-in.md) has the steps.
+- **Client sign-in with Microsoft** (optional, off until an admin turns it on):
+  a client's people sign in with their own work account, from their own
+  company's tenant. The same sign-in app is made multi-tenant and the button
+  goes to `organizations`; the ID token's issuer must be its own `tid`, and
+  the `tid` decides the path: the MSP's tenant is staff, any other tenant can
+  only reach a client account (never created, never staff) matched on that
+  `tid` and the person's `oid`, which staff took from the client's collected
+  directory when they added them, granted a client whose Directory ID is that
+  `tid`, in the sign-in app's cloud and not archived. App roles in a client's
+  token are ignored, and such an account only ever sees clients in its own
+  organisation. The client's
+  administrator can approve the sign-in scopes for their organisation from a
+  link on the client's *Settings → Client sign-in* page, which is also where
+  staff add the client's people and copy the message to send them
+  ([docs/client-sign-in.md](docs/client-sign-in.md)).
 - **Two-step sign-in** (a 6-digit code from an authenticator app) is required
-  for everyone on new installs, client accounts included. Installs set up
+  for everyone on new installs, client accounts included; accounts that sign
+  in with Microsoft and have no password rely on their organisation's MFA
+  instead. Installs set up
   before October 2026 keep requiring it for staff only, so
   nobody is surprised after an upgrade; *Settings → Users* shows the policy
   and recommends extending it to clients. Set it with
@@ -786,7 +824,7 @@ officesentry/
   lifecycle.py   first collection, pause, archive and deleting a client
   permissions.py capabilities and the built-in roles
   roles.py       roles and per-person overrides, read and written
-  sso.py         staff sign-in with Microsoft (OpenID Connect)
+  sso.py         sign-in with Microsoft for staff and clients' people (OpenID Connect)
   permission_batch.py  new permissions released together, and each client's approval
   first_run.py   the Get started checklist
   search_index.py  the sidebar search's index, kept by the worker

@@ -775,6 +775,8 @@ def test_preview_renders_email_in_a_locked_down_frame(client, db, two_tenants):
     assert body.headers["X-Frame-Options"] == "SAMEORIGIN"
     assert "script-src" not in body.headers["Content-Security-Policy"]
     assert "frame-ancestors 'self'" in body.headers["Content-Security-Policy"]
+    assert "base-uri 'none'" in body.headers["Content-Security-Policy"]
+    assert "form-action 'none'" in body.headers["Content-Security-Policy"]
     assert "Alpha Ltd" in body.get_data(as_text=True)
     assert db.execute("SELECT COUNT(*) FROM email_deliveries").fetchone()[0] == 0  # previews never send
 

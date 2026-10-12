@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from ..collectors.sharepoint_lookup import DENIED_TEXT
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import DataReport, Link, Rows, Section, Tile, metric_trend
@@ -36,6 +37,10 @@ WAITING = (
     "permission levels and lists with their own permissions through SharePoint's own API, which needs "
     "Sites.Read.All on Office 365 SharePoint Online. It comes with the next permission update: send the consent "
     "link from the client page to their Global Admin. Until then, Site access shows owners, admins and guests."
+)
+UNREADABLE = (
+    "No site's permissions could be read on the last collection: SharePoint answered every site with an error. "
+    "The run log on the client page has Microsoft's messages; the next collection tries again."
 )
 DIRECT = "Given directly"
 
@@ -176,13 +181,17 @@ def site_permissions(snap: TenantSnapshot, now: datetime, report: DataReport) ->
             'Site permissions haven\'t been collected yet. Refresh "Site permissions" on the client page.'
         )
         return
-    if not status.get("available"):
-        reason = status.get("reason")
+    # Older collections stored a run that read no site at all as available, with every site unreadable.
+    nothing_read = status.get("available") and not status.get("sites") and status.get("unreadable")
+    if not status.get("available") or nothing_read:
+        reason = "unreadable" if nothing_read else status.get("reason")
         report.unavailable = {
             "no_sharepoint": "This tenant has no SharePoint licence.",
             "consent": WAITING,
             "no_certificate": "Office Sentry reads SharePoint permissions with the app's certificate, and this "
             "connection has none. Add the certificate under App connection.",
+            "denied": DENIED_TEXT,
+            "unreadable": UNREADABLE,
         }.get(
             reason,
             "Office Sentry can't read this tenant's sites yet. It needs the Sites.Read.All permission: open the "

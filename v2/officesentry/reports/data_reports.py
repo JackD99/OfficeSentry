@@ -20,6 +20,7 @@ from ..checks.tenant_settings import GUEST_ROLES, admin_consent_missing
 from ..collectors import REGISTRY
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
+from ..permission_batch import waiting_text
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from . import workbook
@@ -74,6 +75,7 @@ class Section:
     review: bool = True  # False: rows already dealt with (accepted, resolved), so no "<n> to review"
     chart: Chart | None = None  # drawn from the rows the view leaves (views.chart)
     figure: str = ""  # the chart as drawn for a download, set by views.apply()
+    uncut: Section | None = None  # the whole table, when a PDF keeps only its first rows (printing.cap_rows)
 
     def add(self, row: list, flag: str | None = None, key=None) -> None:
         self.rows.append([_cell(v) for v in row])
@@ -183,6 +185,8 @@ def link_pages(sections: list[Section], indexes: list[tuple[dict[str, str], Call
                     row[i] = PageLink(v, href)
                 elif type(v) is Link and not v.page_href and (href := lookups[i].get(v.href.lower().rstrip("/"))):
                     row[i] = replace(v, page_href=href)
+                elif isinstance(v, Many):
+                    v.hrefs |= {p: h for p in v.parts if p not in v.hrefs and (h := lookups[i].get(p.lower()))}
 
 
 def people_index(snap: TenantSnapshot) -> dict[str, str]:
@@ -204,18 +208,40 @@ def link_people(sections: list[Section], tenant_id: int, index: dict[str, str]) 
             for i, v in enumerate(row):
                 if type(v) is str and (uid := index.get(v.lower())):
                     row[i] = UserLink(v, user_path(tenant_id, uid))
+                elif isinstance(v, Many):
+                    v.hrefs |= {p: user_path(tenant_id, uid) for p in v.parts if (uid := index.get(p.lower()))}
 
 
 class Many(str):
-    """A list cell ("A, B, C") that still knows its items, so a value filter can offer each one."""
+    """A list cell ("A, B, C") that still knows its items, so a value filter can offer each one.
+
+    On the page a long list shows ``summary`` ("breakglass@contoso.com + 11 admin roles"), or its first two
+    items and how many more, and opens in place to the whole list; downloads keep every item. ``hrefs``
+    maps items to their pages in Office Sentry (``link_people``)."""
 
     parts: tuple[str, ...] = ()
+    summary: str = ""
+    hrefs: dict[str, str]
 
-    def __new__(cls, items):
+    def __new__(cls, items, summary: str = ""):
         parts = tuple(str(v) for v in items)
         obj = super().__new__(cls, ", ".join(parts))
         obj.parts = parts
+        obj.summary = summary
+        obj.hrefs = {}
         return obj
+
+    @property
+    def short(self) -> str:
+        """What the page shows before the list is opened: "" when the list is short enough to show whole."""
+        if self.summary:
+            return self.summary
+        if len(self.parts) > LIST_WHOLE:
+            return f"{', '.join(self.parts[:2])} + {len(self.parts) - 2} more"
+        return ""
+
+
+LIST_WHOLE = 3  # a list cell with this many items or fewer shows them all
 
 
 @dataclass
@@ -312,6 +338,9 @@ class DataReport:
     highlights: list[Highlight] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)  # what couldn't be checked, and why
     filtered: list[str] = field(default_factory=list)  # the table view a download applies, in words
+    # For a report read in parts, what each part held: "read", "waiting" (for the client to approve a new
+    # permission) or "failed". What changed only compares two days that read the same parts.
+    parts: dict[str, str] = field(default_factory=dict)
 
 
 def _cell(value):
@@ -428,15 +457,22 @@ def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             controls.add(
                 [f"Remote domain: {d.get('Name')}", target, "Allowed" if d.get("AutoForwardEnabled") else "Blocked"]
             )
-        report.highlights.append(
-            Highlight(
+        if policies:
+            forwarding = Highlight(
                 "Automatic forwarding",
                 "Allowed" if allowed else "Blocked",
                 "By the outbound spam policy",
                 "warn" if allowed else "ok",
                 Rows("What stops forwarding"),
             )
-        )
+        else:  # every Exchange Online organisation has a default policy, so none means it wasn't read
+            forwarding = Highlight(
+                "Automatic forwarding",
+                "Unknown",
+                "Exchange returned no outbound spam policy",
+                rows=Rows("What stops forwarding"),
+            )
+        report.highlights.append(forwarding)
         sections.append(controls)
     report.sections = sections
 
@@ -717,7 +753,15 @@ def conditional_access(snap: TenantSnapshot, now: datetime, report: DataReport) 
         row = coverage.describe(p, d, snap.capabilities)
         state = f"{row.state}, but never applies (needs Entra ID P2)" if row.warning else row.state
         pol.add(
-            [row.name, state, row.users, row.excluded, row.apps, row.conditions, row.grant],
+            [
+                row.name,
+                state,
+                Many(row.include, row.include_summary),
+                Many(row.exclude, row.exclude_summary),
+                row.apps,
+                row.conditions,
+                row.grant,
+            ],
             "medium" if row.warning else None,
         )
     report.sections.append(pol)
@@ -1172,7 +1216,12 @@ SUPPORT = {
 }
 
 
-def _device_issues(d: dict, now: datetime) -> tuple[list[str], str | None]:
+NO_RECOVERY_KEY = "Encrypted, but no BitLocker recovery key saved in Entra ID"
+
+
+def _device_issues(d: dict, now: datetime, keys: dict[str, dict] | None = None) -> tuple[list[str], str | None]:
+    """A managed device's problems, worst first by flag. ``keys`` (``devices.recovery_keys``) is given when the
+    recovery key list was read."""
     issues, flag = [], None
     rank = {"high": 0, "medium": 1, "low": 2}
 
@@ -1188,6 +1237,13 @@ def _device_issues(d: dict, now: datetime) -> tuple[list[str], str | None]:
         add("Not compliant", "medium")
     if devices.is_computer(d) and d.get("isEncrypted") is False:
         add("Not encrypted", "high")
+    if (
+        keys is not None
+        and devices.is_windows(d)
+        and d.get("isEncrypted")
+        and not devices.has_recovery_key(d.get("azureADDeviceId"), keys)
+    ):
+        add(NO_RECOVERY_KEY, "medium")
     if devices.is_windows(d):
         support = devices.windows_support(d.get("osVersion"), now.date())
         if support.status in ("ended", "pro_ended", "ending"):
@@ -1209,11 +1265,12 @@ def _seen(value: str | None, now: datetime) -> str:
 @report(
     "devices",
     "Devices",
-    "Intune compliance, encryption and Windows support, and every Entra ID device record.",
+    "Intune compliance, encryption and Windows support, BitLocker recovery keys saved in Entra ID, and every "
+    "Entra ID device record.",
     ("devices",),
     group="devices",
     order=10,
-    keywords="intune compliance bitlocker encryption windows",
+    keywords="intune compliance bitlocker recovery key escrow encryption windows",
 )
 def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     entra = devices.objects(snap, "entra_device")
@@ -1223,6 +1280,8 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
     status = devices.objects(snap, "intune_status") or []
     intune = bool(status and status[0].get("available"))
     managed = (devices.objects(snap, "managed_device") or []) if intune else []
+    key_state = devices.bitlocker_state(snap)
+    keys = devices.recovery_keys(snap) if key_state == "read" else None
 
     # Operating systems: Intune's view when there is one, otherwise devices active in Entra.
     if managed:
@@ -1283,7 +1342,7 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
         )
         every.chart = Chart("Compliance")
         for d in sorted(managed, key=lambda d: (d.get("deviceName") or "").lower()):
-            issues, flag = _device_issues(d, now)
+            issues, flag = _device_issues(d, now, keys)
             if issues:
                 attention.add(
                     [d.get("deviceName"), d.get("userPrincipalName"), devices.os_label(d), "; ".join(issues)], flag
@@ -1304,6 +1363,16 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
             )
         attention.rows, attention.flags = _by_flag(attention)
         sections += [attention, every]
+
+    if key_state == "read":
+        sections.append(_recovery_key_section(entra, managed, keys or {}, now))
+    elif key_state == "waiting":
+        report.notes.append(
+            "Whether each computer's BitLocker recovery key is saved isn't shown yet. "
+            + waiting_text(snap.tenant["name"], [devices.BITLOCKER])
+        )
+    elif key_state == "failed":
+        report.notes.append("BitLocker recovery keys couldn't be read; see the Devices collection's log.")
 
     records = Section(
         "Entra ID device records",
@@ -1329,6 +1398,46 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
         )
     sections.append(records)
     report.sections = sections
+
+
+RECOVERY_KEYS = "BitLocker recovery keys"
+
+
+def _recovery_key_section(entra: list[dict], managed: list[dict], keys: dict[str, dict], now: datetime) -> Section:
+    """Joined Windows computers seen recently and whether each has its recovery key saved in Entra ID. Without
+    it, a computer that asks for its recovery key (after a firmware update, say) can't be unlocked."""
+    encrypted = {
+        (d.get("azureADDeviceId") or "").lower(): d.get("isEncrypted") for d in managed if d.get("azureADDeviceId")
+    }
+    section = Section(
+        RECOVERY_KEYS,
+        ["Device", "Join type", "Encrypted", "Recovery key saved", "Keys saved", "Last saved", "Last seen"],
+        intro="Windows computers joined to Entra ID and seen in the last "
+        f"{devices.STALE_DAYS} days, and whether the BitLocker recovery key for the system drive is saved in "
+        "Entra ID. Encrypted comes from Intune. Office Sentry only reads that a key exists, never the key.",
+        empty="No Windows computers are joined to Entra ID.",
+    )
+    for d in sorted(entra, key=lambda d: (d.get("displayName") or "").lower()):
+        if not devices.escrows_keys(d, now):
+            continue
+        device_id = (d.get("deviceId") or "").lower()
+        saved = keys.get(device_id) or {}
+        has_key = devices.has_recovery_key(device_id, keys)
+        is_encrypted = encrypted.get(device_id)
+        section.add(
+            [
+                d.get("displayName"),
+                JOIN_TYPES.get(d.get("trustType"), d.get("trustType") or "Unknown"),
+                is_encrypted if isinstance(is_encrypted, bool) else "",
+                has_key,
+                saved.get("keys") if isinstance(saved.get("keys"), int) else 0,
+                _date(saved.get("latest") if isinstance(saved.get("latest"), str) else None),
+                _seen(d.get("approximateLastSignInDateTime"), now),
+            ],
+            "medium" if is_encrypted and not has_key else None,
+        )
+    section.rows, section.flags = _by_flag(section)
+    return section
 
 
 def _by_flag(section: Section) -> tuple[list, list]:
@@ -1482,10 +1591,22 @@ def build(
     return report
 
 
+def detail_removed(conn, collector: str, run) -> bool:
+    """Retention has removed the sign-in detail ``run`` collected: it keeps it for less time than the daily
+    history, which doesn't record it."""
+    from .. import retention, state_history  # here: the history imports the worker's schedule
+
+    return (
+        collector in retention.SIGNIN_COLLECTORS
+        and not conn.execute(
+            f"SELECT 1 FROM runs WHERE id = ? AND {state_history.HOLDS_OBJECTS}", (run["id"],)
+        ).fetchone()
+    )
+
+
 def _no_longer_held(conn, snap: TenantSnapshot, collectors, report: DataReport) -> None:
     """On a past day, say which data was collected by then but isn't held any more (sign-in detail, which
     retention keeps for less time than the daily history), rather than that it was never collected."""
-    from .. import retention, state_history  # here: the history imports the worker's schedule
 
     def held(collector: str) -> bool:
         run = snap.runs.get(collector)
@@ -1495,9 +1616,7 @@ def _no_longer_held(conn, snap: TenantSnapshot, collectors, report: DataReport) 
                 " AND finished_at <= ? LIMIT 1",
                 (report.tenant["id"], collector, snap.as_of),
             ).fetchone()
-        return collector not in retention.SIGNIN_COLLECTORS or bool(
-            conn.execute(f"SELECT 1 FROM runs WHERE id = ? AND {state_history.HOLDS_OBJECTS}", (run["id"],)).fetchone()
-        )
+        return not detail_removed(conn, collector, run)
 
     gone = [REGISTRY[c].title for c in collectors if not held(c)]
     if not gone:

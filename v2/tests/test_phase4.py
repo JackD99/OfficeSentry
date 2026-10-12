@@ -588,3 +588,14 @@ def test_shared_mailbox_that_needs_its_licence_is_not_waste(db, two_tenants):
     assert "(not counting 1 shared mailbox that needs one)" in held.summary
     plain = {r.key: r for r in evaluate(TenantSnapshot(db, store.get_tenant(db, beta)))}["licensed_disabled"]
     assert "info@x.com" in [f.subject for f in plain.findings]  # no hold, archive or size: licence not needed
+
+
+def test_shared_mailbox_over_50_gb_is_not_waste(db, two_tenants):
+    alpha, _ = two_tenants
+    shared = gd.INFO_USER | {"accountEnabled": False, "assignedLicenses": USERS[0]["assignedLicenses"]}
+    size = [{"TotalItemSize": "51 GB (54,760,833,024 bytes)", "TotalDeletedItemSize": "0 B (0 bytes)", "ItemCount": 9}]
+    exchange = dict(gd.EXCHANGE, **{"Get-MailboxStatistics": {"g-u7": size}})
+    seed_tenant(db, alpha, users=USERS + [shared], exchange=exchange)
+    result = {r.key: r for r in evaluate(TenantSnapshot(db, store.get_tenant(db, alpha)))}["licensed_disabled"]
+    assert "info@x.com" not in [f.subject for f in result.findings]
+    assert "(not counting 1 shared mailbox that needs one)" in result.summary

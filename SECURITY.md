@@ -54,8 +54,9 @@ little as possible with that access. Details and code references are in
   mail app, Exchange's `Get-` cmdlets, alert webhooks, the live test's
   recording (which passes on a GET), and three that only touch the MSP's own
   tenant: creating the app, adding a release's new permissions to it, and
-  staff sign-in with Microsoft (its token request, and creating its sign-in
-  app). `tests/test_isolation_walk.py` opens every tenant-scoped route with
+  sign-in with Microsoft (its token request, creating its sign-in app, and
+  letting that app accept other organisations' accounts for client sign-in).
+  `tests/test_isolation_walk.py` opens every tenant-scoped route with
   another client's IDs, as staff and as a client, and expects a refusal.
   `tests/test_roles.py` opens every route as every built-in role and expects
   a refusal exactly where the role lacks what the page needs.
@@ -77,14 +78,15 @@ little as possible with that access. Details and code references are in
 | Control | Implementation |
 |---|---|
 | Tenant isolation | Deny by default. Users see only clients granted to them; others return 404. One gate (`web/access.py`) loads every client. |
-| Roles | A role is a set of capabilities and a scope (every client, or those granted). Seven built-in roles (Administrator, Team leader, Second line, First line, Account manager, Auditor, Client viewer), custom roles, and per-person capabilities added or taken away, everywhere or on one client; taking away wins. Every page and download checks on the server. Someone who manages users without being an Administrator can only give out what they hold on every client they see, can't change an account that can do or see more, and isn't shown client accounts of other clients. Clients see only their own organisation's reports. |
-| Sign in with Microsoft | Optional, off until an admin sets it up. OpenID Connect against a single-tenant app in the MSP's own tenant with no API permissions, authorization code with PKCE, a certificate-signed client assertion (`private_key_jwt`; the private key is encrypted in the database) and the ID token verified against the tenant's published keys: signature, audience, issuer, tenant, lifetime and nonce. Roles are app roles assigned in Entra (one per built-in role, and values an admin gives custom roles) and read at every sign-in; client access is still granted in Office Sentry. Passwords stay as the break-glass route until an admin signed in with Microsoft turns them off; `python -m officesentry staff-sign-in --passwords on` turns them back on from the server. Client accounts never use it. |
+| Roles | A role is a set of capabilities and a scope (every client, or those granted). Seven built-in roles (Administrator, Team leader, Second line, First line, Account manager, Auditor, Client viewer), custom roles, and per-person capabilities added or taken away, everywhere or on one client; taking away wins. Every page and download checks on the server. Someone who manages users without being an Administrator can only give out what they hold on every client they see, can't change an account, or a role held by one, that sees or does more, and isn't shown client accounts of other clients. A role limited to some clients manages clients, users and the activity log within those clients only; client groups, Settings and System status need every client. A report area someone can't open on a client stays closed wherever that client's data goes: scheduled emails and their previews, the report history, report designs and the home pages. Clients see only their own organisation's reports. |
+| Sign in with Microsoft | Optional, off until an admin sets it up. OpenID Connect against a single-tenant app in the MSP's own tenant with no API permissions, authorization code with PKCE, a certificate-signed client assertion (`private_key_jwt`; the private key is encrypted in the database) and the ID token verified against the tenant's published keys: signature, audience, issuer, tenant, lifetime and nonce. Roles are app roles assigned in Entra (one per built-in role, and values an admin gives custom roles) and read at every sign-in; client access is still granted in Office Sentry. Passwords stay as the break-glass route until an admin signed in with Microsoft turns them off; `python -m officesentry staff-sign-in --passwords on` turns them back on from the server. An account with no password confirms a security change by signing in to Microsoft again (`prompt=login`, the same Microsoft account), which counts for ten minutes on that session. |
+| Client sign-in with Microsoft | Optional, off until an admin turns it on. The same sign-in app accepts other organisations' accounts (`AzureADMultipleOrgs`; changed in the MSP's tenant only, by device sign-in with `Application.ReadWrite.All` or by hand), and the button signs in through `organizations`. The ID token's issuer must be the tenant in its own `tid`. A token from the MSP's tenant takes the staff path above; any other tenant can only reach an existing client account, matched on the token's `tid` and `oid` together and never on `preferred_username` or `email`, and only when the account is granted (directly, never through a group) a client whose Directory ID is that `tid`, in the sign-in app's cloud and not archived. Staff connect a client's person to their object ID when they add them, from the client's directory as Office Sentry last collected it (members only, not guests). Accounts are never created this way, a client's account never becomes staff (nor a staff account a client's), the same object ID from another tenant is refused, and app roles in a client's token are ignored. A client account connected this way only ever sees clients whose Directory ID is its own tenant's, whatever it is granted; disconnecting it removes its grants of clients in any other organisation, and staff limited to some clients can't change an account that holds a client outside them, even one it can't see now. Microsoft sign-in, staff or client, doesn't ask for Office Sentry's own two-step code, whatever `OFFICESENTRY_REQUIRE_MFA` says; it relies on Entra's MFA and Conditional Access. Refusals don't say whether an account exists, and strangers' sign-ins are counted per address without their names. A client's administrator can approve the sign-in scopes (`openid profile email`, no API permissions) from a signed link; its public return page records nothing for the client (the approval is noted at the first sign-in from that client's tenant) and never shows Microsoft's text. |
 | Two-step sign-in | Authenticator-app codes (TOTP) with ten one-time recovery codes. New installs require it for everyone; installs from before October 2026 keep requiring it for staff (everyone but client accounts) until `OFFICESENTRY_REQUIRE_MFA=all` is set (the Users page recommends it). A code or recovery code works once, even when sent twice at the same moment. Recovery codes are stored as an HMAC under a random key that is itself encrypted with the encryption key, so a copy of the database alone can't be used to guess them; codes made before 2.2.0 (a plain SHA-256) are put under the key when the portal starts. Adding an authenticator from the account page, turning it off and replacing recovery codes ask for the password, and an admin resetting someone else's password, two-step sign-in or sessions gives their own password too. |
 | Passwords | At least 12 characters, not one of the 20,000 most commonly used passwords of that length (from the public list of 10 million leaked passwords), and not containing the username or the product's name; scrypt hash (Werkzeug). A password an admin set (new user or reset) has to be replaced at the next sign-in. |
 | Sign-in limits | Wrong passwords never lock an account. They slow down the address they come from: 5 per username or 20 in all per 15 minutes, counted before the password is checked so parallel requests can't get past them. A spread-out attack on one account slows only addresses that haven't signed in to it before. Five wrong two-step codes lock that step for 15 minutes. Five wrong passwords where a signed-in browser is asked for it again sign that browser out, and never lock the account, so a stolen session can't keep its owner from signing in to end it. The client address comes from `X-Forwarded-For` only behind `OFFICESENTRY_TRUSTED_PROXIES`. |
-| Sessions | Server-side: the cookie holds a random token, stored as a hash. 2 hours idle and 8 hours in total; ended on sign-out, disable, delete, role, password or two-step change. `__Host-` cookie, HttpOnly, SameSite=Lax, Secure over HTTPS. Same-site redirects only. |
+| Sessions | Server-side: the cookie holds a random token, stored as a hash. 2 hours idle and 8 hours in total by default (`OFFICESENTRY_SESSION_IDLE_MINUTES`, `OFFICESENTRY_SESSION_HOURS`); ended on sign-out, disable, delete, role, password or two-step change. `__Host-` cookie, HttpOnly, SameSite=Lax, Secure over HTTPS. Same-site redirects only. |
 | CSRF | Flask-WTF on every form. |
-| Headers | Nonce-based CSP with no external assets, HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy, Cross-Origin-Opener-Policy and Cross-Origin-Resource-Policy `same-origin`, `X-Permitted-Cross-Domain-Policies: none`, `Cache-Control: no-store`. The bundled Caddy drops the `Server` header. |
+| Headers | Nonce-based CSP with no external assets, HSTS over HTTPS, X-Frame-Options DENY (the portal's own email and design previews may be framed by the portal, under a stricter CSP), nosniff, Referrer-Policy, Permissions-Policy, Cross-Origin-Opener-Policy and Cross-Origin-Resource-Policy `same-origin`, `X-Permitted-Cross-Domain-Policies: none`. `Cache-Control: no-store` on everything but the static files and the brand colours and logo, which only the visitor's own browser may keep. Behind a proxy, the visitor's address, scheme and host come from the forwarded headers of `OFFICESENTRY_TRUSTED_PROXIES` hops; a path prefix never does. The bundled Caddy drops the `Server` header. |
 | Activity log | Sign-ins, every change, and every refusal (a page or tenant someone wasn't allowed, a form sent with a stale token), with the client address; admins read, filter and export it under *Settings → Activity log*. Failed sign-ins with unknown usernames and refusals are counted per address and hour, without storing what was typed, and sign-in noise is removed after 90 days. Someone given the activity log who doesn't see every client reads only the entries about their own clients. |
 | Secrets | Session key and encryption key are separate. `python -m officesentry rotate-keys` re-encrypts every encrypted value (the app's certificate keys, the staff sign-in certificate key, two-step secrets and the recovery code key, mail credentials, the alert webhook and its signing secret, and the setup wizard's sign-in code while it waits) and refuses if it finds one it doesn't know. Generated secrets are written with mode `0600`. |
 | PDFs | Rendered by WeasyPrint with a URL fetcher that only loads the app's own static files and `data:` URIs: no other files, no network. |
@@ -181,15 +183,42 @@ place, but nobody can sign in with the old one.
 - Review the Entra app's permissions and sign-in logs in your own tenant
   from time to time.
 
+## Checking a release
+
+Every image at [`ghcr.io/jackd99/officesentry`](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry)
+is built by this repository's [release workflow](.github/workflows/release.yml) from a tagged commit on
+`main` that passed the full CI run, and scanned before it gets a version tag (a fixable vulnerability rated
+high or critical stops the release). Each one carries an SBOM and a build provenance saying which workflow,
+commit and tag made it, and the provenance is signed through GitHub's artifact attestations (Sigstore). To
+check an image before running it, with the [GitHub CLI](https://cli.github.com) and the version you're
+installing in place of `<version>`:
+
+```bash
+gh attestation verify oci://ghcr.io/jackd99/officesentry:<version> --repo JackD99/OfficeSentry
+```
+
+It passes only for an image this repository's workflow built; anything else, or a copy changed since, fails.
+Releases up to 2.2.0 signed each platform's build but not the multi-platform image the version tags point at,
+so for those, check the digest the release notes list instead (`oci://ghcr.io/jackd99/officesentry@sha256:…`).
+
+What goes into the image is pinned too: Python packages from hash-pinned lock files that CI audits for known
+vulnerabilities on every change and every week, and the base image by digest. The image runs as an
+unprivileged user and leaves out pip, which nothing needs once it's built. The GitHub Actions the workflows
+use are pinned to full commit hashes, and the jobs that can publish or deploy don't keep their token where
+the code they build could read it.
+
 ## Known limitations
 
 - SQLite suits one server; it isn't built for several web servers sharing a database.
 - Staff can sign in with Microsoft once an admin sets it up
-  ([Staff sign-in with Microsoft](v2/docs/staff-sign-in.md)). Client accounts
-  always sign in with a username, password and two-step code; there's no
-  single sign-on for them.
+  ([Staff sign-in with Microsoft](v2/docs/staff-sign-in.md)), and so can a
+  client's people, from their own company's tenant, once an admin turns client
+  sign-in on ([Client sign-in with Microsoft](v2/docs/client-sign-in.md)).
+  Clients in another Microsoft cloud than the sign-in app, or whose tenant ID
+  isn't known yet, keep using a password and two-step code.
 - An account that signs in with a password gets it from an admin, shared out
   of band. Whoever uses it first must replace it, so a leaked one is noticed
   (the real user can't sign in), but one-time invitation links would be
-  better. Staff who sign in with Microsoft don't need one: their account is
-  made at their first sign-in.
+  better. Accounts that sign in with Microsoft don't need one: staff accounts
+  are made at their first sign-in, and a client's people are found in their
+  own directory and added with no password.

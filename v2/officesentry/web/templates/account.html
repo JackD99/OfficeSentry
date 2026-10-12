@@ -16,7 +16,7 @@
   <div class="card-head"><h2>Microsoft account</h2>
     {% if current_user.entra_oid %}<span class="pill ok">Connected</span>{% else %}<span class="pill">Not connected</span>{% endif %}</div>
   {% if current_user.entra_oid %}
-  <p class="muted">You can sign in with <strong>{{ current_user.entra_upn or 'your Microsoft account' }}</strong>{% if current_user.entra_linked_at %}, connected {{ ts(current_user.entra_linked_at) }}{% endif %}. Your role comes from the role assigned to you in Entra.</p>
+  <p class="muted">You can sign in with <strong>{{ current_user.entra_upn or 'your Microsoft account' }}</strong>{% if current_user.entra_linked_at %}, connected {{ ts(current_user.entra_linked_at) }}{% endif %}.{% if current_user.role == 'client' %} Your organisation's own sign-in rules and MFA apply.{% else %} Your role comes from the role assigned to you in Entra.{% endif %}</p>
   {% if has_password %}
   <form method="post" action="{{ url_for('sso.disconnect') }}" class="form-row">{{ csrf() }}
     <label>Your password <input type="password" name="password" autocomplete="current-password" required>

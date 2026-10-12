@@ -1,15 +1,15 @@
 """Automatic replies: which mailboxes answer every message with an out-of-office reply, who hears it, and
 replies that look forgotten.
 
-Reads ``collectors/auto_replies.py``. How long a reply has been on comes from Office Sentry's own retained
-snapshots: the earliest collection in an unbroken run of collections that found it on.
+Reads ``collectors/auto_replies.py``. How long a reply has been on comes from Office Sentry's own collections
+(the daily history once retention has removed their snapshots): the earliest collection in an unbroken run of
+collections that found it on.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from .. import store
 from ..devices import parse_ts
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
@@ -59,7 +59,9 @@ def _sending(value: str) -> bool:
 
 def first_seen(snap: TenantSnapshot, now: datetime) -> dict[str, str]:
     """For each mailbox whose reply is sending now, the date of the earliest collection in the unbroken run of
-    collections (newest first) that found it sending."""
+    collections (newest first) that found it sending, read from the daily history once a snapshot has gone."""
+    from .. import state_history  # here: the history imports the worker's schedule
+
     cutoff = snap.as_of or now.strftime("%Y-%m-%dT%H:%M:%SZ")
     runs = snap.conn.execute(
         "SELECT id, finished_at FROM runs WHERE tenant_id = ? AND collector = 'auto_replies'"
@@ -69,9 +71,9 @@ def first_seen(snap: TenantSnapshot, now: datetime) -> dict[str, str]:
     seen: dict[str, str] = {}
     open_: set[str] | None = None  # mailboxes still sending in every run read so far
     for run in runs:
-        rows = store.run_objects(snap.conn, run["id"], "auto_reply")
+        rows = state_history.objects_of(snap.conn, run["id"], "auto_reply")
         if not rows:
-            break  # pruned, or nothing on: the run stops here either way
+            break  # no longer held, or nothing on: the run stops here either way
         sending = {_text(r.get("mailboxId")) for r in rows if _sending(state(r, parse_ts(run["finished_at"]) or now))}
         open_ = sending if open_ is None else open_ & sending
         if not open_:
@@ -184,7 +186,9 @@ def auto_replies_report(snap: TenantSnapshot, now: datetime, out: DataReport) ->
             "Replying outside the organisation",
             outside,
             "To everyone or to contacts",
-            rows=Rows(EVERY, {"Replies outside the organisation": ["Everyone", "Contacts only"]}),
+            rows=Rows(
+                EVERY, {"State": [ON, SCHEDULED_ON], "Replies outside the organisation": ["Everyone", "Contacts only"]}
+            ),
         ),
         Tile(
             f"On for over {FORGOTTEN_DAYS} days",
