@@ -115,6 +115,13 @@ class Release:
         return self.sections.get("action", "")
 
     @property
+    def asks(self) -> bool:
+        """The notes' Action required section asks something of people. Every release fills it in, saying
+        "None" when there's nothing to do (CONTRIBUTING.md, "Releases")."""
+        text = self.action.strip().lower()
+        return bool(text) and not text.startswith("none")
+
+    @property
     def permissions(self) -> str:
         return self.sections.get("permissions", "")
 

@@ -164,6 +164,14 @@ def test_a_database_upgrade_is_read_from_its_section():
     assert not updates.from_github(gh("2.4.2", "Nothing to say.")).upgrades_database
 
 
+def test_an_action_required_of_none_asks_nothing():
+    """Every release fills in Action required (CONTRIBUTING.md), saying "None" when there's nothing to do."""
+    none = updates.from_github(gh("2.4.1", "### Action required\n\nNone. `docker-compose.yml` is the same.\n"))
+    assert none.action and not none.asks
+    assert updates.from_github(gh("2.4.0", NOTES)).asks
+    assert not updates.from_github(gh("2.4.2", "Nothing to say.")).asks
+
+
 def test_drafts_pre_releases_and_other_tags_are_not_releases():
     assert updates.from_github(gh("2.4.0", draft=True)) is None
     assert updates.from_github(gh("2.4.0", prerelease=True)) is None
@@ -453,6 +461,24 @@ def test_pressing_update_asks_the_updater(admin, cfg, db, release_build, docker)
     again = admin.post("/admin/updates/start", data={"version": "2.4.0", "read": "1"}, follow_redirects=True)
     assert "be started now; this page says why" in again.get_data(as_text=True)
     assert updates.read_request(cfg.data_dir).id == asked.id
+
+
+def test_a_release_that_asks_nothing_needs_no_tick(admin, cfg, db, release_build, docker):
+    """ "None" under Action required is shown as it is, without the warning or the box to tick, unless a release
+    the update also brings asks something."""
+    nothing = "### Action required\n\nNone. `docker-compose.yml` is the same as 2.3.0's.\n"
+    warning = '<div class="grow notes"><strong>Action required</strong>'
+    known(db, gh("2.4.0", nothing))
+    updater_says(cfg.data_dir)
+    page_ = admin.get("/admin/updates").get_data(as_text=True)
+    assert "<h4>Action required</h4>" in page_ and "is the same as 2.3.0" in page_ and "Update to 2.4.0" in page_
+    assert warning not in page_ and 'name="read"' not in page_
+    known(db, gh("2.4.0", nothing), gh("2.3.0", "### Action required\n\n- Change the proxy.\n"))
+    page_ = admin.get("/admin/updates").get_data(as_text=True)
+    assert page_.count(warning) == 1 and 'name="read" value="1" required' in page_
+    known(db, gh("2.4.0", nothing))
+    admin.post("/admin/updates/start", data={"version": "2.4.0"})
+    assert updates.read_request(cfg.data_dir).version == "2.4.0"
 
 
 @pytest.mark.parametrize("version", ["2.3.0", "2.5.0", "1.0.0"])

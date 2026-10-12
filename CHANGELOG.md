@@ -11,9 +11,8 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.3.1] - 2026-10-12
 
-### Action required
-
-None. `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are the same as 2.3.0's.
+Fixes for 2.3. Nothing to do before updating: `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are
+the same as 2.3.0's, so the Update button can install it.
 
 ### New Microsoft permissions
 
@@ -53,7 +52,8 @@ No.
   just scanned from it still works.
 - The Kubernetes manifests and the deploy guides' examples name this release (they still said 2.1.0), and a
   test keeps them in step with each release.
-- Tests no longer fail when run around midnight UTC or from the first of a month.
+- Tests no longer fail when run around midnight UTC, from the first of a month, or a few hours after the live
+  tenant was recorded.
 - **Wide tables fit a laptop.** The last tables that scrolled sideways at 1366 px with long names now fit: a long
   name before an address's "@" or a long host name in a DNS record may wrap at its dots, and **Every row** on All
   clients opens without a column or two its Client column has no room for (Size on shared mailboxes, Synced
@@ -61,6 +61,8 @@ No.
   users, Account and Send on behalf on mailbox permissions by person). **Columns** offers them, and the client's
   own report and the downloads keep them. Tables are measured again once the page's font has loaded, so one that
   only just fits no longer slips past its card, and the All clients checks matrix now shows every category.
+- **Settings → Updates** shows a release's **Action required** that says "None" as plain text, without a
+  warning or a box to tick before **Update**.
 
 ### Security
 

@@ -73,7 +73,8 @@ def live(db):
     db.execute("INSERT INTO settings (key, value) VALUES ('live_test_client_id', ?)", (FIXTURE["client_id"],))
     graph = lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None, resource_tokens=lambda h: lambda: "t")  # noqa: E731
     exo = lambda t, c: ExchangeClient(t["tenant_ref"], lambda: "t", sleep=lambda s: None)  # noqa: E731
-    # The sign-in and audit logs are read up to "now" into the activity history: the recording's now.
+    # The sign-in and audit logs (into the activity history) and the message trace are read up to "now": the
+    # recording's now.
     with (
         responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
         patch("officesentry.dnscheck.lookup", replay.fake_dns(FIXTURE)),
