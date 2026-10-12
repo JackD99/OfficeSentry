@@ -13,7 +13,7 @@
     <div class="hero-copy">
       <p class="eyebrow">{{ "Free and open source" if source_public else "Free software" }} · Built for MSPs</p>
       <h1>Microsoft 365 reports for every client, without the busywork</h1>
-      <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, client reports you design yourself, evidence for Cyber Essentials and insurance forms, 47 detail reports, a page for every person, mailbox, group and site, a view across every client and what changed since last month.</p>
+      <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, client reports you design yourself, evidence for Cyber Essentials and insurance forms, 49 detail reports, a page for every person, mailbox, group and site, a view across every client and what changed since last month.</p>
       <div class="actions">
         <a class="btn primary lg" href="{{ demo_url }}">Try the live demo</a>
         {% if contact and not source_public %}<a class="btn lg" href="{{ contact }}">Ask for early access</a>
@@ -93,8 +93,8 @@
 
     <article class="feature">
       <div class="feature-copy">
-        <h3>47 detail reports you can filter, save and export</h3>
-        <p>Identity, email, files and Teams, devices and licences: MFA coverage, mail forwarding, mailbox permissions, mail flow per domain, sign-ins, Conditional Access, administrative units, Teams channels and their guests, who can reach each SharePoint site, Intune policies and BitLocker recovery keys, licence changes month by month, licence right-sizing and more.</p>
+        <h3>49 detail reports you can filter, save and export</h3>
+        <p>Identity, email, files and Teams, devices and licences: MFA coverage, mail forwarding, mailbox permissions, mail flow per domain, mail flow rules and spam protection, sign-ins, Conditional Access, administrative units, Teams channels and their guests, who can reach each SharePoint site, Intune policies and BitLocker recovery keys, licence changes month by month, licence right-sizing and more.</p>
         <ul class="ticks">
           <li>{{ check() }}Filter by any value or date, sort and hide columns</li>
           <li>{{ check() }}Save a view and reuse it on any client</li>
@@ -240,6 +240,7 @@
         <li><strong>Mail flow by domain</strong> Mail received and sent per domain, quarantined and failed mail, and who gets the most spam and phishing.</li>
         <li><strong>Intune policies</strong> Which platforms have devices but no compliance policy, what each policy requires, paused update rings, and app protection for phones, with who each applies to.</li>
         <li><strong>BitLocker recovery keys</strong> Which Windows computers have their recovery key saved in Entra ID, read without ever reading the key.</li>
+        <li><strong>Mail rules and protection</strong> Every mail flow rule and connector in plain words, and the spam, phishing and malware policies with whom each covers, with rules that skip the spam filter or copy mail outside flagged.</li>
         <li><strong>A support package</strong> One zip of versions, settings, health checks and logs to attach to a bug report, with keys, tokens, addresses and client names taken out.</li>
       </ul>
     </div>

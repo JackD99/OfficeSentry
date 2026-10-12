@@ -2,7 +2,7 @@
 
 **Branded Microsoft 365 security and licensing reports for every client, without gathering anything by hand.**
 Office Sentry reads each client's Microsoft 365 every night, keeps the history, and turns it into the reports an MSP
-actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, 47 detail reports, a page for
+actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, 49 detail reports, a page for
 every person, mailbox, group and site, a view across all clients, and what changed since last month. It never changes
 anything in a client's tenant.
 
@@ -121,7 +121,7 @@ from other organisations in them, the apps added to each team (custom uploads fl
 
 ### Detail reports you can filter, save and export
 
-47 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
+49 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
 values (or by age, for dates), sorted and have columns hidden; the view can be saved and reused on any client, and
 the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline figure opens the rows behind it.
 
