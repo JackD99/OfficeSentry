@@ -155,7 +155,8 @@ class GraphClient:
             try:
                 return provider()
             except TokenError as exc:
-                raise GraphError(401, exc.code, exc.message) from exc
+                # Not reaching Microsoft is a network failure like any other, not a refused sign-in.
+                raise GraphError(0 if exc.code == "network_error" else 401, exc.code, exc.message) from exc
 
         def resource_tokens(resource: str) -> Callable[[], str]:
             return shared_certificate_token_provider(tenant_ref, client_id, key_pem, thumbprint, resource, cloud)

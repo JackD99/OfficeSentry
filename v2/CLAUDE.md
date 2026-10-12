@@ -939,7 +939,9 @@ deduplicated on (tenant, time, id), so reading an event twice stores it once.
   audits 7 years); whole months go as files (`events.prune`). `lifecycle.delete_tenant` deletes the
   tenant's rows from every file after the database delete, and the daily pass sweeps rows whose key is
   gone (`events.sweep`). `backup` mirrors the folder (`backups.mirror_events`) and `restore` puts back
-  missing files.
+  missing files; with none at all, it forgets the restored cursors (`backups._forget_history`), so the next
+  run reads back what Microsoft keeps instead of claiming months that aren't there. `deploy/jobs.sh restore`
+  fetches the `events` copies with the database.
 - Tests that need a fixed "now" patch `events.clock` (the live replay sets it to the recording's time).
 
 ## Logs and the support package
