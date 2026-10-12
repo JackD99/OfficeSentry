@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from .conftest import LAPTOPS, OUTPUT, PHONE
+from .conftest import LAPTOPS, OUTPUT, PHONE, screenshots
 from .pages import NOT_PAGES, every_page, is_page
 
 AUDIT = (Path(__file__).resolve().parent / "audit.js").read_text(encoding="utf-8")
@@ -92,6 +92,50 @@ def _screenshot(page, spec, label: str, problems: list[dict]) -> str:
         OUTPUT / name, optimize=True
     )
     return name
+
+
+FITS = (
+    "() => [...document.querySelectorAll('.table-scroll')].map(b => [b.className, b.scrollWidth <= b.clientWidth + 2])"
+)
+
+
+def test_tables_are_fitted_again_once_the_fonts_arrive(open_as, browser):
+    """A page draws in a fallback font until Inter arrives (font-display: swap) and Inter is a little wider, so
+    tables.js fits each table again then: one that fitted in the fallback but needs to be snug in Inter is."""
+    spec = next(p for p in PAGES if p.name == "stress/across.rows_index[file-permissions]")
+    where = open_as(spec)
+    width, height = LAPTOPS[0]
+    context = browser.new_context(viewport={"width": width, "height": height}, device_scale_factor=1)
+    try:
+        screenshots.sign_in(context, where.site.server.url, where.user, where.site.passwords[where.user])
+        held, released = [], []
+
+        def hold(route):  # the fonts arrive only once tables.js has measured the page in the fallback
+            if released:
+                route.continue_()
+            else:
+                held.append(route)
+
+        context.route("**/static/fonts/*", hold)
+        page = context.new_page()
+        page.goto(where.url, wait_until="domcontentloaded")
+        page.wait_for_function("() => window.officeSentryTables")
+        for _ in range(100):
+            if held:
+                break
+            page.wait_for_timeout(50)
+        assert held, "the page asked for no fonts"
+        released.append(True)
+        for route in held:
+            route.continue_()
+        page.evaluate("document.fonts.ready")
+        page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+        after = page.evaluate(FITS)
+        assert after and all(fits for _, fits in after), after
+        page.evaluate("() => window.dispatchEvent(new Event('resize'))")  # tables.js fits every table afresh
+        assert page.evaluate(FITS) == after
+    finally:
+        context.close()
 
 
 def test_every_route_is_a_page_or_says_why_not():

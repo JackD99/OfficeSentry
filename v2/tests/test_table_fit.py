@@ -81,9 +81,18 @@ def test_columns_get_room_by_how_long_their_values_are():
     assert _width(["2026-10-01"], "date") == "s"
 
 
-def test_long_addresses_wrap_after_the_at_sign_only():
+def test_long_addresses_wrap_after_the_at_sign_and_long_parts_after_their_dots():
     assert str(wrappable("anna.kowalski@fabrikam.example")) == "anna.kowalski@<wbr>fabrikam.example"
     assert str(wrappable("ann@x.com")) == "ann@x.com"  # short ones stay whole
+    assert (
+        str(wrappable("bartholomew.fitzwilliamokonkwo@fabrikam.example"))
+        == "bartholomew.<wbr>fitzwilliamokonkwo@<wbr>fabrikam.example"
+    )  # a long name before the "@" may break at its dot; the short domain stays whole
+    assert (
+        str(wrappable("v=spf1 include:spf.protection.outlook.com -all"))
+        == "v=spf1 include:spf.<wbr>protection.<wbr>outlook.<wbr>com -all"
+    )  # and so may a long host name in a DNS record
+    assert str(wrappable("contoso-com.mail.protection.outlook.com.")).endswith("outlook.<wbr>com.")
     assert "<wbr>" not in str(wrappable("Privileged Authentication Administrator"))
     assert str(wrappable("<b>" * 12)) == "&lt;b&gt;" * 12  # escaped
 

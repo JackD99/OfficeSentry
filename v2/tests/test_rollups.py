@@ -144,6 +144,8 @@ def test_rollup_pages_and_downloads(client, db, two_tenants):
         page = client.get(f"/across/{key}")
         assert page.status_code == 200, key
         assert "Alpha Ltd" in page.get_data(as_text=True)
+        # Only the insurance evidence matrix (a column per control) says it scrolls on a laptop by design.
+        assert ("data-scrolls=" in page.get_data(as_text=True)) == (key == "evidence"), key
     assert client.get("/across/nope").status_code == 404
     assert client.get("/across?key=mailboxes").headers["Location"].endswith("/across/mailboxes")
     resp = client.get("/across/review.csv")

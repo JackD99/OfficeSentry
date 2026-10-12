@@ -56,7 +56,7 @@
                     ('CSV', url_for('across.rollup_download', key=rollup.key, ext='csv'), '')]) }}
     </div>
   </div>
-  <div class="table-scroll{{ ' tall' if rollup.rows|length > 12 }}">
+  <div class="table-scroll{{ ' tall' if rollup.rows|length > 12 }}"{% if rollup.scrolls %} data-scrolls="{{ rollup.scrolls }}"{% endif %}>
   {% set figures = rollup|figure_columns %}
   <table class="stack-sm sortable" id="rollup-table">
     <thead><tr>

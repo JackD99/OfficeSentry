@@ -276,6 +276,7 @@ def mailbox_permissions(snap: TenantSnapshot, now: datetime, report: DataReport)
             "sign-in, guests and outside addresses are flagged: remove access nobody needs."
         ),
         empty="Nobody has access to another mailbox.",
+        optional_across=("Account", "Send on behalf"),
     )
     for p in sorted(by_person.values(), key=lambda p: (-len({m for r in RIGHTS for m in p[r]}), p["label"].lower())):
         status, flag = _account(p["user"], p["label"], domains)
@@ -350,6 +351,7 @@ def shared_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) ->
         drifts=("Size",),
         empty="No shared, room or equipment mailboxes.",
         optional=("Licensed",),
+        optional_across=("Size",),
     )
     for m in sorted(
         rows,

@@ -63,7 +63,7 @@
     <tbody>
     {% for row in rows %}{% set t = row.tenant %}
     <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}">
-      <td><a class="strong" href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">{{ t.name }}</a><span class="sub mono">{{ t.tenant_ref }}</span></td>
+      <td><a class="strong" href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">{{ t.name }}</a><span class="sub mono">{{ t.tenant_ref|wrappable }}</span></td>
       {% set here_sec = sec and can('reports.security', t.id) %}
       {% if sec %}<td data-label="Open findings">{% if t.consented_at and here_sec %}{{ sev_counts(row.counts) }}{% else %}<span class="faint">–</span>{% endif %}</td>{% endif %}
       {% if lic %}<td class="num" data-label="Secure Score">{% if can('reports.tenant', t.id) %}{{ kpi(row, 'secure_score.pct', '%', spark=true) }}{% else %}<span class="faint">–</span>{% endif %}</td>{% endif %}

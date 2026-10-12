@@ -118,9 +118,9 @@ and a final check fails unless the parts together ran every test.
   that touch templates or CSS also run the browser tests (screenshots against
   baselines, and axe-core); `v2/tests/browser/README.md` says how to run them.
   They also run the layout checks, which open every page at three laptop
-  widths and on a phone with long names and empty data, and list pages that
-  scroll sideways, cut text off, overlap or push controls off the screen
-  (`v2/tests/layout/README.md`; report only for now).
+  widths and on a phone with long names and empty data, and fail on a page
+  that scrolls sideways, cuts text off, overlaps or pushes controls off the
+  screen (`v2/tests/layout/README.md`).
 - When a screenshot or an example PDF changes because you meant it to, add
   the label `refresh-baselines` to the pull request: a workflow retakes the
   screenshots in the pinned browser and redraws the PDF pages (from your
