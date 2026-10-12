@@ -32,6 +32,9 @@ LOG_FILES = 3  # the current file and two before it
 PROCESSES = ("web", "worker")
 # The first two fields of a line, as FORMAT writes them: when, and how bad.
 LINE = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ) (\w+) ")
+# extra={IN_FILE: "..."}: what the log files say instead of the message, which only standard error shows
+# (the setup link's token stays out of the files the support package and the Support page read).
+IN_FILE = "in_file"
 
 _context: ContextVar[dict | None] = ContextVar("officesentry_log_context", default=None)
 _installed: dict[str, logging.Handler] = {}
@@ -109,6 +112,8 @@ class SharedRotatingFileHandler(RotatingFileHandler):
         return st.st_dev, st.st_ino
 
     def emit(self, record: logging.LogRecord) -> None:
+        if (instead := getattr(record, IN_FILE, None)) is not None:
+            record = logging.makeLogRecord({**record.__dict__, "msg": instead, "args": ()})
         if self.stream is not None and self._stat() != self._ident:
             self.stream.close()
             self.stream = None  # reopened by the next write, on the file now at that name

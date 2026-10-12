@@ -423,6 +423,9 @@ def test_setup_link_is_logged_and_private(cfg, db, caplog):
     assert f"/setup?token={token}" in caplog.text
     if os.name != "nt":
         assert stat.S_IMODE(os.stat(cfg.data_dir / "setup-token").st_mode) == 0o600
+    # The log file (in support packages and on the Support page) says where the link is, not the token.
+    in_file = (cfg.data_dir / "logs" / "web.log").read_text(encoding="utf-8")
+    assert "No admin account yet" in in_file and "setup-link" in in_file and token not in in_file
 
 
 # -- Redirects, cookies, proxies -------------------------------------------------------
