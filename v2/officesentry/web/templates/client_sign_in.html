@@ -1,0 +1,122 @@
+{#- Who at one client can sign in, and how (web/client_access.py). -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, csrf, tenant_header with context %}
+{% block title %}Client sign-in · {{ tenant.name }}{% endblock %}
+{% block content %}
+{{ tenant_header(tenant, 'client_sign_in') }}
+{% set ready = clients_enabled and same_cloud and known and not own %}
+
+<div class="tiles">
+  <div class="tile"><div class="label">People who can sign in</div><div class="value">{{ people|length }}</div>
+    <div class="foot">{% if people %}{{ with_microsoft }} with Microsoft, {{ people|length - with_microsoft }} with a password{% else %}Nobody at {{ tenant.name }} yet.{% endif %}</div></div>
+  <div class="tile"><div class="label">Sign in with Microsoft</div>
+    <div class="value small-value">{% if ready %}<span class="pill ok">Ready</span>{% elif clients_enabled %}<span class="pill warn">Not for this client</span>{% else %}<span class="pill">Off</span>{% endif %}</div>
+    <div class="foot">{% if ready %}With their own work account.{% elif not clients_enabled %}Client accounts use a password.{% elif not same_cloud %}Another Microsoft cloud.{% elif own %}Your own tenant.{% else %}Tenant ID not known yet.{% endif %}</div></div>
+  <div class="tile"><div class="label">Approved by {{ tenant.name }}</div>
+    <div class="value small-value">{% if approved %}<span class="pill ok">Approved</span>{% else %}<span class="pill">Not yet</span>{% endif %}</div>
+    <div class="foot">{% if approved %}{{ ts(approved) }}{% else %}Noted when someone there first signs in.{% endif %}</div></div>
+</div>
+
+{% if not clients_enabled %}
+<div class="callout" role="status">{{ icon('shield') }}<div class="grow"><strong>Client sign-in with Microsoft is off.</strong>
+  {% if can('settings.manage') %}Turn it on under <a href="{{ url_for('sso.settings_page') }}#clients">Settings → Microsoft sign-in</a> so {{ tenant.name }}'s people sign in with their own work account.{% else %}An admin turns it on under Settings → Microsoft sign-in.{% endif %}
+  Until then, give someone a password account on the <a href="{{ url_for('admin.users') }}">Users</a> page.</div></div>
+{% elif not same_cloud %}
+<div class="callout warn" role="status">{{ icon('alert') }}<div><strong>{{ tenant.name }} is in another Microsoft cloud than your sign-in app,</strong> so its people can't sign in with Microsoft. Give them a password account on the <a href="{{ url_for('admin.users') }}">Users</a> page instead.</div></div>
+{% elif not known %}
+<div class="callout warn" role="status">{{ icon('alert') }}<div><strong>Office Sentry doesn't know {{ tenant.name }}'s tenant ID yet.</strong> It learns it from the first collection; until then nobody there can sign in with Microsoft.</div></div>
+{% elif own %}
+<div class="callout" role="status">{{ icon('shield') }}<div><strong>{{ tenant.name }} is your own tenant,</strong> so anyone there who signs in with Microsoft signs in as staff, with the role Entra gives them. Client accounts here use a password.</div></div>
+{% endif %}
+
+<div class="grid-main">
+<section class="card flush">
+  <div class="card-head"><h2>Who can sign in</h2></div>
+  {% if people %}
+  <table class="stack-sm">
+    <thead><tr><th>Person</th><th>Signs in with</th><th>Last sign-in</th><th><span class="sr-only">Link</span></th></tr></thead>
+    <tbody>
+    {% for u in people %}
+    <tr><td>{% if can('users.manage') %}<a class="strong" href="{{ url_for('admin.edit_user', user_id=u.id) }}">{{ u.username }}</a>{% else %}{{ u.username }}{% endif %}{% if u.disabled %} <span class="pill">Disabled</span>{% endif %}</td>
+      <td data-label="Signs in with">{% if u.entra_oid %}Microsoft{% if u.entra_upn and u.entra_upn|lower != u.username|lower %} <span class="muted small">as {{ u.entra_upn }}</span>{% endif %}{% if not u.last_login_at %} <span class="muted small">not signed in yet</span>{% endif %}{% elif u.totp_enabled_at %}Password <span class="pill ok">2-step on</span>{% else %}Password <span class="pill">2-step off</span>{% endif %}</td>
+      <td data-label="Last sign-in" class="nowrap">{{ ts(u.last_login_at) }}</td>
+      <td class="num">{% if ready and u.entra_oid and not u.disabled %}<button type="button" class="sm ghost" data-copy-text="{{ start_url }}?hint={{ (u.entra_upn or u.username)|urlencode }}" title="A link that opens Microsoft's sign-in with their address filled in">{{ icon('copy') }} Sign-in link</button>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="intro muted">Nobody at {{ tenant.name }} can sign in yet.{% if ready %} Add their primary contacts here; they sign in with the work account they already use.{% endif %}</p>
+  {% endif %}
+  <p class="footnote pad">Clients' people only ever see {{ tenant.name }}'s reports, never other clients, settings or anything of yours. Change or remove someone on their user page.</p>
+</section>
+
+<div>
+{% if ready %}
+<section class="card" id="add">
+  <h2>Add someone</h2>
+  {% if can_add %}
+  <form method="post" action="{{ url_for('client_access.add', tenant_id=tenant.id) }}">
+    {{ csrf() }}
+    <label>Their work email address <input type="email" name="email" maxlength="64" required autocomplete="off" placeholder="jo@{{ tenant.name|lower|replace(' ', '') }}.com">
+      <span class="hint">The address they sign in to Microsoft with. Office Sentry finds them in {{ tenant.name }}'s directory as of its last collection and only ever lets that account in. They need no password here.</span></label>
+    <div class="form-actions"><button class="primary">Add</button></div>
+  </form>
+  {% if contacts %}
+  <div class="contact-picks">
+  <h3>From {{ tenant.name }}'s report contacts</h3>
+  <ul class="plain-list">
+    {% for c in contacts %}
+    <li><form method="post" action="{{ url_for('client_access.add', tenant_id=tenant.id) }}">{{ csrf() }}
+      <input type="hidden" name="email" value="{{ c.email }}"><button class="sm" aria-label="Add {{ c.email }}">{{ icon('plus') }} Add</button>
+      <span>{{ c.name or c.email }}{% if c.name %} <span class="muted small">{{ c.email }}</span>{% endif %}</span></form></li>
+    {% endfor %}
+  </ul>
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="muted">Only someone who can give the Client viewer role can add people.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if clients_enabled and same_cloud and not own %}
+<section class="card" id="approval">
+  <div class="card-head"><h2>{{ tenant.name }}'s approval</h2>{% if approved %}<span class="pill ok">Approved</span>{% endif %}</div>
+  {% if approved %}
+  <p class="m0">Approved {{ ts(approved) }}. Their people can sign in with Microsoft.</p>
+  {% elif approval %}
+  <p>{{ tenant.name }}'s Microsoft 365 administrator approves sign-in once for their organisation, from this link. It only lets their people sign in here: Office Sentry learns each person's name and sign-in address, and nothing else.</p>
+  <div class="form-actions wrap"><button type="button" class="primary" data-copy-text="{{ approval }}">{{ icon('copy') }} Copy approval link</button></div>
+  <p class="footnote">Organisations that let people approve apps themselves don't need it: the first person to sign in approves it for themselves.</p>
+  {% else %}
+  <p class="muted m0">The approval link appears once Office Sentry knows {{ tenant.name }}'s tenant ID.</p>
+  {% endif %}
+</section>
+{% endif %}
+</div>
+</div>
+
+{% if ready and people %}
+<section class="card" id="message">
+  <h2>Tell them how to sign in</h2>
+  <p class="muted small">Copy this into an email to the people you added.</p>
+  <label class="copy-label">Message <textarea class="copy-text" rows="12" readonly id="invite-body">Subject: Your Microsoft 365 reports from {{ brand.display_name }}
+
+Hi,
+
+{{ brand.display_name }} now gives you {{ tenant.name }}'s Microsoft 365 security and licensing reports online. Sign in with your usual work Microsoft account, the one you use for Outlook and Teams:
+
+{{ sign_in_url }}
+
+Press "Sign in with Microsoft" and choose your work account. You'll only see {{ tenant.name }}'s reports.
+{% if approval and not approved %}
+The first time, Microsoft may say your organisation needs to approve it. If it does, forward this link to your Microsoft 365 administrator; it takes them a minute:
+{{ approval }}
+{% endif %}
+Thanks,
+{{ brand.display_name }}{% if brand.contact %}
+{{ brand.contact }}{% endif %}</textarea></label>
+  <div class="form-actions"><button type="button" class="primary" data-copy="#invite-body">{{ icon('copy') }} Copy message</button></div>
+</section>
+{% endif %}
+{% endblock %}

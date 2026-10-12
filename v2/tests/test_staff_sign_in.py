@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 import time
 from urllib.parse import parse_qs, urlsplit
 
@@ -112,6 +113,11 @@ def page(client, url: str) -> str:
 def accounts(db) -> list[str]:
     """Every account but the first admin's, by name."""
     return [r[0] for r in db.execute("SELECT username FROM users WHERE username <> 'owner' ORDER BY id")]
+
+
+def _flash(resp) -> list[str]:
+    """The messages a response shows."""
+    return re.findall(r'<div class="flash [^"]*" role="status">(.*?)</div>', resp.get_data(as_text=True))
 
 
 def signed_in_as(client) -> str | None:
@@ -545,6 +551,28 @@ def test_an_account_without_a_password_cannot_be_disconnected(client, db, vault,
     assert admin
 
 
+def test_disconnecting_someone_else_takes_managing_users_and_reach(client, db, configured):
+    owner = db.execute("SELECT id FROM users WHERE username = 'owner'").fetchone()[0]
+    db.execute("UPDATE users SET entra_oid = ?, entra_tid = ? WHERE id = ?", (JACK["oid"], TENANT, owner))
+    for name, caps in (("settings-only", ["settings.manage"]), ("helpdesk", ["users.manage"])):
+        role = office_roles.create(db, "owner", name, "", "staff", "granted", caps)
+        db.execute("UPDATE users SET role_id = ? WHERE id = ?", (role, make_user(db, name, role="analyst")))
+    db.commit()
+    before = db.execute("SELECT session_version FROM users WHERE id = ?", (owner,)).fetchone()[0]
+    # Settings alone isn't managing users.
+    login(client, "settings-only")
+    assert client.post(f"/admin/users/{owner}/microsoft/disconnect").status_code == 403
+    client.post("/logout")
+    # Managing users, but not an Administrator's account.
+    login(client, "helpdesk")
+    resp = client.post(f"/admin/users/{owner}/microsoft/disconnect")
+    assert resp.status_code == 302
+    assert "Only an Administrator can change an Administrator's account" in page(client, resp.headers["Location"])
+    row = db.execute("SELECT entra_oid, session_version FROM users WHERE id = ?", (owner,)).fetchone()
+    assert tuple(row) == (JACK["oid"], before)
+    assert client.post("/admin/users/999999/microsoft/disconnect").status_code == 404
+
+
 # -- Passwords as the break-glass route ------------------------------------------------------------------
 
 
@@ -573,10 +601,16 @@ def test_passwords_off_for_staff_needs_a_microsoft_session_and_spares_clients(cl
     )
     client.post("/logout")
 
-    # Staff passwords are refused even when right; clients still sign in with theirs.
-    resp = login(client, "jack")
-    assert resp.status_code == 200 and "Passwords are off for staff" in resp.get_data(as_text=True)
+    # Staff passwords are refused even when right, answered and counted exactly as a wrong one so the page
+    # never confirms a guess; clients still sign in with theirs.
+    right, wrong = login(client, "jack"), login(client, "jack", "not the password")
+    assert right.status_code == wrong.status_code == 200
+    assert "Passwords are off" not in right.get_data(as_text=True)
+    assert _flash(right) and _flash(right) == _flash(wrong)
     assert signed_in_as(client) is None
+    assert [r[0] for r in db.execute("SELECT outcome FROM login_attempts WHERE username = 'jack' ORDER BY id")][
+        -2:
+    ] == ["failed", "failed"]
     assert db.execute("SELECT detail FROM audit_log WHERE action = 'login_failed'").fetchone()["detail"] == (
         "password sign-in is off for staff"
     )
@@ -832,7 +866,7 @@ def test_certificate_expiry_is_watched(db, configured):
     found = cert_lifecycle.expiring(db, datetime(2026, 10, 1, tzinfo=UTC))
     assert [e.kind for e in found] == ["sign_in"] and found[0].level == "30"
     assert found[0].headline.startswith("The sign-in app's certificate expires in 19 days")
-    assert "Staff sign-in" in cert_lifecycle.fix_steps(found[0])
+    assert "Microsoft sign-in" in cert_lifecycle.fix_steps(found[0])
 
 
 def test_admins_only(client, db, configured):

@@ -254,14 +254,15 @@ def login():
     # Unknown names still pay for a hash, so timing doesn't tell them apart.
     ok = check_password_hash(user["password_hash"] if user else _DUMMY_HASH, password)
     ok = ok and user is not None and not user["disabled"]
+    # Staff sign in with Microsoft here. A right password is answered and counted exactly as a wrong one, so
+    # the page never confirms a guess (the sign-in page already tells staff to use Microsoft).
+    off = ok and not sso.passwords_allowed(sso.settings(g.db), user["role"])
+    ok = ok and not off
     throttle.finish(g.db, reserved, ok)
 
-    if ok and not sso.passwords_allowed(sso.settings(g.db), user["role"]):
-        # Staff sign in with Microsoft here; the password was right, but it isn't a way in any more.
+    if off:
         audit(g.db, user["username"], "login_failed", detail="password sign-in is off for staff")
-        flash("Passwords are off for staff accounts here. Use Sign in with Microsoft.", "error")
-        return render_template("login.html", username=username), 200
-    if ok and _locked(user):
+    elif ok and _locked(user):
         # Right password, but two-step codes are locked: someone who has the password is guessing codes.
         audit(g.db, user["username"], "login_failed", detail="two-step codes locked")
     elif ok:
@@ -561,8 +562,15 @@ def confirm_password(field: str = "password", wrong: str = "That password isn't 
     Wrong answers are counted on this browser's session, and the MAX_FAILURESth
     signs it out, so a stolen session can't be used to guess the password here.
     They never lock the account: whoever holds a stolen session can't keep its
-    owner from signing in and ending it.
+    owner from signing in and ending it. An account with no password (it signs
+    in with Microsoft) confirms by signing in to Microsoft again instead
+    (``sso.confirm``), which counts for a few minutes.
     """
+    if not sso.has_password(g.user):
+        if sessions.recently_confirmed(g.session_row, sso.CONFIRM_MINUTES):
+            return True
+        flash("Confirm it's you with Microsoft first, then make the change.", "error")
+        return False
     # Counted before the password is checked, in one statement, so parallel requests get no more guesses.
     counted = g.db.execute(
         "UPDATE sessions SET wrong_passwords = wrong_passwords + 1 WHERE id = ? AND wrong_passwords < ?"

@@ -6,6 +6,11 @@
 <p class="sub">Microsoft 365 security and licensing reports{% if brand.name %} from {{ brand.name }}{% endif %}.</p>
 {% if microsoft_sign_in %}
 <a class="btn wide microsoft" href="{{ url_for('sso.start', next=request.args.get('next')) }}">{{ microsoft_logo() }} Sign in with Microsoft</a>
+{% if microsoft_staff and microsoft_clients and session.get('microsoft_staff_fallback') %}
+{#- Microsoft turned the last try away, or it wasn't one of a client's people: staff (a guest in the MSP's
+    tenant, say) can go in through the MSP's own tenant (web/sso.FALLBACK_KEY). -#}
+<p class="small staff-fallback">Staff of {{ brand.display_name }}? <a href="{{ url_for('sso.start', next=request.args.get('next'), **{'as': 'staff'}) }}">Sign in with Microsoft as staff</a></p>
+{% endif %}
 {% if staff_passwords_off %}
 <details class="help password-fallback">
   <summary>Client account? Sign in with a password</summary>

@@ -47,6 +47,21 @@
 <svg class="ms-logo" viewBox="0 0 21 21" width="18" height="18" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
 {%- endmacro %}
 
+{# A security change asks again who's making it: the signed-in person's password, or for someone with no
+   password (they sign in with Microsoft) a fresh Microsoft sign-in, which counts for a few minutes (sso.confirm).
+   Goes inside the change's form; the button signs in to Microsoft and comes back to this page. #}
+{% macro confirm_identity(field='password', label='Your password', hint='', optional=false, why="Confirm it's you first") -%}
+{% if not no_password %}
+<label>{{ label }}{% if optional %} <span class="faint">({{ optional }})</span>{% endif %}<input type="password" name="{{ field }}" autocomplete="current-password"{% if not optional %} required{% endif %}>
+  {% if hint %}<span class="hint">{{ hint }}</span>{% endif %}</label>
+{% elif confirmed_with_microsoft %}
+<p class="confirm-identity small"><span class="pill ok">Confirmed</span> You confirmed it's you with Microsoft a moment ago.</p>
+{% else %}
+<div class="confirm-identity"><p class="small m0">{{ why }}. You have no password here, so sign in to Microsoft again.</p>
+  <button class="sm" formaction="{{ url_for('sso.confirm', next=request.full_path if request.query_string else request.path) }}" formnovalidate>{{ microsoft_logo() }} Confirm with Microsoft</button></div>
+{% endif %}
+{%- endmacro %}
+
 {% macro ts(value, empty='never') -%}
 {% if value %}<time datetime="{{ value }}" title="{{ value|when }}">{{ value|ago }}</time>{% else %}<span class="muted">{{ empty }}</span>{% endif %}
 {%- endmacro %}
@@ -78,6 +93,7 @@
 {% set TAB_OF = {
   'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports', 'designs': 'reports',
   'schedules': 'emails', 'projects': 'findings', 'collection': 'settings', 'manage': 'settings',
+  'client_sign_in': 'settings',
   'activity': 'changes', 'mailboxes': 'users', 'group_pages': 'users', 'site_pages': 'users',
 } %}
 
@@ -129,6 +145,7 @@
 {% elif tab == 'settings' and staff %}
   {% if can('collect', tid) %}{% set _ = pages.append(('collection', 'Data collection', url_for('tenants.collection', tenant_id=tenant.id))) %}{% endif %}
   {% set _ = pages.append(('manage', 'Manage', url_for('tenant_admin.manage', tenant_id=tenant.id))) %}
+  {% if can('users.manage') %}{% set _ = pages.append(('client_sign_in', 'Client sign-in', url_for('client_access.page', tenant_id=tenant.id))) %}{% endif %}
 {% endif %}
 {% if pages|length < 2 %}{% set pages = [] %}{% endif %}
 {% if pages %}

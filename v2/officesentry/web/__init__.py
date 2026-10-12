@@ -24,6 +24,7 @@ from . import (
     alerts,
     auth,
     branding,
+    client_access,
     data_retention,
     designs,
     email,
@@ -42,6 +43,7 @@ from . import (
     reports,
     saved_views,
     search,
+    sessions,
     site_pages,
     styleguide,
     support,
@@ -219,9 +221,15 @@ def create_app(cfg: Config | None = None) -> Flask:
             "group_scope": g.get("group_scope"),
             "public_demo": bool(g.get("public_demo")),
             "public_demo_link": public_demo.link() if g.get("public_demo") else "",
-            # Sign in with Microsoft (sso.py): the sign-in page's button, and whether staff may still use passwords.
-            "microsoft_sign_in": staff_sign_in.enabled(sign_in),
-            "staff_passwords_off": sign_in.get("sso_passwords") == "off",
+            # Sign in with Microsoft (sso.py): the sign-in page's button, who it's for, whether staff may still use
+            # passwords, and whether someone without a password has just confirmed a change with Microsoft.
+            "microsoft_sign_in": staff_sign_in.shown(sign_in),
+            "microsoft_staff": staff_sign_in.enabled(sign_in),
+            "microsoft_clients": staff_sign_in.clients_enabled(sign_in),
+            "staff_passwords_off": staff_sign_in.enabled(sign_in) and sign_in.get("sso_passwords") == "off",
+            "no_password": bool(user) and not staff_sign_in.has_password(user),
+            "confirmed_with_microsoft": bool(user)
+            and sessions.recently_confirmed(g.get("session_row"), staff_sign_in.CONFIRM_MINUTES),
         }
 
     def _error(code: int, message: str, detail: str = ""):
@@ -350,4 +358,5 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(designs.bp)
     app.register_blueprint(evidence.bp)
     app.register_blueprint(sso_web.bp)
+    app.register_blueprint(client_access.bp)
     return app

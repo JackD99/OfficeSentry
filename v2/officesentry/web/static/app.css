@@ -1461,6 +1461,15 @@ input.copy-text { font-size: var(--fs-sm); margin: var(--space-1) 0 0; }
 .auth-card .btn.microsoft, body.branded .auth-card .btn.microsoft { margin-top: 0; gap: var(--space-2-5); font-weight: 600; background: var(--text); border-color: var(--text); color: var(--surface); }
 .auth-card .btn.microsoft:hover, body.branded .auth-card .btn.microsoft:hover { opacity: .9; }
 .auth-card .btn.microsoft .ms-logo { flex: none; }
+.auth-card .staff-fallback { margin: var(--space-2-5) 0 0; text-align: center; }
+/* Client sign-in (client_sign_in.html): report contacts to add with one press. */
+.contact-picks { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+.contact-picks h3 { margin-bottom: var(--space-2-5); }
+.contact-picks form { display: flex; align-items: center; gap: var(--space-3); margin: 0; }
+.contact-picks form > span { min-width: 0; overflow-wrap: anywhere; }
+/* confirm_identity (_macros.html): someone with no password confirms a change by signing in to Microsoft again. */
+.confirm-identity { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: var(--space-2) 0 var(--space-3); }
+.confirm-identity .ms-logo { flex: none; width: 14px; height: 14px; }
 .card .kv + .steps { margin-top: var(--space-4); }
 .auth-card .or-line { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 var(--space-3); color: var(--muted); font-size: var(--fs-sm); }
 .auth-card .or-line::before, .auth-card .or-line::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
