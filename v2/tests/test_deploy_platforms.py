@@ -11,18 +11,40 @@ from pathlib import Path
 import pytest
 import yaml
 
+from officesentry import __version__
+
 V2 = Path(__file__).resolve().parent.parent
 ROOT = V2.parent
 GUIDES = V2 / "docs" / "deploy"
 STACK = V2 / "deploy" / "stack" / "compose.yaml"
 KUBERNETES = V2 / "deploy" / "kubernetes"
 CLOUD_INIT = V2 / "deploy" / "cloud-init-server.yaml"
+CHANGELOG = ROOT / "CHANGELOG.md"
 IMAGE = "ghcr.io/jackd99/officesentry"
 DIGEST = r"@sha256:[0-9a-f]{64}"
 
 
 def _guides() -> list[str]:
     return sorted(p.name for p in GUIDES.glob("*.md") if p.name != "README.md")
+
+
+def _current_release() -> str:
+    """``__version__`` when it's a release, else (a development version) the newest release in CHANGELOG.md."""
+    if re.fullmatch(r"\d+\.\d+\.\d+", __version__):
+        return __version__
+    return re.findall(r"^## \[(\d+\.\d+\.\d+)\] - \d{4}-\d{2}-\d{2}$", CHANGELOG.read_text(encoding="utf-8"), re.M)[0]
+
+
+def test_guides_name_the_current_release():
+    """The exact release a guide's example runs (and the Kubernetes maintenance pod) moves on with each release."""
+    named = {}
+    for path in [*sorted(GUIDES.glob("*.md")), KUBERNETES / "maintenance.yaml"]:
+        text = path.read_text(encoding="utf-8")
+        exact = r"(\d+\.\d+\.\d+)\b"  # not a moving tag such as :2
+        found = re.findall(rf"^\s*OFFICESENTRY_VERSION={exact}", text, re.M) + re.findall(rf"{IMAGE}:{exact}", text)
+        named.update({f"{path.name}: {version}": version for version in found})
+    assert named, "no guide names a release"
+    assert {where for where, version in named.items() if version != _current_release()} == set()
 
 
 def test_every_guide_is_on_the_index_and_the_website():
@@ -190,6 +212,7 @@ def test_kustomization_lists_what_exists_and_pins_one_release():
     assert image["name"] == IMAGE and re.fullmatch(r"\d+\.\d+\.\d+", image["newTag"])
     maintenance = _manifests()["Pod/officesentry-maintenance"]["spec"]["containers"][0]["image"]
     assert maintenance == f"{IMAGE}:{image['newTag']}"
+    assert image["newTag"] == _current_release()  # a release PR moves it on with __version__
     settings = dict(line.split("=", 1) for line in kustomization["configMapGenerator"][0]["literals"])
     assert settings["OFFICESENTRY_TRUSTED_PROXIES"] == "1"
     assert not any("KEY" in name for name in settings)  # keys belong in the Secret
