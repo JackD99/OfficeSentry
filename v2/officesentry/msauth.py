@@ -1,4 +1,4 @@
-"""App-only tokens from the connection's certificate, for Graph and Exchange."""
+"""App-only tokens from the connection's certificate, for Graph, Exchange, SharePoint and the audit log feed."""
 
 from __future__ import annotations
 
@@ -23,9 +23,14 @@ def authority(tenant_ref: str, cloud: str | None = None) -> str:
 
 
 def _check_resource(resource: str, cloud: str | None) -> None:
-    """A token for one cloud's sign-in must be for that same cloud's Graph, Exchange or a SharePoint host."""
+    """A token for one cloud's sign-in must be for that same cloud's Graph, Exchange, a SharePoint host or (for
+    the audit log add-on) its Office 365 Management Activity feed."""
     c = clouds.get(cloud)
-    if resource not in (c.graph, c.exchange) and not c.is_sharepoint(resource):
+    if (
+        resource not in (c.graph, c.exchange)
+        and not c.is_sharepoint(resource)
+        and not (c.management and resource == c.management)
+    ):
         raise ValueError(f"{resource} isn't a {c.label} resource")
 
 

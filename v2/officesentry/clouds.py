@@ -20,6 +20,12 @@ dod            login.microsoftonline.us    dod-graph.microsoft.us               
 china          login.chinacloudapi.cn      microsoftgraph.chinacloudapi.cn      partner.outlook.cn
 =============  ==========================  ===================================  ======================
 
+The audit log add-on reads the Office 365 Management Activity feed (``auditlog/feed.py``), which has a host of
+its own per cloud (``management``): ``manage.office.com``, ``manage.office365.us`` (GCC High) and
+``manage.protection.apps.mil`` (DoD). Microsoft documents none for China, so the add-on is ``missing`` there.
+GCC (moderate) tenants read theirs from ``manage-gcc.office.com``, which the commercial cloud can't tell
+apart yet, so the add-on doesn't serve them.
+
 SharePoint hostnames differ too (``*.sharepoint.com``, ``*.sharepoint.us``,
 ``*.sharepoint-mil.us``, ``*.sharepoint.cn``). Office Sentry never builds SharePoint
 URLs itself: it reads sites through Graph and uses the ``webUrl`` Microsoft returns.
@@ -48,6 +54,7 @@ class Cloud:
     exchange: str  # Exchange Online admin API root (also the token resource)
     sharepoint_suffix: str
     admin_centre: str  # where the MSP registers this cloud's app
+    management: str = ""  # Office 365 Management Activity feed root (also the token resource), "" where none
     # Collectors or parts of one that Microsoft doesn't offer in this cloud -> the reason, for ctx.warn
     # and a report's "unavailable". Keys are a collector key or "<collector>.<part>".
     missing: dict[str, str] = field(default_factory=dict)
@@ -77,6 +84,7 @@ CLOUDS: dict[str, Cloud] = {
         exchange="https://outlook.office365.com",
         sharepoint_suffix="sharepoint.com",
         admin_centre="https://entra.microsoft.com",
+        management="https://manage.office.com",
     ),
     "gcc_high": Cloud(
         "gcc_high",
@@ -86,6 +94,7 @@ CLOUDS: dict[str, Cloud] = {
         exchange="https://outlook.office365.us",
         sharepoint_suffix="sharepoint.us",
         admin_centre="https://entra.microsoft.us",
+        management="https://manage.office365.us",
         missing={
             "usage.apps": "Microsoft doesn't offer the Microsoft 365 Apps usage report in GCC High.",
             "usage.copilot": "Microsoft doesn't offer the Copilot usage report in GCC High.",
@@ -99,6 +108,7 @@ CLOUDS: dict[str, Cloud] = {
         exchange="https://webmail.apps.mil",
         sharepoint_suffix="sharepoint-mil.us",
         admin_centre="https://entra.microsoft.us",
+        management="https://manage.protection.apps.mil",
         missing={
             "usage.apps": f"Microsoft doesn't offer the Microsoft 365 Apps usage report in {_DOD}.",
             "usage.copilot": f"Microsoft doesn't offer the Copilot usage report in {_DOD}.",
@@ -117,6 +127,8 @@ CLOUDS: dict[str, Cloud] = {
             "risky_users": f"Microsoft doesn't offer Entra ID Protection (risky users) in {_CHINA}.",
             "usage.apps": f"Microsoft doesn't offer the Microsoft 365 Apps usage report in {_CHINA}.",
             "usage.copilot": f"Microsoft doesn't offer Copilot in {_CHINA}.",
+            "audit_activity": f"Microsoft doesn't document its audit log feed for {_CHINA}, so the audit log "
+            "add-on isn't available there.",
         },
     ),
 }
