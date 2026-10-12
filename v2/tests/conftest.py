@@ -1,8 +1,11 @@
+import importlib
 import json
 import os
 import sqlite3
+import sys
 import traceback
 import zlib
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -39,6 +42,36 @@ def pytest_addoption(parser):
     parser.addoption(
         "--shard-list", metavar="FILE", help="with --shard: write the part's tests to FILE as JSON, for CI to check"
     )
+
+
+# The test-data modules date what they hold from the moment they load ("renews in 150 days", "last signed in
+# 2 days ago"), listed so each comes after the ones it reads. A run that passes midnight UTC loads them
+# again before its next test, so a test never compares yesterday's data with today's clock.
+DATED_DATA = (
+    "tests.exchangedata",
+    "tests.mailflowdata",
+    "tests.mailprotectiondata",
+    "tests.graphdata",
+    "tests.licencedata",
+    "tests.usagedata",
+    "tests.teamsdata",
+    "tests.adminactivitydata",
+    "tests.devicedata",
+    "tests.hybriddata",
+    "tests.sharepoint_data",
+)
+_data_dated = {"on": datetime.now(UTC).date()}
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    """Before the test's fixtures, which may read the data."""
+    today = datetime.now(UTC).date()
+    if today != _data_dated["on"]:
+        for name in DATED_DATA:
+            if name in sys.modules:
+                importlib.reload(sys.modules[name])
+        _data_dated["on"] = today
 
 
 def pytest_ignore_collect(collection_path, config):
