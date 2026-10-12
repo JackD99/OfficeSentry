@@ -213,7 +213,7 @@ as `grants` and drops grants past their expiry from exposure.
   `test_report_library.py` opens every seeded headline link.
 - Tables are drawn by `templates/_report_table.html` from `reports/views.py`:
   value filters, date presets, hidden columns and sort all live in the query
-  string (`f=`, `age=`, `hide=`, `sort=`, keyed by table and column slugs), and
+  string (`f=`, `age=`, `hide=`, `show=`, `sort=`, keyed by table and column slugs), and
   the page, PDF, XLSX and CSV apply the same view (`views.apply`). Pass lists
   for list cells (they become `Many`, so a filter offers each item). Saved
   views are per person, per report key (`saved_views` table, `web/saved_views.py`);
@@ -222,8 +222,9 @@ as `grants` and drops grants past their expiry from exposure.
   A `Section` can also name its flag column (`flag_name`), group rows under
   collapsible headings by a column (`group`, anchors in `group_ids`), always
   offer a value filter on some columns (`filter_columns`), carry a key per row
-  for row actions (`keys`, `{% call(key) report_table(tv, csv, action=...) %}`)
-  and drop the "to review" count (`review=False`).
+  for row actions (`keys`, `{% call(key) report_table(tv, csv, action=...) %}`),
+  drop the "to review" count (`review=False`) and leave columns out of the page
+  until someone shows them (`optional`, below).
 - The Findings tab (`/tenants/<id>/findings`, and `/findings/resolved`) is built
   by `reports/findings_report.py` from the `findings` table on that same table:
   open findings grouped by check, then accepted risks, with saved views (report
@@ -508,6 +509,15 @@ turning each step's `target` into a link.
   (`views._width`: `w-s` stays on one line, `w-m` and `w-l` wrap within limits), and long addresses may
   wrap after their "@" (`wrappable`). A table that still doesn't fit scrolls inside its card, never the
   page, with the sideways scrollbar in view and its first column pinned (`tables.js`, `edges`).
+- A report table that doesn't fit a 1366 px laptop opens on its default columns: the `Section` names the
+  rest in `optional`, the Columns menu shows "7/11" and offers them (`show=` in the view, or a filter by
+  one), and downloads keep them. Pick the columns that answer the report's question; leave out dates
+  created, second sizes and details a person's page has. The Users lists (people, mailboxes, groups,
+  sites) use the same `.table-scroll` box and width classes, and the person and object pages draw their
+  cells with `_report_table.html`'s `cell`.
+- The menu folds to its icons on laptops (`.menu-folded` on `<html>`, `[data-fold]` in `app.js`,
+  remembered in `localStorage`; `base.html` applies it before the page draws, and an MSP's logo gives way
+  to the mark in its brand colour). Its width is `--sidebar-w`.
 - The person page and `object_page.html` open with a summary (`.grid-main`:
   Needs attention and Open findings, the facts card beside them), then each
   part as `<details class="card part" open>` at full width; `app.js` folds
@@ -535,7 +545,8 @@ turning each step's `target` into a link.
   `formatting.py` (`money`, `when`, `day`, `capability`); reports and checks
   never import `web` (`tests/test_imports.py`).
 - Tables that people read on phones get `class="stack-sm"` and a
-  `data-label` on every cell after the first.
+  `data-label` on every cell after the first. Stacked, the label sits on the
+  left and the cell's content stays together on the right.
 - Scripts need `nonce="{{ csp_nonce }}"`; there are no external assets.
 - The root README's screenshots (`docs/screenshots/`) and `examples/` come from
   `python scripts/screenshots.py` (demo data from `scripts/demo_data.py`); re-run

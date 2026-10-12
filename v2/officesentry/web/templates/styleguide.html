@@ -66,6 +66,11 @@
         <div class="sg-shape" data-token="{{ t.name }}"><code>--{{ t.name }}</code></div>
         {% endfor %}{% endfor %}
       </div>
+      {% for g in groups if g.title == 'Layout' %}
+      <ul class="list sg-space">
+        {% for t in g.tokens %}<li><code class="sg-name">--{{ t.name }}</code><span class="faint small">{{ t.light }}{% if t.note %}: {{ t.note }}{% endif %}</span></li>{% endfor %}
+      </ul>
+      {% endfor %}
     </div>
   </div>
 </section>

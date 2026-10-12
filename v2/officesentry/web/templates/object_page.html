@@ -4,9 +4,9 @@
 {% from "_macros.html" import icon, ts, tenant_header, downloads with context %}
 {% block title %}{{ page.name }} · {{ tenant.name }}{% endblock %}
 {% set PILL = {'ok': 'ok', 'warn': 'warn', 'bad': 'bad'} %}
-{% macro cell(v) -%}
-{% if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text }}</a>{% elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>{% else %}{{ v|readable }}{% endif %}
-{%- endmacro %}
+{#- Cells as report tables draw them: links, long lists folded to a summary that opens in place, long addresses
+    that wrap. -#}
+{% from "_report_table.html" import cell %}
 {% block content %}
 {{ tenant_header(tenant, tab) }}
 

@@ -94,6 +94,7 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         intro="Every member and guest account. Accounts that report to someone whose sign-in is blocked "
         "are flagged: the manager has usually left, so approvals and HR records go nowhere.",
         empty="The tenant has no accounts.",
+        optional=("Job title", "Manager", "Source", "Created"),
     )
     reports: dict[str, list[str]] = {}
     known: dict[str, dict] = {}  # each manager as the accounts reporting to them see it

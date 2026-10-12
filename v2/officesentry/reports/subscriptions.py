@@ -217,6 +217,7 @@ def _subscriptions(skus, subs, names, prices, currency, now):
         intro="Every product the tenant has, with licences bought, assigned and still available, and "
         "what they cost a month at your prices. Free products are listed last.",
         empty="The tenant has no subscriptions.",
+        optional=("In grace period", "Suspended", "Price / month"),
     )
     section.chart = Chart("Licence", ("Assigned", "Available"), total="Purchased", tones=("1", "muted"))
     next_dates = _next_dates(subs, now)

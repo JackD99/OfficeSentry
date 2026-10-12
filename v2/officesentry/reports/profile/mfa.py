@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 from ... import authmethods
+from ...text import plural
+from ..data_reports import LIST_WHOLE, Many
 from ..identity_reports import GAP_TEXT, METHOD_NAMES, Enforcement, Registration, _methods, _phishing_resistant
 from .base import Part, Person, _yes, part
+
+
+def _policies(names: list[str]) -> Many:
+    """Conditional Access policies: every one when there are few, else "7 policies", which opens to them."""
+    return Many(names, plural(len(names), "policy") if len(names) > LIST_WHOLE else "")
 
 
 @part(20)
@@ -29,11 +36,15 @@ def mfa_part(p: Person) -> Part:
                 result.facts.append(("Default method", METHOD_NAMES.get(default.lower(), default)))
             result.facts.append(("Phishing-resistant method", _yes(_phishing_resistant(row))))
             _sign_in_strength(p, row, result)
-    result.facts.append(("MFA required by", ", ".join(sources) or ("Nothing" if enf.known else "Not checked")))
+    result.facts.append(
+        ("MFA required by", _policies(sources) if sources else ("Nothing" if enf.known else "Not checked"))
+    )
     if excluded:
-        result.facts.append(("Excluded from", ", ".join(excluded)))
+        result.facts.append(("Excluded from", _policies(excluded)))
     if cov is not None:
-        result.facts.append(("Conditional Access policies that apply", ", ".join(cov.policies) or "None"))
+        result.facts.append(
+            ("Conditional Access policies that apply", _policies(cov.policies) if cov.policies else "None")
+        )
         result.facts.append(("Legacy sign-in blocked", "Yes" if cov.legacy_blocked or enf.security_defaults else "No"))
     elif enf.security_defaults:
         result.facts.append(("Legacy sign-in blocked", "Yes, by Security Defaults"))
