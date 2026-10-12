@@ -61,6 +61,8 @@ No.
   users, Account and Send on behalf on mailbox permissions by person). **Columns** offers them, and the client's
   own report and the downloads keep them. Tables are measured again once the page's font has loaded, so one that
   only just fits no longer slips past its card, and the All clients checks matrix now shows every category.
+- **Settings → Updates** shows a release's **Action required** that says "None" as plain text, without a
+  warning or a box to tick before **Update**.
 
 ### Security
 

@@ -1056,7 +1056,9 @@ Settings values go in the package only when listed in `PLAIN_SETTINGS` (or a pre
 *Settings → Updates* (`web/updates.py`, capability `system.update`: admins by default, in `EVERY_CLIENT`)
 lists every release newer than the one running, with its notes split by `updates.parse_notes` (summary, Action required,
 New Microsoft permissions, Database upgrade, Security) and drawn by `web/release_notes.render`, which escapes
-everything and keeps only https links (relative ones point at the release's tag on GitHub). The list comes
+everything and keeps only https links (relative ones point at the release's tag on GitHub). Action required is
+a warning the admin ticks before Update, unless it says "None", as a release with nothing to do does
+(`Release.asks`; CONTRIBUTING.md, "Releases"). The list comes
 from `updates.check`: GitHub's releases API, once a day from the `updates` periodic job (setting
 `updates.check`, on unless an admin turns it off) or on *Check now*. The job never asks GitHub under
 `cfg.testing` or on the public demo; `tests/test_updates.py` mocks GitHub's answers with `responses`. The
