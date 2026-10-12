@@ -8,7 +8,7 @@ from flask import Blueprint, Response, current_app, g, render_template, request
 
 from .. import __version__, support, system_health
 from ..db import audit, transaction
-from .access import needs
+from .access import current, needs
 
 bp = Blueprint("support", __name__, url_prefix="/admin")
 
@@ -36,6 +36,7 @@ def index():
         help_url=HELP_URL,
         log_dir=cfg.data_dir / "logs",
         docker=Path("/.dockerenv").exists(),
+        can_identify=current().sees_all,
     )
 
 
@@ -44,7 +45,8 @@ def index():
 def package():
     """Build the package now and send it; nothing is kept on the server."""
     cfg = current_app.extensions["officesentry.config"]
-    identifiers = request.form.get("identifiers") == "1"
+    # Client names are for whoever sees every client: the package covers them all, not one person's scope.
+    identifiers = request.form.get("identifiers") == "1" and current().sees_all
     pkg = support.build(g.db, cfg, include_identifiers=identifiers)
     with transaction(g.db):
         audit(

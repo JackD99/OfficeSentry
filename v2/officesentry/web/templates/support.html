@@ -37,8 +37,10 @@
   <div class="callout" role="note">{{ icon('shield') }}<span><strong>Never inside:</strong> encryption keys, certificates and private keys, passwords, session tokens, webhook URLs, e-mail and IP addresses, or anything a report shows. Clients appear as numbers, people as <span class="mono">[user]</span>.</span></div>
   <form method="post" action="{{ url_for('support.package') }}" class="package-form">
     {{ csrf() }}
+    {% if can_identify %}
     <label class="check identifiers"><input type="checkbox" name="identifiers" value="1"><span><strong>Include client identifiers</strong>
       <span class="hint">Keeps client names, Microsoft tenant IDs, domains and user names, so a problem with one client can be followed by name. Only for a private channel, never a public issue.</span></span></label>
+    {% endif %}
     <div class="form-actions wrap"><button class="primary">{{ icon('download') }} Download support package</button>
       <span class="muted small">Recorded in the activity log.</span></div>
   </form>
