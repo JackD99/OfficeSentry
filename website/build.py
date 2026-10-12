@@ -295,6 +295,8 @@ WHATS_NEW = {
     "items": [],  # {"icon", "title", "text", "href", "link"}: "link" names the page "href" opens
     "also": [  # smaller changes, a few words each
         "month-end emails sent at Microsoft's pace, however many clients you approve at once",
+        "All clients opens any report from the All reports menu",
+        "sign-in and sessions tested harder, on every page",
     ],
 }
 
