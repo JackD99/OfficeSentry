@@ -113,8 +113,9 @@ offsite_copy() {
 }
 
 # Restores the newest database backup in the newest off-site copy into the scratch volume, at
-# /restore/data/backups/<name>; prints that path. Records failures under "part".
-fetch_newest() {  # part
+# /restore/data/backups/<name>; prints that path. With "history", the activity history copies come too, in
+# /restore/data/backups/events beside it, where restore looks for them. Records failures under "part".
+fetch_newest() {  # part [history]
   local out newest
   newest=$(restic -- ls latest --tag officesentry 2>/dev/null \
     | grep -E '^/data/backups/officesentry-[0-9]{8}-[0-9]{6}\.db\.gz$' | sort | tail -n 1)
@@ -122,10 +123,12 @@ fetch_newest() {  # part
     fail "$1" "the newest off-site copy holds no database backup" >&2
     return 1
   fi
+  local include=(--include "$newest")
+  [ "${2:-}" = history ] && include+=(--include /data/backups/events)
   echo "Restoring $newest from the newest off-site copy into a scratch volume." >&2
   docker volume rm -f "$SCRATCH" > /dev/null 2>&1
   docker volume create "$SCRATCH" > /dev/null
-  if ! out=$(restic -v "$SCRATCH:/restore" -- restore latest --tag officesentry --target /restore --include "$newest" 2>&1); then
+  if ! out=$(restic -v "$SCRATCH:/restore" -- restore latest --tag officesentry --target /restore "${include[@]}" 2>&1); then
     fail "$1" "restoring $newest from the off-site copy failed: $(last_line "$out")" >&2
     return 1
   fi
@@ -160,7 +163,7 @@ restore_offsite() {
   offsite_on || { echo "Off-site backups aren't set up (no RESTIC_REPOSITORY in .env.backup)."; return 1; }
   open_repository restore_check || return 1
   local file
-  file=$(fetch_newest restore_check) || return 1
+  file=$(fetch_newest restore_check history) || return 1
   docker compose stop web worker
   # restore checks the backup, keeps the database it replaces as backups/pre-restore-*.db.gz (or moves a
   # damaged one aside whole), and refuses a backup from a newer Office Sentry.

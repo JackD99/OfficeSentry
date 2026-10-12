@@ -155,7 +155,10 @@ as `grants` and drops grants past their expiry from exposure.
   in templates), never "account(s)".
 - A check that calls for work an MSP would sell goes in one project's
   `checks` in `projects.CATALOG` with a rough `Effort` in hours (each check
-  in at most one; `test_projects.py` checks). A project is half a day or more
+  in at most one; `test_projects.py` checks), and in the `when` of the
+  `Cover` lines it calls for, so a proposal lists only the work found. A
+  project's title is what a client buys (you'd put it on a quote); a repair
+  (sync that stopped) is in no project. A project is half a day or more
   (`projects.MIN_HOURS`, counting `OVERHEAD`); `projects.assess` turns the rest
   into quick fixes, and a small critical fix is always a quick fix so it isn't
   held for a sale. Failing checks in no project are quick fixes too.
@@ -231,13 +234,18 @@ as `grants` and drops grants past their expiry from exposure.
   live build (a call with `now=...` never uses them). Rows are per tenant:
   only ever read them for `scoped_tenants()`. The same task keeps each
   tenant's rows in `search_index` (`search_index.py`) for the sidebar search.
-  The change report matches table rows on their first column; set
+  The change report matches table rows on their first column (rows whose key
+  another row shares are compared whole); set
   `Section(compare=False)` for event logs and time series. Columns named
   `Last ...`, `... (UTC)` or containing "change", and the day counts in
   `month_changes.DAY_COUNT_COLUMNS` ("Days", "Days left", ...), are ignored as
-  time-driven; "No check-in for N days" in a cell is compared without its number.
+  time-driven; day counts in a cell ("No check-in for N days",
+  `DAY_COUNT_TEXT`) are compared without their number, and age buckets
+  (`CLOCK_BUCKETS`) only count when their date changed.
   A section names its columns that drift every night with use (sizes, file and
-  item counts) in `Section(drifts=(...))`, and those are ignored too.
+  item counts) in `Section(drifts=(...))`, and those are ignored too. A report
+  isn't compared when one of its data sources has no run at the start of the
+  period, or when its `DataReport.parts` (read, waiting, failed) differ.
 - Downloads go through `reports/tables.py` (`Table`, `to_csv`, `to_xlsx`): CSV
   prefixes formula characters, XLSX never stores formulas (`safe_xlsx`).
 - Report builders in `reports/` return plain data; templates and
@@ -255,7 +263,8 @@ as `grants` and drops grants past their expiry from exposure.
   returns one account's last activity and use per service (keys in
   `usage.SERVICES`), Office apps by platform, installs and activity counts, for
   any page about one person. Usage reports may conceal names (32-character
-  codes); show `usage.label(row)` and `usage.CONCEALED_NOTICE`.
+  codes); show `usage.label(row)` (`usage.owner_label` for SharePoint and
+  OneDrive owners) and `usage.CONCEALED_NOTICE`.
 - `tests/seed.py` runs every collector against `tests/graphdata.py`; use it
   for rule and report tests.
 - Questionnaire answers (`reports/evidence.py`, `build()`, kept for the
@@ -933,7 +942,9 @@ deduplicated on (tenant, time, id), so reading an event twice stores it once.
   audits 7 years); whole months go as files (`events.prune`). `lifecycle.delete_tenant` deletes the
   tenant's rows from every file after the database delete, and the daily pass sweeps rows whose key is
   gone (`events.sweep`). `backup` mirrors the folder (`backups.mirror_events`) and `restore` puts back
-  missing files.
+  missing files; with none at all, it forgets the restored cursors (`backups._forget_history`), so the next
+  run reads back what Microsoft keeps instead of claiming months that aren't there. `deploy/jobs.sh restore`
+  fetches the `events` copies with the database.
 - Tests that need a fixed "now" patch `events.clock` (the live replay sets it to the recording's time).
 
 ## Logs and the support package

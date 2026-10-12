@@ -2,6 +2,12 @@
 {% from "_macros.html" import csrf %}
 {% set STATUS_TONE = {'suggested': '', 'proposed': 'info', 'agreed': 'ok', 'declined': ''} %}
 
+{# What was found, linked to its findings, with the check's goal under it (Reason.detail). #}
+{% macro reason(tenant, r, sub='desc') -%}
+{% if r.check %}<a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}#check-{{ r.check }}">{{ r.headline }}</a>{% else %}{{ r.headline }}{% endif %}
+<span class="{{ sub }}">{{ r.detail }}</span>
+{%- endmacro %}
+
 {% macro status_pill(rec) -%}
 <span class="pill {{ STATUS_TONE.get(rec.status, '') }}"{% if rec.updated_by %} title="{{ rec.updated_by }}, {{ rec.updated_at|when }}"{% endif %}>{{ rec.status_label }}</span>
 {%- endmacro %}

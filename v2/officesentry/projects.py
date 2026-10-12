@@ -16,6 +16,11 @@ sells two projects. For each tenant (``assess``):
   otherwise each reason is a quick fix;
 - failing checks no project covers are quick fixes too, so everything failing has a home.
 
+A project is something the client buys: new protection, a migration, a clean-up that saves money. Repairs
+(directory sync that stopped, say) belong to no project, so they're quick fixes done under the support
+agreement rather than sold. What a project covers (``covers``) is listed for the parts its reasons call for,
+so a proposal never offers work the client doesn't need.
+
 Recommendations are worked out from stored data whenever they're shown, so a project drops off once the
 tenant is fixed. What the account manager did with one (proposed, agreed, declined, with a note) is kept in
 ``project_status``. Estimates are a rough guide for staff and never reach the client's proposal.
@@ -28,6 +33,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
+from . import devices, hybrid
 from .checks import SEVERITY_RANK, Finding, RuleResult, evaluate
 from .db import utcnow
 from .findings import finding_key, lifecycle_map
@@ -96,16 +102,40 @@ class Reason:
     def effort(self) -> str:
         return effort_label(self.hours)
 
+    @property
+    def headline(self) -> str:
+        """What was found, in a few words: a check's summary ("3 sites with no owner"), a signal's title."""
+        return self.summary if self.check else self.title
+
+    @property
+    def detail(self) -> str:
+        """The line under it: the check's goal, labelled so it doesn't read as a second finding, or what a
+        signal means."""
+        return f"Goal: {self.title}" if self.check else self.summary
+
 
 Signal = Callable[[TenantSnapshot], "Reason | None"]
+
+
+@dataclass(frozen=True)
+class Cover:
+    """A part of what a project delivers. ``when`` names the checks (and ``signal:<key>``) that call for it:
+    it's offered only when one of them is among the project's reasons. With no ``when`` it's always offered."""
+
+    text: str
+    when: tuple[str, ...] = ()
+
+
+def _cover(text: str, *when: str) -> Cover:
+    return Cover(text, when)
 
 
 @dataclass
 class Project:
     key: str
-    title: str
+    title: str  # what the client buys, in their words: a name you'd put on a quote
     pitch: str  # why it matters, in words a client understands
-    covers: list[str]  # what the project delivers
+    covers: list[Cover]  # what the project delivers
     checks: dict[str, Effort] = field(default_factory=dict)
     signals: list[Signal] = field(default_factory=list)
     size: tuple[str, str] | None = None  # (metric key, noun): how big the job is, "42 users"
@@ -150,7 +180,56 @@ def _missing(capability: str, title: str, summary: str, severity: str, hours: fl
             return None
         return Reason(title, summary, severity, hours=hours, action=action, signal=f"missing_{capability}")
 
+    signal.__name__ = f"_missing_{capability}"  # like the other signals: its key with a leading underscore
     return signal
+
+
+CLOUD_ONLY_MAX_USERS = 50  # above this, on-premises AD usually does more than sync accounts, so it stays
+
+
+def _synced_users(snap: TenantSnapshot) -> list[dict] | None:
+    """Enabled members synced from on-premises AD, for a small tenant with directory sync on."""
+    status, users = hybrid.sync_status(snap), snap.objects("users", "user")
+    if not status or not status.get("enabled") or users is None:
+        return None
+    synced = [
+        u for u in users if u.get("onPremisesSyncEnabled") and u.get("accountEnabled") and u.get("userType") == "Member"
+    ]
+    return synced if 0 < len(synced) <= CLOUD_ONLY_MAX_USERS else None
+
+
+def _synced_accounts(snap: TenantSnapshot) -> Reason | None:
+    """A small business whose accounts still come from an office server: it can usually go cloud-only."""
+    synced = _synced_users(snap)
+    if synced is None:
+        return None
+    return Reason(
+        f"{plural(len(synced), 'account')} synced from an office server",
+        "They depend on on-premises Active Directory and the Entra Connect server staying up",
+        "low",
+        hours=3 + min(0.25 * len(synced), 8),  # plan, check what needs AD, convert, then turn sync off
+        action="Move the accounts to cloud-only and turn off directory sync",
+        signal="synced_accounts",
+    )
+
+
+def _domain_joined(snap: TenantSnapshot) -> Reason | None:
+    """Computers joined to the office domain, which have to move to Entra ID before the server can go."""
+    if _synced_users(snap) is None or (entra := devices.objects(snap, "entra_device")) is None:
+        return None
+    joined = [
+        d for d in entra if d.get("trustType") == "ServerAd" and d.get("accountEnabled") and devices.is_computer(d)
+    ]
+    if not joined:
+        return None
+    return Reason(
+        f"{plural(len(joined), 'computer')} joined to the office domain",
+        "Each moves to Entra ID before the server can go",
+        "low",
+        hours=min(len(joined), 40),  # each one re-joined to Entra ID, keeping its files and settings
+        action="Join each computer to Entra ID instead, keeping its user's files and settings",
+        signal="domain_joined",
+    )
 
 
 # -- The catalog ----------------------------------------------------------------------
@@ -164,11 +243,38 @@ CATALOG: list[Project] = [
         "second factor everywhere, blocking the old sign-in methods that can't ask for one and locking down "
         "admin accounts stops nearly all of them.",
         [
-            "Conditional Access policies: MFA for everyone, legacy sign-in blocked, break-glass accounts",
-            "MFA registration drive, moving people off text and call codes to the Authenticator app",
-            "Admin accounts: the right number of Global Administrators, cloud-only, phishing-resistant sign-in",
-            "Risky sign-in and risky user handling",
-            "Report-only rollout first, so nobody is locked out",
+            _cover(
+                "Conditional Access policies: MFA for everyone, legacy sign-in blocked, break-glass accounts",
+                "signal:no_ca_policies",
+                "mfa_enforced",
+                "legacy_auth_blocked",
+                "admins_ca_mfa",
+            ),
+            _cover(
+                "MFA registration drive, moving people off text and call codes to the Authenticator app",
+                "users_mfa_registered",
+                "phone_only_mfa",
+            ),
+            _cover(
+                "Admin accounts: separate, cloud-only and signing in with a passkey or security key",
+                "admin_mfa",
+                "admin_phishing_resistant",
+                "cloud_only_admins",
+            ),
+            _cover(
+                "Admin roles: the right number of Global Administrators, none held by guests, apps reviewed",
+                "global_admin_count",
+                "guest_admins",
+                "service_principal_admins",
+            ),
+            _cover("Risky sign-in and risky user handling", "risky_sign_ins", "risky_users"),
+            _cover(
+                "Report-only rollout first, so nobody is locked out",
+                "signal:no_ca_policies",
+                "mfa_enforced",
+                "legacy_auth_blocked",
+                "admins_ca_mfa",
+            ),
         ],
         checks={
             "mfa_enforced": Effort(whole=4, each=0.25),  # no policy: design and roll out; else an exclusion
@@ -195,9 +301,14 @@ CATALOG: list[Project] = [
         "management or protection from malicious links and attachments. Microsoft 365 Business Premium "
         "includes all three; an add-on can cover a single gap.",
         [
-            "Licence options and cost comparison (Business Premium or add-ons)",
-            "Switch-over with no interruption to email or files",
-            "Turning on the new protections once they're licensed",
+            _cover("Licence options and cost comparison (Business Premium or add-ons)"),
+            _cover("Entra ID P1, so sign-in rules can be set with Conditional Access", "signal:missing_entra_p1"),
+            _cover("Intune, so laptops and phones can be managed, encrypted and wiped", "signal:missing_intune"),
+            _cover(
+                "Defender for Office 365, with Safe Links and Safe Attachments turned on",
+                "signal:missing_defender_o365_p1",
+            ),
+            _cover("Switch-over with no interruption to email or files"),
         ],
         signals=[
             _missing(
@@ -233,10 +344,10 @@ CATALOG: list[Project] = [
         "Company data lives on laptops and phones. Managing them means they're encrypted, kept up to date and "
         "can be wiped if lost, and unmanaged devices can be kept away from company data.",
         [
-            "Intune enrolment for every company computer (Autopilot for new ones)",
-            "Compliance policies: encryption, updates, antivirus, screen lock",
-            "BitLocker with recovery keys stored in Entra ID",
-            "Clean-up of old devices",
+            _cover("Intune enrolment for every company computer (Autopilot for new ones)", "intune_enrolled"),
+            _cover("Compliance policies: encryption, updates, antivirus, screen lock", "device_compliance"),
+            _cover("BitLocker with recovery keys stored in Entra ID", "device_encryption"),
+            _cover("Clean-up of old devices and ones that stopped checking in", "device_checkin", "stale_devices"),
         ],
         checks={
             "intune_enrolled": Effort(each=0.5, most=20),
@@ -253,9 +364,9 @@ CATALOG: list[Project] = [
         "Computers on a Windows version that no longer gets security updates stay open to every flaw found from "
         "now on. Upgrading, or replacing machines that can't upgrade, closes that gap.",
         [
-            "Which computers can upgrade in place and which need replacing",
-            "Upgrades scheduled around the working day",
-            "Replacement hardware quoted and set up",
+            _cover("Which computers can upgrade in place and which need replacing"),
+            _cover("Upgrades scheduled around the working day"),
+            _cover("Replacement hardware quoted and set up"),
         ],
         # Past end of support: upgrade or replace. Ending soon (low): a feature update before it does.
         checks={"supported_windows": Effort(fixed=1, each=1.5, minor=0.25)},
@@ -267,10 +378,19 @@ CATALOG: list[Project] = [
         "Email is how most attacks arrive and how fraud gets paid. Locking down the domain stops others "
         "pretending to be the business, and closing forwarding and old protocols stops mail leaking out.",
         [
-            "SPF, DKIM and DMARC set up and enforced for every domain",
-            "Encrypted delivery (MTA-STS and TLS reporting)",
-            "External forwarding and suspicious inbox rules removed and blocked",
-            "SMTP AUTH turned off, mailbox auditing on, shared mailboxes locked",
+            _cover(
+                "SPF, DKIM and DMARC set up and enforced for every domain", "spf_record", "dkim_enabled", "dmarc_policy"
+            ),
+            _cover("Encrypted delivery (MTA-STS and TLS reporting)", "mta_sts", "tls_rpt"),
+            _cover(
+                "External forwarding and suspicious inbox rules removed and blocked",
+                "external_forwarding",
+                "auto_forward_policy",
+                "suspicious_inbox_rules",
+            ),
+            _cover("SMTP AUTH turned off, once scanners and apps send mail another way", "smtp_auth"),
+            _cover("Mailbox auditing on", "mailbox_auditing"),
+            _cover("Sign-in blocked for shared mailboxes", "shared_mailbox_signin"),
         ],
         checks={
             "spf_record": Effort(each=0.5),
@@ -289,14 +409,18 @@ CATALOG: list[Project] = [
     ),
     Project(
         "app_governance",
-        "App and consent governance",
+        "Third-party app review",
         "Third-party apps can be granted access to mail and files without IT knowing. Reviewing what's there "
         "and putting an approval step in place stops data quietly leaving through an app.",
         [
-            "Review of every app with access, removing what isn't needed",
-            "Admin approval workflow for new apps",
-            "Users stopped from registering apps or creating tenants",
-            "Expiring app secrets and certificates renewed",
+            _cover("Review of every app with access, removing what isn't needed", "risky_app_permissions"),
+            _cover(
+                "Admin approval for new apps, instead of people agreeing to them on their own",
+                "user_consent",
+                "admin_consent_workflow",
+            ),
+            _cover("People stopped from registering apps or creating tenants", "app_registration", "tenant_creation"),
+            _cover("Expiring app secrets and certificates renewed", "app_credentials"),
         ],
         checks={
             "risky_app_permissions": Effort(each=0.5),
@@ -310,38 +434,60 @@ CATALOG: list[Project] = [
     ),
     Project(
         "external_sharing",
-        "Sharing, guests and Teams governance",
-        "Files shared with anyone who has the link, guests nobody remembers inviting and teams nobody owns are "
-        "an easy way for data to end up in the wrong hands.",
+        "File sharing and guest access",
+        "Files shared with anyone who has the link, guests nobody remembers inviting and sites and teams nobody "
+        "owns are an easy way for data to end up in the wrong hands.",
         [
-            "Sharing settings: no anonymous links, sensible defaults",
-            "Existing anyone links reviewed and removed",
-            "Guest invitation rules and a review of current guests",
-            "An owner for every team and group, who can create them, and expiry for unused ones",
+            _cover("Sharing settings: no anonymous links, sensible defaults", "sharepoint_sharing"),
+            _cover(
+                "Existing sharing reviewed: anyone links removed, outside editors cut to view-only",
+                "anyone_links",
+                "outside_edit_access",
+            ),
+            _cover(
+                "Guest invitation rules and a review of current guests",
+                "guest_invites",
+                "pending_guests",
+                "guest_access_level",
+                "email_verified_join",
+            ),
+            _cover(
+                "An owner from the business for every site, team and group",
+                "site_owners",
+                "ownerless_groups",
+                "guest_owners",
+                "site_guest_full_control",
+            ),
+            _cover("Who can create teams and groups, and expiry for unused ones", "group_creation", "group_expiration"),
         ],
         checks={
             "sharepoint_sharing": Effort(fixed=0.5),
             "anyone_links": Effort(fixed=0.25, each=0.1, most=8),
+            "outside_edit_access": Effort(fixed=0.25, each=0.1, most=6),
             "guest_invites": Effort(fixed=0.25),
             "pending_guests": Effort(fixed=0.25, each=0.05, most=2),
             "guest_access_level": Effort(fixed=0.25),
             "email_verified_join": Effort(fixed=0.25),
+            "site_owners": Effort(each=0.25, most=8),
+            "site_guest_full_control": Effort(each=0.25, most=4),
             "ownerless_groups": Effort(each=0.25, most=8),
             "guest_owners": Effort(each=0.25, most=8),
             "group_creation": Effort(fixed=1),  # agree who, set up the group and the policy
             "group_expiration": Effort(fixed=0.5),
         },
-        size=("users.guests", "guest"),
+        size=("sharepoint.sites", "site"),
     ),
     Project(
         "storage",
-        "SharePoint storage and archiving",
-        "When SharePoint storage runs out, people can't save files. Clearing old versions and archiving is "
-        "usually cheaper than buying more space.",
+        "Storage and archiving",
+        "When storage runs out, people can't save files or receive email. Clearing old versions and archiving "
+        "is usually cheaper than buying more space.",
         [
-            "Where the space has gone, site by site",
-            "Version history limits and clean-up",
-            "Archiving, or extra storage where it's needed",
+            _cover("Where the SharePoint space has gone, site by site", "sharepoint_storage_space"),
+            _cover("Version history limits and clean-up", "sharepoint_storage_space"),
+            _cover("Online archive and retention for mailboxes that are nearly full", "mailbox_quota"),
+            _cover("OneDrive clean-up for people near their limit", "onedrive_quota"),
+            _cover("Extra storage only where it's still needed"),
         ],
         checks={
             "sharepoint_storage_space": Effort(fixed=4),
@@ -351,13 +497,15 @@ CATALOG: list[Project] = [
     ),
     Project(
         "licence_cleanup",
-        "Licence and account clean-up",
+        "Licence savings and leaver clean-up",
         "Licences on accounts nobody uses, and paid licences sitting unassigned, cost money every month and "
         "leave old accounts open to misuse.",
         [
-            "Leavers' accounts closed and their licences reclaimed",
-            "Unused paid licences cut at renewal",
-            "Licence assignment errors fixed and renewals checked",
+            _cover("Leavers' accounts closed and their licences reclaimed", "stale_users", "licensed_disabled"),
+            _cover("Unused paid licences cut at renewal", "unassigned_licences"),
+            _cover("Licence assignment errors fixed", "licence_assignment_errors"),
+            _cover("Renewals checked, so nothing lapses by accident", "subscriptions_lapsing"),
+            _cover("Managers updated where people still report to a leaver", "blocked_manager"),
         ],
         checks={
             "stale_users": Effort(each=0.25, most=12),  # confirm with the client, then close each one
@@ -369,18 +517,23 @@ CATALOG: list[Project] = [
         },
         size=("users.licensed", "licensed user"),
     ),
+    # Directory sync that has stopped is a repair (a quick fix), not something to sell; this is the project. It
+    # replaced "Directory sync health" (hybrid_identity), whose statuses were about the repair and so don't carry.
     Project(
-        "hybrid_identity",
-        "Directory sync health",
-        "When sync from the office server stops, leavers keep working accounts and password changes don't "
-        "reach Microsoft 365.",
+        "cloud_only",
+        "Move to cloud-only accounts",
+        "Accounts that sync from an office server depend on it: when sync stops, leavers keep working accounts "
+        "and password changes don't reach Microsoft 365, and the server needs patching and backing up. For a "
+        "business this size, moving accounts to the cloud usually lets the server go.",
         [
-            "Entra Connect repaired or upgraded",
-            "Password hash sync on, as a fallback and for leaked-password detection",
-            "Plan for moving to cloud-only accounts where the server is no longer needed",
+            _cover("What still needs the office server: file shares, printers and older apps"),
+            _cover("Accounts moved to cloud-only, keeping each person's mailbox and files", "signal:synced_accounts"),
+            _cover(
+                "Computers moved from the office domain to Entra ID, keeping files and settings", "signal:domain_joined"
+            ),
+            _cover("Directory sync turned off and the sync server retired"),
         ],
-        checks={"directory_sync_running": Effort(fixed=3), "password_hash_sync": Effort(fixed=0.5)},
-        size=("users.members", "user"),
+        signals=[_synced_accounts, _domain_joined],  # their counts are the size of the job
     ),
 ]
 
@@ -406,6 +559,12 @@ class Recommendation:
     @property
     def effort(self) -> str:
         return effort_label(self.hours)
+
+    @property
+    def covers(self) -> list[str]:
+        """What the project delivers for this client: the parts its reasons call for."""
+        found = {r.key for r in self.reasons}
+        return [c.text for c in self.project.covers if not c.when or found.intersection(c.when)]
 
     @property
     def severity(self) -> str:

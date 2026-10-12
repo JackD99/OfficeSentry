@@ -59,7 +59,7 @@ ISSUED_FLOOR_DAYS = 365
 
 # Objects that hold sign-in detail: who signed in, from which address, country and city.
 # The data sources that store them.
-SIGNIN_COLLECTORS = ("sign_ins", "mail_usage")
+SIGNIN_COLLECTORS = ("sign_ins", "legacy_signins")
 SIGNIN_KINDS = (
     "sign_in_status",
     "sign_in_account",

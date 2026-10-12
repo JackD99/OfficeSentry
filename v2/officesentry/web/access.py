@@ -212,6 +212,24 @@ def tenant_ids(conn, user) -> set[int] | None:
     return {r[0] for r in conn.execute(_GRANTED, _params(user, a))}
 
 
+def unseen_client_accounts(conn, user) -> dict[int, str]:
+    """Client accounts (id -> username) whose every client is outside this person's scope. Their names are the
+    client's own people (jane@bravo.example), so pages that list accounts leave them out for whoever doesn't
+    see every client."""
+    mine = tenant_ids(conn, user)
+    if mine is None:
+        return {}
+    grants: dict[int, set[int]] = {}
+    names: dict[int, str] = {}
+    for row in conn.execute(
+        "SELECT u.id, u.username, ut.tenant_id FROM users u JOIN user_tenants ut ON ut.user_id = u.id"
+        " WHERE u.role = 'client'"
+    ):
+        grants.setdefault(row["id"], set()).add(row["tenant_id"])
+        names[row["id"]] = row["username"]
+    return {uid: names[uid] for uid, tids in grants.items() if not tids & mine}
+
+
 def can_see_tenant(conn, user, tenant_id: int) -> bool:
     if user is None:
         return False

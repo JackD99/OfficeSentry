@@ -182,7 +182,7 @@ def issued_report(tenant_id: int, report_id: int):
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"issued:{r['filename']}")
     return Response(
         bytes(r["data"]),
-        mimetype=r["content_type"],
+        content_type=r["content_type"],  # as stored, charset and all
         headers={"Content-Disposition": f'attachment; filename="{r["filename"]}"'},
     )
 

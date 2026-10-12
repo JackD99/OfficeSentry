@@ -57,5 +57,5 @@ def download(ext: str):
     if ext == "xlsx":
         body, mimetype = data_reports.to_xlsx(report, brand=branding.load(g.db)), XLSX
     else:
-        body, mimetype = tables.to_csv(data_reports.section_table(report.sections[0])), "text/csv; charset=utf-8"
+        body, mimetype = tables.to_csv(data_reports.section_table(report.sections[0])), "text/csv"
     return Response(body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="coming-up.{ext}"'})

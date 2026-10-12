@@ -104,9 +104,9 @@ def test_unreadable_password_sync_is_partial(db, two_tenants, factory):
     "hours, status, severity, summary",
     [
         (0.3, "pass", None, "Last sync less than an hour ago"),
-        (5, "fail", "high", "Last sync 5 hours ago"),
-        (30, "fail", "critical", "Last sync 30 hours ago"),
-        (24 * 9, "fail", "critical", "Last sync 9 days ago"),
+        (5, "fail", "high", "Not syncing: last sync 5 hours ago"),
+        (30, "fail", "critical", "Not syncing: last sync 30 hours ago"),
+        (24 * 9, "fail", "critical", "Not syncing: last sync 9 days ago"),
         (None, "fail", "high", "Turned on but has never synced"),
     ],
 )

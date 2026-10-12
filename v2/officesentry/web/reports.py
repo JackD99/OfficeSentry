@@ -456,7 +456,7 @@ def findings_download(tenant_id: int, ext: str, resolved: bool):
     if ext == "xlsx":
         body, mimetype = data_reports.to_xlsx(report, brand=branding.load(g.db)), XLSX
     else:
-        body, mimetype = tables.to_csv(data_reports.section_table(section)), "text/csv; charset=utf-8"
+        body, mimetype = tables.to_csv(data_reports.section_table(section)), "text/csv"
     return Response(body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{name}.{ext}"'})
 
 

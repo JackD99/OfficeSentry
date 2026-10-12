@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 
 from flask import Blueprint, Response, g, render_template, request
 
 from ..db import AUDIT_NOISE, AUDIT_NOISE_DAYS, audit
 from ..reports.tables import Table, to_csv
-from .access import needs, visible_tenants
+from .access import current, needs, unseen_client_accounts, visible_tenants
 
 bp = Blueprint("activity", __name__)
 
@@ -35,7 +36,7 @@ def _filters() -> dict:
 
 
 def _where(f: dict) -> tuple[str, list]:
-    where, params = [], []
+    where, params = _scope()
     if f["user"]:
         where.append("a.username = ?")
         params.append(f["user"])
@@ -52,6 +53,20 @@ def _where(f: dict) -> tuple[str, list]:
         where.append("a.ts < ?")
         params.append(f"{(f['to'] + timedelta(days=1)).isoformat()}T00:00:00Z")
     return (" WHERE " + " AND ".join(where)) if where else "", params
+
+
+def _scope() -> tuple[list[str], list]:
+    """For someone who doesn't see every client: only what happened on the clients they see, and portal-wide
+    rows that aren't by or about a client account of the others (whose name is one of that client's people:
+    the user pages start their detail with it)."""
+    if current().sees_all:
+        return [], []
+    unseen = sorted(unseen_client_accounts(g.db, g.user).values())
+    return [
+        "(a.tenant_id IS NULL OR a.tenant_id IN (SELECT value FROM json_each(?)))",
+        "NOT EXISTS (SELECT 1 FROM json_each(?) h WHERE a.username = h.value OR a.detail = h.value"
+        " OR a.detail LIKE h.value || ':%' OR a.detail LIKE h.value || ' %')",
+    ], [json.dumps(sorted(_tenant_names())), json.dumps(unseen)]
 
 
 def _tenant_names() -> dict[int, str]:
@@ -77,7 +92,12 @@ def index():
     ).fetchall()
     names = _tenant_names()
     actions = [r[0] for r in g.db.execute("SELECT DISTINCT action FROM audit_log ORDER BY action")]
-    users = [r[0] for r in g.db.execute("SELECT username FROM users ORDER BY username COLLATE NOCASE")]
+    unseen = unseen_client_accounts(g.db, g.user)
+    users = [
+        r["username"]
+        for r in g.db.execute("SELECT id, username FROM users ORDER BY username COLLATE NOCASE")
+        if r["id"] not in unseen
+    ]
     query = {k: (v.isoformat() if isinstance(v, date) else v) for k, v in f.items() if v not in (None, "")}
     return render_template(
         "activity.html",
@@ -123,6 +143,6 @@ def export():
     audit(g.db, g.user["username"], "activity_log_downloaded", detail=f"{len(rows)} rows")
     return Response(
         to_csv(table),
-        mimetype="text/csv; charset=utf-8",
+        mimetype="text/csv",
         headers={"Content-Disposition": 'attachment; filename="office-sentry-activity.csv"'},
     )

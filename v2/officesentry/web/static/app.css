@@ -1142,6 +1142,11 @@ textarea.commentary { width: 100%; min-height: 9em; }
 @media (max-width: 640px) { .project-cols { grid-template-columns: 1fr; } }
 .project-cols .list .desc { display: block; }
 td .project-status { flex-wrap: nowrap; }
+/* The list of every client's projects fits a laptop: long client and project names and the reasons wrap. */
+@media (min-width: 641px) {
+  #projects-table td.name { max-width: 13em; overflow-wrap: break-word; }
+  #projects-table td.wrap.why { max-width: 18em; }
+}
 
 /* Report tables grouped under collapsible headings (Findings, by check) */
 .subtabs a :is(.n, .count) { margin-left: var(--space-1); font-size: var(--fs-xs); font-weight: 400; color: var(--faint); font-variant-numeric: tabular-nums; }

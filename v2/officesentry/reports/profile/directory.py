@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 from ...licences import is_stale, last_sign_in
 from ...snapshot import TenantSnapshot
+from ...text import fold
 from ...text import plural as _plural
 from ..data_reports import Highlight
 from ..identity_reports import Enforcement, Registration, _roles
@@ -103,7 +104,7 @@ def directory(conn, tenant, now: datetime | None = None) -> tuple[list[Directory
                 counts.get(uid, 0),
             )
         )
-    rows.sort(key=lambda r: (-r.findings, not r.roles, r.name.lower()))
+    rows.sort(key=lambda r: (-r.findings, not r.roles, fold(r.name)))
     members = sum(not r.guest for r in rows)
     tiles = [
         Highlight("Accounts", len(rows), f"{_plural(members, 'member')}, {_plural(len(rows) - members, 'guest')}"),

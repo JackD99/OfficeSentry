@@ -17,6 +17,7 @@
 	respond @outside "Not found" 404 {
 		close
 	}
+	header -Server
 	encode gzip
 	# The portal sets its own security headers; neither Caddy's nor gunicorn's name reaches the browser.
 	header -Server

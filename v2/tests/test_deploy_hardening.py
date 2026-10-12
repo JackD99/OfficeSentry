@@ -156,12 +156,14 @@ def test_a_slow_upgrade_is_given_time_before_the_deploy_gives_up():
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
-def test_start_script_starts_the_worker_once_the_portal_is_healthy(tmp_path):
+@pytest.mark.parametrize("profiles", ["", "https"])
+def test_start_script_starts_the_worker_once_the_portal_is_healthy(tmp_path, profiles):
     """When "compose up" gives up waiting for the portal (an upgrade slower than its health check allows), the
-    worker is created but not started: the script waits for the portal itself, then brings the rest up."""
+    worker is created but not started: the script waits for the portal itself, then brings the rest up. With
+    Caddy, it then restarts Caddy, which reads its Caddyfile only when it starts."""
     folder = tmp_path / "v2"
     (folder / "deploy").mkdir(parents=True)
-    (folder / ".env").write_text("COMPOSE_PROFILES=\n", encoding="utf-8")
+    (folder / ".env").write_text(f"COMPOSE_PROFILES={profiles}\n", encoding="utf-8")
     shutil.copy(V2 / "deploy" / "start.sh", folder / "deploy" / "start.sh")
     shutil.copy(V2 / "deploy" / "jobs.sh", folder / "deploy" / "jobs.sh")
     tools = tmp_path / "bin"
@@ -198,6 +200,10 @@ def test_start_script_starts_the_worker_once_the_portal_is_healthy(tmp_path):
     second = lines.index("compose up -d --remove-orphans", first + 1)  # once the portal was seen healthy
     assert lines.count("compose up -d --remove-orphans") == 2
     assert first < lines.index("inspect -f {{.State.Health.Status}} cid-web") < second
+    if profiles:
+        assert lines.index("compose restart caddy") > second
+    else:
+        assert "compose restart caddy" not in lines
 
 
 def test_offsite_and_drill_record_their_status(env_cfg):
