@@ -17,6 +17,13 @@ overview and DEPLOY.md for running it on a server.
   multi-tenant read-only app. `tests/test_no_writes.py` fails on any
   `.post/.put/.patch/.delete/.request(` outside its `ALLOWED` files, and
   checks a full collection only sends GETs (plus `Get-` cmdlets).
+- **The audit log add-on's feed start and stop are the only other non-GET
+  calls** (`auditlog/feed.py`, in `ALLOWED`): `subscriptions/start` and
+  `/stop` on Microsoft's Office 365 Management Activity API, from the
+  add-on's own app (`ActivityFeed.Read` only), never from a collection.
+  Start goes once a client an admin asked for has approved (`addon.confirm`),
+  stop when the add-on is switched off for a client or the client is deleted
+  (the `audit_stop` task). Keep it to those two.
 - **Every route needs `@needs(...)`** naming the capabilities it needs
   (`permissions.py`; `kind="staff"` for a page clients never see), or
   `@login_required` for the few pages anyone signed in may open (listed in
@@ -636,8 +643,8 @@ never a web request or the main loop: `worker.TASK_THREADS` task threads
 claim tasks (highest priority first) and run the function registered for
 their kind with `@tasks.handler(kind)` (add its module to
 `worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`),
-`send_schedule` (`delivery.py`), `consent_check` (`onboarding.py`), `erase` (`lifecycle.py`) and
-`precompute` (`reports/precomputed.py`, below other work). Queue with `tasks.enqueue(conn, kind,
+`send_schedule` (`delivery.py`), `consent_check` (`onboarding.py`), `erase` (`lifecycle.py`),
+`audit_check` and `audit_stop` (`auditlog/addon.py`) and `precompute` (`reports/precomputed.py`, below other work). Queue with `tasks.enqueue(conn, kind,
 key=..., payload=...)`: at most one task per `key` is queued or running, so
 use a key that names the thing done once ("approve:<tenant>:<period>").
 Claimed runs and tasks carry a lease (`store.LEASE`) that the heartbeat
@@ -1022,6 +1029,28 @@ deduplicated on (tenant, time, id), so reading an event twice stores it once.
   run reads back what Microsoft keeps instead of claiming months that aren't there. `deploy/jobs.sh restore`
   fetches the `events` copies with the database.
 - Tests that need a fixed "now" patch `events.clock` (the live replay sets it to the recording's time).
+
+## Audit log add-on
+
+`auditlog/` (schema in `migrations/0044`, pages in `web/audit_addon.py`, docs in `docs/audit-log-addon.md`)
+reads each opted-in client's unified audit log through the Office 365 Management Activity feed. Its app is
+an `app_connections` row of kind `audit` per cloud (`store.list_connections` returns the shared app's unless
+asked), made by the wizard (`app_setup`, purpose `audit`) or by hand, with `ActivityFeed.Read` only. Each
+client asked is an `audit_feeds` row (`addon.state`: Not sent, Sent, Approved, On, Off). Nothing shows
+anywhere while the `audit_addon` setting is off (`addon.enabled`). The client link (salt
+`client-consent-audit`) returns to `/consent/callback` like onboarding's and is never believed: the
+`audit_check` task and the `audit_checks` job confirm consent by signing in as the add-on (`addon.confirm`),
+which then starts the feed for a client an admin asked for.
+
+- The collector `audit_activity` is an add-on collector (`Collector.addon`, run only where `applies`);
+  `collectors.core()` is every other one, for anything that lists data sources. It keeps only
+  `operations.OPERATIONS` in the activity history's `activity` store (`events.add_activity`,
+  `activity_between`, `activity_counts`; email subjects are taken out) and stores an `audit_feed` object
+  with what the feed lost.
+- A report that only exists with an add-on declares `shown=` in `@report`; `registry.hidden(conn, tenant)`
+  names those not there, and every list of reports (menus, library, rollups, schedules, What changed,
+  the client home) leaves them out, as `web/reports.exists` does for their URLs.
+- Tests simulate manage.office.com with `responses` (`tests/auditdata.py`).
 
 ## Logs and the support package
 

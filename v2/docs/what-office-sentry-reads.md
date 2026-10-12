@@ -184,6 +184,34 @@ its conditions (for example "subject contains *invoice*" or "from
 destination folder from the rule in Exchange (`Get-InboxRule`). It never opens
 the folder.
 
+## The audit log add-on, if you approve it
+
+Your MSP may also ask you to approve a second, separate app, **Office Sentry
+audit log add-on**. It's optional: if you don't approve it, nothing else on
+this page changes.
+
+- **One permission**: *Read activity data for your organization*
+  (`ActivityFeed.Read` on the Office 365 Management APIs). It has none of the
+  permissions above.
+- **What it reads**: your Microsoft 365 audit log for SharePoint, OneDrive and
+  Exchange, of which it keeps a short list of activities: files deleted,
+  downloaded, moved or shared; mail read, sent or deleted by someone other
+  than the mailbox's owner (an admin or a delegate); inbox rules, forwarding
+  and mailbox permissions set up; and changes to auditing itself. Files
+  opened or edited, and people reading their own mail, are left out.
+- **What it never reads**: email, attachments, file contents, chats or
+  channel messages. The audit log says *that* something happened and who did
+  it, not what was in it, and Office Sentry doesn't keep the email subjects
+  some audit records carry.
+- **Two requests that aren't reads.** Microsoft's audit log feed needs one to
+  start and one to stop: Office Sentry sends *start* once you've approved the
+  add-on, and *stop* when your MSP switches it off. They tell Microsoft whether
+  to make your new audit records available to the add-on; neither changes
+  anything in your tenant.
+
+It's removed the same way as the main app (see *How to remove access*,
+step 2), by deleting "Office Sentry audit log add-on" instead.
+
 ## Where the information is kept
 
 Office Sentry runs on hosting your MSP chooses, so some of the details below
@@ -212,7 +240,8 @@ data forever; ask them what they use.
 - **Activity history** (the sign-in and audit logs described under
   `AuditLog.Read.All` above): every sign-in for **180 days**, the daily
   sign-in summaries for **25 months** and every directory audit event for
-  **7 years**.
+  **7 years**. If you approved the audit log add-on, the activities it keeps
+  are kept for **2 years**.
 - **Detailed snapshots** (lists of users, mailboxes, policies and so on) are
   kept for the last 30 days, plus one per month for the last 12 months, and
   older ones are deleted automatically. The most recent collection of each
