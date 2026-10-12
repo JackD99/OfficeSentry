@@ -11,6 +11,16 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.3.0] - Unreleased
 
+### Database upgrade
+
+Yes, applied on start as usual: migration 41 adds a count of wrong passwords to each signed-in browser.
+
+### Changed
+
+- **All clients opens reports from the All reports menu**, the same one as a client's Reports tab: every
+  report in columns with a search box, Monthly review, Insurance evidence and Checks included, instead of a
+  drop-down list as tall as the screen. One row per client and Every row sit beside it; phones keep a list.
+
 ### Fixed
 
 - **A large month-end no longer loses emails to Microsoft's sending limit.** Exchange Online takes 30
@@ -27,6 +37,31 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
+- Pages no longer scroll sideways past the edge of the window: the All clients Checks page and Projects
+  (hidden text in their tables widened the page), and on phones the monthly review's buttons and the
+  History list on person, mailbox, group and site pages, where a long address now wraps.
+
+### Security
+
+- Someone who manages users without being an Administrator, and has a capability taken away on one client,
+  no longer counts as holding it everywhere: they can't give it to anyone, put it in a role, or change an
+  account that holds it.
+- The user pages no longer show a user manager who only sees some clients the client accounts of other
+  clients, and the activity log shows a custom role that only sees some clients only the entries about
+  those clients.
+- The support package keeps clients as numbers for anyone who doesn't see every client: *Include client
+  identifiers* is only offered to people who see them all.
+- Webhook signing secrets must be at least 16 characters, since a short one can be worked out from a single
+  signed request. A shorter secret already saved keeps working until it is changed; a long random one
+  (`openssl rand -hex 32`) is best.
+- Wrong passwords where a signed-in browser is asked for the password again (to change it, turn two-step
+  sign-in off, or reset someone else's) no longer lock the account: the fifth signs that browser out. Someone
+  holding a stolen session could otherwise keep its owner from signing in to end it.
+- Recovery codes made before 2.2.0, still stored as a plain SHA-256, are put under the recovery code key when
+  the portal starts, so a copy of the database can't be used to work them out. They keep working.
+- New tests attack sign-in, sessions and forms on every route: a form sent without this browser's own token
+  is refused, opening a page never changes stored data, sign-in answers the same whatever was wrong, and a
+  copied cookie stops working whenever its session ends.
 
 ## [2.2.0] - 2026-10-11
 

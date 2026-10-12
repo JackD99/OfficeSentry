@@ -93,7 +93,8 @@ value is replaced. Microsoft's error codes (`AADSTS…`,
 **Include client identifiers** on the Support page (or
 `--include-identifiers` on the command) keeps client names, tenant IDs,
 domains and user names, so a problem with one client can be followed by
-name. The zip's README then says so in its first lines. Use it only for a
+name. The page only offers it to people who see every client, since the
+package covers them all. The zip's README then says so in its first lines. Use it only for a
 private channel, never a public issue.
 
 ## The reference on an error page
