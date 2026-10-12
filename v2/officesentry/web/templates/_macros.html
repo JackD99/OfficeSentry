@@ -106,8 +106,8 @@
 <div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">{{ 'Clients' if staff else 'Your reports' }}</a><span>/</span><span>{{ tenant.name }}</span></div>
 <div class="page-head">
   <div class="head-title">
-    <h1>{{ title or tenant.name }}</h1>
-    <div class="sub">{% if title %}{{ tenant.name }} · {% endif %}<span class="mono">{{ tenant.tenant_ref }}</span>{% if staff and not cloud_of(tenant).is_default %} <span class="pill info" title="Microsoft national cloud">{{ cloud_of(tenant).label }}</span>{% endif %}{% if tenant.archived_at %} <span class="pill info">Archived</span>{% elif not tenant.enabled %} <span class="pill info" title="No collection or emailed reports until it's resumed">Paused</span>{% endif %}</div>
+    <h1>{{ tenant.name }}</h1>
+    <div class="sub"><span class="mono">{{ tenant.tenant_ref }}</span>{% if staff and not cloud_of(tenant).is_default %} <span class="pill info" title="Microsoft national cloud">{{ cloud_of(tenant).label }}</span>{% endif %}{% if tenant.archived_at %} <span class="pill info">Archived</span>{% elif not tenant.enabled %} <span class="pill info" title="No collection or emailed reports until it's resumed">Paused</span>{% endif %}</div>
   </div>
   <div class="actions">{{ caller() if caller }}
     {% if can('reports.security', tid) %}<a class="btn primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">{{ icon('doc') }} Monthly review</a>{% endif %}
@@ -153,6 +153,9 @@
   {% for key, label, href in pages %}<a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
 </nav>
 {% endif %}
+{#- The client's name is every client page's heading; a page the tabs don't name (Recommended projects,
+    Report history) gives its own title under them, as a report does under its picker. -#}
+{% if title %}<h2 class="section-title page-title">{{ title }}</h2>{% endif %}
 {%- endmacro %}
 
 

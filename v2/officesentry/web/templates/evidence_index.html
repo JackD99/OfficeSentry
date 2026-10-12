@@ -3,11 +3,16 @@
 {% from "_evidence.html" import verdict_pill with context %}
 {% block title %}Evidence · {{ tenant.name }}{% endblock %}
 {% block content %}
-{{ tenant_header(tenant, 'evidence', title='Evidence and certifications') }}
+{{ tenant_header(tenant, 'evidence') }}
 <div class="report-layout">
 {{ report_picker(tenant, 'evidence') }}
 <div class="report-main" id="report" tabindex="-1">
-<p class="muted small intro-line">Pick what {{ tenant.name }} is going for. Each pack judges the scheme's controls from Microsoft 365 data, says what to fix, and gives the answers to paste into the form.</p>
+<div class="toolbar report-title">
+  <div>
+    <h2 class="section-title">Evidence and certifications</h2>
+    <p class="muted small m0">Pick what {{ tenant.name }} is going for. Each pack judges the scheme's controls from Microsoft 365 data, says what to fix, and gives the answers to paste into the form.</p>
+  </div>
+</div>
 
 {% for title, results in groups %}
 <section class="card flush scheme-group" aria-labelledby="group-{{ loop.index }}">

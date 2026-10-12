@@ -233,25 +233,45 @@ class PolicyRow:
     conditions: str
     grant: str
     warning: str = ""
+    # Who it applies to and who it leaves out, one entry each, and a short form of each for a long list
+    # ("breakglass@contoso.com + 11 admin roles"; "" when the list is short enough to read whole).
+    include: list[str] = field(default_factory=list)
+    exclude: list[str] = field(default_factory=list)
+    include_summary: str = ""
+    exclude_summary: str = ""
+
+
+SHOW_WHOLE = 3  # a list this long or shorter reads fine as it is
+
+
+def summarise(accounts: list[str], groups: list[str], roles: list[str], others: list[str] = ()) -> str:
+    """A long list of who a policy covers, in a few words: two names of a kind, or a count of more
+    ("breakglass@contoso.com + 11 admin roles", "4 accounts + Finance team"). "" for a short list."""
+    if len(accounts) + len(groups) + len(roles) + len(others) <= SHOW_WHOLE:
+        return ""
+    bits = list(others)
+    for names, noun in ((accounts, "account"), (groups, "group"), (roles, "admin role")):
+        if names:
+            bits.append(", ".join(names) if len(names) <= 2 else plural(len(names), noun))
+    return " + ".join(bits)
+
+
+def _who(u: dict, d: Directory, side: str) -> tuple[list[str], str]:
+    """``(everyone named, short form)`` for one side of a policy's users: ``side`` is "include" or "exclude"."""
+    named = _labels(u.get(f"{side}Users"), d)
+    groups = _labels(u.get(f"{side}Groups"), d, "group")
+    roles = _labels(u.get(f"{side}Roles"), d, "role")
+    guests = ["Guests and external users"] if u.get(f"{side}GuestsOrExternalUsers") else []
+    others = [n for n in named if n in ("All users", "Nobody", "Guests")] + guests
+    accounts = [n for n in named if n not in others]
+    return named + groups + roles + guests, summarise(accounts, groups, roles, others)
 
 
 def describe(policy: dict, d: Directory, capabilities: dict | None = None) -> PolicyRow:
     cond = policy.get("conditions") or {}
     u = cond.get("users") or {}
-    include = (
-        _labels(u.get("includeUsers"), d)
-        + _labels(u.get("includeGroups"), d, "group")
-        + _labels(u.get("includeRoles"), d, "role")
-    )
-    if u.get("includeGuestsOrExternalUsers"):
-        include.append("Guests and external users")
-    exclude = (
-        _labels(u.get("excludeUsers"), d)
-        + _labels(u.get("excludeGroups"), d, "group")
-        + _labels(u.get("excludeRoles"), d, "role")
-    )
-    if u.get("excludeGuestsOrExternalUsers"):
-        exclude.append("Guests and external users")
+    include, include_summary = _who(u, d, "include")
+    exclude, exclude_summary = _who(u, d, "exclude")
     apps = cond.get("applications") or {}
     inc_apps = apps.get("includeApplications") or []
     app_text = (
@@ -305,6 +325,10 @@ def describe(policy: dict, d: Directory, capabilities: dict | None = None) -> Po
         "; ".join(parts),
         grant_text,
         warning,
+        include or ["Nobody"],
+        exclude,
+        include_summary,
+        exclude_summary,
     )
 
 
