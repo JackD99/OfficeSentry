@@ -35,9 +35,9 @@ body:
     attributes:
       label: Version
       description: >-
-        The version at the foot of the portal's menu, or in `/health` (`2.3.0`). If you run your own build of a
+        The version at the foot of the portal's menu, or in `/health` (`2.3.1`). If you run your own build of a
         branch, add its commit (`git rev-parse --short HEAD`).
-      placeholder: 2.3.0
+      placeholder: 2.3.1
   - type: dropdown
     id: install
     attributes:

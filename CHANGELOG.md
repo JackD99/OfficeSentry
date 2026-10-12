@@ -9,7 +9,77 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
-## [2.3.1] - Unreleased
+## [2.3.1] - 2026-10-12
+
+### Action required
+
+None. `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are the same as 2.3.0's.
+
+### New Microsoft permissions
+
+None.
+
+### Database upgrade
+
+No.
+
+### Fixed
+
+- **Site access** no longer shows every site as open to everyone, guests included: SharePoint lists the
+  "Everyone" claims on every site whether or not they're given anything, so whether everyone can open a site
+  now comes from what it grants, directly or through its SharePoint groups. Nor does it say a site with no
+  Microsoft 365 group has no owner (a high finding from **Every site has at least two owners**) when its
+  owners are in the site's owners group: their members now count as owners once the client has approved the
+  SharePoint permission, and until then the report and the check say they can't count them yet.
+- **Teams** no longer lists every team older than 90 days as inactive where Microsoft hides names in usage
+  reports, its default: Microsoft then hides team IDs in the activity report too, so the report says inactive
+  teams can't be told until names are shown, and how to show them.
+- **Data collection** no longer shows a green run that read nothing. Inbox rules and automatic replies with no
+  mailboxes or users collected yet, and per-user MFA before the client's licences are known, now fail and say
+  what has to be collected first, so their reports say "not collected" instead of "none found".
+- **Month-end:** a paused client's month no longer sits in the queue as a draft; it's named under the queue
+  until the client is resumed. An automatic plan whose client has no contacts now records a failed email on
+  its day ("has no contacts to email it to") instead of sending nothing without a word, and sends that
+  month's report once a contact is added.
+- An app connection made by hand from the App connection page's steps no longer asks to **Update this app**
+  as soon as its client ID is saved: those steps already list every permission the release asks for.
+- **Activity history** pages no longer say "detailed from" a date older than the history kept, once retention
+  has removed the months before it.
+- `create-app` and `update-app` say in plain words when Microsoft can't be reached, refuses or doesn't know
+  the tenant, instead of printing a traceback.
+- `check-backup` of a plain `.db` file no longer leaves `-wal` and `-shm` files beside it, and `restore`
+  removes the first-admin setup link left by a new server, since the restored database has its admins.
+- Reloading two-step sign-in setup in the same browser within five minutes keeps the same QR code, so a code
+  just scanned from it still works.
+- The Kubernetes manifests and the deploy guides' examples name this release (they still said 2.1.0), and a
+  test keeps them in step with each release.
+- Tests no longer fail when run around midnight UTC or from the first of a month.
+- **Wide tables fit a laptop.** The last tables that scrolled sideways at 1366 px with long names now fit: a long
+  name before an address's "@" or a long host name in a DNS record may wrap at its dots, and **Every row** on All
+  clients opens without a column or two its Client column has no room for (Size on shared mailboxes, Synced
+  from on-premises on privileged role holders, Addresses on repeated sign-in failures, Department on deleted
+  users, Account and Send on behalf on mailbox permissions by person). **Columns** offers them, and the client's
+  own report and the downloads keep them. Tables are measured again once the page's font has loaded, so one that
+  only just fits no longer slips past its card, and the All clients checks matrix now shows every category.
+
+### Security
+
+- **What changed shows only the report areas someone can open.** Anyone with *What changed* saw every area's
+  changes on a client, including areas their role leaves out (an Account manager saw identity and mailbox
+  changes). Now each key change, figure and report's changes on a client's What changed page, its PDF and
+  spreadsheet, and the All clients page show only to someone who opens that report there, and new and fixed
+  findings only to someone who opens findings.
+- **A role that sees or does more than you is an Administrator's to change.** Someone who manages users
+  without being an Administrator could take capabilities out of such a role, or reset or delete it, and
+  couldn't put them back. The role page now says only an Administrator can change it.
+- **Only Administrators see an Administrator's signed-in sessions** on their user page.
+- **The SMTP server is checked like a webhook.** Office Sentry looks it up once and connects to that address,
+  refusing a link-local (cloud metadata), multicast or reserved one. This machine and the local network are
+  still allowed, since mail relays live there.
+- **The first-admin setup link stays out of `web.log`.** The log file (read by the support package and the
+  Support page) now says where to find the link; only the portal's own output shows it.
+- The public demo makes PDFs two at a time, so a stream of PDF requests can't slow its pages for everyone
+  else, and the website has a `/.well-known/security.txt` saying where to report a vulnerability.
 
 ## [2.3.0] - 2026-10-12
 
@@ -1069,7 +1139,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
-[2.3.1]: https://github.com/JackD99/OfficeSentry/compare/v2.3.0...HEAD
+[2.3.1]: https://github.com/JackD99/OfficeSentry/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0

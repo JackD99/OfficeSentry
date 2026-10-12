@@ -21,7 +21,7 @@ spec:
   containers:
     - name: shell
       # The release you run (the newTag in kustomization.yaml).
-      image: ghcr.io/jackd99/officesentry:2.3.0
+      image: ghcr.io/jackd99/officesentry:2.3.1
       command: ["sleep", "infinity"]
       envFrom:
         - secretRef:
