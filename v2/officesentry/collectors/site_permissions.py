@@ -24,8 +24,8 @@ from ..sharepoint_api import SharePointAccessDenied, SharePointError, beside, ho
 from ..text import plural
 from .base import Collector, RunContext, register
 from .connection import granted
+from .sharepoint_logins import classify_login, guest_address
 from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups
-from .site_access import classify_login, guest_address
 
 ROLE_PARAMS = {"$expand": "Member,RoleDefinitionBindings"}
 WEB_PARAMS = {
