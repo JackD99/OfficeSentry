@@ -212,6 +212,11 @@ Sentry and isn't a copy of an earlier one sent again:
   the one whose key id matches, then save the new one in Office Sentry and
   remove the old one from the receiver.
 
+Use a long random secret: Office Sentry refuses one shorter than 16
+characters, since anyone who sees one signed request could find a short secret
+by trying them all, then sign requests of their own. `openssl rand -hex 32`
+makes a good one.
+
 Refuse a request whose signature doesn't match or whose timestamp is more than
 five minutes from your clock. In Python:
 
@@ -254,6 +259,10 @@ wrong passwords come from (15-minute sliding window):
 - 5 wrong two-step codes lock the two-step step of that account for 15
   minutes. Reaching it needs the right password, so if this happens, change
   the password.
+- 5 wrong passwords where a signed-in browser is asked for the password again
+  (to change it, turn two-step off, or reset someone else's) sign that browser
+  out. They don't lock the account, so a stolen session can't keep its owner
+  from signing in and ending it.
 
 **Two-step sign-in** is required for everyone on a new install, client
 accounts included. An install that was already in use before this release

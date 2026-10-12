@@ -45,9 +45,9 @@ TABS = (
 
 def _grantable() -> frozenset[str]:
     """The capabilities the signed-in person may put into a role: all of them for an Administrator,
-    otherwise only the ones they hold everywhere themselves (the user page follows the same rule)."""
-    actor = current()
-    return frozenset(permissions.KEYS) if actor.is_admin else actor.capabilities
+    otherwise only the ones they hold everywhere themselves, on every client they see (the user page follows
+    the same rule)."""
+    return current().everywhere()
 
 
 def _beyond(capabilities, scope: str, kind: str) -> bool:

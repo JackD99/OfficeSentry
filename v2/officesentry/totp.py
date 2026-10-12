@@ -17,6 +17,8 @@ from urllib.parse import quote, urlencode
 
 import segno
 
+from .db import transaction
+
 DIGITS = 6
 STEP = 30
 WINDOW = 1  # accept the previous and next step too, for clock drift
@@ -113,7 +115,10 @@ def normalise_recovery_code(value: str) -> str:
 # like any other secret (``__main__.ENCRYPTED_SETTINGS``), so codes keep working across a rotation.
 KEY_SETTING = "totp.recovery_key_enc"
 ENCRYPTED_KEYS = (KEY_SETTING,)
-_KEYED = "hmac:"  # how a keyed hash starts; codes stored before it are a bare SHA-256
+_KEYED = "hmac:"  # how a keyed hash starts
+# Codes made before keyed hashes (2.2.0) were stored as a bare SHA-256; ``rekey_old_codes`` keeps each as an HMAC
+# of that hash under the same key, so they still work and no unkeyed hash stays in the database.
+_REKEYED = "hmac-sha256:"
 
 
 def recovery_key(conn, vault) -> bytes:
@@ -132,9 +137,29 @@ def hash_recovery_code(value: str, key: bytes) -> str:
     return _KEYED + hmac.new(key, normalise_recovery_code(value).encode(), hashlib.sha256).hexdigest()
 
 
+def _rekeyed(bare: str, key: bytes) -> str:
+    return _REKEYED + hmac.new(key, bare.encode(), hashlib.sha256).hexdigest()
+
+
 def recovery_code_hashes(value: str, key: bytes) -> tuple[str, str]:
-    """Every form a stored code can take: keyed, or the unsalted SHA-256 of codes made before keyed hashes."""
-    return hash_recovery_code(value, key), hashlib.sha256(normalise_recovery_code(value).encode()).hexdigest()
+    """Every form a stored code can take: keyed, or a code made before keyed hashes, re-keyed."""
+    bare = hashlib.sha256(normalise_recovery_code(value).encode()).hexdigest()
+    return hash_recovery_code(value, key), _rekeyed(bare, key)
+
+
+def rekey_old_codes(conn, vault) -> int:
+    """Put every recovery code still stored as a bare SHA-256 under the key, and say how many. A bare hash of
+    a ten-character code can be found by trying them all, so the portal does this when it starts; sign-in
+    only accepts keyed forms."""
+    with transaction(conn):
+        old = conn.execute("SELECT id, code_hash FROM user_recovery_codes WHERE code_hash NOT LIKE 'hmac%'").fetchall()
+        if old:
+            key = recovery_key(conn, vault)
+            conn.executemany(
+                "UPDATE user_recovery_codes SET code_hash = ? WHERE id = ? AND code_hash = ?",
+                [(_rekeyed(row["code_hash"], key), row["id"], row["code_hash"]) for row in old],
+            )
+    return len(old)
 
 
 def looks_like_recovery_code(value: str) -> bool:
