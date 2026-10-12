@@ -747,7 +747,7 @@ PDF. A client's live report shows none of it until the month is approved or sent
 scheduled email of a client whose reports wait for approval (`month_end.needs_approval`).
 
 The reviewer can leave things out of one client's copy of one month
-(`report_hidden`, migration 0042; `month_end.hidden`, `leave_out`, `put_back`,
+(`report_hidden`, migration 0043; `month_end.hidden`, `leave_out`, `put_back`,
 items checked by `valid_item`): `check:<key>`, `kpi:<key>` (`designs.KPI_OPTIONS`),
 `action:<id>`, `part:<key>` (`month_end.PARTS`, the monthly review's sections),
 `block:<design id>:<block id>` and `notes:<design id>`. `report_context` carries

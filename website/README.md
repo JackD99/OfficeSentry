@@ -13,7 +13,7 @@ Which files become pages is the `SECTIONS` list at the top of `build.py`:
 
 | Menu section | Pages |
 |---|---|
-| Get started | the root README's "Quick start" section, `v2/DEPLOY.md`, `v2/docs/onboarding-a-client.md`, `v2/docs/staff-sign-in.md`, `v2/docs/troubleshooting.md`, `v2/docs/getting-help.md`, `v2/docs/securing-the-portal.md` |
+| Get started | the root README's "Quick start" section, `v2/DEPLOY.md`, `v2/docs/onboarding-a-client.md`, `v2/docs/staff-sign-in.md`, `v2/docs/client-sign-in.md`, `v2/docs/troubleshooting.md`, `v2/docs/getting-help.md`, `v2/docs/securing-the-portal.md` |
 | Deploy | `v2/docs/deploy/README.md` (the list of platforms) and each guide in `v2/docs/deploy/` |
 | Reference | `v2/README.md`, `v2/docs/checks.md`, `v2/docs/what-office-sentry-reads.md`, `examples/README.md` |
 | How-to | `website/pages/how-to/`: one page per job people search for (an MFA report, mail forwarding, unused licences, Cyber Essentials evidence, SharePoint storage, keeping sign-in logs), the manual way first, then Office Sentry's report |

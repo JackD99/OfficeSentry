@@ -1,13 +1,13 @@
-"""Staff sign-in with their own Microsoft account (Microsoft Entra ID, OpenID Connect).
+"""Sign in with Microsoft (Microsoft Entra ID, OpenID Connect), for staff and for clients' own people.
 
-This is about who signs in to the portal, not about client data. It uses a *separate*, single-tenant app
-registration in the MSP's own tenant (the "sign-in app"), never the multi-tenant read-only app that reads
-client tenants, so nothing about client access or its permissions changes. The sign-in app has no API
-permissions at all: Office Sentry only ever asks Microsoft who the person is (an ID token).
+This is about who signs in to the portal, not about client data. It uses a *separate* app registration in
+the MSP's own tenant (the "sign-in app"), never the multi-tenant read-only app that reads client tenants, so
+nothing about client access or its permissions changes. The sign-in app has no API permissions at all:
+Office Sentry only ever asks Microsoft who the person is (an ID token).
 
 How it works:
 
-* The admin turns it on under Settings → Staff sign-in. The setup wizard signs them in to Microsoft with a
+* The admin turns it on under Settings → Microsoft sign-in. The setup wizard signs them in to Microsoft with a
   device code (``app_setup.py``, as for the read-only app) and creates the sign-in app
   (``create_sign_in_app``): single tenant, a certificate Office Sentry made (the private key stays
   encrypted here), an app role for each built-in role (``APP_ROLE_DEFINITIONS``), "assignment required" on its service
@@ -28,6 +28,26 @@ How it works:
 * Passwords stay as the break-glass route for staff until an admin turns them off here, which only an admin
   signed in with Microsoft can do. ``python -m officesentry staff-sign-in --passwords on`` turns them back
   on from the server if Microsoft sign-in ever breaks.
+* An account with no password (``NO_PASSWORD``) confirms a security change, where others type their
+  password again, by signing in to Microsoft again (``Flow.confirm_user_id``, ``prompt=login``); the
+  session notes when (``sessions.confirmed_at``) and that counts for ``CONFIRM_MINUTES``.
+
+Client sign-in (``clients_enabled``): a client's people sign in with their own work account, in their own
+tenant, so their organisation's MFA and Conditional Access apply and a leaver is locked out when their
+account is disabled there. The sign-in app is single tenant until the admin lets other organisations use it
+(``allow_other_organisations``, from the wizard's device sign-in, or by hand; ``sso_multi_tenant``); then
+"Sign in with Microsoft" goes to ``organizations`` and the token's tenant decides the path. The MSP's own
+tenant is the staff path above, unchanged. Any other tenant is the client path (``client_account_for``):
+
+* Only an account the MSP made for that person: staff find them in the client's directory as Office Sentry
+  last collected it (``directory_person``), and the account is matched on that object ID and tenant ID only,
+  never on a sign-in name or email address. Staff accounts are never reached from a client's tenant, and no
+  account is created.
+* The token's tenant must be the Directory ID of a client the account is granted (``directory_id``). App
+  roles in the token are ignored: a client account is always the client role it was given here, and only
+  ever sees clients in that organisation (``access.visible_tenants``), whatever else it is granted.
+* Each client's own administrator approves the sign-in app once (``approval_url``, Microsoft's admin consent
+  for the sign-in scopes, nothing else), unless their people may approve such apps themselves.
 """
 
 from __future__ import annotations
@@ -47,7 +67,7 @@ from urllib.parse import urlencode
 import jwt
 import requests
 
-from . import clouds
+from . import clouds, store
 from . import permissions as p
 from .certs import GeneratedCert, generate_certificate, key_credential
 from .db import utcnow
@@ -55,6 +75,11 @@ from .db import utcnow
 DEFAULT_NAME = "Office Sentry sign-in"
 CALLBACK_PATH = "/login/microsoft/callback"
 SCOPES = "openid profile email"
+# Where "Sign in with Microsoft" goes once client sign-in is on: any work or school account, whose tenant then
+# decides the path (the MSP's own: staff; a client's: that client's people).
+ORGANIZATIONS = "organizations"
+# A confirmation with Microsoft (accounts with no password) counts for this long.
+CONFIRM_MINUTES = 10
 GUID_RE = re.compile(r"^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$")
 # Microsoft's app ID for Microsoft Graph, whose delegated "openid profile email" the sign-in app uses.
 GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000"
@@ -65,6 +90,8 @@ SETUP_PERMISSIONS = (
     "AppRoleAssignment.ReadWrite.All",
     "DelegatedPermissionGrant.ReadWrite.All",
 )
+# What the client sign-in wizard's device sign-in asks for: change the app's supported account types. Delegated.
+UPDATE_PERMISSIONS = ("Application.ReadWrite.All",)
 # A sign-in that took longer than this (state in the cookie) starts again.
 FLOW_SECONDS = 10 * 60
 # Published signing keys are kept this long; an unknown key ID fetches them again (at most once a minute).
@@ -136,6 +163,9 @@ KEYS = (
     "sso_notes",  # setup steps the wizard couldn't do, for the page to say
     "sso_set_up_at",
     "sso_set_up_by",
+    "sso_clients",  # '1' when client accounts may sign in with Microsoft (their own tenant's account)
+    "sso_multi_tenant",  # '1' once the sign-in app accepts accounts from other organisations
+    "sso_multi_tenant_by",  # who made that change, and how ("wizard" or "by hand")
 )
 ENCRYPTED_KEYS = ("sso_key_enc", "sso_next_key_enc")
 
@@ -175,7 +205,23 @@ def is_configured(s: dict) -> bool:
 
 
 def enabled(s: dict) -> bool:
+    """May staff sign in with Microsoft?"""
     return s.get("sso_enabled") == "1" and is_configured(s)
+
+
+def multi_tenant(s: dict) -> bool:
+    """Does the sign-in app accept accounts from other organisations (needed for client sign-in)?"""
+    return s.get("sso_multi_tenant") == "1" and is_configured(s)
+
+
+def clients_enabled(s: dict) -> bool:
+    """May client accounts sign in with Microsoft (with an account in their own tenant)?"""
+    return s.get("sso_clients") == "1" and multi_tenant(s)
+
+
+def shown(s: dict) -> bool:
+    """Does the sign-in page offer "Sign in with Microsoft"?"""
+    return enabled(s) or clients_enabled(s)
 
 
 def break_glass(s: dict) -> bool:
@@ -200,8 +246,10 @@ def redirect_uri(base_url: str) -> str:
     return base_url.rstrip("/") + CALLBACK_PATH
 
 
-def issuer(s: dict) -> str:
-    return f"{cloud(s).login}/{s['sso_tenant']}/v2.0"
+def issuer(s: dict, tenant: str | None = None) -> str:
+    """Who signs the ID token: the MSP's tenant, or ``tenant`` (a client's) for a sign-in through
+    ``organizations``."""
+    return f"{cloud(s).login}/{tenant or s['sso_tenant']}/v2.0"
 
 
 def admin_centre_url(s: dict) -> str:
@@ -228,9 +276,17 @@ class Flow:
     started: int
     next: str | None = None
     link_user_id: int | None = None  # set when a signed-in person is connecting their Microsoft account
+    confirm_user_id: int | None = None  # set when a signed-in person confirms a change with Microsoft
+    clients: bool = False  # sent to ``organizations``: a client's tenant may answer, not only the MSP's
 
     @classmethod
-    def new(cls, next_url: str | None = None, link_user_id: int | None = None) -> Flow:
+    def new(
+        cls,
+        next_url: str | None = None,
+        link_user_id: int | None = None,
+        confirm_user_id: int | None = None,
+        clients: bool = False,
+    ) -> Flow:
         return cls(
             secrets.token_urlsafe(24),
             secrets.token_urlsafe(24),
@@ -238,6 +294,8 @@ class Flow:
             int(time.time()),
             next_url,
             link_user_id,
+            confirm_user_id,
+            clients and link_user_id is None and confirm_user_id is None,
         )
 
     def as_dict(self) -> dict:
@@ -248,18 +306,33 @@ class Flow:
             "started": self.started,
             "next": self.next,
             "link": self.link_user_id,
+            "confirm": self.confirm_user_id,
+            "clients": self.clients,
         }
 
     @classmethod
     def from_dict(cls, d: dict | None) -> Flow | None:
         try:
-            return cls(d["state"], d["nonce"], d["verifier"], int(d["started"]), d.get("next"), d.get("link"))
+            return cls(
+                d["state"],
+                d["nonce"],
+                d["verifier"],
+                int(d["started"]),
+                d.get("next"),
+                d.get("link"),
+                d.get("confirm"),
+                d.get("clients") is True,
+            )
         except (TypeError, KeyError, ValueError):
             return None
 
     @property
     def expired(self) -> bool:
         return time.time() - self.started > FLOW_SECONDS
+
+    def authority(self, s: dict) -> str:
+        """The tenant segment of Microsoft's endpoints for this sign-in."""
+        return ORGANIZATIONS if self.clients else s["sso_tenant"]
 
 
 def _b64url(data: bytes) -> str:
@@ -283,19 +356,20 @@ def authorize_url(s: dict, redirect: str, flow: Flow, login_hint: str | None = N
         query["login_hint"] = login_hint
     if prompt:
         query["prompt"] = prompt
-    return f"{cloud(s).login}/{s['sso_tenant']}/oauth2/v2.0/authorize?{urlencode(query)}"
+    return f"{cloud(s).login}/{flow.authority(s)}/oauth2/v2.0/authorize?{urlencode(query)}"
 
 
-def token_endpoint(s: dict) -> str:
-    return f"{cloud(s).login}/{s['sso_tenant']}/oauth2/v2.0/token"
+def token_endpoint(s: dict, authority: str | None = None) -> str:
+    return f"{cloud(s).login}/{authority or s['sso_tenant']}/oauth2/v2.0/token"
 
 
-def client_assertion(s: dict, key_pem: str, now: datetime | None = None) -> str:
+def client_assertion(s: dict, key_pem: str, now: datetime | None = None, authority: str | None = None) -> str:
     """A JWT signed with the sign-in app's certificate, proving to Microsoft that this is Office Sentry
-    (``private_key_jwt``). ``x5t`` carries the certificate's SHA-1 thumbprint, as Entra expects."""
+    (``private_key_jwt``). ``x5t`` carries the certificate's SHA-1 thumbprint, as Entra expects. Its audience
+    is the token endpoint it's sent to."""
     now = now or datetime.now(UTC)
     claims = {
-        "aud": token_endpoint(s),
+        "aud": token_endpoint(s, authority),
         "iss": s["sso_client_id"],
         "sub": s["sso_client_id"],
         "jti": str(uuid.uuid4()),
@@ -312,33 +386,63 @@ PROBLEMS = {
     "a role in the Entra admin centre (Enterprise applications → Office Sentry sign-in → "
     "Users and groups).",
     "50011": "The reply address Office Sentry sent doesn't match the sign-in app in Entra. An admin needs to add it "
-    "to the app registration (Authentication → Web → Redirect URIs): see Settings → Staff sign-in.",
+    "to the app registration (Authentication → Web → Redirect URIs): see Settings → Microsoft sign-in.",
     "65001": "The sign-in app hasn't been given consent in your tenant. An admin can grant it in the Entra admin "
     "centre (Enterprise applications → Office Sentry sign-in → Permissions → Grant admin consent).",
     "7000215": "Microsoft doesn't recognise Office Sentry's certificate for the sign-in app. An admin should "
-    "upload the current .cer from Settings → Staff sign-in to the app registration.",
+    "upload the current .cer from Settings → Microsoft sign-in to the app registration.",
     "700027": "Microsoft doesn't recognise Office Sentry's certificate for the sign-in app. An admin should "
-    "upload the current .cer from Settings → Staff sign-in to the app registration.",
+    "upload the current .cer from Settings → Microsoft sign-in to the app registration.",
     "700016": "Microsoft can't find the sign-in app in that tenant. An admin should check the client ID and "
-    "tenant ID under Settings → Staff sign-in.",
+    "tenant ID under Settings → Microsoft sign-in.",
     "90002": "Microsoft doesn't know the tenant Office Sentry is set to sign you in to. An admin should check the "
-    "tenant ID under Settings → Staff sign-in.",
+    "tenant ID under Settings → Microsoft sign-in.",
     "50020": "That account belongs to another tenant. Sign in with your account in your own (the MSP's) tenant.",
     "50076": "Your tenant wants a second sign-in step that wasn't completed. Try again and complete it on "
     "Microsoft's page.",
     "53003": "Your Conditional Access policies blocked this sign-in.",
     "50058": "Microsoft didn't sign you in. Try again.",
     "50126": "That didn't work on Microsoft's page. Try again.",
+    "50194": "The sign-in app only accepts accounts from the MSP's own tenant, so client sign-in can't work yet. "
+    "Staff can use Sign in with Microsoft as staff below; an admin should finish setting up client sign-in "
+    "under Settings → Microsoft sign-in.",
+}
+# The same failures on a sign-in a client's tenant may answer (``Flow.clients``): said for a client's people,
+# who can't change anything at the MSP.
+NOT_APPROVED = (
+    "Your organisation hasn't approved signing in to these reports yet. Ask your IT provider for the approval "
+    "link and pass it to your Microsoft 365 administrator; it takes them a minute."
+)
+CLIENT_PROBLEMS = {
+    "65001": NOT_APPROVED,
+    "65004": "You didn't approve the sign-in on Microsoft's page, so you weren't signed in.",
+    "90094": NOT_APPROVED,
+    "90095": NOT_APPROVED,
+    "consent_required": NOT_APPROVED,
+    "50105": "Your organisation only lets people it has assigned use this sign-in. Ask your Microsoft 365 "
+    "administrator to assign you to it, or your IT provider for help.",
+    "53003": "Your organisation's Conditional Access policies blocked this sign-in.",
 }
 _AADSTS = re.compile(r"AADSTS(\d+)")
 
 
-def problem(error: str | None, description: str | None = None) -> str:
-    """What to tell the person, from Microsoft's error (the query string, or the token endpoint's body)."""
+def known_problem(error: str | None, description: str | None = None, clients: bool = False) -> str | None:
+    """Our explanation of Microsoft's error, or None for one we don't know.
+    ``clients``: the sign-in went to ``organizations``, so it may be one of a client's people."""
     code = _AADSTS.search(description or "")
     for key in (code.group(1) if code else None, error):
+        if clients and key in CLIENT_PROBLEMS:
+            return CLIENT_PROBLEMS[key]
         if key in PROBLEMS:
             return PROBLEMS[key]
+    return None
+
+
+def problem(error: str | None, description: str | None = None, clients: bool = False) -> str:
+    """What to tell the person, from Microsoft's error (the query string, or the token endpoint's body)."""
+    if known := known_problem(error, description, clients):
+        return known
+    code = _AADSTS.search(description or "")
     # The first line of Microsoft's text, without its "AADSTS12345: " prefix and trace ids, printable only.
     first = (description or "").splitlines()[:1]
     first = "".join(ch for ch in (first[0] if first else "") if ch.isprintable()).strip()
@@ -362,11 +466,13 @@ def _json(resp: requests.Response) -> dict:
 def exchange_code(
     s: dict, key_pem: str, code: str, redirect: str, flow: Flow, session: requests.Session | None = None
 ) -> str:
-    """Trade the authorization code for the ID token. Returns the raw ID token (verified separately)."""
+    """Trade the authorization code for the ID token, at the endpoint the sign-in started at. Returns the raw
+    ID token (verified separately)."""
     http = session or requests.Session()
+    authority = flow.authority(s)
     try:
         resp = http.post(
-            token_endpoint(s),
+            token_endpoint(s, authority),
             data={
                 "client_id": s["sso_client_id"],
                 "grant_type": "authorization_code",
@@ -375,7 +481,7 @@ def exchange_code(
                 "scope": SCOPES,
                 "code_verifier": flow.verifier,
                 "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-                "client_assertion": client_assertion(s, key_pem),
+                "client_assertion": client_assertion(s, key_pem, authority=authority),
             },
             timeout=30,
         )
@@ -385,7 +491,7 @@ def exchange_code(
         ) from exc
     body = _json(resp)
     if not resp.ok or not body.get("id_token"):
-        raise SignInError(problem(body.get("error"), body.get("error_description")))
+        raise SignInError(problem(body.get("error"), body.get("error_description"), clients=flow.clients))
     return str(body["id_token"])
 
 
@@ -395,14 +501,14 @@ _KEYS: dict[str, tuple[datetime, dict[str, dict]]] = {}
 _KEYS_LOCK = threading.Lock()
 
 
-def keys_url(s: dict) -> str:
-    return f"{cloud(s).login}/{s['sso_tenant']}/discovery/v2.0/keys"
+def keys_url(s: dict, authority: str | None = None) -> str:
+    return f"{cloud(s).login}/{authority or s['sso_tenant']}/discovery/v2.0/keys"
 
 
-def _fetch_keys(s: dict, session: requests.Session | None) -> dict[str, dict]:
+def _fetch_keys(s: dict, session: requests.Session | None, authority: str | None = None) -> dict[str, dict]:
     http = session or requests.Session()
     try:
-        resp = http.get(keys_url(s), timeout=30)
+        resp = http.get(keys_url(s, authority), timeout=30)
         resp.raise_for_status()
         body = resp.json()
     except (requests.RequestException, ValueError) as exc:
@@ -415,11 +521,18 @@ def _fetch_keys(s: dict, session: requests.Session | None) -> dict[str, dict]:
     return found
 
 
-def signing_key(s: dict, kid: str, session: requests.Session | None = None, now: datetime | None = None) -> dict:
-    """The tenant's published key with this ID, from a per-process cache refreshed when it's stale or the ID is
-    new (Microsoft rotates keys). Raises ``SignInError`` when it can't be had."""
+def signing_key(
+    s: dict,
+    kid: str,
+    session: requests.Session | None = None,
+    now: datetime | None = None,
+    authority: str | None = None,
+) -> dict:
+    """The published key with this ID (the MSP tenant's, or ``organizations``' for a sign-in a client's tenant
+    may answer), from a per-process cache refreshed when it's stale or the ID is new (Microsoft rotates keys).
+    Raises ``SignInError`` when it can't be had."""
     now = now or datetime.now(UTC)
-    url = keys_url(s)
+    url = keys_url(s, authority)
     with _KEYS_LOCK:
         fetched, keys = _KEYS.get(url, (None, {}))
         fresh = fetched is not None and now - fetched < KEYS_TTL
@@ -429,7 +542,7 @@ def signing_key(s: dict, kid: str, session: requests.Session | None = None, now:
             raise SignInError(
                 "Microsoft signed this sign-in with a key it hasn't published yet. Try again in a minute."
             )
-        keys = _fetch_keys(s, session)
+        keys = _fetch_keys(s, session, authority)
         _KEYS[url] = (now, keys)
     if kid not in keys:
         raise SignInError("Microsoft signed this sign-in with a key it hasn't published. Try again in a minute.")
@@ -460,21 +573,26 @@ class Identity:
 def verify_id_token(
     s: dict, id_token: str, flow: Flow, session: requests.Session | None = None, now: datetime | None = None
 ) -> Identity:
-    """Check the ID token's signature, audience, issuer, tenant, lifetime and nonce. Raises ``SignInError``."""
+    """Check the ID token's signature, audience, issuer, tenant, lifetime and nonce. Raises ``SignInError``.
+
+    A sign-in that went to the MSP's tenant must come back from it. One that went to ``organizations``
+    (``Flow.clients``) may come back from any tenant, but signed by that very tenant (the issuer names the
+    token's ``tid``); which tenants get anywhere is ``client_account_for``'s call."""
     try:
         header = jwt.get_unverified_header(id_token)
     except jwt.PyJWTError as exc:
         raise SignInError("Microsoft's answer wasn't a sign-in token. Try again.") from exc
     if header.get("alg") != "RS256" or not header.get("kid"):
         raise SignInError("Microsoft's sign-in token was signed in a way Office Sentry doesn't accept.")
-    key = jwt.PyJWK(signing_key(s, str(header["kid"]), session, now)).key
+    authority = flow.authority(s)
+    key = jwt.PyJWK(signing_key(s, str(header["kid"]), session, now, authority)).key
     try:
         claims = jwt.decode(
             id_token,
             key,
             algorithms=["RS256"],
             audience=s["sso_client_id"],
-            issuer=issuer(s),
+            issuer=None if flow.clients else issuer(s),  # checked against the token's own tenant below
             leeway=60,
             options={"require": ["exp", "iat", "aud", "iss", "sub", "nonce", "oid", "tid"]},
         )
@@ -485,7 +603,10 @@ def verify_id_token(
     if not secrets.compare_digest(str(claims.get("nonce", "")), flow.nonce):
         raise SignInError("This sign-in didn't start in this browser. Try again.")
     tid = str(claims.get("tid", "")).lower()
-    if tid != s["sso_tenant"].lower():
+    if flow.clients:
+        if not GUID_RE.match(tid) or str(claims.get("iss", "")) != issuer(s, tid):
+            raise SignInError("Microsoft's sign-in token didn't check out, so you weren't signed in. Try again.")
+    elif tid != s["sso_tenant"].lower():
         raise SignInError(PROBLEMS["50020"])
     oid = str(claims.get("oid", "")).lower()
     if not GUID_RE.match(oid):
@@ -514,7 +635,7 @@ class EntraRole:
 
 
 def custom_values(s: dict) -> dict[str, int]:
-    """App role value -> custom role id, as an admin set them under Settings → Staff sign-in."""
+    """App role value -> custom role id, as an admin set them under Settings → Microsoft sign-in."""
     try:
         raw = json.loads(s.get("sso_role_values") or "{}")
     except ValueError:
@@ -578,6 +699,9 @@ def account_for(conn, identity: Identity, s: dict, now: str | None = None):
     now = now or utcnow()
     grant = role_for(identity, s)
     user = conn.execute("SELECT * FROM users WHERE entra_oid = ?", (identity.oid,)).fetchone()
+    if user is not None and (user["role"] == "client" or (user["entra_tid"] or identity.tid) != identity.tid):
+        # A client's account never becomes staff, whatever Entra says.
+        raise Refused(NOT_STAFF)
     if user is None and identity.upn and "@" in identity.upn:
         # Only the sign-in name (the UPN): Microsoft's "email" claim is neither verified nor unique.
         user = conn.execute(
@@ -599,20 +723,140 @@ def account_for(conn, identity: Identity, s: dict, now: str | None = None):
             )
         cur = conn.execute(
             "INSERT INTO users (username, password_hash, role, role_id, all_tenants, created_at, entra_oid,"
-            " entra_upn, entra_linked_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)",
-            (username, NO_PASSWORD, role, role_id, now, identity.oid, identity.upn, now),
+            " entra_tid, entra_upn, entra_linked_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)",
+            (username, NO_PASSWORD, role, role_id, now, identity.oid, identity.tid, identity.upn, now),
         )
         return conn.execute("SELECT * FROM users WHERE id = ?", (cur.lastrowid,)).fetchone(), "created"
     outcome = "linked" if not user["entra_oid"] else "signed_in"
     changed = user["role"] != role or user["role_id"] != role_id
     conn.execute(
-        "UPDATE users SET entra_oid = ?, entra_upn = ?, entra_linked_at = COALESCE(entra_linked_at, ?),"
+        "UPDATE users SET entra_oid = ?, entra_tid = ?, entra_upn = ?, entra_linked_at = COALESCE(entra_linked_at, ?),"
         " role = ?, role_id = ?, session_version = session_version + ? WHERE id = ?",
-        (identity.oid, identity.upn, now, role, role_id, int(changed), user["id"]),
+        (identity.oid, identity.tid, identity.upn, now, role, role_id, int(changed), user["id"]),
     )
     return conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone(), (
         "role_changed" if changed and outcome == "signed_in" else outcome
     )
+
+
+# -- Clients' own people -----------------------------------------------------------------------------------
+
+NOT_STAFF = (
+    "That Microsoft account belongs to a client's account here, so it can't sign in as staff. Ask an Office "
+    "Sentry admin to sort it out."
+)
+NOT_SET_UP = (
+    "Your Microsoft account isn't set up to sign in here. Ask your IT provider to add you, using the address "
+    "you sign in to Microsoft with."
+)
+OTHER_ORGANISATION = (
+    "That account belongs to another organisation. Sign in with your account in your own (the MSP's) tenant."
+)
+
+
+def directory_id(conn, tenant) -> str | None:
+    """A client's Directory (tenant) ID: its tenant ID when it was added by ID (or Office Sentry swapped the
+    domain for it), else the organisation its latest collection read. None until either is known."""
+    ref = str(tenant["tenant_ref"] or "").lower()
+    if GUID_RE.match(ref):
+        return ref
+    run = store.latest_run(conn, tenant["id"], "tenant_profile")
+    if run is None:
+        return None
+    ids = {str(o.get("id") or "").lower() for o in store.run_objects(conn, run["id"], "organization")}
+    ids = {i for i in ids if GUID_RE.match(i)}
+    return ids.pop() if len(ids) == 1 else None
+
+
+def client_tenants(conn, user_id: int, tid: str, s: dict) -> list:
+    """The clients granted to this account whose Directory ID is ``tid``, in the sign-in app's cloud and not
+    archived. A client account is never given clients through a group (``access._GRANTED``)."""
+    rows = conn.execute(
+        "SELECT t.* FROM tenants t JOIN user_tenants ut ON ut.tenant_id = t.id"
+        " WHERE ut.user_id = ? AND t.archived_at IS NULL AND t.cloud = ? ORDER BY t.id",
+        (user_id, cloud(s).key),
+    ).fetchall()
+    return [t for t in rows if directory_id(conn, t) == tid]
+
+
+def directory_person(conn, tenant, address: str) -> dict:
+    """The member of a client's own directory whose sign-in address (else email address) is ``address``, from
+    its latest Users collection: ``oid``, ``upn`` and ``name``. Their object ID is what their client account is
+    matched on when they sign in (``client_account_for``); the address only finds them here, once. Raises
+    ``Refused`` saying why nobody was found."""
+    run = store.latest_run(conn, tenant["id"], "users")
+    if run is None:
+        raise Refused(
+            f"Office Sentry hasn't collected {tenant['name']}'s users yet, so it can't find {address} in their "
+            "directory. Collect their data first."
+        )
+    wanted = address.strip().lower()
+    people = store.run_objects(conn, run["id"], "user")
+    found = [u for u in people if str(u.get("userPrincipalName") or "").lower() == wanted]
+    if not found:
+        found = [u for u in people if str(u.get("mail") or "").lower() == wanted]
+    if len(found) != 1:
+        raise Refused(
+            f"{address} isn't a sign-in address in {tenant['name']}'s directory as of its last collection. Check "
+            "the address; someone new shows up after the next collection."
+        )
+    person = found[0]
+    oid = str(person.get("_id") or "").lower()
+    if str(person.get("userType") or "Member") != "Member" or not GUID_RE.match(oid):
+        raise Refused(
+            f"{address} is a guest in {tenant['name']}'s directory, so they sign in through their own organisation. "
+            "Give them a password account instead."
+        )
+    return {"oid": oid, "upn": str(person.get("userPrincipalName") or address), "name": person.get("displayName")}
+
+
+def client_account_for(conn, identity: Identity, s: dict, now: str | None = None):
+    """The client account for a Microsoft identity from a client's tenant: the one whose object ID and tenant
+    are the token's, as staff added it from the client's directory (``directory_person``). Never by sign-in
+    name or email address, which a tenant's administrator can set to anything. It must be granted a client
+    whose Directory ID is the token's tenant. Never a staff account, never a new account, and the token's app
+    roles count for nothing. The sign-in address shown for them stays the one from the client's directory,
+    not the token's. Returns (user row, the clients it matched). Raises ``Refused``."""
+    now = now or utcnow()
+    if not clients_enabled(s):
+        raise Refused(OTHER_ORGANISATION)
+    user = conn.execute(
+        "SELECT * FROM users WHERE entra_oid = ? AND entra_tid = ? AND role = 'client'", (identity.oid, identity.tid)
+    ).fetchone()
+    if user is None:
+        raise Refused(NOT_SET_UP)
+    matched = client_tenants(conn, user["id"], identity.tid, s)
+    if not matched:
+        raise Refused(NOT_SET_UP)
+    if user["disabled"]:
+        raise Refused("Your account here is disabled. Ask your IT provider if you need it back.")
+    conn.executemany(
+        "UPDATE tenants SET sign_in_approved_at = COALESCE(sign_in_approved_at, ?) WHERE id = ?",
+        [(now, t["id"]) for t in matched],
+    )
+    return user, matched
+
+
+def client_people(conn, tenant_id: int) -> list:
+    """The client accounts granted this client (its own people), by name."""
+    return conn.execute(
+        "SELECT u.* FROM users u JOIN user_tenants ut ON ut.user_id = u.id"
+        " WHERE ut.tenant_id = ? AND u.role = 'client' ORDER BY u.username COLLATE NOCASE",
+        (tenant_id,),
+    ).fetchall()
+
+
+def signs_in_with_microsoft(user) -> bool:
+    """Does this account sign in with Microsoft (connected already, or made without a password for it)? A
+    client's person is connected when they're added."""
+    return bool(user["entra_oid"]) or not has_password(user)
+
+
+def approval_url(s: dict, tenant: str, redirect: str, state: str) -> str:
+    """The link a client's administrator opens to approve the sign-in app for their organisation: Microsoft's
+    admin consent for the sign-in scopes only (no API permissions), back to ``redirect`` with ``state``."""
+    query = {"client_id": s["sso_client_id"], "scope": SCOPES, "redirect_uri": redirect, "state": state}
+    return f"{cloud(s).login}/{tenant}/v2.0/adminconsent?{urlencode(query)}"
 
 
 def link(conn, user_id: int, identity: Identity, now: str | None = None) -> None:
@@ -621,17 +865,30 @@ def link(conn, user_id: int, identity: Identity, now: str | None = None) -> None
     if other:
         raise Refused("That Microsoft account is already connected to another Office Sentry account.")
     conn.execute(
-        "UPDATE users SET entra_oid = ?, entra_upn = ?, entra_linked_at = ? WHERE id = ?",
-        (identity.oid, identity.upn, now or utcnow(), user_id),
+        "UPDATE users SET entra_oid = ?, entra_tid = ?, entra_upn = ?, entra_linked_at = ? WHERE id = ?",
+        (identity.oid, identity.tid, identity.upn, now or utcnow(), user_id),
     )
 
 
 def unlink(conn, user_id: int) -> bool:
-    """Disconnect. Refused (False) for an account with no password: it would have no way to sign in."""
-    user = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
+    """Disconnect. Refused (False) for an account with no password: it would have no way to sign in. A
+    client's account connected in its own organisation also loses its grants of clients in any other: they
+    count for nothing while it's connected (``web.access._organisation``), and mustn't start counting now."""
+    user = conn.execute("SELECT role, entra_tid, password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
     if user is None or not has_password(user):
         return False
-    conn.execute("UPDATE users SET entra_oid = NULL, entra_upn = NULL, entra_linked_at = NULL WHERE id = ?", (user_id,))
+    if user["role"] == "client" and user["entra_tid"]:
+        granted = conn.execute(
+            "SELECT t.* FROM tenants t JOIN user_tenants ut ON ut.tenant_id = t.id WHERE ut.user_id = ?", (user_id,)
+        ).fetchall()
+        conn.executemany(
+            "DELETE FROM user_tenants WHERE user_id = ? AND tenant_id = ?",
+            [(user_id, t["id"]) for t in granted if directory_id(conn, t) != user["entra_tid"]],
+        )
+    conn.execute(
+        "UPDATE users SET entra_oid = NULL, entra_tid = NULL, entra_upn = NULL, entra_linked_at = NULL WHERE id = ?",
+        (user_id,),
+    )
     return True
 
 
@@ -646,9 +903,9 @@ def staff_counts(conn) -> tuple[int, int]:
 # -- The sign-in app in Entra (setup wizard) -----------------------------------------------------------
 
 
-def setup_scope(cloud_key: str | None = None) -> str:
+def setup_scope(cloud_key: str | None = None, permissions: tuple[str, ...] = SETUP_PERMISSIONS) -> str:
     graph = clouds.get(cloud_key).graph
-    return " ".join(f"{graph}/{p}" for p in SETUP_PERMISSIONS)
+    return " ".join(f"{graph}/{p}" for p in permissions)
 
 
 def _token_claim(token: str, claim: str) -> str | None:
@@ -791,6 +1048,58 @@ def create_problem(exc: requests.RequestException) -> str:
             "Administrator or Cloud Application Administrator of your own tenant and start again."
         )
     return f"Microsoft wouldn't create the sign-in app ({resp.status_code}): {message or 'no reason given'}."
+
+
+def allow_other_organisations(
+    token: str, s: dict, cloud_key: str | None = None, session: requests.Session | None = None
+) -> str:
+    """Let the sign-in app accept work accounts from other organisations (client sign-in), with ``token`` from
+    the wizard's device sign-in: its "supported account types" become any organisation's directory. Nothing
+    else about the app changes; it still has no permissions. Returns the app's object id. Raises
+    ``SignInError`` in words for people."""
+    http = session or requests.Session()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    base = f"{clouds.get(cloud_key).graph}/v1.0"
+    tenant = _token_claim(token, "tid")
+    if tenant and tenant != s["sso_tenant"].lower():
+        raise SignInError(
+            "You signed in to a different tenant from the one the sign-in app is in. Sign in to your own (the "
+            "MSP's) tenant and start again."
+        )
+    try:
+        resp = http.get(
+            f"{base}/applications",
+            headers=headers,
+            params={"$filter": f"appId eq '{s['sso_client_id']}'", "$select": "id,signInAudience"},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        found = resp.json().get("value") or []
+        if not found:
+            raise SignInError(
+                f"Your tenant has no app registration with client ID {s['sso_client_id']}. Check the IDs under "
+                "The sign-in app on this page."
+            )
+        object_id = str(found[0]["id"])
+        if found[0].get("signInAudience") != "AzureADMultipleOrgs":
+            resp = http.patch(
+                f"{base}/applications/{object_id}",
+                headers=headers,
+                json={"signInAudience": "AzureADMultipleOrgs"},
+                timeout=60,
+            )
+            resp.raise_for_status()
+    except requests.RequestException as exc:
+        bad = getattr(exc, "response", None)
+        if bad is not None and bad.status_code in (401, 403):
+            raise SignInError(
+                "That account can't change app registrations. Sign in as a Global Administrator, Application "
+                "Administrator or Cloud Application Administrator of your own tenant and start again."
+            ) from exc
+        raise SignInError("Microsoft wouldn't change the sign-in app just now. Try again.") from exc
+    except (LookupError, ValueError, AttributeError) as exc:
+        raise SignInError("Microsoft's answer about the sign-in app didn't make sense. Try again.") from exc
+    return object_id
 
 
 def store_app(conn, vault, created: CreatedApp, cert: GeneratedCert, name: str, cloud_key: str, actor: str) -> None:

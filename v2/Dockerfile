@@ -23,9 +23,11 @@ RUN pip install --no-cache-dir --require-hashes --no-deps -r requirements.txt \
 COPY pyproject.toml ./
 COPY officesentry ./officesentry
 # Built with the locked setuptools rather than whatever is newest; `pip check` fails the build if the
-# lock no longer satisfies pyproject.toml.
+# lock no longer satisfies pyproject.toml. pip itself then goes: nothing runs it once the image is built, and the
+# copy the base image ships is older than pip's own security fixes, which every image scan would list.
 RUN pip install --no-cache-dir --no-deps --no-build-isolation . && pip check \
-    && rm -rf build officesentry.egg-info
+    && rm -rf build officesentry.egg-info \
+    && python -m pip uninstall --yes --quiet pip
 USER sentry
 VOLUME /data
 EXPOSE 8000

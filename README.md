@@ -285,7 +285,9 @@ for. A project drops off by itself once its findings are fixed.
 ### A view for clients
 
 Client users can sign in too. They see only their own organisation's reports, key numbers and downloads, never
-collection internals, run logs or other clients.
+collection internals, run logs or other clients. They can sign in with their own work Microsoft account, under
+their organisation's own MFA, from their own tenant only: no guest accounts in yours and no passwords to hand
+out ([Client sign-in](v2/docs/client-sign-in.md)).
 
 ![What a client sees when they sign in](docs/screenshots/client-view.png)
 
@@ -389,7 +391,8 @@ docker compose --profile https up -d
 
 The image is [`ghcr.io/jackd99/officesentry`](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry),
 public, for amd64 (Intel and AMD) servers and, from 2.1.0, arm64 ones. It is built and
-scanned by GitHub Actions from a tagged release, with a signed build provenance. Each release lists what changed,
+scanned by GitHub Actions from a tagged release, with a signed build provenance you can check
+([SECURITY.md, "Checking a release"](SECURITY.md#checking-a-release)). Each release lists what changed,
 and anything to do before updating, in [CHANGELOG.md](CHANGELOG.md).
 
 Leave out `--profile https` if you already have a reverse proxy, and point it at `http://127.0.0.1:8000`. Then:
@@ -421,6 +424,8 @@ from there.
 - [Deploy guides](v2/docs/deploy/README.md): Portainer and other container managers, Unraid, Synology and
   TrueNAS, Kubernetes, Azure, AWS, other clouds and Cloudflare
 - [Staff sign-in with Microsoft](v2/docs/staff-sign-in.md): let your team sign in with their Entra ID account
+- [Client sign-in with Microsoft](v2/docs/client-sign-in.md): let your clients' people sign in with their own
+  work account
 - [Onboarding a client](v2/docs/onboarding-a-client.md): consent, Global Reader, the first collection, connection
   health and offboarding
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access

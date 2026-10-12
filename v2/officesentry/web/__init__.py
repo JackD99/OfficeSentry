@@ -24,6 +24,7 @@ from . import (
     alerts,
     auth,
     branding,
+    client_access,
     data_retention,
     designs,
     email,
@@ -42,6 +43,7 @@ from . import (
     reports,
     saved_views,
     search,
+    sessions,
     site_pages,
     styleguide,
     support,
@@ -89,9 +91,11 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.extensions["officesentry.vault"] = Vault(cfg.encryption_keys)
 
     if cfg.trusted_proxies > 0:
-        # Behind a reverse proxy: take the client IP, scheme and host from its headers.
+        # Behind a reverse proxy: take the client IP, scheme and host from its headers. Not a path prefix: the
+        # portal always runs at the root of its address, and proxies pass X-Forwarded-Prefix on from the visitor
+        # untouched, which would let a request point every link on its own page somewhere else.
         n = cfg.trusted_proxies
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=n, x_proto=n, x_host=n, x_port=n, x_prefix=n)
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=n, x_proto=n, x_host=n, x_port=n)
 
     conn = connect(cfg.db_path)
     try:
@@ -108,6 +112,12 @@ def create_app(cfg: Config | None = None) -> Flask:
     finally:
         conn.close()
 
+    # Before CSRFProtect's own check, so the page refusing a form sent with a stale token has a nonce for its
+    # script too.
+    @app.before_request
+    def _csp_nonce():
+        g.csp_nonce = secrets.token_urlsafe(16)
+
     csrf.init_app(app)
     filters.register(app)
 
@@ -116,7 +126,6 @@ def create_app(cfg: Config | None = None) -> Flask:
         # The worker can't report that it has stopped, so the portal watches it (system_alerts.py).
         system_alerts.start_watchdog(app, cfg)
         g.db = connect(cfg.db_path, busy_timeout_ms=WEB_BUSY_TIMEOUT_MS)
-        g.csp_nonce = secrets.token_urlsafe(16)
         access.load_user()
         # Every line logged while handling this request names it (logs.py); the id goes back in the
         # X-Request-ID header and on the error page, so a report can quote it.
@@ -160,7 +169,10 @@ def create_app(cfg: Config | None = None) -> Flask:
         resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         resp.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         resp.headers["X-Permitted-Cross-Domain-Policies"] = "none"
-        if cfg.secure_cookies:
+        # Only over HTTPS, as browsers only take it from there: a portal behind a proxy that doesn't say the
+        # visitor came over HTTPS (X-Forwarded-Proto) then shows it by the header missing
+        # (docs/securing-the-portal.md, "Checking it worked").
+        if cfg.secure_cookies and request.is_secure:
             resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         # Static files and the public brand colours and logo may be cached; nothing else is.
         if request.endpoint not in ("static", "branding.brand_css", "branding.logo"):
@@ -209,9 +221,15 @@ def create_app(cfg: Config | None = None) -> Flask:
             "group_scope": g.get("group_scope"),
             "public_demo": bool(g.get("public_demo")),
             "public_demo_link": public_demo.link() if g.get("public_demo") else "",
-            # Sign in with Microsoft (sso.py): the sign-in page's button, and whether staff may still use passwords.
-            "microsoft_sign_in": staff_sign_in.enabled(sign_in),
-            "staff_passwords_off": sign_in.get("sso_passwords") == "off",
+            # Sign in with Microsoft (sso.py): the sign-in page's button, who it's for, whether staff may still use
+            # passwords, and whether someone without a password has just confirmed a change with Microsoft.
+            "microsoft_sign_in": staff_sign_in.shown(sign_in),
+            "microsoft_staff": staff_sign_in.enabled(sign_in),
+            "microsoft_clients": staff_sign_in.clients_enabled(sign_in),
+            "staff_passwords_off": staff_sign_in.enabled(sign_in) and sign_in.get("sso_passwords") == "off",
+            "no_password": bool(user) and not staff_sign_in.has_password(user),
+            "confirmed_with_microsoft": bool(user)
+            and sessions.recently_confirmed(g.get("session_row"), staff_sign_in.CONFIRM_MINUTES),
         }
 
     def _error(code: int, message: str, detail: str = ""):
@@ -281,15 +299,6 @@ def create_app(cfg: Config | None = None) -> Flask:
         return _error(413, "That file is too large.", f"Uploads are limited to {limit} MB.")
 
     @app.errorhandler(500)
-    def _server_error(_e):
-        return _error(
-            500,
-            "Something went wrong on the server.",
-            "Nothing was changed. Try again in a moment; if it keeps happening, tell your admin, who can read the "
-            "portal's log.",
-        )
-
-    @app.errorhandler(500)
     def _failed(_e):
         # Flask has already logged the traceback with this request's id in its context.
         return render_template(
@@ -349,4 +358,5 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(designs.bp)
     app.register_blueprint(evidence.bp)
     app.register_blueprint(sso_web.bp)
+    app.register_blueprint(client_access.bp)
     return app

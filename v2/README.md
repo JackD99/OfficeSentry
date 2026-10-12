@@ -480,6 +480,9 @@ These areas have no real recording and are tested with simulated data only:
 - [Staff sign-in with Microsoft](docs/staff-sign-in.md): setting up the
   sign-in app, assigning roles in Entra, linking accounts, and turning
   passwords off and back on.
+- [Client sign-in with Microsoft](docs/client-sign-in.md): letting your
+  clients' people sign in with their own work account, adding them, and their
+  administrator's approval.
 - [Deploy guides](docs/deploy/README.md): Portainer and other container
   managers, Unraid, Synology and TrueNAS, Kubernetes, Azure, AWS, other clouds
   and Cloudflare.
@@ -549,7 +552,7 @@ These areas have no real recording and are tested with simulated data only:
 
 - **Sign in with Microsoft** (optional, off until an admin sets it up): staff sign
   in with their own Microsoft Entra ID account through OpenID Connect, under the
-  MSP's own Conditional Access and MFA. *Settings → Staff sign-in* creates a
+  MSP's own Conditional Access and MFA. *Settings → Microsoft sign-in* creates a
   small single-tenant app in the MSP's tenant with the same device-code wizard
   as the app connection (`sso.py`, `app_setup.py`); the read-only client app and
   its permissions are untouched. The app has an app role for each built-in role
@@ -561,10 +564,29 @@ These areas have no real recording and are tested with simulated data only:
   matching username; new staff get an account at their first sign-in. Passwords
   stay as the break-glass route until an admin signed in with Microsoft turns
   them off (`python -m officesentry staff-sign-in --passwords on` turns them
-  back on from the server). Client accounts always use passwords.
+  back on from the server). An admin with no password confirms a security
+  change (setting a password, signing someone out, resetting two-step) by
+  signing in to Microsoft again (`prompt=login`), which counts for ten minutes.
   [docs/staff-sign-in.md](docs/staff-sign-in.md) has the steps.
+- **Client sign-in with Microsoft** (optional, off until an admin turns it on):
+  a client's people sign in with their own work account, from their own
+  company's tenant. The same sign-in app is made multi-tenant and the button
+  goes to `organizations`; the ID token's issuer must be its own `tid`, and
+  the `tid` decides the path: the MSP's tenant is staff, any other tenant can
+  only reach a client account (never created, never staff) matched on that
+  `tid` and the person's `oid`, which staff took from the client's collected
+  directory when they added them, granted a client whose Directory ID is that
+  `tid`, in the sign-in app's cloud and not archived. App roles in a client's
+  token are ignored, and such an account only ever sees clients in its own
+  organisation. The client's
+  administrator can approve the sign-in scopes for their organisation from a
+  link on the client's *Settings → Client sign-in* page, which is also where
+  staff add the client's people and copy the message to send them
+  ([docs/client-sign-in.md](docs/client-sign-in.md)).
 - **Two-step sign-in** (a 6-digit code from an authenticator app) is required
-  for everyone on new installs, client accounts included. Installs set up
+  for everyone on new installs, client accounts included; accounts that sign
+  in with Microsoft and have no password rely on their organisation's MFA
+  instead. Installs set up
   before October 2026 keep requiring it for staff only, so
   nobody is surprised after an upgrade; *Settings → Users* shows the policy
   and recommends extending it to clients. Set it with
@@ -800,7 +822,7 @@ officesentry/
   lifecycle.py   first collection, pause, archive and deleting a client
   permissions.py capabilities and the built-in roles
   roles.py       roles and per-person overrides, read and written
-  sso.py         staff sign-in with Microsoft (OpenID Connect)
+  sso.py         sign-in with Microsoft for staff and clients' people (OpenID Connect)
   permission_batch.py  new permissions released together, and each client's approval
   first_run.py   the Get started checklist
   search_index.py  the sidebar search's index, kept by the worker
