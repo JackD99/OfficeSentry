@@ -20,6 +20,11 @@ from ..text import plural
 REGISTRY: dict[str, type[Collector]] = {}
 
 
+class NothingToRead(Exception):
+    """A collector that reads what others collected found none of it (say sign-in has never worked), so it
+    asked Microsoft nothing. The run fails with this reason rather than succeeding with nothing in it."""
+
+
 def register(cls: type[Collector]) -> type[Collector]:
     if cls.key in REGISTRY:
         raise ValueError(f"duplicate collector key {cls.key!r}")
