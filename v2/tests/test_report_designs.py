@@ -151,6 +151,18 @@ def test_half_width_blocks_share_a_row(client, db, two_tenants):
     assert 'class="block block-summary_text' in page
 
 
+def test_projects_block_words_quick_fixes_as_the_projects_pages_do(client, db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    did = designs.create(db, "Projects", "test", _doc(_block("projects", quick=25)))
+    _staff(client, db)
+    page = _text(client.get(f"/tenants/{alpha}/designs/{did}"))
+    block = page[page.index('class="block block-projects') :]
+    # What was found leads, the check's goal under it; a signal leads with its name. No green tick: these are open.
+    assert "Goal: Every admin has MFA" in block and "<li>No Defender for Office 365<span" in block
+    assert '<ul class="passing">' not in block
+
+
 def test_a_broken_widget_never_takes_the_report_down(client, db, two_tenants, monkeypatch, caplog):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)

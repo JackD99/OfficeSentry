@@ -272,7 +272,7 @@
 {% endif %}
 {% if d.quick_count %}
 <p class="section-intro">{{ d.quick_count|plural('quick fix', 'quick fixes') }} that don't need a project{% if d.quick_fixes %}:{% else %}.{% endif %}</p>
-{% if d.quick_fixes %}<ul class="passing">{% for r in d.quick_fixes %}<li>{{ r.summary }}</li>{% endfor %}{% if d.quick_count > d.quick_fixes|length %}<li class="muted">…and {{ d.quick_count - d.quick_fixes|length }} more</li>{% endif %}</ul>{% endif %}
+{% if d.quick_fixes %}<ul class="evidence">{% for r in d.quick_fixes %}<li>{{ r.headline }}<span class="goal">{{ r.detail }}</span></li>{% endfor %}{% if d.quick_count > d.quick_fixes|length %}<li class="muted">…and {{ d.quick_count - d.quick_fixes|length }} more</li>{% endif %}</ul>{% endif %}
 {% endif %}
 {%- endmacro %}
 
