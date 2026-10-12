@@ -143,8 +143,8 @@ def test_user_pages_leave_out_other_clients_accounts(client, db, two_tenants):
 
 
 def test_settings_and_system_status_need_every_client(client, db, two_tenants):
-    """Team-wide emails, global alerts, report plans and the support package cover every client, so a role
-    limited to some clients doesn't get them, from the role or added for the person."""
+    """Team-wide emails, global alerts, report plans, the support package and installing an update cover every
+    client, so a role limited to some clients doesn't get them, from the role or added for the person."""
     alpha, _ = two_tenants
     _limited(db, "boss", list(p.KEYS), tenants=[alpha])
     staff = make_user(db, "staff", role="analyst", tenants=[alpha])
@@ -152,12 +152,23 @@ def test_settings_and_system_status_need_every_client(client, db, two_tenants):
         db,
         "setup",
         db.execute("SELECT * FROM users WHERE id = ?", (staff,)).fetchone(),
-        [roles.Override("settings.manage", None, True), roles.Override("system.manage", alpha, True)],
+        [
+            roles.Override("settings.manage", None, True),
+            roles.Override("system.manage", alpha, True),
+            roles.Override("system.update", None, True),
+        ],
     )
     for username in ("boss", "staff"):
         client.post("/logout")
         login(client, username)
-        for url in ("/admin/email", "/emails/digests/new", "/reporting/plans", "/admin/status", "/admin/support"):
+        for url in (
+            "/admin/email",
+            "/emails/digests/new",
+            "/reporting/plans",
+            "/admin/status",
+            "/admin/support",
+            "/admin/updates",
+        ):
             assert client.get(url).status_code == 403, (username, url)
     client.post("/logout")
     login(client, "boss")

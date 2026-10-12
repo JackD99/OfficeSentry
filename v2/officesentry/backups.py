@@ -346,6 +346,25 @@ def database_file(conn: sqlite3.Connection) -> Path | None:
     return None
 
 
+def _last_written(db_file: Path) -> float:
+    """When the database last changed: the time on its file or its write-ahead log, whichever is later."""
+    files = (db_file, db_file.with_name(db_file.name + "-wal"))
+    return max((p.stat().st_mtime for p in files if p.exists()), default=0.0)
+
+
+def copy_version(path: Path) -> int | None:
+    """A copy's database version, read without leaving SQLite's ``-wal`` and ``-shm`` files beside it (a
+    read-only open of a database in WAL mode would)."""
+    try:
+        conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro&immutable=1", uri=True)
+        try:
+            return int(conn.execute("PRAGMA user_version").fetchone()[0])
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+
+
 def before_upgrade(db_file: Path, current: int, target: int, release: str | None = None) -> Path | None:
     """Copy the database before migrations change it, into ``<data dir>/backups``, named
     ``pre-upgrade-v<old>-to-v<new>-<time>[-from-<release>].db``: the database versions, and the Office Sentry
@@ -353,16 +372,22 @@ def before_upgrade(db_file: Path, current: int, target: int, release: str | None
 
     ``db.migrate`` calls this before it takes the write lock, so the portal and worker keep working while a
     large database is copied. Two processes starting at once would both copy, so a copy of the same upgrade
-    made in the last hour counts and returns None.
+    made in the last hour, since the database last changed, counts and returns None. An older one doesn't:
+    after an upgrade that was rolled back, a retry must not reuse the copy from the first attempt, or going
+    back again would lose everything written in between. A process that finds another has upgraded the
+    database already returns None too, since that one made the copy.
     """
     folder = db_file.parent / "backups"
     name = f"{PRE_UPGRADE_PREFIX}v{current}-to-v{target}-"
-    recent = datetime.now(UTC).timestamp() - 3600
-    if folder.is_dir() and any(p.stat().st_mtime > recent for p in backup_files(folder, name)):
+    since = max(datetime.now(UTC).timestamp() - 3600, _last_written(db_file))
+    if folder.is_dir() and any(p.stat().st_mtime > since for p in backup_files(folder, name)):
         return None
     suffix = f"-from-{tag}" if release and (tag := re.sub(r"[^0-9A-Za-z.+-]", "", release)[:40]) else ""
     src = sqlite3.connect(db_file, timeout=30)
     try:
+        src.execute("BEGIN")  # the version read here and the copy are one snapshot, whatever others commit
+        if src.execute("PRAGMA user_version").fetchone()[0] != current:
+            return None
         dest = copy_database(src, folder / f"{name}{_stamp()}{suffix}.db")
     finally:
         src.close()

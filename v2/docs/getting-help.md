@@ -73,6 +73,7 @@ JSON, and the README inside explains each one.
 | `failures.json` | failed collection runs and background tasks of the last 14 days, with their error text and the run log's error lines |
 | `worker.json` | the worker's last heartbeat, what's queued and running |
 | `connections.json` | each app connection's cloud and certificate dates |
+| `updates.json` | whether the Update button's updater is running and can update, and its last update step by step, without the server's folders or who asked |
 | `activity.json` | the last 150 actions in the activity log, without who did them or from where |
 | `packages.txt` | every installed Python package and its version |
 | `logs/web.log`, `logs/worker.log` | the last 512 KB of the portal's and the worker's own logs |

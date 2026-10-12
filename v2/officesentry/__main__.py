@@ -547,6 +547,14 @@ def cmd_delete_tenant(args, cfg):
         print("Remember the client's side: they delete the Office Sentry enterprise app and its Global Reader role.")
 
 
+def cmd_updater(args, cfg):
+    """The updater container (the ``updater`` service in docker-compose.yml): installs a release when an admin
+    presses Update. Needs no configuration: ``main`` doesn't load one for it, so no secrets.json is made."""
+    from .updater import main as run_updater
+
+    run_updater()
+
+
 def cmd_support_package(args, cfg, config_error: str | None = None):
     """Write the support package (support.py): a zip of versions, settings, health, failures and logs with
     secrets and client data taken out, to attach to a bug report. Works when the portal won't start: a
@@ -741,6 +749,12 @@ def main(argv=None):
     )
     pkg.set_defaults(func=cmd_support_package)
 
+    updater = sub.add_parser(
+        "updater",
+        help="install a release when an admin presses Update (the updater service in docker-compose.yml only)",
+    )
+    updater.set_defaults(func=cmd_updater)
+
     live = sub.add_parser("live-test", help="collect from a test tenant using OFFICESENTRY_TEST_* variables")
     live.add_argument("--collector", action="append", help="only run this collector (repeatable)")
     live.add_argument("--out", help="also write XLSX exports to this folder")
@@ -772,6 +786,10 @@ def main(argv=None):
             cmd_support_package(args, None, config_error=str(exc))
             return
         cmd_support_package(args, cfg)
+        return
+    if args.command == "updater":
+        # It reads no settings and decrypts nothing, so it gets no keys (and makes none).
+        cmd_updater(args, None)
         return
     args.func(args, load_config())
 

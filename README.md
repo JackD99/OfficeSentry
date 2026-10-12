@@ -2,7 +2,7 @@
 
 **Branded Microsoft 365 security and licensing reports for every client, without gathering anything by hand.**
 Office Sentry reads each client's Microsoft 365 every night, keeps the history, and turns it into the reports an MSP
-actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, 47 detail reports, a page for
+actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, 49 detail reports, a page for
 every person, mailbox, group and site, a view across all clients, and what changed since last month. It never changes
 anything in a client's tenant.
 
@@ -56,6 +56,11 @@ can send just that.
 </table>
 
 ![This month: findings found and fixed each month, what was done and what to do next](docs/screenshots/review-attention.png)
+
+Before a month's reports go out, **Month-end** lists every client to review. On each one you write the commentary,
+pick what you recommend next, add notes to findings and leave out anything that client shouldn't get this month (a
+check, a key figure, a whole part of the report), with a preview of the client's copy beside you. Then approve
+one client or many: each is frozen as it is and emailed or published to the client's portal.
 
 **Report designs** let an account manager build their own client report without code: drag in blocks (a
 verdict, key figures, failing checks, what changed, licences, a table from any detail report, your own text),
@@ -116,7 +121,7 @@ from other organisations in them, the apps added to each team (custom uploads fl
 
 ### Detail reports you can filter, save and export
 
-47 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
+49 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
 values (or by age, for dates), sorted and have columns hidden; the view can be saved and reused on any client, and
 the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline figure opens the rows behind it.
 
@@ -388,7 +393,9 @@ The image is [`ghcr.io/jackd99/officesentry`](https://github.com/JackD99/OfficeS
 public, for amd64 (Intel and AMD) servers and, from 2.1.0, arm64 ones. It is built and
 scanned by GitHub Actions from a tagged release, with a signed build provenance you can check
 ([SECURITY.md, "Checking a release"](SECURITY.md#checking-a-release)). Each release lists what changed,
-and anything to do before updating, in [CHANGELOG.md](CHANGELOG.md).
+and anything to do before updating, in [CHANGELOG.md](CHANGELOG.md). **Settings → Updates** shows those notes for
+every newer release, and an optional **Update** button installs one: it checks the release's signature, restarts
+Office Sentry on it and goes back by itself if it doesn't start ([The Update button](v2/DEPLOY.md#the-update-button)).
 
 Leave out `--profile https` if you already have a reverse proxy, and point it at `http://127.0.0.1:8000`. Then:
 

@@ -398,6 +398,17 @@ CATALOG: list[Project] = [
             _cover("SMTP AUTH turned off, once scanners and apps send mail another way", "smtp_auth"),
             _cover("Mailbox auditing on", "mailbox_auditing"),
             _cover("Sign-in blocked for shared mailboxes", "shared_mailbox_signin"),
+            _cover(
+                "Mail flow rules that let spam in or send copies out fixed",
+                "mail_rule_spam_bypass",
+                "mail_rule_external_copy",
+            ),
+            _cover(
+                "Spam, phishing and malware policies tightened: allowed senders, spoof protection, attachment filter",
+                "spam_allowed_domains",
+                "spoof_protection",
+                "malware_file_filter",
+            ),
         ],
         checks={
             "spf_record": Effort(each=0.5),
@@ -411,6 +422,11 @@ CATALOG: list[Project] = [
             "external_forwarding": Effort(each=0.25),
             "auto_forward_policy": Effort(fixed=0.5),
             "suspicious_inbox_rules": Effort(each=0.5),  # check each one with the mailbox owner
+            "mail_rule_spam_bypass": Effort(each=0.5),  # agree a safer route with whoever the rule was for
+            "mail_rule_external_copy": Effort(each=0.5),
+            "spam_allowed_domains": Effort(each=0.5),
+            "spoof_protection": Effort(each=0.25),
+            "malware_file_filter": Effort(each=0.25),
         },
         size=("mailboxes.total", "mailbox"),
     ),

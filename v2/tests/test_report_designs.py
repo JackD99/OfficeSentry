@@ -37,7 +37,7 @@ def _block(kind: str, width: str = "full", **settings) -> dict:
 def test_clean_keeps_known_blocks_and_coerces_every_setting():
     doc = designs.clean(
         {
-            "settings": {"title": " Quarterly review ", "cover_verdict": 0, "junk": 1},
+            "settings": {"title": " Quarterly review ", "cover_verdict": 0, "cover": "sideways", "notes": 1, "junk": 1},
             "blocks": [
                 {"kind": "kpis", "width": "half", "settings": {"keys": ["waste", "nope"], "columns": 99, "heading": 7}},
                 {
@@ -53,7 +53,14 @@ def test_clean_keeps_known_blocks_and_coerces_every_setting():
             ],
         }
     )
-    assert doc["settings"] == {"title": "Quarterly review", "subtitle": "", "cover_verdict": False, "contents": True}
+    assert doc["settings"] == {
+        "title": "Quarterly review",
+        "subtitle": "",
+        "cover": "full",
+        "cover_verdict": False,
+        "contents": True,
+        "notes": True,
+    }
     kinds = [b["kind"] for b in doc["blocks"]]
     assert kinds == ["kpis", "findings", "text", "text", "page_break"]
     kpis, findings, text, text2, brk = doc["blocks"]
@@ -63,7 +70,14 @@ def test_clean_keeps_known_blocks_and_coerces_every_setting():
     assert len(text["settings"]["text"]) == designs.LONG_TEXT_MAX and text["width"] == "half"
     assert text["id"] == "sameid" and text2["id"] == "sameidx"  # ids are unique, whatever the editor sent
     assert designs.clean("nonsense") == {
-        "settings": {"title": "", "subtitle": "", "cover_verdict": True, "contents": True},
+        "settings": {
+            "title": "",
+            "subtitle": "",
+            "cover": "full",
+            "cover_verdict": True,
+            "contents": True,
+            "notes": False,
+        },
         "blocks": [],
     }
     assert len(designs.clean({"blocks": [{"kind": "text"}] * 200})["blocks"]) == designs.MAX_BLOCKS

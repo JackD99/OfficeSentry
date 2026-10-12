@@ -128,7 +128,9 @@ class Brand:
             f"--brand-soft:{light_soft};--brand-line:{mix(self.accent, '#ffffff', 0.7)};"
             f"--brand-cover-2:{mix(self.accent, '#000000', 0.25)};--brand-ink-dark:{dark_ink};"
             "}"
-            "@media (prefers-color-scheme: dark){body.report:not(.pdf){"
+            # A page drawn light on purpose (data-theme="light": PDFs, print pages, report previews) keeps
+            # the light colours.
+            '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) body.report:not(.pdf){'
             f"--brand-ink:{dark_ink};--brand-soft:{dark_soft};"
             f"--brand-line:{mix(self.accent, '#181e27', 0.55)};"
             "}}"

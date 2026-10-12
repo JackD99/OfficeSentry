@@ -15,9 +15,11 @@
     `wide = true` for landscape pages.
     Needs: pdf, css_href, brand (injected), and report.css components.
     print_view (web/printing.py) is the browser-made PDF: the page as it
-    prints, opening the print window, for servers without WeasyPrint. -#}
+    prints, opening the print window, for servers without WeasyPrint.
+    preview (an editor's or reviewer's preview pane) leaves the toolbar out;
+    paper draws the page light, as the PDF is, whatever the viewer's theme. -#}
 <!doctype html>
-<html lang="en"{% if pdf or print_view %} data-theme="light"{% endif %}>
+<html lang="en"{% if pdf or print_view or (paper is defined and paper) %} data-theme="light"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -26,14 +28,14 @@
   {% if pdf %}<style>{{ brand.css|safe }}</style>
   {% else %}<link rel="stylesheet" href="{{ url_for('branding.brand_css', v=brand.version) }}">{% endif %}
 </head>
-<body class="report{% if pdf or print_view %} pdf{% endif %}{% if print_view %} print-view{% endif %}">
+<body class="report{% if pdf or print_view %} pdf{% endif %}{% if print_view %} print-view{% endif %}{% if preview is defined and preview %} preview{% endif %}">
 {% if print_view %}<nav class="toolbar print-bar">
   <p class="hint"><strong>Save as PDF:</strong> in the print window, choose <strong>Save as PDF</strong> as the printer.</p>
   <span class="spacer"></span>
   <button type="button" class="button" data-back>Back</button>
   <button type="button" class="button primary" data-print>Print or save as PDF</button>
 </nav>
-{% elif not pdf %}<nav class="toolbar">{% block toolbar %}{% endblock %}</nav>{% endif %}
+{% elif not pdf and not (preview is defined and preview) %}<nav class="toolbar">{% block toolbar %}{% endblock %}</nav>{% endif %}
 <main>
 <article class="{{ 'doc-compact' if compact_cover }}{{ ' document' if document }}{{ ' wide' if wide }}">
 <header class="cover{% if compact_cover %} compact{% endif %}">
