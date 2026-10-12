@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -16,6 +17,7 @@ from officesentry.snapshot import TenantSnapshot
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_collectors import USERS
+from tests.test_roles import role_user
 
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -121,6 +123,44 @@ def test_rollup_pages_and_downloads(client, db, two_tenants):
     assert wb.sheetnames[0] == "Summary" and wb["Summary"]["A2"].value == "All clients"
     assert wb.worksheets[1]["A1"].value == "Client"
     assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'rollup_downloaded'").fetchone()[0] == 2
+
+
+def _picker(page: str) -> str:
+    pickers = re.findall(r'<nav class="report-menu"[^>]*>(.*?)</nav>', page, re.S)
+    assert len(pickers) == 1
+    return pickers[0]
+
+
+def test_all_clients_picks_reports_from_the_all_reports_menu(client, db, two_tenants):
+    """The same picker as a client's Reports tab: the summaries and every detail report, the open one marked
+    and its area beside the menu; Every row opens a report's rows; phones get the list as a select."""
+    make_user(db, "admin")
+    login(client, "admin")
+    page = client.get("/across/review").get_data(as_text=True)
+    picker = _picker(page)
+    hrefs = re.findall(r'href="(/across/[^"]+)"', picker)
+    assert hrefs[:3] == ["/across/review", "/across/evidence", "/across/checks"]
+    assert set(hrefs[3:]) == {f"/across/{key}" for key in data_reports.REPORTS}
+    assert len(hrefs) == len(data_reports.REPORTS) + 3
+    assert re.findall(r'aria-current="page">([^<]+)<', picker) == ["Monthly review"]
+    assert '<span class="report-area">Summaries</span>' in picker and 'data-report-search="report-list"' in picker
+    assert '<option value="checks"' in page and '<optgroup label="Identity and access">' in page
+    assert client.get("/across?key=checks").headers["Location"].endswith("/across/checks")
+
+    rows = _picker(client.get("/across/mfa/rows", follow_redirects=True).get_data(as_text=True))
+    assert 'href="/across/inbox-rules/rows"' in rows and 'href="/across/review"' in rows
+    assert re.findall(r'aria-current="page">([^<]+)<', rows) == ["MFA coverage"]
+    assert '<span class="report-area">Identity and access</span>' in rows
+
+
+def test_all_clients_picker_lists_only_what_the_role_may_open(client, db, two_tenants):
+    alpha, _ = two_tenants
+    role_user(db, "desk", "first_line", tenants=[alpha])  # reports on people, email and devices only
+    login(client, "desk")
+    picker = _picker(client.get("/across/mfa").get_data(as_text=True))
+    assert "Summaries" not in picker and "/across/checks" not in picker and "/across/review" not in picker
+    assert "/across/mailboxes" in picker and "/across/sharepoint-storage" not in picker
+    assert "/across/checks" not in client.get("/across?key=checks").headers["Location"]
 
 
 def test_rollups_only_show_granted_tenants(client, db, two_tenants):

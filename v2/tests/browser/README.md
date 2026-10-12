@@ -5,6 +5,9 @@ width, in light and dark, and:
 
 - compares a screenshot with its baseline in `baselines/` (the top 2,400 px on a laptop and 3,200 px on a
   phone; the style guide pages whole);
+- fails if the page is wider than the window, naming the smallest thing past the edge (a wide table
+  scrolls in its own box; the usual culprits are hidden text a scroll box doesn't clip and words that can't
+  wrap);
 - runs [axe-core](https://github.com/dequelabs/axe-core) (kept in `vendor/`, never loaded from a CDN) at the
   laptop width, failing on "serious" and "critical" WCAG 2.1 A and AA problems.
 
