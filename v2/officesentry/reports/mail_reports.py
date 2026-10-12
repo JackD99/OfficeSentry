@@ -349,6 +349,7 @@ def shared_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) ->
         ["Mailbox", "Type", "Sign-in allowed", "Last sign-in", "Licensed", "Full access", "Send as", "Size"],
         drifts=("Size",),
         empty="No shared, room or equipment mailboxes.",
+        optional=("Licensed",),
     )
     for m in sorted(
         rows,

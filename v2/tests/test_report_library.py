@@ -111,6 +111,36 @@ def test_changes_sort_as_numbers_and_names_without_accents_or_case():
     assert sorted(["Zoe", "Émile", "eve", "Åsa", "ana"], key=text.fold) == ["ana", "Åsa", "Émile", "eve", "Zoe"]
 
 
+def test_optional_columns_start_hidden_on_the_page_only():
+    """A wide report's optional columns wait under Columns; downloads, and a filter by one, still have them."""
+    report = sample()
+    report.sections[0].optional = ("Roles", "Size")
+    tv = views.table_view(report, 0, views.View(), "/p")
+    assert [c.name for c in tv.visible] == ["Name", "Last sign-in"]
+    assert tv.hidden_count == 2 and not tv.chosen  # the button counts them but isn't highlighted
+    assert [len(cells) for cells, _ in tv.rows] == [2, 2, 2, 2]
+    assert (
+        views.apply(report, views.View.parse("sort=people/name:asc")).sections[0].columns
+        == sample().sections[0].columns
+    )  # downloads keep every column
+
+    by = {c.slug: c for c in tv.columns}
+    assert by["size"].toggle_href == "/p?show=people%2Fsize#t-people"
+    shown = views.table_view(report, 0, views.View.parse("show=people/size"), "/p")
+    assert [c.name for c in shown.visible] == ["Name", "Last sign-in", "Size"] and shown.chosen
+    assert {c.slug: c for c in shown.columns}["size"].toggle_href == "/p#t-people"  # and hidden again
+    everything = views.table_view(report, 0, views.View.parse(tv.show_all_href.split("?")[1].split("#")[0]), "/p")
+    assert everything.hidden_count == 0
+
+    # Filtering by one shows it; hiding it then hides it outright, and the filter stays.
+    filtered = views.table_view(report, 0, views.View.parse("f=people/roles:Global+Administrator"), "/p")
+    assert "Roles" in [c.name for c in filtered.visible]
+    roles = {c.slug: c for c in filtered.columns}["roles"]
+    hidden = views.View.parse(roles.toggle_href.split("?")[1].split("#")[0])
+    assert hidden.hidden == [("people", "roles")] and hidden.filters
+    assert "Roles" not in [c.name for c in views.table_view(report, 0, hidden, "/p").visible]
+
+
 def test_table_view_offers_values_and_presets():
     tv = views.table_view(sample(), 0, views.View.parse("f=people/roles:Exchange+Administrator"), "/p")
     by = {c.slug: c for c in tv.columns}
@@ -203,6 +233,24 @@ def test_report_page_filters_hides_and_downloads_the_same_rows(client, db, two_t
     # A filter that matches nothing says so and offers the way back.
     page = client.get(f"{base}?f=forwarding/set-by:Nobody").get_data(as_text=True)
     assert "No rows match this filter" in page and "Show all 3" in page
+
+
+def test_a_wide_report_opens_on_its_default_columns(client, db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    make_user(db, "admin")
+    login(client, "admin")
+    base = f"/tenants/{alpha}/data/all-users"
+    page = unescape(client.get(base).get_data(as_text=True))
+    table = page[page.index('id="tbl-every-account"') :]
+    table = table[: table.index("</thead>")]
+    assert "Department" in table and "Job title" not in table and "Created" not in table
+    assert "Downloads include the columns hidden to fit the page." in page and ">7/11<" in page
+    body = client.get(f"{base}.csv?section=1").get_data(as_text=True).lstrip("﻿")
+    assert "Job title" in body.splitlines()[0]  # the download has every column
+    page = unescape(client.get(f"{base}?show=every-account/job-title").get_data(as_text=True))
+    table = page[page.index('id="tbl-every-account"') :]
+    assert "Job title" in table[: table.index("</thead>")]
 
 
 def test_saved_views(client, db, two_tenants):

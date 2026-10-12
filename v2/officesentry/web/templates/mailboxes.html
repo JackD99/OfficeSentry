@@ -27,7 +27,7 @@
     </div>
   </div>
   <p class="intro">Open any mailbox to see its size and growth, forwarding and inbox rules, who else can get into it, the phones syncing it and its history on one page. Mailboxes with open findings come first.</p>
-  <div class="scroll-x">
+  <div class="table-scroll{{ ' tall' if rows|length > 12 }}" data-key="mailboxes">
   <table class="stack-sm sortable" id="mailboxes">
     <thead><tr>
       <th aria-sort="none"><button type="button" class="sort">Mailbox</button></th>
@@ -42,11 +42,11 @@
     <tbody>
     {% for r in rows %}
     <tr data-name="{{ (r.name ~ ' ' ~ r.address ~ ' ' ~ r.type)|lower }}">
-      <td class="wrap"><a class="strong" href="{{ url_for('mailboxes.mailbox', tenant_id=tenant.id, mailbox_id=r.id) }}">{{ r.name }}</a>{% if r.address and r.address != r.name %}<span class="sub">{{ r.address }}</span>{% endif %}</td>
-      <td data-label="Type">{{ r.type }}</td>
-      <td data-label="Account">{% if r.account == 'Sign-in blocked' %}<span class="pill bad">Sign-in blocked</span>{% elif r.account == 'No account' %}<span class="muted">No account</span>{% else %}{{ r.account }}{% endif %}</td>
+      <td class="wrap"><a class="strong" href="{{ url_for('mailboxes.mailbox', tenant_id=tenant.id, mailbox_id=r.id) }}">{{ r.name }}</a>{% if r.address and r.address != r.name %}<span class="sub">{{ r.address|wrappable }}</span>{% endif %}</td>
+      <td data-label="Type" class="w-s">{{ r.type }}</td>
+      <td data-label="Account" class="w-s">{% if r.account == 'Sign-in blocked' %}<span class="pill bad">Sign-in blocked</span>{% elif r.account == 'No account' %}<span class="muted">No account</span>{% else %}{{ r.account }}{% endif %}</td>
       <td data-label="Size" class="num" data-sort="{{ r.size_sort }}">{{ r.size }}{% if r.share is not none %}<span class="sub">{{ r.share }}% of quota</span>{% endif %}</td>
-      <td data-label="Forwarding">{% if r.forwarding == 'Outside' %}<span class="pill bad">Outside</span>{% elif r.forwarding %}{{ r.forwarding }}{% else %}<span class="faint">None</span>{% endif %}</td>
+      <td data-label="Forwarding" class="w-s">{% if r.forwarding == 'Outside' %}<span class="pill bad">Outside</span>{% elif r.forwarding %}{{ r.forwarding }}{% else %}<span class="faint">None</span>{% endif %}</td>
       <td data-label="Others with access" class="num">{% if r.access %}{{ r.access }}{% else %}<span class="faint">0</span>{% endif %}</td>
       <td data-label="Inbox rules" class="num">{% if r.flagged_rules %}<span class="pill warn">{{ r.rules }}</span>{% elif r.rules %}{{ r.rules }}{% else %}<span class="faint">0</span>{% endif %}</td>
       <td data-label="Open findings" class="num">{% if r.findings %}<span class="pill warn">{{ r.findings }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>

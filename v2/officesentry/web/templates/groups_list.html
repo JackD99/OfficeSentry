@@ -27,7 +27,7 @@
     </div>
   </div>
   <p class="intro">Open any group to see its owners and members, what it gives them, its mail and files, how it's set up and its history on one page. Groups with open findings or no active owner come first.</p>
-  <div class="scroll-x">
+  <div class="table-scroll{{ ' tall' if rows|length > 12 }}" data-key="groups">
   <table class="stack-sm sortable" id="groups">
     <thead><tr>
       <th aria-sort="none"><button type="button" class="sort">Group</button></th>
@@ -42,13 +42,13 @@
     <tbody>
     {% for r in rows %}
     <tr data-name="{{ (r.name ~ ' ' ~ r.mail ~ ' ' ~ r.type)|lower }}">
-      <td class="wrap"><a class="strong" href="{{ url_for('group_pages.group', tenant_id=tenant.id, gid=r.id) }}">{{ r.name }}</a>{% if r.mail %}<span class="sub">{{ r.mail }}</span>{% endif %}</td>
-      <td data-label="Type">{{ r.type }}</td>
-      <td data-label="Owners">{% if not r.owners_ok %}<span class="pill bad">{{ r.owners }}</span>{% elif r.owners == 'Not checked' or not r.owners %}<span class="muted">{{ r.owners or 'Not read' }}</span>{% else %}{{ r.owners }}{% endif %}</td>
+      <td class="wrap"><a class="strong" href="{{ url_for('group_pages.group', tenant_id=tenant.id, gid=r.id) }}">{{ r.name }}</a>{% if r.mail %}<span class="sub">{{ r.mail|wrappable }}</span>{% endif %}</td>
+      <td data-label="Type" class="wrap w-m">{{ r.type }}</td>
+      <td data-label="Owners" class="wrap w-m">{% if not r.owners_ok %}<span class="pill bad">{{ r.owners }}</span>{% elif r.owners == 'Not checked' or not r.owners %}<span class="muted">{{ r.owners or 'Not read' }}</span>{% else %}{{ r.owners }}{% endif %}</td>
       <td data-label="Members" class="num" data-sort="{{ r.members if r.members is not none else -1 }}">{% if r.members is none %}<span class="muted">Not read</span>{% elif r.members == 0 %}<span class="pill warn">0</span>{% else %}{{ r.members }}{% endif %}</td>
       <td data-label="Guests" class="num">{% if r.guests %}<span class="pill warn">{{ r.guests }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
-      <td data-label="Membership">{{ r.membership }}</td>
-      <td data-label="Created">{% if r.created %}{{ r.created|day }}{% endif %}</td>
+      <td data-label="Membership" class="w-s">{{ r.membership }}</td>
+      <td data-label="Created" class="w-s">{% if r.created %}{{ r.created|day }}{% endif %}</td>
       <td data-label="Open findings" class="num">{% if r.findings %}<span class="pill warn">{{ r.findings }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
     </tr>
     {% endfor %}

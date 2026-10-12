@@ -26,7 +26,7 @@
     </div>
   </div>
   <p class="intro">Open anyone to see their licences, MFA, roles, groups, mailbox, devices, OneDrive sharing and history on one page. Accounts with open findings come first.</p>
-  <div class="scroll-x">
+  <div class="table-scroll{{ ' tall' if rows|length > 12 }}" data-key="people">
   <table class="stack-sm sortable" id="people">
     <thead><tr>
       <th aria-sort="none"><button type="button" class="sort">Name</button></th>
@@ -40,12 +40,12 @@
     <tbody>
     {% for r in rows %}
     <tr data-name="{{ (r.name ~ ' ' ~ r.upn ~ ' ' ~ r.roles|join(' '))|lower }}">
-      <td class="wrap"><a class="strong" href="{{ url_for('people.person', tenant_id=tenant.id, user_id=r.id) }}">{{ r.name }}</a>{% if r.upn and r.upn != r.name %}<span class="sub">{{ r.upn }}</span>{% endif %}</td>
-      <td data-label="Type">{{ 'Guest' if r.guest else 'Member' }}{% if not r.enabled %}<span class="sub">Sign-in blocked</span>{% endif %}</td>
-      <td data-label="MFA">{% if r.mfa_tone %}<span class="pill {{ PILL[r.mfa_tone] }}">{{ r.mfa }}</span>{% else %}<span class="muted">{{ r.mfa }}</span>{% endif %}</td>
-      <td data-label="Admin roles" class="wrap">{{ r.roles|join(', ') if r.roles else '' }}</td>
+      <td class="wrap"><a class="strong" href="{{ url_for('people.person', tenant_id=tenant.id, user_id=r.id) }}">{{ r.name }}</a>{% if r.upn and r.upn != r.name %}<span class="sub">{{ r.upn|wrappable }}</span>{% endif %}</td>
+      <td data-label="Type" class="w-s">{{ 'Guest' if r.guest else 'Member' }}{% if not r.enabled %}<span class="sub">Sign-in blocked</span>{% endif %}</td>
+      <td data-label="MFA" class="w-s">{% if r.mfa_tone %}<span class="pill {{ PILL[r.mfa_tone] }}">{{ r.mfa }}</span>{% else %}<span class="muted">{{ r.mfa }}</span>{% endif %}</td>
+      <td data-label="Admin roles" class="wrap w-m">{{ r.roles|join(', ') if r.roles else '' }}</td>
       <td data-label="Licences" class="num">{{ r.licences }}</td>
-      <td data-label="Last sign-in" data-sort="{{ r.last_sign_in_sort }}">{{ r.last_sign_in }}</td>
+      <td data-label="Last sign-in" class="w-s" data-sort="{{ r.last_sign_in_sort }}">{{ r.last_sign_in }}</td>
       <td data-label="Open findings" class="num">{% if r.findings %}<span class="pill warn">{{ r.findings }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
     </tr>
     {% endfor %}
