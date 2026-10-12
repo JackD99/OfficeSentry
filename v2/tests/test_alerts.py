@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import socket
+import threading
 import time
 from unittest.mock import patch
 
@@ -487,6 +488,37 @@ def test_webhook_connects_to_the_address_it_checked(monkeypatch):
     with pytest.raises(alerts.AlertError, match="Couldn't connect"):
         alerts.post(HOOK, {"x": 1})
     assert targets and all(t == (PUBLIC_IP, 443) for t in targets)
+
+
+def test_a_proxy_is_asked_for_the_address_that_was_checked(monkeypatch):
+    # Behind HTTPS_PROXY, the proxy is asked to connect to the checked address, never to the name (which
+    # the proxy would look up again, perhaps to an internal address).
+    proxy = socket.create_server(("127.0.0.1", 0))
+    asked = []
+
+    def serve():
+        conn, _ = proxy.accept()
+        with proxy, conn:
+            asked.append(conn.recv(4096).decode().split("\r\n", 1)[0])
+            conn.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    answers = iter([PUBLIC_IP] + ["127.0.0.1"] * 10)
+
+    def lookup(host, port, *a, **k):
+        address = host if host[0].isdigit() else next(answers)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, port))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", lookup)
+    for name in ("HTTPS_PROXY", "https_proxy"):
+        monkeypatch.setenv(name, f"http://127.0.0.1:{proxy.getsockname()[1]}")
+    for name in ("NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(alerts.AlertError, match="Couldn't connect"):
+        alerts.post(HOOK, {"x": 1})
+    thread.join(5)
+    assert asked == [f"CONNECT {PUBLIC_IP}:443 HTTP/1.1"]
 
 
 def test_pinned_connection_keeps_the_name_for_tls():

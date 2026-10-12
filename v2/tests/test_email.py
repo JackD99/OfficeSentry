@@ -1,12 +1,14 @@
 import base64
 import json
+import smtplib
 import socket
+import threading
 from datetime import UTC, datetime, timedelta
 
 import pytest
 import responses
 
-from officesentry import alerts, delivery, mailer, store
+from officesentry import alerts, delivery, mailer, outbound, store
 from officesentry import db as db_module
 from officesentry.db import connect, migrate
 from officesentry.reports.export import pdf_available
@@ -14,6 +16,7 @@ from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
 SENT = []
+REAL_SMTP = smtplib.SMTP
 
 
 class FakeSMTP:
@@ -173,6 +176,96 @@ def test_no_password_over_an_unencrypted_connection(client, db, vault):
     assert SENT[0] == ("login", "reports@msp.com", "s3cret")
     assert _configure(client, smtp_host="localhost", smtp_security="none", smtp_port="25").status_code == 302
     assert mailer.mail_settings(db)["smtp_security"] == "none"
+
+
+def _mail_server():
+    """A mail server on 127.0.0.1 that takes one message from the real smtplib: (port, what it was sent)."""
+    listener = socket.create_server(("127.0.0.1", 0))
+    got = []
+
+    def serve():
+        conn, _ = listener.accept()
+        with listener, conn, conn.makefile("rwb") as f:
+            reading = False
+            f.write(b"220 relay\r\n")
+            f.flush()
+            for raw in f:
+                line = raw.decode().rstrip("\r\n")
+                verb = line.split(" ", 1)[0].upper()
+                if reading and line != ".":
+                    got.append(line)
+                    continue
+                if reading:
+                    reading = False
+                    f.write(b"250 queued\r\n")
+                elif verb == "DATA":
+                    reading = True
+                    f.write(b"354 go on\r\n")
+                elif verb == "QUIT":
+                    f.write(b"221 bye\r\n")
+                    break
+                else:
+                    f.write(b"250 relay\r\n")
+                f.flush()
+
+    threading.Thread(target=serve, daemon=True).start()
+    return listener.getsockname()[1], got
+
+
+def test_the_mail_server_is_looked_up_once_and_never_reached_at_a_metadata_address(db, vault, monkeypatch):
+    monkeypatch.setattr(mailer.smtplib, "SMTP", REAL_SMTP)
+    port, got = _mail_server()
+    answers = ["127.0.0.1", "10.9.9.9"]  # the second answer would be a DNS rebinding
+    looked_up = []
+
+    def lookup(host, port, *a, **k):
+        if host == "mail.example.test":
+            looked_up.append(host)
+            host = answers[len(looked_up) - 1]
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (host, port))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", lookup)
+    _smtp_ready(db)
+    db.execute("UPDATE settings SET value = 'mail.example.test' WHERE key = 'smtp_host'")
+    db.execute("INSERT INTO settings (key, value) VALUES ('smtp_port', ?)", (str(port),))
+    email = mailer.Email(to=["a@client.com"], subject="Pinned", html="<p>x</p>", text="x")
+    mailer.send(db, vault, email)
+    # Sent to the address that was checked, without asking DNS again.
+    assert looked_up == ["mail.example.test"] and "Subject: Pinned" in got
+
+    # Cloud metadata (link-local) is never a mail server: refused before connecting.
+    answers[:] = ["169.254.169.254"]
+    looked_up.clear()
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: pytest.fail("connected"))
+    with pytest.raises(mailer.MailError, match=r"169\.254\.169\.254, a link-local"):
+        mailer.send(db, vault, email)
+
+
+@pytest.mark.parametrize(
+    ("address", "allowed"),
+    [
+        ("127.0.0.1", True),  # a relay on this machine
+        ("::1", True),
+        ("10.0.0.25", True),  # a relay on the local network
+        ("192.168.1.10", True),
+        ("fd00::25", True),
+        ("40.92.0.1", True),
+        ("169.254.169.254", False),  # cloud metadata
+        ("::ffff:169.254.169.254", False),
+        ("fe80::1", False),
+        ("224.0.0.1", False),
+        ("240.0.0.1", False),
+        ("0.0.0.0", False),  # noqa: S104
+    ],
+)
+def test_mail_server_addresses(monkeypatch, address, allowed):
+    family = socket.AF_INET6 if ":" in address else socket.AF_INET
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, port, *a, **k: [(family, 1, 6, "", (address, port))])
+    if allowed:
+        assert outbound.mail_server_address("mail.example.test", 25) == address
+    else:
+        with pytest.raises(outbound.NotPublic):
+            outbound.mail_server_address("mail.example.test", 25)
 
 
 def test_graph_settings_keep_secret_only_for_the_same_app(client, db, vault):
