@@ -157,6 +157,11 @@ limiter and telemetry, and is GET only. Its paths are catalogued in
 `endpoints.SHAREPOINT`. It needs Sites.Read.All on Office 365 SharePoint
 Online; until a client approves it, SharePoint answers 401 and the collector
 stores the reason `consent` so the report says it's waiting, without a warning.
+Site access reads its latest snapshot for who is in each SharePoint group (owners
+groups, and "Everyone" given access through a group), so `site_permissions` is
+imported before `site_access` in `collectors/__init__.py`; the login-name helpers
+both use are in `collectors/sharepoint_logins.py`. SharePoint lists both
+"Everyone" claims in every site's user information list, so only a grant counts.
 
 The shared-files scan (`SharedFiles`) walks each library once, then keeps its
 delta link as a `drive_cursor` object and asks Microsoft only for what changed

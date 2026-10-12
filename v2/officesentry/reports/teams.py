@@ -4,7 +4,8 @@ added to each team, and teams nobody has used lately.
 Reads ``collectors/teams.py``. Channels, channel members and apps need permissions added in 2.2; while the
 client hasn't approved them the report says so (``permission_batch.waiting_text``) and shows what it has.
 A team is inactive when Microsoft's activity report shows nothing in it for ``INACTIVE_DAYS`` and it is
-older than that.
+older than that. Where Microsoft hides names in usage reports (its default), the activity report hides each
+team's ID too (all zeros), so its rows can't be matched to teams and inactive teams can't be told.
 """
 
 from __future__ import annotations
@@ -84,7 +85,8 @@ def teams_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     have_channels = parts.get("channels") == "read"
     have_members = have_channels and parts.get("members") == "read"
     have_apps = parts.get("apps") == "read"
-    activity_read = status.get("activity") is True
+    hidden = status.get("concealed") is True
+    activity_read = status.get("activity") is True and not hidden
     waiting = [p for p in status.get("waiting") or [] if isinstance(p, str)]
     notices = []
     if waiting:
@@ -128,6 +130,9 @@ def teams_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
         ["Team", "Last activity", "Privacy", "Channels", "Created"],
         empty=f"Every team older than {INACTIVE_DAYS} days was used in the last {INACTIVE_DAYS} days."
         if activity_read
+        else "Microsoft hides team names in this tenant's usage reports, so its activity can't be matched to "
+        "teams and inactive teams can't be told. The note above says how to show names."
+        if hidden
         else "Microsoft's Teams activity report wasn't available, so inactive teams can't be told.",
     )
     channels = Section(
@@ -257,8 +262,12 @@ def teams_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
         Tile("Teams", n, "Teams in this tenant", rows=Rows(EVERY)),
         Tile(
             "Inactive teams",
-            stale if activity_read else "Not read",
-            f"No activity in {INACTIVE_DAYS} days" if activity_read else "Needs Microsoft's activity report",
+            stale if activity_read else "Hidden" if hidden else "Not read",
+            f"No activity in {INACTIVE_DAYS} days"
+            if activity_read
+            else "Microsoft hides team names"
+            if hidden
+            else "Needs Microsoft's activity report",
             ("warn" if stale else "ok") if activity_read else None,
             Rows(INACTIVE),
         ),

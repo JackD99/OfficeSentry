@@ -3,26 +3,29 @@
 One collector over every site (``Sites.Read.All``) that answers what clients ask about site access
 with the permissions Office Sentry already has:
 
-* who owns the site: the owners of its Microsoft 365 group, else its site collection administrators
+* who owns the site: the owners of its Microsoft 365 group, else its site collection administrators and
+  the members of its owners group
 * its site collection administrators, and everyone SharePoint has recorded on the site, read from the
-  site's hidden user information list (people, groups, guests, and "Everyone" claims)
+  site's hidden user information list (people, groups and guests)
 * what the default document library grants and to whom: site groups, the group, people, everyone
+* whether everyone in the organisation can open the site, from what it grants
 * guests who have been given access on the site, and the group's guests
 
-Membership of SharePoint groups on sites that have no Microsoft 365 group needs SharePoint's own API
-(a permission on the SharePoint resource, coming in a later consent batch); those sites say so rather
-than guessing. Everything here is GET only.
+Who is in a SharePoint group needs SharePoint's own API (Sites.Read.All on the SharePoint resource, in the
+2.2 consent batch), which the Site permissions collector reads; this one uses its latest snapshot. Until a
+client approves that, a site whose owners or "Everyone" may be in a SharePoint group says it doesn't know
+rather than guessing. SharePoint records both "Everyone" claims in every site's user information list by
+default, so finding them there says nothing about access. Everything here is GET only.
 """
 
 from __future__ import annotations
-
-import re
 
 from ..graph import GraphError, PermissionMissing
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .base import Collector, RunContext, register
 from .sharepoint import PERMISSION_FIELDS
+from .sharepoint_logins import classify_login, guest_address
 from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups
 
 # The hidden list SharePoint keeps on every site of everyone it has resolved there: people given access
@@ -41,53 +44,7 @@ ADMINS_KEPT = 20
 GUESTS_KEPT = 50
 ACCESS_KEPT = 60
 
-# Login name shapes (claims). Anything else without "|" is a SharePoint group by its name.
-_PERSON = re.compile(r"^i:0#\.f\|membership\|(.+)$", re.IGNORECASE)
-_M365 = re.compile(r"^c:0o\.c\|federateddirectoryclaimprovider\|([^|]+?)(_o)?$", re.IGNORECASE)
-_SECURITY = re.compile(r"^c:0t\.c\|tenant\|([^|]+)$", re.IGNORECASE)
-EVERYONE = "c:0(.s|true"
-EVERYONE_BUT_GUESTS = "spo-grid-all-users"
-SYSTEM_LOGINS = ("app@sharepoint", "sharepoint\\system", "_spocache", "_spocrawler", "_spofrm")
 ROLE_WORDS = {"owner": "Full control", "write": "Edit", "read": "View"}
-
-
-def classify_login(login: str | None) -> tuple[str, str]:
-    """``(kind, value)`` for a SharePoint login name.
-
-    Kinds: ``person`` (address), ``guest`` (address), ``group_members`` and ``group_owners`` (Microsoft 365
-    group id), ``security_group`` (id), ``everyone``, ``everyone_but_guests``, ``system``, ``sp_group``
-    (the group's name) or ``unknown``.
-    """
-    login = (login or "").strip()
-    low = login.lower()
-    if not login:
-        return ("unknown", "")
-    if any(s in low for s in SYSTEM_LOGINS):
-        return ("system", login)
-    if low == EVERYONE:
-        return ("everyone", login)
-    if EVERYONE_BUT_GUESTS in low:
-        return ("everyone_but_guests", login)
-    if m := _PERSON.match(login):
-        who = m.group(1)
-        return ("guest" if "#ext#" in who.lower() or "urn:spo:guest" in who.lower() else "person", who.lower())
-    if "urn:spo:guest" in low:
-        return ("guest", login.rsplit("|", 1)[-1].lower())
-    if m := _M365.match(login):
-        return ("group_owners" if m.group(2) else "group_members", m.group(1).lower())
-    if m := _SECURITY.match(login):
-        return ("security_group", m.group(1).lower())
-    if "|" not in login:
-        return ("sp_group", login)
-    return ("unknown", login)
-
-
-def guest_address(login_value: str, email: str | None) -> str:
-    """A guest's own address: the invitation email, else the address folded into the login name."""
-    if email and "@" in email:
-        return email.lower()
-    local = login_value.split("#ext#", 1)[0]
-    return local.replace("_", "@", 1).lower() if "_" in local and "@" not in local else local.lower()
 
 
 def site_group_kind(name: str) -> str:
@@ -148,7 +105,6 @@ class _Site:
         self.admins: list[dict] = []
         self.people = 0
         self.guests: list[str] = []
-        self.everyone: str | None = None
         self.sp_groups: list[str] = []
         self.security_groups = 0
         self.access: list[dict] = []
@@ -166,7 +122,8 @@ class _Site:
             if name and name not in self.sp_groups:
                 self.sp_groups.append(name)
             return
-        if kind == "system" or kind == "unknown":
+        # Every site's list has both "Everyone" claims whether or not they're given anything (see the top).
+        if kind in ("system", "unknown", "everyone", "everyone_but_guests"):
             return
         if kind == "group_members":
             self.group_id = self.group_id or value
@@ -174,10 +131,6 @@ class _Site:
             self.group_id = self.group_id or value
         elif kind == "security_group":
             self.security_groups += 1
-        elif kind == "everyone":
-            self.everyone = "all"
-        elif kind == "everyone_but_guests":
-            self.everyone = self.everyone or "members"
         elif kind == "guest":
             address = guest_address(value, f.get("EMail"))
             if address not in self.guests:
@@ -188,8 +141,12 @@ class _Site:
             self.admins.append({"name": f.get("Title") or value, "upn": value, "email": (f.get("EMail") or "").lower()})
 
 
-def owners_of(found: _Site, groups: dict[str, dict], users: dict[str, dict]) -> tuple[list[dict], str | None]:
-    """The site's owners and where they come from: the group's owners, else its site administrators."""
+def owners_of(
+    found: _Site, groups: dict[str, dict], users: dict[str, dict], sp_site: dict | None = None
+) -> tuple[list[dict], str | None]:
+    """The site's owners and where they come from: the group's owners ("group"), else its site administrators
+    ("admins") and, once SharePoint's own API has been read (``sp_site``, the Site permissions snapshot), the
+    members of its owners group ("sharepoint"). None when that group may hold owners nobody can count yet."""
     group = groups.get(found.group_id or "")
     if group is not None and group.get("examined"):
         owners = [
@@ -198,14 +155,47 @@ def owners_of(found: _Site, groups: dict[str, dict], users: dict[str, dict]) -> 
             if isinstance(o, dict) and o.get("type", "user") == "user"
         ]
         return owners, "group"
-    if found.user_list:
-        owners = []
-        for a in found.admins:
-            u = users.get(a["upn"]) or users.get(a["email"])
-            enabled = True if (u is None and not users) else bool(u and u.get("accountEnabled") is not False)
-            owners.append({"name": a["name"], "upn": a["upn"], "enabled": enabled})
-        return owners, "admins"
-    return [], None
+    if not found.user_list:
+        return [], None
+    people = [(a["name"], a["upn"], a["email"]) for a in found.admins]
+    source = "admins"
+    if sp_site is not None:
+        source = "sharepoint"
+        for g in sp_site.get("groups") or []:
+            if not isinstance(g, dict) or g.get("role") != "owners":
+                continue
+            for m in g.get("members") or []:
+                if not isinstance(m, dict) or m.get("kind") not in ("person", "guest"):
+                    continue
+                login = str(m.get("id") or "").lower()
+                if login and login not in {p[1] for p in people}:
+                    people.append((m.get("name") or login, login, login))
+    elif found.sp_groups and len(people) < 2:
+        source = None  # its owners group may hold more, and only SharePoint's own API says who
+    owners = []
+    for name, upn, email in people:
+        u = users.get(upn) or users.get(email)
+        enabled = True if (u is None and not users) else bool(u and u.get("accountEnabled") is not False)
+        owners.append({"name": name, "upn": upn, "enabled": enabled})
+    return owners, source
+
+
+def everyone_access(access: list[dict], sp_site: dict | None) -> str | None:
+    """ "all" when everyone, guests included, is given access to the site, "members" when everyone in the
+    organisation is, else None: from the default library's grants and, once read, the site's own (directly or
+    through a SharePoint group that holds a permission level)."""
+    kinds = {"everyone" if a.get("outside") else "everyone_but_guests" for a in access if a.get("how") == "Everyone"}
+    if sp_site is not None:
+        members = {g.get("id"): g.get("members") or [] for g in sp_site.get("groups") or [] if isinstance(g, dict)}
+        for grant in sp_site.get("grants") or []:
+            who = grant.get("principal") if isinstance(grant, dict) else None
+            if not isinstance(who, dict):
+                continue
+            inside = members.get(who.get("id"), []) if who.get("kind") == "sp_group" else [who]
+            kinds |= {m.get("kind") for m in inside if isinstance(m, dict)}
+    if "everyone" in kinds:
+        return "all"
+    return "members" if "everyone_but_guests" in kinds else None
 
 
 @register
@@ -235,6 +225,8 @@ class SiteAccess(Collector):
             return
         snap = TenantSnapshot(ctx.conn, ctx.tenant)
         groups = {g["_id"]: g for g in snap.objects("groups", "group") or [] if isinstance(g, dict)}
+        # Each site's SharePoint groups and grants, from the last time SharePoint's own API was read.
+        sp_sites = {s["_id"]: s for s in snap.objects("site_permissions", "site") or [] if isinstance(s, dict)}
         group_by_mail = {
             (g.get("mail") or "").lower(): gid for gid, g in groups.items() if isinstance(g.get("mail"), str)
         }
@@ -295,7 +287,9 @@ class SiteAccess(Collector):
                 owner = use.get("ownerPrincipalName")
                 found.group_id = group_by_mail.get(owner.lower()) if isinstance(owner, str) else None
             group = groups.get(found.group_id or "")
-            owners, source = owners_of(found, groups, users)
+            sp_site = sp_sites.get(site["id"])
+            owners, source = owners_of(found, groups, users, sp_site)
+            everyone = everyone_access(found.access, sp_site)
             guests = list(found.guests)
             for g in (group or {}).get("guests") or []:
                 if isinstance(g, str) and g.lower() not in guests:
@@ -325,7 +319,10 @@ class SiteAccess(Collector):
                         "memberCount": group.get("memberCount") if group and group.get("examined") else None,
                         "guests": sorted(guests)[:GUESTS_KEPT],
                         "guestCount": len(guests),
-                        "everyone": found.everyone,
+                        "everyone": everyone,
+                        # Not known while "Everyone" may be in a SharePoint group nobody has read.
+                        "everyoneKnown": everyone is not None or sp_site is not None or not found.sp_groups,
+                        "sharePointRead": sp_site is not None,
                         "spGroups": found.sp_groups[:ACCESS_KEPT],
                         "securityGroups": found.security_groups,
                         "access": found.access,
