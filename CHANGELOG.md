@@ -22,6 +22,12 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   step 5): copy `deploy/jobs.sh` from this release's source over your copy, so a restore from the off-site
   copy brings back the activity history too.
 
+### Changed
+
+- **All clients opens reports from the All reports menu**, the same one as a client's Reports tab: every
+  report in columns with a search box, Monthly review, Insurance evidence and Checks included, instead of a
+  drop-down list as tall as the screen. One row per client and Every row sit beside it; phones keep a list.
+
 ### Fixed
 
 - **A large month-end no longer loses emails to Microsoft's sending limit.** Exchange Online takes 30
@@ -58,6 +64,9 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
+- Pages no longer scroll sideways past the edge of the window: the All clients Checks page and Projects
+  (hidden text in their tables widened the page), and on phones the monthly review's buttons and the
+  History list on person, mailbox, group and site pages, where a long address now wraps.
 
 ## [2.2.0] - 2026-10-11
 
