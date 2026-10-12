@@ -11,45 +11,15 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.3.0] - Unreleased
 
-### Action required
-
-- **Client sign-in with Microsoft** needs nothing on upgrade: it's off until an admin turns it on. Turning it
-  on makes the staff sign-in app accept other organisations' accounts (one setting on the app in your own
-  tenant, done by **Sign in to Microsoft** under *Settings → Microsoft sign-in*); who can sign in is still
-  decided by Office Sentry ([v2/docs/client-sign-in.md](v2/docs/client-sign-in.md)).
-
 ### Database upgrade
 
-Yes, applied on start as usual: migration 41 adds the tenant a Microsoft account belongs to on each account,
-when someone from each client first signed in with Microsoft, and when a session last confirmed a change with
-Microsoft. Nobody's access changes. As ever, a copy of the database is made first.
-
-### Added
-
-- **Client sign-in with Microsoft.** A client's people can sign in with the work account they already use,
-  under their own organisation's MFA and Conditional Access, instead of a password from you. Each client's
-  **Settings → Client sign-in** page lists who there can sign in and how, adds their primary contacts by work
-  address (found in the client's directory as Office Sentry last collected it; report contacts without an
-  account are a click away), gives each person a sign-in link with their address filled in, and has a
-  message to send them and an approval link for their Microsoft 365 administrator, which asks for nothing but
-  sign-in. Office Sentry only lets them in from their own company's tenant, into their own client account,
-  matched on Microsoft's ID for that person and never on a name or address: never as staff, never into a new
-  account, whatever roles their own tenant gives them, and only ever to clients in their own organisation.
-  Nobody is invited into your tenant as a guest.
-- **Settings → Microsoft sign-in** (was *Staff sign-in*) has a *Your clients' people* card: let the sign-in
-  app accept clients' accounts with one Microsoft sign-in (or by hand), turn client sign-in on, and each
-  client's people and approval at a glance.
-- **Confirm with Microsoft.** An admin who signs in only with Microsoft has no password to type before a
-  security change (setting someone's password, signing someone out, resetting their two-step sign-in), so
-  those forms sign them in to Microsoft again instead; it counts for ten minutes.
-- **Adding staff who sign in with Microsoft** on *Settings → Users*: no password, the username is their
-  sign-in address, and the account is connected at their first sign-in. Staff can be granted clients before
-  they first sign in.
+Yes, applied on start as usual: migration 41 adds a count of wrong passwords to each signed-in browser.
 
 ### Changed
 
-- The users page's two-step advice no longer counts client accounts that sign in with Microsoft, and their
-  user page says their organisation's MFA applies instead.
+- **All clients opens reports from the All reports menu**, the same one as a client's Reports tab: every
+  report in columns with a search box, Monthly review, Insurance evidence and Checks included, instead of a
+  drop-down list as tall as the screen. One row per client and Every row sit beside it; phones keep a list.
 
 ### Fixed
 
@@ -67,13 +37,31 @@ Microsoft. Nobody's access changes. As ever, a copy of the database is made firs
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
+- Pages no longer scroll sideways past the edge of the window: the All clients Checks page and Projects
+  (hidden text in their tables widened the page), and on phones the monthly review's buttons and the
+  History list on person, mailbox, group and site pages, where a long address now wraps.
 
 ### Security
 
-- Disconnecting someone's Microsoft account from their user page now needs the right to manage users, and
-  only an Administrator can do it to an Administrator. It needed only the right to change settings.
-- With staff passwords turned off, a staff account's right password now gets the same answer as a wrong one,
-  and counts as a failed attempt.
+- Someone who manages users without being an Administrator, and has a capability taken away on one client,
+  no longer counts as holding it everywhere: they can't give it to anyone, put it in a role, or change an
+  account that holds it.
+- The user pages no longer show a user manager who only sees some clients the client accounts of other
+  clients, and the activity log shows a custom role that only sees some clients only the entries about
+  those clients.
+- The support package keeps clients as numbers for anyone who doesn't see every client: *Include client
+  identifiers* is only offered to people who see them all.
+- Webhook signing secrets must be at least 16 characters, since a short one can be worked out from a single
+  signed request. A shorter secret already saved keeps working until it is changed; a long random one
+  (`openssl rand -hex 32`) is best.
+- Wrong passwords where a signed-in browser is asked for the password again (to change it, turn two-step
+  sign-in off, or reset someone else's) no longer lock the account: the fifth signs that browser out. Someone
+  holding a stolen session could otherwise keep its owner from signing in to end it.
+- Recovery codes made before 2.2.0, still stored as a plain SHA-256, are put under the recovery code key when
+  the portal starts, so a copy of the database can't be used to work them out. They keep working.
+- New tests attack sign-in, sessions and forms on every route: a form sent without this browser's own token
+  is refused, opening a page never changes stored data, sign-in answers the same whatever was wrong, and a
+  copied cookie stops working whenever its session ends.
 
 ## [2.2.0] - 2026-10-11
 

@@ -30,7 +30,7 @@ from .home import home_url, open_to
 bp = Blueprint("auth", __name__)
 
 MIN_PASSWORD = 12
-MAX_FAILURES = 5  # wrong two-step codes (sign-in or enrolment) before LOCKOUT
+MAX_FAILURES = 5  # wrong two-step codes (sign-in or enrolment) before LOCKOUT; wrong confirmations (confirm_password)
 LOCKOUT = timedelta(minutes=15)
 PENDING_SECONDS = 10 * 60
 # Compared against when the username doesn't exist, so timing doesn't reveal it.
@@ -383,6 +383,8 @@ def two_step_setup():
 
     if request.method == "POST" and user["totp_pending_enc"] and signed_in and not confirm_password():
         # From the account page, adding an authenticator needs the password: a stolen session isn't enough.
+        if g.user is None:  # signed out after too many wrong passwords
+            return redirect(url_for("auth.login"))
         return _setup_page(user, signed_in, fresh=False)
     if request.method == "POST" and user["totp_pending_enc"]:
         attempt = None
@@ -536,7 +538,7 @@ def account():
 def change_password():
     if request.method == "GET":
         return redirect(url_for("auth.account"))
-    # Wrong guesses count towards the lock, like any other password check on a signed-in session.
+    # Wrong guesses count like any other password check on a signed-in session (confirm_password).
     if not confirm_password("current", "Current password is wrong."):
         return redirect(url_for("auth.account"))
     if problem := password_problem(
@@ -557,25 +559,35 @@ def change_password():
 def confirm_password(field: str = "password", wrong: str = "That password isn't right.") -> bool:
     """The signed-in person's password, asked again before a security change.
 
-    Wrong answers count towards the two-step lock (MAX_FAILURES), so a stolen
-    session can't be used to guess the password here. An account with no
-    password (it signs in with Microsoft) confirms by signing in to Microsoft
-    again instead (``sso.confirm``), which counts for a few minutes.
+    Wrong answers are counted on this browser's session, and the MAX_FAILURESth
+    signs it out, so a stolen session can't be used to guess the password here.
+    They never lock the account: whoever holds a stolen session can't keep its
+    owner from signing in and ending it. An account with no password (it signs
+    in with Microsoft) confirms by signing in to Microsoft again instead
+    (``sso.confirm``), which counts for a few minutes.
     """
     if not sso.has_password(g.user):
         if sessions.recently_confirmed(g.session_row, sso.CONFIRM_MINUTES):
             return True
         flash("Confirm it's you with Microsoft first, then make the change.", "error")
         return False
-    attempt = _reserve_attempt(g.user)
-    if attempt is None:
-        flash("Too many wrong passwords or codes. Try again in 15 minutes.", "error")
-        return False
-    if check_password_hash(g.user["password_hash"], request.form.get(field, "")):
-        attempt.succeeded()
-        g.db.execute("UPDATE users SET failed_logins = 0 WHERE id = ?", (g.user["id"],))
+    # Counted before the password is checked, in one statement, so parallel requests get no more guesses.
+    counted = g.db.execute(
+        "UPDATE sessions SET wrong_passwords = wrong_passwords + 1 WHERE id = ? AND wrong_passwords < ?"
+        " RETURNING wrong_passwords",
+        (g.session_row["id"], MAX_FAILURES),
+    ).fetchone()
+    if counted is not None and check_password_hash(g.user["password_hash"], request.form.get(field, "")):
+        g.db.execute("UPDATE sessions SET wrong_passwords = 0 WHERE id = ?", (g.session_row["id"],))
         return True
-    attempt.failed("password_confirm_failed")
+    if counted is not None:
+        audit(g.db, g.user["username"], "password_confirm_failed")
+    if counted is None or counted["wrong_passwords"] >= MAX_FAILURES:
+        audit(g.db, g.user["username"], "logout", detail="after too many wrong passwords")
+        sessions.end()
+        g.user = g.session_row = None
+        flash("That password was wrong too many times, so this browser was signed out.", "error")
+        return False
     flash(wrong, "error")
     return False
 

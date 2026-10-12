@@ -1,8 +1,8 @@
-{#- The top of every All clients page: the summary tabs, the detail report picker, and for a detail
-    report the choice between one row per tenant and every row. key is the page's report key. -#}
+{#- The top of every All clients page: the report picker and, for a detail report, the choice between one row
+    per tenant and every row. key is the page's report key: 'review', 'evidence', 'checks' or a detail report's. -#}
 {% from "_macros.html" import icon %}
 {% from "_groups.html" import group_picker with context %}
-{% macro across_head(key, main, groups, mode='') -%}
+{% macro across_head(key, main, mode='') -%}
 <div class="page-head">
   <div>
     <h1>All clients</h1>
@@ -11,27 +11,74 @@
   <div class="actions">{{ group_picker() }}<a class="btn" href="{{ url_for('across.changes') }}">{{ icon('clock') }} What changed this month</a></div>
 </div>
 
-<div class="report-picker">
-  <nav class="subtabs m0" aria-label="Report">
-    {% for k, title in main %}
-    <a href="{{ url_for('across.rollup', key=k) }}"{% if k == key %} class="active" aria-current="page"{% endif %}>{{ title }}</a>
-    {% endfor %}
-    <a href="{{ url_for('across.checks') }}"{% if key == 'checks' %} class="active" aria-current="page"{% endif %} title="Every check's result for every client">Checks</a>
-  </nav>
-  <form method="get" action="{{ url_for('across.index') }}" class="picker-form" id="detail-picker" data-autosubmit>
-    {% if mode == 'rows' %}<input type="hidden" name="mode" value="rows">{% endif %}
-    <label for="detail-key" class="inline-label">Detail report</label>
-    <select id="detail-key" name="key">
-      <option value=""{% if key in ('review', 'evidence', 'checks') %} selected{% endif %} disabled>Choose a report…</option>
-      {% for gr in groups %}<optgroup label="{{ gr.title }}">{% for k, title, desc in gr.reports %}<option value="{{ k }}"{% if k == key %} selected{% endif %}>{{ title }}</option>{% endfor %}</optgroup>{% endfor %}
-    </select>
-    <noscript><button class="btn sm">Show</button></noscript>
-  </form>
-</div>
+<div class="across-bar">
+{{ across_picker(key, main, mode) }}
 {% if mode %}
 <nav class="subtabs across-mode" aria-label="Layout">
   <a href="{{ url_for('across.rollup', key=key) }}"{% if mode == 'tenants' %} class="active" aria-current="page"{% endif %} title="Headline figures, one row per client">One row per client</a>
   <a href="{{ url_for('across.rows_index', key=key) }}"{% if mode == 'rows' %} class="active" aria-current="page"{% endif %} title="Every row of a table from every client, to filter and download">Every row</a>
 </nav>
 {% endif %}
+</div>
+{%- endmacro %}
+
+{#- The same picker as a client's Reports tab (report_picker in _macros.html): on laptops an "All reports"
+    menu, every report in columns with a search box and the open report's area beside it; a select on phones.
+    main is the summaries this person may open; in Every row (mode 'rows') a detail report opens there too. -#}
+{% macro across_picker(key, main, mode) -%}
+{% set tips = {'review': 'Findings, Secure Score, MFA, admins and licence waste for every client',
+               'evidence': 'How far each client has the controls insurers and certifications ask about',
+               'checks': "Every check's result for every client"} %}
+{% set summaries = [] %}
+{% for k, title in main %}{% set _ = summaries.append((k, title, url_for('across.rollup', key=k), tips[k])) %}{% endfor %}
+{% if main %}{% set _ = summaries.append(('checks', 'Checks', url_for('across.checks'), tips['checks'])) %}{% endif %}
+{% set areas = [] %}
+{% set here = namespace(area='') %}
+{% for k, title, href, tip in summaries if k == key %}{% set here.area = 'Summaries' %}{% endfor %}
+{% for area in report_catalogue() if area.key != 'summaries' %}{% set entries = [] %}
+  {% for e in area.entries if e.kind == 'data' and can(entry_capability(e)) %}{% set _ = entries.append((e.key, e.title, url_for('across.rows_index' if mode == 'rows' else 'across.rollup', key=e.key), e.description, e.search)) %}{% if e.key == key %}{% set here.area = area.title %}{% endif %}{% endfor %}
+  {% if entries %}{% set _ = areas.append((area.key, area.title, entries)) %}{% endif %}
+{% endfor %}
+<nav class="report-menu" aria-label="Reports">
+  <details class="menu report-switch" id="report-switch">
+    <summary class="btn sm" title="Every report, across every client">{{ icon('library') }}<span>All reports</span>{{ icon('chevron', 'chev') }}</summary>
+    <div class="menu-panel report-panel">
+      <div class="picker-search">
+        {{ icon('search') }}<label for="report-find" class="sr-only">Find a report</label>
+        <input id="report-find" type="search" placeholder="Find a report" autocomplete="off" maxlength="100" data-report-search="report-list">
+      </div>
+      <div class="picker-list" id="report-list">
+        {% if summaries %}
+        <div class="report-group">
+          <p class="picker-label" id="picker-summaries">Summaries</p>
+          <ul aria-labelledby="picker-summaries">
+            {% for k, title, href, tip in summaries %}<li data-name="{{ (title ~ ' ' ~ tip)|lower }}"><a href="{{ href }}" title="{{ tip }}"{% if k == key %} aria-current="page"{% endif %}>{{ title }}</a></li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+        {% for area_key, area_title, entries in areas %}
+        <div class="report-group">
+          <p class="picker-label" id="picker-{{ area_key }}">{{ area_title }}</p>
+          <ul aria-labelledby="picker-{{ area_key }}">
+            {% for k, title, href, desc, search in entries %}<li data-name="{{ search }}"><a href="{{ href }}" title="{{ desc }}"{% if k == key %} aria-current="page"{% endif %}>{{ title }}</a></li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="no-match" hidden>No report matches. The <a href="{{ url_for('reports.overview') }}">Reports page</a> searches by job too.</p>
+    </div>
+  </details>
+  {% if here.area %}<span class="report-area">{{ here.area }}</span>{% endif %}
+</nav>
+<form method="get" action="{{ url_for('across.index') }}" class="picker-form report-menu-sm" data-autosubmit>
+  {% if mode == 'rows' %}<input type="hidden" name="mode" value="rows">{% endif %}
+  <label for="report-key">Report</label>
+  <select id="report-key" name="key">
+    {% if summaries %}<optgroup label="Summaries">{% for k, title, href, tip in summaries %}<option value="{{ k }}"{% if k == key %} selected{% endif %}>{{ title }}</option>{% endfor %}</optgroup>{% endif %}
+    {% for area_key, area_title, entries in areas %}<optgroup label="{{ area_title }}">{% for k, title, href, desc, search in entries %}<option value="{{ k }}"{% if k == key %} selected{% endif %}>{{ title }}</option>{% endfor %}</optgroup>{% endfor %}
+  </select>
+  <noscript><button class="btn sm">Show</button></noscript>
+</form>
 {%- endmacro %}
