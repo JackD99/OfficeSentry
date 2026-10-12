@@ -100,6 +100,12 @@ ACTIVITY = [
     _activity("g2", "Project Phoenix", _ago(20), 3, 14),
     _activity("g4", "Board", None, 0),
 ]
+# The same report where Microsoft hides names in usage reports (its default): every team's ID is all zeros
+# and its name a code, as the test tenant answered on 12 Oct 2026.
+CONCEALED_ACTIVITY = [
+    _activity("00000000-0000-0000-0000-000000000000", f"{n:032X}", last, users)
+    for n, (last, users) in enumerate(((_ago(3), 6), (_ago(20), 3), (None, 0)), start=1)
+]
 
 
 def mock_teams(rsps, *, channels=None, members=None, apps=None, activity=None, status=200):

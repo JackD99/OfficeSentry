@@ -132,3 +132,18 @@ def test_report_settings_say_outright_when_names_are_concealed(db, two_tenants):
     assert status["concealSetting"] is True and status["concealed"] is True
     waiting = TenantSnapshot(db, store.get_tenant(db, bravo)).objects(COLLECTOR, "usage_status")[0]
     assert waiting["concealSetting"] is None  # not asked while waiting; the codes still tell
+
+
+def test_hidden_names_dont_make_every_team_look_inactive(db, two_tenants):
+    # With names hidden, Microsoft's activity report gives every team the same all-zero ID, so no row matches
+    # a team. That isn't "no activity": the report says it can't tell rather than list every team.
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, teams_kw={"activity": teamsdata.CONCEALED_ACTIVITY})
+    report = _report(db, alpha)
+    assert not _table(report, "Inactive teams")
+    inactive = next(s for s in report.sections if s.title == "Inactive teams")
+    assert inactive.empty.startswith("Microsoft hides team names in this tenant's usage reports")
+    tiles = {t.label: (t.value, t.foot, t.tone) for t in report.tiles}
+    assert tiles["Inactive teams"] == ("Hidden", "Microsoft hides team names", None)
+    assert {r["Last activity"] for r in _table(report, "Every team")} == {""}
+    assert "Microsoft is hiding people's names" in report.notice

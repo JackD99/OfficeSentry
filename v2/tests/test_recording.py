@@ -212,6 +212,22 @@ def test_names_microsoft_hides_stay_hidden():
     assert entries[1]["body"]["value"][0]["displayName"] == "Test User 1"  # real names are still replaced
 
 
+def test_an_id_where_a_name_would_be_isnt_taken_for_a_name():
+    # An audit event's target can be named with the empty GUID, which the hidden-name usage reports also use as
+    # every user's and team's ID. Taken for a person's name, it became "Test User N" all through the recording.
+    empty = "00000000-0000-0000-0000-000000000000"
+    log = raw_log() + [
+        _graph(
+            "/v1.0/auditLogs/directoryAudits",
+            {"value": [{"targetResources": [{"id": empty, "displayName": empty, "userPrincipalName": None}]}]},
+        ),
+        _graph("/beta/reports/getTeamsTeamActivityDetail(period='D90')", {"value": [{"teamId": empty}]}),
+    ]
+    entries = scrub(log, TENANT, CLIENT)["entries"]
+    assert entries[-2]["body"]["value"][0]["targetResources"][0]["displayName"] == empty
+    assert entries[-1]["body"]["value"] == [{"teamId": empty}]
+
+
 def test_guids_are_consistent_and_known_ids_are_kept(fixture):
     user_id = fixture["entries"][1]["body"]["value"][0]["id"]
     assert re.fullmatch(r"5e[0-9a-f]{6}-0000-4000-8000-[0-9a-f]{12}", user_id)
@@ -402,7 +418,16 @@ def test_device_numbers_and_free_text_are_redacted():
             "url": "https://outlook.office365.com/adminapi/beta/x/InvokeCommand",
             "status": 200,
             "cmdlet": {"CmdletName": "Get-MessageTraceV2", "Parameters": {}},
-            "body": {"value": [{"Subject": "Salary review", "RecipientAddress": "all@contoso.com"}]},
+            "body": {
+                "value": [
+                    {
+                        "Subject": "Salary review",
+                        "RecipientAddress": "all@contoso.com",
+                        "FromIP": "209.85.220.41",
+                        "ToIP": "2a01:111:f403:c201::1",
+                    }
+                ]
+            },
         },
         _graph(
             f"/v1.0/users/{JANE}/mailboxSettings/automaticRepliesSetting",
@@ -417,6 +442,9 @@ def test_device_numbers_and_free_text_are_redacted():
     device = entries[-3]["body"]["value"][0]
     assert device["DeviceImei"] == device["RecoveryPassword"] == "redacted"
     assert device["DevicePhoneNumber"].startswith("+1 555 01") and device["DeviceModel"] == "iPhone 15"
-    assert entries[-2]["body"]["value"][0]["Subject"] == "redacted"
+    trace = entries[-2]["body"]["value"][0]
+    assert trace["Subject"] == "redacted"
+    # The mail servers a message passed through say which providers the tenant uses.
+    assert trace["FromIP"].startswith("203.0.113.") and trace["ToIP"].startswith("2001:db8::")
     reply = entries[-1]["body"]
     assert reply["internalReplyMessage"] == "redacted" and reply["externalReplyMessage"] == ""

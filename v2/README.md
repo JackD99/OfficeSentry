@@ -468,24 +468,37 @@ With `--record tests/fixtures/live_tenant.json` it also saves Microsoft's
 responses, with names, addresses, phone numbers, domains and IDs replaced, and
 the test suite replays them, so every collector, check and report runs on real
 Microsoft responses in CI. The recording comes from one Microsoft 365 Business
-Premium tenant (Entra ID P1, synced from on-premises AD, no Intune devices).
-These areas have no real recording and are tested with simulated data only:
+Premium tenant (Entra ID P1, synced from on-premises AD, no Intune devices,
+one team) and was last made on 12 October 2026. These areas have no real
+recording, or only an empty one, and are tested with simulated data only:
 
-- **Entra ID P2 features**: risky users and sign-in risk (the test tenant
-  has no P2; Microsoft answers "not licensed").
+- **Entra ID P2 features**: risky users, sign-in risk, PIM-eligible roles and
+  PIM for groups (the test tenant has no P2; Microsoft answers "not licensed",
+  and no group in it holds a role).
 - **Per-user MFA states**: Office Sentry only reads them on tenants without
   Entra ID P1.
 - **Sign-in methods read one person at a time**: only used when Microsoft's
   registration report comes back empty, as it does on a newly licensed tenant.
 - **Intune device details**: the tenant has no enrolled devices, so the
   device compliance and encryption checks have nothing to read.
-- **Intune policies, BitLocker recovery keys and PIM for groups**: the tenant
-  hasn't approved the 2.2 permissions yet, so the replay covers the waiting
-  state and the policies themselves are simulated.
-- **Mail rules and protection**: the recording was made before Office Sentry
-  read mail flow rules, connectors and filtering policies, so the replay
-  answers those commands with a new tenant's defaults, and rules, connectors
-  and changed policies are simulated.
+- **Intune policies**: Microsoft's answers are real but empty, since the tenant
+  has no compliance policies, configuration profiles or app protection
+  policies, so the policies themselves are simulated.
+- **BitLocker recovery keys**: the tenant hasn't approved
+  BitLockerKey.ReadBasic.All yet, so the replay covers the waiting state.
+- **Mail connectors and changed protection policies**: the tenant's mail flow
+  rule and its default and preset protection policies are real, but it has no
+  connectors, allowed or blocked senders, or policies of its own, so those are
+  simulated.
+- **Teams channels, guests, apps and activity**: the tenant's one team has
+  only its General channel and Microsoft's own apps, and Microsoft hides names
+  in its usage reports, so private and shared channels, guests and people from
+  other organisations in them, custom apps and each team's activity are
+  simulated.
+- **SharePoint groups and permission levels** (Site permissions, and owners
+  groups in Site access): `live-test` signs in with a client secret, which
+  SharePoint's own API refuses, and the tenant hasn't approved its SharePoint
+  permission, so the replay covers the waiting state.
 - **National clouds** (GCC High, DoD, China): there's no test tenant in
   them; the endpoints come from Microsoft's documentation.
 - **Risky sharing**: the tenant's shared file is shared with one person in the

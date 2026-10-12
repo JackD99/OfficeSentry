@@ -19,6 +19,7 @@ Settings come from the environment (the Deploy workflow sets them):
 
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 import os
@@ -690,6 +691,12 @@ def build() -> Path:
     for source, published in COPIED.items():
         shutil.copytree(ROOT / source, OUT / published, ignore=shutil.ignore_patterns("*.md"))
     (OUT / "assets/code.css").write_text(code_css(), encoding="utf-8")
+    # Pages ask for the styles and script by their contents, so a browser or Cloudflare still holding the
+    # last deploy's copy fetches the new one rather than drawing new pages with old styles.
+    assets = {
+        name: f"/assets/{name}?v={hashlib.sha256((OUT / 'assets' / name).read_bytes()).hexdigest()[:10]}"
+        for name in ("site.css", "code.css", "site.js")
+    }
 
     shots = {
         p.stem: {"src": f"/screenshots/{p.name}", "w": png_size(p)[0], "h": png_size(p)[1]}
@@ -701,7 +708,7 @@ def build() -> Path:
         trim_blocks=True,
         lstrip_blocks=True,
     )
-    env.globals.update(cfg, sections=sections, shots=shots, version=version())
+    env.globals.update(cfg, sections=sections, shots=shots, assets=assets, version=version())
 
     def page(template: str, path: str, **ctx) -> None:
         target = OUT / path

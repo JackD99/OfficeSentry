@@ -92,9 +92,10 @@ KNOWN_IDS = {
     g.lower() for f in Path(__file__).parent.rglob("*.py") for g in GUID.findall(f.read_text(encoding="utf-8"))
 }
 TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z")
-# Fields that hold someone's IP address (audit logs, sign-ins). Version numbers look like IPs,
+# Fields that hold someone's IP address (audit logs, sign-ins), or the mail servers a tenant's mail passes
+# through (the message trace's FromIP and ToIP, which say who it uses). Version numbers look like IPs,
 # so only values under these keys are replaced, with documentation addresses.
-IP_KEYS = {"ipaddress", "clientip", "clientipaddress"}
+IP_KEYS = {"ipaddress", "clientip", "clientipaddress", "fromip", "toip"}
 IP = re.compile(r"(?:\d{1,3}\.){3}\d{1,3}|[0-9A-Fa-f:]*:[0-9A-Fa-f:]+")
 # On-premises security identifiers: the domain part (S-1-5-21- and three numbers) is the customer's own AD domain.
 SID = re.compile(r"(?<=S-1-5-21-)(\d+-\d+-\d+)(?=-\d+)")
@@ -373,9 +374,10 @@ def _collect_names(log: list) -> tuple[list[str], dict[str, str], set[str]]:
             if "userPrincipalName" not in item and "userDisplayName" not in item:
                 continue
             # Usage reports in a tenant that hides names carry 32-character codes instead: they aren't
-            # names, and the replay needs them to stay codes.
+            # names, and the replay needs them to stay codes. Nor are IDs where a name would be (an audit
+            # target named with the empty GUID, which those reports also put in every hidden user and team ID).
             display = item.get("displayName") or item.get("userDisplayName")
-            if display and display not in names and not concealed(display):
+            if display and display not in names and not concealed(display) and not GUID.fullmatch(display):
                 people += 1
                 names[display] = f"Test User {people}"
             for key in ("givenName", "surname", "mailNickname"):

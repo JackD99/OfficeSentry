@@ -148,6 +148,8 @@ def site_access(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
     single = [r for r in rows if _problem(r) == "One owner"]
     guests = {g for r in rows for g in (r.get("guests") or []) if isinstance(g, str)}
     open_sites = [r for r in rows if r.get("everyone")]
+    # Snapshots from before 2.3.1 don't say; they were collected as if it were always known.
+    everyone_unknown = [r for r in rows if not r.get("everyone") and r.get("everyoneKnown") is False]
     unknown_owner = [r for r in rows if r.get("ownerCount") is None]
     report.tiles = [
         Tile(
@@ -177,7 +179,9 @@ def site_access(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
         Tile(
             "Open to everyone in the organisation",
             len(open_sites),
-            "Everyone or Everyone except external users",
+            f"Not known for {plural(len(everyone_unknown), 'site')} yet"
+            if everyone_unknown
+            else "Everyone or Everyone except external users",
             "warn" if any(r.get("everyone") == "all" for r in open_sites) else None,
             Rows("Who can access each site", {"Everyone in the organisation": list(EVERYONE_WORDS.values())}),
             metric_trend(snap, "sites.open_to_everyone", now),
@@ -189,7 +193,7 @@ def site_access(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
             rows=Rows("Who can access each site"),
         ),
     ]
-    waiting = [r for r in rows if not r.get("group") and r.get("userList")]
+    waiting = [r for r in rows if not r.get("group") and r.get("userList") and not r.get("sharePointRead")]
     if waiting:
         permissions = (snap.objects("site_permissions", "permissions_status") or [None])[0]
         pending = not isinstance(permissions, dict) or permissions.get("reason") == "consent"
@@ -206,8 +210,8 @@ def site_access(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
         "Sites needing an owner",
         ["Site", "Type", "Problem", "Owners", "Admins", "Last activity"],
         intro="A site with no enabled owner has nobody to approve access or answer for its content; one owner "
-        "is one leaver away from that. Owners are the Microsoft 365 group's owners, or the site "
-        "administrators of a site with no group.",
+        "is one leaver away from that. Owners are the Microsoft 365 group's owners, or for a site with no group "
+        "its site administrators and the people in its owners group.",
         empty="Every site has at least two enabled owners.",
     )
     for r in sorted(ownerless + single, key=lambda r: (_problem(r) != "No owner", (r.get("name") or "").lower())):
@@ -243,7 +247,7 @@ def site_access(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
     )
     every.chart = Chart("Type", ("Guests",), title="Guests by site type", tones=("bad",))
     for r in sorted(rows, key=lambda r: (-(r.get("guestCount") or 0), (r.get("name") or "").lower())):
-        everyone = EVERYONE_WORDS.get(r.get("everyone") or "", "No")
+        everyone = EVERYONE_WORDS.get(r.get("everyone") or "", "Unknown" if r.get("everyoneKnown") is False else "No")
         every.add(
             [
                 _site_cell(r),

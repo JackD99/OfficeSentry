@@ -1,10 +1,11 @@
 """Every collector, check and report against responses recorded from a real tenant.
 
 ``tests/fixtures/live_tenant.json`` comes from ``python -m officesentry live-test --record``
-against a Business Premium (no Teams) test tenant (Entra ID P1, no P2, synced from
-on-premises AD) with 11 Conditional Access policies, one excluding a group, a mail domain,
-a file shared with one person, a deleted file and an inbox rule that moves mail to a
-folder, last on 10 Oct 2026. Names, emails,
+against a Business Premium test tenant (Entra ID P1, no P2, synced from on-premises AD)
+with 11 Conditional Access policies, one excluding a group, a mail domain, a file shared
+with one person, a deleted file, an inbox rule that moves mail to a folder, a mail flow
+rule, Microsoft's preset protection policies and one team (names hidden in usage
+reports), last on 12 Oct 2026. Names, emails,
 phone numbers, domains and IDs are replaced; the response shapes are Microsoft's.
 Re-record when a collector starts asking for something new (DNS too: run it with
 ``--dns-over-https`` where plain DNS is blocked).
@@ -33,97 +34,12 @@ from tests.conftest import login, make_user
 
 FIXTURE = replay.load()
 # When the recording was made; checks that depend on dates (inactive accounts) use it.
-RECORDED = datetime(2026, 10, 10, 19, 30, tzinfo=UTC)
+RECORDED = datetime(2026, 10, 12, 7, 20, tzinfo=UTC)
 
 # Requests added since the recording, answered with Microsoft's documented response shape, and requests whose
 # $select asks for fields added since (the recorded response is served). Empty while the recording is current:
 # add an entry when a collector starts asking for something new, and re-record soon after.
-STAND_INS: dict[str, dict] = {
-    # Site access (collectors/site_access.py): each site's hidden user list and its default library's
-    # permissions, in Microsoft's documented shapes.
-    "/v1.0/sites/{id}/lists/User%20Information%20List/items": {
-        "value": [
-            {
-                "id": "1",
-                "contentType": {"name": "Person"},
-                "fields": {
-                    "Title": "Site Admin",
-                    "EMail": "admin@contoso.example",
-                    "Name": "i:0#.f|membership|admin@contoso.example",
-                    "IsSiteAdmin": True,
-                    "Deleted": False,
-                },
-            }
-        ]
-    },
-    "/v1.0/sites/{id}/drive/root/permissions": {
-        "value": [
-            {"id": "1", "roles": ["owner"], "grantedToV2": {"siteGroup": {"displayName": "Site Owners", "id": "3"}}}
-        ]
-    },
-    # The recording's Secure Score page carries a next link that the collector didn't follow when it was
-    # made (it read one page); now it does, and the page behind the link is answered empty until the next
-    # recording has it.
-    "/v1.0/security/secureScores" + replay.PAGED: {"value": []},
-    # Administrative units (the test tenant has none).
-    "/v1.0/directory/administrativeUnits": {"value": []},
-    "/v1.0/directory/administrativeUnits/{id}/members": {"value": []},
-    # The Teams collector's activity report (2.2); the test tenant has no Teams, so Microsoft lists no teams.
-    "/beta/reports/getTeamsTeamActivityDetail(period='D90')": {"value": []},
-    # Mail flow (2.2): the whole message trace a day at a time, and Microsoft's top spam and phishing recipients.
-    "Get-MessageTraceV2(EndDate,ResultSize,StartDate)": {"value": []},
-    "Get-MailTrafficSummaryReport": {"value": []},
-    # Mail rules and protection (2.3): a tenant as Microsoft sets it up, with no rules or connectors, the
-    # default policies, and Defender for Office 365's built-in protection (Business Premium has it).
-    "Get-TransportRule": {"value": []},
-    "Get-InboundConnector": {"value": []},
-    "Get-OutboundConnector": {"value": []},
-    "Get-HostedContentFilterPolicy": {
-        "value": [
-            {
-                "Name": "Default",
-                "IsDefault": True,
-                "BulkThreshold": 7,
-                "SpamAction": "MoveToJmf",
-                "HighConfidenceSpamAction": "MoveToJmf",
-                "PhishSpamAction": "MoveToJmf",
-                "HighConfidencePhishAction": "Quarantine",
-                "BulkSpamAction": "MoveToJmf",
-                "AllowedSenderDomains": [],
-                "SpamZapEnabled": True,
-                "PhishZapEnabled": True,
-            }
-        ]
-    },
-    "Get-HostedContentFilterRule": {"value": []},
-    "Get-AntiPhishPolicy": {
-        "value": [
-            {
-                "Name": "Office365 AntiPhish Default",
-                "IsDefault": True,
-                "Enabled": True,
-                "EnableSpoofIntelligence": True,
-                "HonorDmarcPolicy": True,
-                "EnableUnauthenticatedSender": True,
-                "EnableMailboxIntelligenceProtection": False,
-                "EnableTargetedUserProtection": False,
-            }
-        ]
-    },
-    "Get-AntiPhishRule": {"value": []},
-    "Get-MalwareFilterPolicy": {
-        "value": [{"Name": "Default", "IsDefault": True, "EnableFileFilter": True, "FileTypes": ["exe", "iso"]}]
-    },
-    "Get-MalwareFilterRule": {"value": []},
-    "Get-SafeLinksPolicy": {
-        "value": [{"Name": "Built-In Protection Policy", "IsBuiltInProtection": True, "EnableSafeLinksForEmail": True}]
-    },
-    "Get-SafeLinksRule": {"value": []},
-    "Get-SafeAttachmentPolicy": {"value": [{"Name": "Built-In Protection Policy", "IsBuiltInProtection": True}]},
-    "Get-SafeAttachmentRule": {"value": []},
-    "Get-EOPProtectionPolicyRule": {"value": []},
-    "Get-ATPProtectionPolicyRule": {"value": []},
-}
+STAND_INS: dict[str, dict] = {}
 NEW_FIELDS: frozenset[str] = frozenset()
 
 
@@ -198,10 +114,12 @@ def test_every_check_runs_on_real_data(db, live):
     results = _results(db, live)
     # The test tenant has no Intune devices and no MTA-STS, so those checks have nothing to read, and no
     # Entra ID P2, so sign-in risk and risky users are hidden. Its one Windows PC is only Entra-registered,
-    # and nobody has a manager set. It hasn't approved the SharePoint permission, so site permissions wait
-    # for it, nor the 2.2 Intune and BitLocker permissions, so their checks wait too.
+    # and nobody has a manager set. It hasn't approved the SharePoint permission, so site permissions and the
+    # owners of its sites (none has a Microsoft 365 group, so they're in SharePoint groups) wait for it, nor
+    # the BitLocker permission, so that check waits too.
     nothing_to_check = {
         "site_guest_full_control",
+        "site_owners",
         "bitlocker_keys",
         "intune_compliance_coverage",
         "tls_rpt",
@@ -401,8 +319,10 @@ def test_connection_health_on_real_data(db, live):
     result = health.result
     assert result["app_found"] and result["global_reader"] and not health.missing
     assert "Exchange.ManageAsAppV2" in result["other"]  # granted, but not one Office Sentry asks for
-    # Recorded before the 2.2 batch: those wait for approval, which is a step to do, not a problem.
+    # Recorded with the 2.2 batch approved except BitLocker and SharePoint's own permission: those wait for
+    # approval, which is a step to do, not a problem.
     assert set(health.waiting) <= set(permission_batch.CURRENT.permissions)
+    assert sorted(health.waiting) == ["BitLockerKey.ReadBasic.All", "SharePoint Sites.Read.All"]
     assert health.check("permissions").state in ("ok", "todo")
     assert health.onboarded
     # The replay signs in without an app connection; that is all there is to fix.
@@ -413,12 +333,91 @@ def test_directory_reports_on_real_data(db, live):
     apps = data_reports.build(db, live, "unused-apps", RECORDED)
     rows = {r[0]: (r, f) for r, f in zip(apps.sections[0].rows, apps.sections[0].flags, strict=True)}
     # Office Sentry's own test app signs in every night and is left out; Entra Connect's app signed in the day
-    # before; an in-house app consented for everyone has never signed in.
-    assert len(rows) == 2 and all(r[1] == "This organisation" for r, _ in rows.values())
-    assert sorted((r[3], f) for r, f in rows.values()) == [("Last 30 days", None), ("No sign-in on record", "medium")]
+    # before; an in-house app and a third party's from an unverified publisher, both consented for everyone,
+    # have never signed in.
+    assert len(rows) == 3
+    assert sorted((r[1], r[3], f) for r, f in rows.values()) == [
+        ("This organisation", "Last 30 days", None),
+        ("This organisation", "No sign-in on record", "medium"),
+        ("Unknown publisher", "No sign-in on record", "medium"),
+    ]
     groups = data_reports.build(db, live, "group-structure", RECORDED)
     tables = {s.title: s for s in groups.sections}
     assert [r[3] for r in tables["Dynamic groups"].rows] == ["Running"]
     assert tables["Empty groups"].rows and not tables["Groups inside groups"].rows
     users = data_reports.build(db, live, "all-users", RECORDED)
     assert users.unavailable is None and len(users.sections[0].rows) == 7
+
+
+def _tables(report) -> dict:
+    return {s.title: s for s in report.sections}
+
+
+def test_teams_on_real_data(db, live):
+    # One public team with only its General channel and 62 apps from the Teams store. The tenant hides names in
+    # usage reports (Microsoft's default), and then the activity report hides team IDs too, so the team's
+    # activity can't be told: it mustn't be listed as inactive for that.
+    report = data_reports.build(db, live, "teams", RECORDED)
+    tables = _tables(report)
+    assert len(tables["Every team"].rows) == 1 and tables["Every team"].rows[0][1:4] == ["Public", 1, 0]
+    assert not tables["Inactive teams"].rows and tables["Inactive teams"].empty.startswith("Microsoft hides team")
+    assert len(tables["Apps in teams"].rows) == 62 and {r[2] for r in tables["Apps in teams"].rows} == {"Teams store"}
+    tiles = {t.label: t.value for t in report.tiles}
+    assert tiles["Inactive teams"] == "Hidden" and tiles["Custom uploaded apps"] == 0
+    assert "hiding people's names" in report.notice
+
+
+def test_site_access_on_real_data(db, live):
+    # Three sites with no Microsoft 365 group. SharePoint lists both "Everyone" claims in each one's user list
+    # though nothing grants them, and the sites' administrators are the Global and SharePoint Administrator
+    # roles, not people. Their owners groups need SharePoint's own permission, which the tenant hasn't approved.
+    sites = TenantSnapshot(db, live).objects("site_access", "site")
+    assert len(sites) == 3 and not any(s["group"] for s in sites)
+    assert all(s["everyone"] is None and s["everyoneKnown"] is False for s in sites)
+    assert all(s["ownerCount"] is None and not s["admins"] for s in sites)
+    report = data_reports.build(db, live, "site-access", RECORDED)
+    tiles = {t.label: (t.value, t.foot) for t in report.tiles}
+    assert tiles["Sites with no owner"][0] == 0 and tiles["Sites"] == (3, "Owners unknown for 3 sites")
+    assert tiles["Open to everyone in the organisation"] == (0, "Not known for 3 sites yet")
+    every = _tables(report)["Who can access each site"]
+    assert {r[6] for r in every.rows} == {"Unknown"}
+
+
+def test_mail_protection_on_real_data(db, live):
+    # Defender for Office 365's Standard and Strict presets are on (Business Premium has them), there's one mail
+    # flow rule (a signature service's, on automatic replies) and no connectors.
+    report = data_reports.build(db, live, "mail-protection", RECORDED)
+    tiles = {t.label: t.value for t in report.tiles}
+    assert tiles["Preset protection"] == "Standard and Strict" and tiles["Connectors"] == 0
+    assert tiles["Rules that skip spam filtering"] == tiles["Rules sending mail outside"] == 0
+    tables = _tables(report)
+    assert len(tables["Mail flow rules"].rows) == 1 and tables["Mail flow rules"].rows[0][3] == "Message type OOF"
+    presets = {r[3] for r in tables["Protection policies"].rows}
+    assert presets == {"", "Standard", "Strict"}
+    results = _results(db, live)
+    for key in ("mail_rule_spam_bypass", "mail_rule_external_copy", "spam_allowed_domains", "malware_file_filter"):
+        assert results[key].status == "pass", key
+    assert results["spoof_protection"].status == "pass"
+
+
+def test_mail_flow_on_real_data(db, live):
+    # Ten days of the message trace, read a day at a time: 20 messages, most of them received, and Microsoft's
+    # own summary of who got the most spam.
+    report = data_reports.build(db, live, "mail-flow", RECORDED)
+    tables = _tables(report)
+    per_domain = tables["Mail per domain"].rows
+    assert sum(r[1] + r[2] + r[3] for r in per_domain) == 20
+    assert sum(r[4] + r[5] + r[6] + r[7] for r in per_domain) == 20  # delivered, junk, quarantined, failed
+    assert len(tables["Top spam recipients"].rows) == 1 and not tables["Top phishing recipients"].rows
+
+
+def test_intune_policies_and_pim_on_real_data(db, live):
+    # Intune's policy lists all answer (the tenant has none yet), and no group holds an admin role, so there's
+    # nobody who could activate one through PIM for groups.
+    snap = TenantSnapshot(db, live)
+    (status,) = snap.objects("intune_policies", "intune_policy_status")
+    assert status["available"] and set(status["parts"].values()) == {"read"} and status["waiting"] == []
+    report = data_reports.build(db, live, "intune-policies", RECORDED)
+    assert report.unavailable is None and not any(s.rows for s in report.sections)
+    assert snap.objects("admin_roles", "pim_groups_status")[0]["state"] == "none"
+    assert snap.objects("devices", "bitlocker_status")[0]["state"] == "waiting"

@@ -106,9 +106,9 @@ def sharepoint_storage_space(snap: TenantSnapshot, now: datetime):
     "site_owners",
     "Every site has at least two owners",
     "Sharing",
-    "Give each site a second owner (in the Microsoft 365 group, or as a site administrator) so access "
-    "requests and content questions have someone to go to when one person leaves. The Site access report "
-    "lists each site's owners.",
+    "Give each site a second owner (in the Microsoft 365 group, in the site's owners group, or as a site "
+    "administrator) so access requests and content questions have someone to go to when one person leaves. "
+    "The Site access report lists each site's owners.",
 )
 def site_owners(snap: TenantSnapshot, now: datetime):
     status = (snap.objects("site_access", "access_status") or [None])[0]
@@ -126,7 +126,9 @@ def site_owners(snap: TenantSnapshot, now: datetime):
         count = s.get("ownerCount")
         if count is None or count >= 2:
             continue
-        where = "Microsoft 365 group" if s.get("ownerSource") == "group" else "site administrators"
+        where = {"group": "Microsoft 365 group", "sharepoint": "site administrators and owners group"}.get(
+            s.get("ownerSource"), "site administrators"
+        )
         findings.append(
             Finding(
                 "high" if count == 0 else "low",
@@ -136,6 +138,11 @@ def site_owners(snap: TenantSnapshot, now: datetime):
             )
         )
     known = sum(1 for s in sites if s.get("ownerCount") is not None)
+    if sites and not known:
+        return _unavailable(
+            "No site's owners could be counted: the owners of sites with no Microsoft 365 group are in "
+            "SharePoint groups, which need the client to approve the SharePoint permission"
+        )
     if findings:
         none = sum(1 for f in findings if f.severity == "high")
         summary = ", ".join(

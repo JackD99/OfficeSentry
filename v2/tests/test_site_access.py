@@ -91,7 +91,9 @@ def test_collector_reads_owners_admins_guests_and_grants(db, two_tenants):
     assert [a["upn"] for a in fin["admins"]] == ["ann@x.com"]
     assert fin["memberCount"] == 3 and fin["people"] == 2  # Ann and Eve recorded; the app and system rows skipped
     assert fin["guests"] == ["pat@supplier.com"] and fin["guestCount"] == 1  # once, from the list and the group
-    assert fin["spGroups"] == ["Sales Owners", "Sales Members", "Sales Visitors"] and fin["everyone"] is None
+    assert fin["spGroups"] == ["Sales Owners", "Sales Members", "Sales Visitors"]
+    # Everyone except external users is in Sales Visitors, which only SharePoint's own API shows.
+    assert fin["everyone"] == "members" and fin["everyoneKnown"] and fin["sharePointRead"]
     assert [(a["who"], a["how"], a["can"], a["outside"]) for a in fin["access"]] == [
         ("Sales Owners", "Site owners group", "Full control", False),
         ("Sales Members", "Site members group", "Edit", False),
@@ -101,7 +103,8 @@ def test_collector_reads_owners_admins_guests_and_grants(db, two_tenants):
     assert fin["userList"] and fin["libraryAccess"] and fin["template"] == "Group" and fin["anyoneLinks"] == 2
 
     old = sites["site-old"]
-    assert old["group"] is None and old["ownerSource"] == "admins"
+    # Its administrator and the one person in its owners group are both Bob.
+    assert old["group"] is None and old["ownerSource"] == "sharepoint"
     assert old["owners"] == [{"name": "Bob", "upn": "bob@x.com", "enabled": False}] and old["ownerCount"] == 0
     assert old["everyone"] == "members" and old["memberCount"] is None and old["guests"] == []
     assert old["access"][1] == {
@@ -120,7 +123,7 @@ def test_collector_reads_owners_admins_guests_and_grants(db, two_tenants):
         "complete": True,
     }
     assert snap.metric("sites.ownerless") == 1 and snap.metric("sites.single_owner") == 0
-    assert snap.metric("sites.guests") == 1 and snap.metric("sites.open_to_everyone") == 1
+    assert snap.metric("sites.guests") == 1 and snap.metric("sites.open_to_everyone") == 2
 
 
 def test_collector_reuses_the_site_list_and_asks_for_no_onedrives(db, two_tenants):
@@ -150,7 +153,7 @@ def test_site_owners_check(db, two_tenants):
     result = {r.key: r for r in evaluate(_snap(db, alpha))}["site_owners"]
     assert result.status == "fail" and result.summary == "1 site with no owner"
     assert [(f.severity, f.subject, f.detail) for f in result.findings] == [
-        ("high", "Old Projects", "No enabled owner (site administrators)")
+        ("high", "Old Projects", "No enabled owner (site administrators and owners group)")
     ]
     assert {r.key: r for r in evaluate(_snap(db, bravo))}["site_owners"].status == "unavailable"
 
@@ -162,9 +165,10 @@ def test_report(db, two_tenants):
     tiles = {t.label: t for t in report.tiles}
     assert tiles["Sites with no owner"].value == 1 and tiles["Sites with no owner"].tone == "bad"
     assert tiles["One owner only"].value == 0 and tiles["Guests with access"].value == 1
-    assert tiles["Open to everyone in the organisation"].value == 1 and tiles["Sites"].value == 2
-    (note,) = [n for n in report.notes if "Site permissions report" in n]  # Old Projects has no group
-    assert note.endswith("lists every SharePoint group and its members.")  # Site permissions has them already
+    assert tiles["Open to everyone in the organisation"].value == 2 and tiles["Sites"].value == 2
+    assert tiles["Open to everyone in the organisation"].foot == "Everyone or Everyone except external users"
+    # Old Projects has no group, but SharePoint's own API has been read, so its groups' members are counted.
+    assert not [n for n in report.notes if "Site permissions report" in n]
 
     needing = _section(report, "Sites needing an owner")
     assert [str(c) for c in needing.rows[0]] == [
@@ -179,14 +183,17 @@ def test_report(db, two_tenants):
 
     every = _section(report, "Who can access each site")
     assert [str(r[0]) for r in every.rows] == ["Finance", "Old Projects"]  # most guests first
-    assert list(map(str, every.rows[0][2:8])) == ["Ann, Eve", "Ann", "3", "1", "No", "Yes"]
+    assert list(map(str, every.rows[0][2:8])) == ["Ann, Eve", "Ann", "3", "1", "Yes", "Yes"]
     assert list(map(str, every.rows[1][2:8])) == ["Bob (disabled)", "Bob", "1 person recorded", "0", "Yes", "No"]
 
     access = _section(report, "Access by site")
     fin = [r[1:] for r in access.rows if str(r[0]) == "Finance"]
     assert fin[0] == ["Owners of Sales: Ann, Eve", "Microsoft 365 group", "Full control", "No"]
     assert fin[1] == ["Members of Sales: 3 people, 1 guest", "Microsoft 365 group", "Edit", "Yes"]
-    assert fin[-1] == ["pat@supplier.com", "Guest", "View", "Yes"]
+    assert fin[-2:] == [
+        ["pat@supplier.com", "Guest", "View", "Yes"],
+        ["Everyone in the organisation", "Everyone", "Given access on the site", "No"],  # through Sales Visitors
+    ]
     old = [r[1:] for r in access.rows if str(r[0]) == "Old Projects"]
     assert old == [
         ["Old Projects Owners", "Site owners group", "Full control", "No"],
@@ -204,6 +211,48 @@ def test_sharepoint_groups_note_says_waiting_only_while_the_client_is_to_approve
     seed_tenant(db, alpha, sharepoint_kw={"rest": "consent"}, our_app={"missing": ("SharePoint Sites.Read.All",)})
     (note,) = [n for n in _report(db, alpha).notes if "Site permissions report" in n]
     assert note.endswith("its members once the client approves the SharePoint permission.")
+
+
+def test_without_sharepoints_own_api_it_says_what_it_cant_count(db, two_tenants):
+    # Until the client approves the SharePoint permission, nobody can see who is in a site's SharePoint groups:
+    # Old Projects' owners group may hold owners besides Bob, and Finance's Everyone claims (in every site's
+    # user list) may or may not be in one of its groups. Neither is guessed.
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, sharepoint_kw={"rest": "consent"}, our_app={"missing": ("SharePoint Sites.Read.All",)})
+    sites = {s["_id"]: s for s in _snap(db, alpha).objects("site_access", "site")}
+    fin, old = sites["site-fin"], sites["site-old"]
+    assert fin["everyone"] is None and fin["everyoneKnown"] is False and not fin["sharePointRead"]
+    assert fin["ownerSource"] == "group" and fin["ownerCount"] == 2  # a group's owners come from Graph
+    assert old["ownerSource"] is None and old["ownerCount"] is None
+    assert [o["upn"] for o in old["owners"]] == ["bob@x.com"]
+    assert old["everyone"] == "members" and old["everyoneKnown"]  # the default library grants it directly
+
+    report = _report(db, alpha)
+    tiles = {t.label: t for t in report.tiles}
+    assert tiles["Sites with no owner"].value == 0 and tiles["Sites"].foot == "Owners unknown for 1 site"
+    assert tiles["Open to everyone in the organisation"].value == 1
+    assert tiles["Open to everyone in the organisation"].foot == "Not known for 1 site yet"
+    every = {str(r[0]): list(map(str, r[2:8])) for r in _section(report, "Who can access each site").rows}
+    assert every["Finance"][4] == "Unknown" and every["Old Projects"][4] == "Yes"
+    assert every["Old Projects"][0] == "Bob (disabled)"
+
+    result = {r.key: r for r in evaluate(_snap(db, alpha))}["site_owners"]
+    assert result.status == "pass" and result.summary == "1 site checked, each with two or more owners"
+
+
+def test_site_owners_check_waits_when_no_site_can_be_counted():
+    from datetime import UTC, datetime
+
+    from officesentry.checks.sharepoint import site_owners
+
+    class Snap:
+        def objects(self, collector, kind):
+            if kind == "access_status":
+                return [{"available": True}]
+            return [{"_id": "s1", "name": "Projects", "ownerCount": None, "ownerSource": None}]
+
+    status, summary, *_ = site_owners(Snap(), datetime.now(UTC))
+    assert status == "unavailable" and "approve the SharePoint permission" in summary
 
 
 def test_report_before_collection(db, two_tenants):
