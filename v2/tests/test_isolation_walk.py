@@ -8,7 +8,9 @@ A's data, so a page that shows B's data gives itself away even where it never
 names the tenant. Each is in its own tenant group. Signed in as an analyst and
 as a client who were each granted only tenant A (the analyst directly or
 through A's group; the client also holds a grant of B's group, which must count
-for nothing), every route in the URL map that names a tenant or one of its
+for nothing), and as one of A's people signed in with their own Microsoft
+account from A's tenant (granted B too, which must count for nothing, since B
+is another organisation), every route in the URL map that names a tenant or one of its
 objects is opened with B's IDs, by GET and by POST with the form an authorised
 person would submit (``FORMS``), and must be refused outright (403, 404 or the
 sign-in page), never turned away by form validation. List and cross-tenant
@@ -17,7 +19,7 @@ asked for.
 
 Then the other way round, since a page about A can leak B too: A gets the same
 objects, and every GET route in the URL map (any arguments at all) is opened
-with A's IDs, as the analyst, the client and a ``manager`` (a custom role
+with A's IDs, as the analyst, both clients and a ``manager`` (a custom role
 limited to A that holds every capability, so no missing capability hides a
 missing tenant check), plain and with ``?tenant=`` naming B, every download
 in each format; none may carry anything of B's, read inside spreadsheets,
@@ -39,8 +41,9 @@ import zipfile
 from datetime import UTC, datetime
 
 import pytest
+import responses
 
-from officesentry import delivery, issued, month_end, permissions, projects, roles, store, tenant_groups
+from officesentry import delivery, issued, month_end, permissions, projects, roles, sso, store, tenant_groups
 from officesentry.db import utcnow
 from officesentry.projects import CATALOG
 from officesentry.reports import data_reports, designs, evidence_answers, export, views
@@ -48,6 +51,7 @@ from officesentry.reports.data_reports import REPORTS
 from officesentry.reports.evidence_answers import QUESTIONS
 from officesentry.web import saved_views
 from tests import sharepoint_data as sd
+from tests import test_client_sign_in as csi
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_collectors import USERS
@@ -91,7 +95,7 @@ OTHER_ARGS = {
     "role_id",
 }
 # Who is signed in for the walk. Each sees only tenant A.
-ROLES = ["analyst", "client", "analyst-by-group", "client-with-group", "manager"]
+ROLES = ["analyst", "client", "analyst-by-group", "client-with-group", "client-by-microsoft", "manager"]
 # A refusal is the access check's: 403, 404 or the sign-in page. A 400 is form validation, which runs
 # after the access check, so an ungranted tenant's URL never gets that far.
 REFUSED = (403, 404)
@@ -148,6 +152,7 @@ NOT_POSTED = NO_NETWORK | {
 # walk sends it a form the route would act on, not an empty one it may refuse before looking at the
 # tenant. ``ids`` is the world's: B's objects by URL argument, and its groups by name.
 FORMS = {
+    "client_access.add": lambda ids: {"email": "jo@bravo.example"},
     "email.add_tenant_contact": lambda ids: {"name": "Bravo Ops", "email": "ops@bravo.example"},
     "email.edit_schedule": lambda ids: SCHEDULE_FORM | {"contacts": str(ids["contact_id"])},
     "email.new_schedule": lambda ids: SCHEDULE_FORM | {"contacts": str(ids["contact_id"])},
@@ -287,8 +292,46 @@ def world(app, db, connection_id):
     return alpha, bravo, ids
 
 
-def _sign_in(client, db, role: str, alpha: int, ids: dict) -> None:
+def microsoft_client(db, vault, username: str, alpha: int, tenants) -> int:
+    """One of A's people with a client account here and no password, connected to their work account in A's
+    own tenant (Jo, ``csi.JO``) as the Client sign-in page connects it, and granted ``tenants``. Client sign-in
+    with Microsoft is set up and on (keeping a sign-in certificate already made), and A's Directory ID is
+    A's tenant. A grant of a client in another organisation must count for nothing (``access._organisation``)."""
+    sso.forget_keys()
+    if not sso.settings(db).get("sso_key_enc"):
+        sso.new_certificate(db, vault)
+    sso.store_manual(db, vault, csi.MSP, csi.CLIENT_ID, "commercial", "Office Sentry sign-in", "admin")
+    sso.save(db, {"sso_enabled": "1", "sso_multi_tenant": "1", "sso_clients": "1"})
+    db.execute("UPDATE tenants SET tenant_ref = ? WHERE id = ?", (csi.ALPHA, alpha))
+    user = make_user(db, username, role="client", tenants=tenants)
+    db.execute(
+        "UPDATE users SET password_hash = ?, entra_oid = ?, entra_tid = ?, entra_upn = ? WHERE id = ?",
+        (sso.NO_PASSWORD, csi.JO["oid"], csi.ALPHA, csi.JO["upn"], user),
+    )
+    db.commit()
+    return user
+
+
+def sign_in_with_microsoft(client, username: str, person: dict = csi.JO) -> None:
+    """Sign in with Microsoft as ``person``, from their own tenant, as test_client_sign_in does (Microsoft
+    simulated at the HTTP level), and check it reached ``username``'s account."""
+    responses.start()
+    try:
+        assert csi.sign_in(client, person).status_code == 302
+    finally:
+        responses.stop()
+        responses.reset()
+    assert csi.signed_in_as(client) == username
+
+
+def _sign_in(client, db, role: str, alpha: int, ids: dict, vault=None) -> None:
     """Someone who may see tenant A only, however ``role`` grants it."""
+    if role == "client-by-microsoft":
+        # One of A's people, signed in with their own work account from A's tenant. B is granted too, by
+        # mistake, but it isn't in A's organisation, so that grant counts for nothing.
+        microsoft_client(db, vault, "someone", alpha, [alpha, ids["tenant_id"]])
+        sign_in_with_microsoft(client, "someone")
+        return
     if role == "analyst-by-group":
         user = make_user(db, "someone", role="analyst")
         tenant_groups.set_user_groups(db, user, [ids["Alpha group"]])
@@ -401,9 +444,9 @@ def test_every_form_is_accepted_from_an_authorised_person(app, client, db, world
 
 
 @pytest.mark.parametrize("role", ROLES)
-def test_ungranted_tenant_is_refused_on_every_route(app, client, db, world, role):
+def test_ungranted_tenant_is_refused_on_every_route(app, client, db, vault, world, role):
     alpha, bravo, ids = world
-    _sign_in(client, db, role, alpha, ids)
+    _sign_in(client, db, role, alpha, ids, vault)
     before = _row_counts(db)
     walked = 0
     for rule in _tenant_rules(app):
@@ -422,9 +465,9 @@ def test_ungranted_tenant_is_refused_on_every_route(app, client, db, world, role
 
 @pytest.mark.parametrize("role", ROLES)
 @pytest.mark.parametrize("pick", [None, "Alpha group", "Bravo group"])
-def test_lists_and_rollups_never_mention_an_ungranted_tenant(app, client, db, world, role, pick):
+def test_lists_and_rollups_never_mention_an_ungranted_tenant(app, client, db, vault, world, role, pick):
     alpha, _, ids = world
-    _sign_in(client, db, role, alpha, ids)
+    _sign_in(client, db, role, alpha, ids, vault)
     if pick:  # the group picker remembers a choice; asking for B's group must not bring B in
         client.get(f"/?group={ids[pick]}")
     period = datetime.now(UTC).strftime("%Y-%m")
@@ -504,12 +547,12 @@ def _a_urls(app, db, alpha: int, ids: dict) -> list[tuple[str, str]]:
     return out
 
 
-@pytest.mark.parametrize("role", ["analyst", "client", "manager"])
-def test_nothing_of_another_tenant_on_any_page_or_download(app, client, db, world, role, _pdf_as_page):
+@pytest.mark.parametrize("role", ["analyst", "client", "client-by-microsoft", "manager"])
+def test_nothing_of_another_tenant_on_any_page_or_download(app, client, db, vault, world, role, _pdf_as_page):
     """Every GET route, opened with A's IDs by someone granted A, plain and with ``?tenant=`` naming B: no page,
     download or file inside one carries anything of B's."""
     alpha, bravo, ids = world
-    _sign_in(client, db, role, alpha, ids)
+    _sign_in(client, db, role, alpha, ids, vault)
     opened = 0
     for endpoint, url in _a_urls(app, db, alpha, ids):
         for query in ("", f"tenant={bravo}&tenant_id={bravo}"):
@@ -517,7 +560,7 @@ def test_nothing_of_another_tenant_on_any_page_or_download(app, client, db, worl
             resp = client.get(full)
             assert not _leaks(_readable(resp)), (role, endpoint, full, resp.status_code, _leaks(_readable(resp)))
             opened += resp.status_code == 200
-    assert opened >= {"analyst": 450, "client": 120, "manager": 480}[role], opened
+    assert opened >= {"analyst": 450, "client": 120, "client-by-microsoft": 120, "manager": 480}[role], opened
 
 
 @pytest.mark.parametrize("role", ["analyst", "manager"])

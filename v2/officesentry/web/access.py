@@ -18,6 +18,8 @@ Scope (which tenants) is read here and nowhere else: ``visible_tenants`` and ``c
 ``_GRANTED``. A role with scope "all", an admin, or a staff account with ``all_tenants`` sees every tenant;
 otherwise the tenants granted directly, and for staff the tenants of every group they were granted (a
 client never gets tenants through a group). Tenant groups otherwise only narrow lists of visible tenants.
+A client account that signs in with a client's own Microsoft account sees only clients in that
+organisation (``_organisation``), whatever it was granted.
 
 ``roles_required`` is kept for code written before capabilities: ``"admin"`` alone means
 ``needs("settings.manage")`` and ``("admin", "analyst")`` means any staff role. New code names a capability.
@@ -30,7 +32,7 @@ from urllib.parse import urlsplit
 
 from flask import abort, g, has_request_context, redirect, request, url_for
 
-from .. import permissions, roles
+from .. import permissions, roles, sso
 from ..db import audit_counted
 from . import public_demo, sessions
 
@@ -180,6 +182,13 @@ def _params(user, a: roles.Access) -> dict:
     return {"uid": user["id"], "kind": a.kind}
 
 
+def _organisation(user, a: roles.Access) -> str | None:
+    """The Microsoft organisation (tenant ID) a client's person signs in from, or None. Such an account only
+    ever sees clients in that organisation (``sso.directory_id``), whatever it was granted, so a grant made
+    by mistake never shows one company's people another company's data."""
+    return user["entra_tid"] if a.kind == permissions.CLIENT and user["entra_tid"] else None
+
+
 def _needed_here(a: roles.Access, rows: list) -> list:
     """Leave out tenants where a capability the view declared was taken away from this person."""
     needed = g.get("needed") if has_request_context() else None
@@ -200,6 +209,8 @@ def visible_tenants(conn, user, archived: bool = False):
             f"SELECT t.* FROM tenants t WHERE t.id IN ({_GRANTED}){where} ORDER BY t.name COLLATE NOCASE",
             _params(user, a),
         ).fetchall()
+    if (tid := _organisation(user, a)) is not None:
+        rows = [t for t in rows if sso.directory_id(conn, t) == tid]
     return _needed_here(a, rows)
 
 
@@ -230,11 +241,11 @@ def out_of_reach(user) -> str | None:
 
 def tenant_ids(conn, user) -> set[int] | None:
     """The ids of the tenants this person's scope covers, whatever the current view needs (``None``: every
-    client). For comparing two people's reach; pages list tenants with ``visible_tenants``."""
+    client). For comparing two people's reach; pages list tenants with ``visible_tenants``. A grant their
+    organisation hides from them now (``_organisation``) still counts: it would show again if they were
+    disconnected from Microsoft."""
     a = access_of(user, conn)
-    if a.sees_all:
-        return None
-    return {r[0] for r in conn.execute(_GRANTED, _params(user, a))}
+    return None if a.sees_all else {r[0] for r in conn.execute(_GRANTED, _params(user, a))}
 
 
 def unseen_client_accounts(conn, user) -> dict[int, str]:
@@ -259,6 +270,10 @@ def can_see_tenant(conn, user, tenant_id: int) -> bool:
     if user is None:
         return False
     a = access_of(user, conn)
+    if (tid := _organisation(user, a)) is not None:
+        tenant = conn.execute("SELECT * FROM tenants WHERE id = ?", (tenant_id,)).fetchone()
+        if tenant is None or sso.directory_id(conn, tenant) != tid:
+            return False
     if a.sees_all:
         return True
     return (

@@ -1,0 +1,23 @@
+{#- Public: a client's Microsoft 365 administrator back from approving the sign-in app for their organisation
+    (web/sso._approval_returned). Names no client and shows none of Microsoft's text, only a known explanation. -#}
+{% extends "base.html" %}
+{% block title %}{{ 'Thank you' if approved else 'Not approved' }} · {{ brand.display_name }}{% endblock %}
+{% macro message() %}
+{% if approved %}
+<h1>Thank you</h1>
+<p>Your organisation's people can now sign in to {{ brand.display_name }}'s reports with their own work account. It only lets them sign in: {{ brand.display_name }} learns each person's name and sign-in address, and nothing else.</p>
+<p><a class="btn primary" href="{{ url_for('auth.login') }}">Go to the sign-in page</a></p>
+<p class="muted small">You can close this page.</p>
+{% elif other_tenant %}
+<h1>That was another organisation</h1>
+<p>You approved it with an account from a different organisation than the one this link is for. Open the link again and sign in with an administrator account of your own organisation.</p>
+{% else %}
+<h1>Sign-in wasn't approved</h1>
+{% if problem %}<p>{{ problem }}</p>{% endif %}
+<p>Nothing was changed. If you meant to approve, open the link again and sign in with an administrator account of your organisation (a Global Administrator, Cloud Application Administrator or Application Administrator), or ask {{ brand.display_name }} for help.</p>
+{% endif %}
+{% if brand.contact %}<p class="small">{{ brand.display_name }} · {{ brand.contact }}</p>{% endif %}
+{% endmacro %}
+{# Signed out (the client) gets the sign-in card layout; someone signed in to the portal, the page. #}
+{% block auth %}{{ message() }}{% endblock %}
+{% block content %}<div class="card narrow-lg">{{ message() }}</div>{% endblock %}

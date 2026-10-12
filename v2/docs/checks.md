@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-61 checks, 38 data sources (collectors) and 47 detail reports.
+63 checks, 39 data sources (collectors) and 48 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -44,9 +44,11 @@ A check reads only the data its collectors stored. When that data is missing, or
 
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
+| **Windows computers have their BitLocker recovery key saved**<br>`bitlocker_keys` | `devices` |  | Make Intune's disk encryption policy (Endpoint security > Disk encryption) require the recovery key to be saved in Entra ID before BitLocker turns on, and on computers already encrypted run BackupToAAD-BitLockerKeyProtector (or re-run the policy). Without the key, a computer that asks for it after a firmware or hardware change can't be unlocked, and its data is lost. |
 | **Managed devices check in with Intune**<br>`device_checkin` | `devices` | The tenant has no Intune licence, or Intune isn't readable | Find out whether each device is lost, replaced or broken. Retire devices that are gone; for devices still in use, restart the Intune Management Extension or re-enrol. |
 | **Managed devices meet compliance policies**<br>`device_compliance` | `devices` | The tenant has no Intune licence, or Intune isn't readable | Open each non-compliant device in Intune (Devices > Monitor > Noncompliant devices) to see which setting fails, fix it or retire the device, and block non-compliant devices with a Conditional Access policy that requires a compliant device. |
 | **Company computers are encrypted**<br>`device_encryption` | `devices` | The tenant has no Intune licence, or Intune isn't readable | Turn on BitLocker (Windows) and FileVault (macOS) with an Intune disk encryption policy, with recovery keys escrowed to Entra ID, so a lost or stolen laptop doesn't expose the client's data. |
+| **Every platform in use has a compliance policy**<br>`intune_compliance_coverage` | `devices` | The tenant has no Intune licence; The tenant has no Intune licence, or Intune isn't readable | In Intune (Devices > Compliance), create and assign a compliance policy for each platform with enrolled devices, requiring at least encryption, a screen lock and a minimum OS version, and set devices with no policy to show as not compliant (Compliance settings). Until then those devices count as compliant, so Conditional Access that requires a compliant device lets them through. |
 | **Joined computers are managed by Intune**<br>`intune_enrolled` | `devices` | The tenant has no Intune licence, or Intune isn't readable | Enrol Entra-joined and hybrid-joined computers in Intune (automatic enrolment under Devices > Enrollment > Windows) so compliance, encryption and updates can be enforced on them. |
 | **No old devices left in Entra ID**<br>`stale_devices` | `devices` |  | Disable, then after 30 days delete, device records that haven't signed in for 90 days (Entra admin center > Devices > All devices, filter by activity). Old records can still hold BitLocker keys and count toward device limits. |
 | **Windows computers still get security updates**<br>`supported_windows` | `devices` | The tenant has no Intune licence, or Intune isn't readable | Upgrade computers on Windows 10 or an old Windows 11 release to the current Windows 11 release (Intune: Windows feature updates policy). Replace hardware that can't run Windows 11, or buy Extended Security Updates as a stopgap. |
@@ -147,7 +149,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | Key | Title | What it reads | Permissions |
 |---|---|---|---|
 | `admin_activity` | Admin activity | Admin role, Conditional Access, app credential, consent, domain and account changes from the directory audit log, kept in the activity history (Microsoft keeps 30 days with Entra ID P1, otherwise 7). | `AuditLog.Read.All` |
-| `admin_roles` | Admin roles | Who holds each directory role, active and PIM-eligible. | `RoleManagement.Read.Directory` |
+| `admin_roles` | Admin roles | Who holds each directory role, active and PIM-eligible, including through groups and people who can activate membership of such a group (PIM for groups). | `RoleManagement.Read.Directory`, `PrivilegedEligibilitySchedule.Read.AzureADGroup` |
 | `admin_units` | Administrative units | Every administrative unit, whether it is assigned or dynamic and restricted, and the users, groups and devices in each. The admins scoped to each unit come from Admin roles. | `Directory.Read.All` |
 | `app_consents` | Apps and consents | Third-party apps, the permissions granted to them, and app secrets or certificates expiring. | `Application.Read.All`, `Directory.Read.All` |
 | `app_sign_ins` | App sign-ins | When each enterprise app last signed in, for a person or on its own (needs Entra ID P1). | `AuditLog.Read.All` |
@@ -156,13 +158,14 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `conditional_access` | Conditional Access | Conditional Access policies and the Security Defaults setting. | `Policy.Read.All` |
 | `connection` | Connection and permissions | Whether the app's permissions are granted in this tenant and it holds the Global Reader role. | `Application.Read.All`, `RoleManagement.Read.Directory` |
 | `deleted_items` | Deleted users and groups | Users and Microsoft 365 groups in the Entra ID recycle bin, and how many days are left to restore each before Microsoft deletes it for good. | `Directory.Read.All` |
-| `devices` | Devices | Devices registered or joined to Entra ID, and Intune compliance, encryption and check-in for managed devices (needs Intune). | `Directory.Read.All`, `DeviceManagementManagedDevices.Read.All` |
+| `devices` | Devices | Devices registered or joined to Entra ID, which have a BitLocker recovery key saved, and Intune compliance, encryption and check-in for managed devices (needs Intune). | `Directory.Read.All`, `DeviceManagementManagedDevices.Read.All`, `BitLockerKey.ReadBasic.All` |
 | `directory_sync` | Directory sync | Whether accounts are synced from on-premises Active Directory, when directory and password hash sync last ran, and how each domain signs in and how often its passwords expire. | `Organization.Read.All`, `Directory.Read.All` |
 | `distribution_lists` | Distribution lists | Every distribution list, its owners and members, and how much mail it gets (needs Global Reader). | `Exchange.ManageAsApp` |
 | `domain_health` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each verified domain, checked in public DNS. | none |
 | `group_nesting` | Group nesting | How many members each security group and distribution list has, the groups inside each, and dynamic membership rules. | `Directory.Read.All` |
 | `groups` | Groups and Teams | Every group, the owners, members and guests of each team and Microsoft 365 group, who can create them and whether unused ones expire. | `Directory.Read.All` |
 | `inbox_rules` | Inbox rules | Every mailbox's inbox rules, to spot forwarding and rules that hide mail. | `MailboxSettings.Read` |
+| `intune_policies` | Intune policies | Intune compliance policies, configuration profiles and Windows update rings, settings catalog and endpoint security policies, and app protection for iOS and Android, with whom each is assigned to (needs Intune). | `DeviceManagementConfiguration.Read.All`, `DeviceManagementApps.Read.All` |
 | `legacy_signins` | Legacy sign-ins | Sign-ins over SMTP AUTH, IMAP, POP and other basic-auth clients in the last 30 days (needs Entra ID P1). | `AuditLog.Read.All` |
 | `m365_usage` | Microsoft 365 usage | Who used email, Teams, OneDrive, SharePoint and the Office apps in the last 30 days, from Microsoft's usage reports. | `Reports.Read.All`, `ReportSettings.Read.All` |
 | `mail_flow` | Mail flow | How much mail each domain sends and receives, how much is delivered, sent to Junk, quarantined or failed, and who gets the most spam and phishing (needs Global Reader). | `Exchange.ManageAsApp` |
@@ -200,7 +203,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `auto-replies` | Automatic replies | Mailboxes answering mail with an out-of-office reply, who outside hears it, and replies that have been on so long they look forgotten. | `auto_replies`, `users` |
 | `conditional-access` | Conditional Access coverage | Every policy in plain words, and which accounts each one actually covers. | `admin_roles`, `conditional_access`, `users` |
 | `deleted-items` | Deleted users and groups | Users, teams and Microsoft 365 groups in the recycle bin, with the licences they held and the days left to restore each before Microsoft deletes it for good after 30 days. | `deleted_items`, `tenant_profile` |
-| `devices` | Devices | Intune compliance, encryption and Windows support, and every Entra ID device record. | `devices` |
+| `devices` | Devices | Intune compliance, encryption and Windows support, BitLocker recovery keys saved in Entra ID, and every Entra ID device record. | `devices` |
 | `distribution-lists` | Distribution lists | Every distribution list with its members and owners, who can mail it, and empty, ownerless or unused lists. | `distribution_lists`, `mailboxes`, `users` |
 | `domains` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each of the tenant's domains, from public DNS. | `domain_health` |
 | `file-permissions` | File and folder permissions | Who can open each shared file or folder, how they got access, who shared it and when links expire. | `shared_files`, `users` |
@@ -211,6 +214,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `hybrid` | Hybrid identity | Directory sync from on-premises AD, password hash sync, how each domain signs in, and admin accounts synced from AD. | `admin_roles`, `directory_sync`, `users` |
 | `inactive` | Inactive accounts | Members and guests who haven't signed in for a long time, and old invitations. | `admin_roles`, `tenant_profile`, `users` |
 | `inbox-rules` | Inbox rules | Rules that forward, delete or hide mail, and every rule in every mailbox. | `inbox_rules`, `mailboxes` |
+| `intune-policies` | Intune policies | Which platforms have a compliance policy, what each compliance policy requires, configuration profiles and Windows update rings, endpoint security policies and app protection for phones, with whom each applies to. | `devices`, `group_nesting`, `groups`, `intune_policies` |
 | `legacy-auth` | Legacy sign-ins | Sign-ins with SMTP AUTH, IMAP, POP and other protocols that can't do MFA, and which mailboxes still allow them. | `legacy_signins`, `mailboxes` |
 | `licence-changes` | Licence changes | Who was given or lost a licence and when, who made the change, and licences bought and assigned month by month, from Office Sentry's own history. | `tenant_profile`, `users` |
 | `licence-rightsizing` | Licence right-sizing | People who could move to a cheaper licence, and services people are licensed for but don't use. | `m365_usage`, `mailbox_usage`, `tenant_profile`, `users` |
@@ -247,11 +251,11 @@ Every application permission the app requests (all read-only) and the collectors
 |---|---|---|---|
 | `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents`, `connection` |
 | `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `app_sign_ins`, `legacy_signins`, `mfa_registration`, `sign_ins`, `users` |
-| `BitLockerKey.ReadBasic.All` | Microsoft Graph | Whether a device's BitLocker recovery key is saved (never the key) | not used by a collector yet |
+| `BitLockerKey.ReadBasic.All` | Microsoft Graph | Whether a device's BitLocker recovery key is saved (never the key) | `devices` |
 | `Channel.ReadBasic.All` | Microsoft Graph | Teams channels: standard, private and shared | `teams` |
 | `ChannelMember.Read.All` | Microsoft Graph | Who is in each private and shared channel, guests included | `teams` |
-| `DeviceManagementApps.Read.All` | Microsoft Graph | Intune app protection policies and managed apps | not used by a collector yet |
-| `DeviceManagementConfiguration.Read.All` | Microsoft Graph | Intune configuration and compliance policies | not used by a collector yet |
+| `DeviceManagementApps.Read.All` | Microsoft Graph | Intune app protection policies and managed apps | `intune_policies` |
+| `DeviceManagementConfiguration.Read.All` | Microsoft Graph | Intune configuration and compliance policies | `intune_policies` |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
 | `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `admin_units`, `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `group_nesting`, `groups`, `teams`, `tenant_profile` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `distribution_lists`, `mail_flow`, `mailbox_usage`, `mailboxes`, `mobile_devices` |
@@ -259,7 +263,7 @@ Every application permission the app requests (all read-only) and the collectors
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `auto_replies`, `inbox_rules` |
 | `Organization.Read.All` | Microsoft Graph | Tenant details and subscriptions | `directory_sync`, `tenant_profile` |
 | `Policy.Read.All` | Microsoft Graph | Conditional Access and authorization policies | `auth_methods_policy`, `conditional_access`, `per_user_mfa`, `tenant_policies` |
-| `PrivilegedEligibilitySchedule.Read.AzureADGroup` | Microsoft Graph | Who can activate membership of a privileged group (PIM) | not used by a collector yet |
+| `PrivilegedEligibilitySchedule.Read.AzureADGroup` | Microsoft Graph | Who can activate membership of a privileged group (PIM) | `admin_roles` |
 | `ReportSettings.Read.All` | Microsoft Graph | Whether usage reports hide people's names | `m365_usage` |
 | `Reports.Read.All` | Microsoft Graph | Usage and MFA registration reports | `m365_usage`, `sharepoint_usage`, `teams` |
 | `RoleManagement.Read.Directory` | Microsoft Graph | Admin role holders and PIM | `admin_roles`, `connection` |

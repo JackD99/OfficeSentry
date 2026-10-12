@@ -17,6 +17,7 @@ from . import mobile_devices, auto_replies, distribution_lists  # noqa: F401, I0
 from . import sign_ins, risky_users  # noqa: F401, I001
 from . import domains  # noqa: F401
 from . import devices  # noqa: F401
+from . import intune_policies  # noqa: F401  (its report counts the devices snapshot by platform)
 from . import directory_sync  # noqa: F401
 from . import sharepoint  # noqa: F401  (shared files reuse the users and tenant profile snapshots)
 from . import sharepoint_storage  # noqa: F401

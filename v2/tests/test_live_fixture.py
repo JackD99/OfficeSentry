@@ -149,9 +149,11 @@ def test_every_check_runs_on_real_data(db, live):
     # The test tenant has no Intune devices and no MTA-STS, so those checks have nothing to read, and no
     # Entra ID P2, so sign-in risk and risky users are hidden. Its one Windows PC is only Entra-registered,
     # and nobody has a manager set. It hasn't approved the SharePoint permission, so site permissions wait
-    # for it.
+    # for it, nor the 2.2 Intune and BitLocker permissions, so their checks wait too.
     nothing_to_check = {
         "site_guest_full_control",
+        "bitlocker_keys",
+        "intune_compliance_coverage",
         "tls_rpt",
         "blocked_manager",
         "device_compliance",

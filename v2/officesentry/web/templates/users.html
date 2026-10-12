@@ -4,23 +4,53 @@
 {% block content %}
 <div class="page-head"><div><h1>Users</h1><div class="sub">People who can sign in to Office Sentry.</div></div>
   <div class="actions"><a class="btn" href="{{ url_for('roles.index') }}">{{ icon('users') }} Roles</a></div></div>
-<div class="grid-main">
 <section class="card flush">
+  <div class="table-scroll">
   <table class="stack-sm">
     <thead><tr><th>User</th><th>Role</th><th>Clients</th><th>Sign-in</th><th>Status</th><th>Last sign-in</th></tr></thead>
     <tbody>
     {% for u in users %}
-    <tr><td><a class="strong" href="{{ url_for('admin.edit_user', user_id=u.id) }}">{{ u.username }}</a>{% if u.id == current_user.id %} <span class="faint small">(you)</span>{% endif %}</td>
+    <tr><td><a class="strong" href="{{ url_for('admin.edit_user', user_id=u.id) }}">{{ u.username|wrappable }}</a>{% if u.id == current_user.id %} <span class="faint small">(you)</span>{% endif %}</td>
       {% set r = role_of[u.id] %}
       <td data-label="Role"><span class="pill {{ 'accent' if r.kind == 'admin' else '' }}">{{ r.name }}</span>{% if overrides.get(u.id) %} <span class="faint small" title="Capabilities added or taken away for this person">{{ overrides[u.id]|plural('override') }}</span>{% endif %}</td>
       <td data-label="Clients">{% if scope_of(u) == 'all' %}All{% elif r.kind != 'client' and group_grants.get(u.id) %}Granted and {{ group_grants[u.id]|plural('group') }}{% else %}Granted only{% endif %}</td>
-      <td data-label="Sign-in">{% if u.entra_oid %}Microsoft{% if u.password_hash != '!' %} <span class="muted small">or password</span>{% endif %}{% elif u.totp_enabled_at %}Password <span class="pill ok">2-step on</span>{% else %}Password <span class="pill">2-step off</span>{% endif %}</td>
+      <td data-label="Sign-in">{% if u.entra_oid %}Microsoft{% if u.password_hash != '!' %} <span class="muted small">or password</span>{% endif %}{% elif u.password_hash == '!' %}Microsoft <span class="muted small">not signed in yet</span>{% elif u.totp_enabled_at %}Password <span class="pill ok">2-step on</span>{% else %}Password <span class="pill">2-step off</span>{% endif %}</td>
       <td data-label="Status">{% if u.disabled %}<span class="pill">Disabled</span>{% elif u.locked_until %}<span class="pill warn" title="Locked until {{ u.locked_until|when }}">Locked</span>{% else %}<span class="pill ok">Active</span>{% endif %}</td>
       <td data-label="Last sign-in" class="nowrap">{% if u.last_login_at %}<time title="{{ u.last_login_at|when }}">{{ u.last_login_at|ago }}</time>{% else %}<span class="muted">Never</span>{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </section>
+<div class="grid-main">
+<section class="card">
+  <h2>Add a user</h2>
+  <form method="post" action="{{ url_for('admin.create_user') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username <input name="username" maxlength="64" required autocomplete="off"></label>
+    <fieldset class="choices">
+      <legend>Role</legend>
+      {% for r in roles %}
+      <label class="choice"><input type="radio" name="role" value="{{ r.id }}" {% if r.key == 'client_viewer' %}checked{% endif %}{% if r.id not in givable %} disabled{% endif %}>
+        <span><span class="strong">{{ r.name }}</span><span class="hint">{{ r.description }}</span></span></label>
+      {% endfor %}
+    </fieldset>
+    {% if microsoft_staff %}
+    <fieldset class="choices" data-signs-in>
+      <legend>How they sign in</legend>
+      <label class="choice"><input type="radio" name="signs_in" value="password" checked>
+        <span><span class="strong">Password</span><span class="hint">You set a first password and they choose their own when they first sign in.</span></span></label>
+      <label class="choice"><input type="radio" name="signs_in" value="microsoft">
+        <span><span class="strong">Microsoft</span><span class="hint">Staff only. No password here. The username is the address they sign in to Microsoft with in your own tenant; their account is connected at their first sign-in and gets its role from Entra.{% if microsoft_clients %} Add a client's people on the client's Client sign-in page instead.{% endif %}</span></span></label>
+    </fieldset>
+    {% endif %}
+    <label id="new-password">Initial password <input type="password" name="password" minlength="12" autocomplete="new-password" required>
+      <span class="hint">At least 12 characters. Share it with them securely; they choose their own the first time they sign in.</span></label>
+    <div class="form-actions"><button class="primary">Add user</button></div>
+    <p class="footnote">New users see no clients until you grant them on their page, unless their role covers every client.</p>
+  </form>
+</section>
+<div>
 <section class="card">
   <h2>Two-step sign-in</h2>
   {% set p = two_step.policy %}
@@ -34,27 +64,28 @@
 </section>
 {% if microsoft_sign_in %}
 <section class="card">
-  <h2>Staff who sign in with Microsoft</h2>
-  <p class="small">They appear here by themselves at their first sign-in, with the role their app role in Entra gives them. Grant them clients on their page afterwards. <a href="{{ url_for('sso.settings_page') }}">Staff sign-in settings</a>.</p>
+  <h2>Signing in with Microsoft</h2>
+  {% if microsoft_staff %}<p class="small">Staff appear here by themselves at their first sign-in, with the role their app role in Entra gives them. To grant them clients before then, add them with Add a user, using the address they sign in to Microsoft with.</p>{% endif %}
+  {% if microsoft_clients %}<p class="small">A client's people sign in with their own work account. Add them on the client's <strong>Settings → Client sign-in</strong> page, which also has the message to send them.</p>{% endif %}
+  <p class="small m0"><a href="{{ url_for('sso.settings_page') }}">Microsoft sign-in settings</a></p>
 </section>
 {% endif %}
-<section class="card">
-  <h2>Add a user</h2>
-  <form method="post" action="{{ url_for('admin.create_user') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Username <input name="username" maxlength="64" required autocomplete="off"></label>
-    <fieldset class="choices">
-      <legend>Role</legend>
-      {% for r in roles %}
-      <label class="choice"><input type="radio" name="role" value="{{ r.id }}" {% if r.key == 'client_viewer' %}checked{% endif %}{% if r.id not in givable %} disabled{% endif %}>
-        <span><span class="strong">{{ r.name }}</span><span class="hint">{{ r.description }}</span></span></label>
-      {% endfor %}
-    </fieldset>
-    <label>Initial password <input type="password" name="password" minlength="12" autocomplete="new-password" required>
-      <span class="hint">At least 12 characters. Share it with them securely; they choose their own the first time they sign in.</span></label>
-    <div class="form-actions"><button class="primary">Add user</button></div>
-    <p class="footnote">New users see no clients until you grant them on their page, unless their role covers every client.</p>
-  </form>
-</section>
 </div>
+</div>
+{% if microsoft_staff %}
+<script nonce="{{ csp_nonce }}">
+  /* Microsoft sign-in needs no password: hide the field and stop the browser asking for it. */
+  (function () {
+    var box = document.getElementById('new-password'), input = box.querySelector('input');
+    function update() {
+      var microsoft = !!document.querySelector('[data-signs-in] input[value=microsoft]:checked');
+      box.hidden = microsoft;
+      input.required = !microsoft;
+      if (microsoft) input.value = '';
+    }
+    document.querySelectorAll('[data-signs-in] input').forEach(function (r) { r.addEventListener('change', update); });
+    update();
+  })();
+</script>
+{% endif %}
 {% endblock %}

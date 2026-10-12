@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import confirm_identity with context %}
 {% block title %}{{ user.username }} · Users{% endblock %}
 {% block content %}
 <div class="crumbs"><a href="{{ url_for('admin.users') }}">Users</a><span>/</span><span>{{ user.username }}</span></div>
@@ -14,10 +15,12 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if last_admin %}<p class="callout warn small">This is the only Administrator. Make someone else an Administrator before changing their role or disabling the account.</p>{% endif %}
   <fieldset class="choices" data-roles>
-    <legend>Role{% if user.entra_oid %} <span class="faint small">(set in Entra)</span>{% endif %}</legend>
-    {% if user.entra_oid %}<p class="muted small m0">{{ user.username }} signs in with Microsoft, so their role is the app role assigned to them in Entra at each sign-in. Change it there{% if can('settings.manage') %}; <a href="{{ url_for('sso.settings_page') }}#roles">Staff sign-in</a> says which app role gives which role{% endif %}.</p>{% endif %}
+    {% set from_entra = user.entra_oid and role.kind != 'client' %}
+    <legend>Role{% if from_entra %} <span class="faint small">(set in Entra)</span>{% endif %}</legend>
+    {% if user.entra_oid and not from_entra %}<p class="muted small m0">{{ user.username }} signs in with their own organisation's Microsoft account, so they can only have a client role.</p>{% endif %}
+    {% if from_entra %}<p class="muted small m0">{{ user.username }} signs in with Microsoft, so their role is the app role assigned to them in Entra at each sign-in. Change it there{% if can('settings.manage') %}; <a href="{{ url_for('sso.settings_page') }}#roles">Microsoft sign-in</a> says which app role gives which role{% endif %}.</p>{% endif %}
     {% for r in roles %}
-    <label class="choice"><input type="radio" name="role" value="{{ r.id }}" data-kind="{{ r.kind }}" data-scope="{{ r.scope }}" {% if r.id == role.id %}checked{% endif %}{% if (user.id == current_user.id and r.kind != 'admin') or (r.id != role.id and r.id not in givable) or (user.entra_oid and r.id != role.id) %} disabled{% endif %}>
+    <label class="choice"><input type="radio" name="role" value="{{ r.id }}" data-kind="{{ r.kind }}" data-scope="{{ r.scope }}" {% if r.id == role.id %}checked{% endif %}{% if (user.id == current_user.id and r.kind != 'admin') or (r.id != role.id and r.id not in givable) or (from_entra and r.id != role.id) or (user.entra_oid and r.kind != 'client' and role.kind == 'client') %} disabled{% endif %}>
       <span><span class="strong">{{ r.name }}{% if r.kind == 'client' %} <span class="faint small">client role</span>{% endif %}</span><span class="hint">{{ r.description }}</span></span></label>
     {% endfor %}
     <p class="footnote m0">{% if can('users.manage') %}Roles are built-in sets of capabilities. What each one opens is listed under <strong>What {{ user.username }} can do</strong>.{% endif %}{% if not actor.is_admin and givable|length < roles|length %} Roles that hold more than yours can only be given by an Administrator.{% endif %}</p>
@@ -40,8 +43,7 @@
   {% endif %}
   <label>{{ 'Password' if user.password_hash == '!' else 'New password' }} <span class="faint">(optional)</span><input type="password" name="password" minlength="12" autocomplete="new-password">
     <span class="hint">{% if user.password_hash == '!' %}This account signs in with Microsoft and has no password. Set one only as a fallback; they choose their own at their first password sign-in.{% else %}Leave blank to keep the current password. Setting one signs them out, and they choose their own at their next sign-in.{% endif %}</span></label>
-  <label>Your password <span class="faint">(only to set a new password)</span><input type="password" name="admin_password" autocomplete="current-password">
-    <span class="hint">Your own password, asked again before you change someone's password.</span></label>
+  {{ confirm_identity('admin_password', optional='only to set a new password', hint="Your own password, asked again before you change someone's password.", why="To set a password, confirm it's you first") }}
   <label class="check"><input type="checkbox" name="disabled" value="1" {% if user.disabled %}checked{% endif %}> Disable this account (they can't sign in)</label>
   <div class="form-actions"><button class="primary">Save changes</button><a class="btn ghost" href="{{ url_for('admin.users') }}">Cancel</a></div>
 </form>
@@ -115,7 +117,7 @@
   <dl class="kv">
     {% if user.entra_oid %}<dt>Microsoft account</dt><dd><span class="pill ok">Connected</span> <span class="mono small">{{ user.entra_upn }}</span></dd>{% endif %}
     <dt>Two-step sign-in</dt>
-    <dd>{% if user.totp_enabled_at %}<span class="pill ok">On</span>{% elif two_step_required %}<span class="pill warn">Not set up</span> <span class="muted small">They'll be asked to set it up at their next sign-in.</span>{% else %}<span class="pill">Off</span>{% endif %}</dd>
+    <dd>{% if user.totp_enabled_at %}<span class="pill ok">On</span>{% elif user.password_hash == '!' %}<span class="muted small">Not needed: they have no password and sign in with Microsoft, which asks for their organisation's MFA.</span>{% elif two_step_required %}<span class="pill warn">Not set up</span> <span class="muted small">They'll be asked to set it up at their next sign-in.</span>{% else %}<span class="pill">Off</span>{% endif %}</dd>
     <dt>Signed in on</dt>
     <dd>{{ sessions|length }} browser{{ '' if sessions|length == 1 else 's' }}</dd>
     {% if locked %}<dt>Status</dt><dd><span class="pill warn">Two-step locked</span> <span class="muted small">Too many wrong two-step codes, which needs their password. Unlocks by itself {{ user.locked_until|ago }}; consider resetting their password.</span></dd>{% endif %}
@@ -127,8 +129,7 @@
   {% if sessions or user.totp_enabled_at %}
   <form method="post" action="{{ url_for('admin.sign_out_user' if sessions else 'admin.reset_two_step', user_id=user.id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Your password <input type="password" name="admin_password" autocomplete="current-password" required>
-      <span class="hint">Your own password, asked again before you sign {{ 'yourself' if user.id == current_user.id else user.username }} out or reset two-step sign-in.</span></label>
+    {{ confirm_identity('admin_password', hint="Your own password, asked again before you sign " ~ ('yourself' if user.id == current_user.id else user.username) ~ " out or reset two-step sign-in.", why="Before you sign " ~ ('yourself' if user.id == current_user.id else user.username) ~ " out or reset two-step sign-in, confirm it's you") }}
     <div class="form-actions wrap">
       {% if unlock %}<button form="unlock-user">Unlock now</button>{% endif %}
       {% if sessions %}<button formaction="{{ url_for('admin.sign_out_user', user_id=user.id) }}">Sign out everywhere{{ ' else' if user.id == current_user.id else '' }}</button>{% endif %}

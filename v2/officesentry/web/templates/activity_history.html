@@ -4,7 +4,7 @@
 {% from "_macros.html" import icon, tenant_header, ts with context %}
 {% block title %}Activity history · {{ tenant.name }}{% endblock %}
 {% block content %}
-{{ tenant_header(tenant, 'activity', title='Activity history') }}
+{{ tenant_header(tenant, 'activity') }}
 {% set s, a = page.signins, page.audits %}
 
 {% if not page.collected %}

@@ -8,6 +8,10 @@ is useless after sign-out.
 A session ends when it is deleted, after ``session_idle_minutes`` without a
 request, after ``session_hours`` in total, or when the user's
 ``session_version`` changes (password, role, access or two-step changes).
+
+``confirmed_at`` notes when someone without a password last confirmed it's
+them with Microsoft (``confirm``), which stands in for retyping a password
+before a security change for a few minutes (``recently_confirmed``).
 """
 
 from __future__ import annotations
@@ -95,6 +99,22 @@ def current():
         # well within the idle limit.
         try_write(g.db, "UPDATE sessions SET last_seen_at = ? WHERE id = ?", (_iso(now), row["id"]))
     return row, user
+
+
+def confirm() -> None:
+    """Note that the person just confirmed it's them with Microsoft (sso.py), on this browser's session."""
+    token = session.get("sid")
+    if token:
+        g.db.execute(
+            "UPDATE sessions SET confirmed_at = ? WHERE token_hash = ?", (_iso(datetime.now(UTC)), _hash(token))
+        )
+
+
+def recently_confirmed(row, minutes: int, now: datetime | None = None) -> bool:
+    """Did this Microsoft session confirm it's them with Microsoft in the last ``minutes``?"""
+    if row is None or row["method"] != "microsoft" or not row["confirmed_at"]:
+        return False
+    return _parse(row["confirmed_at"]) + timedelta(minutes=minutes) > (now or datetime.now(UTC))
 
 
 def end() -> None:
