@@ -30,7 +30,8 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
   month-over-month report for the last 7, 30 or 90 days. It covers key
   figures then and now, new and fixed findings, admin, account, Conditional
   Access, forwarding, app, device and group changes, and a row-by-row
-  comparison of every detail report.
+  comparison of every detail report. Each person sees the changes in the
+  report areas they open on that client, and findings only with findings.
 - **Downloads**: every page above has CSV and XLSX. Values from clients can
   never become spreadsheet formulas.
 - **Licence prices** (*Settings*): enter monthly prices per SKU to cost waste and
