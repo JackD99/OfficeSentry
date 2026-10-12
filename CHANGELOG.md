@@ -11,18 +11,6 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.3.1] - Unreleased
 
-### Fixed
-
-- **Site access** no longer shows every site as open to everyone, guests included: SharePoint lists the
-  "Everyone" claims on every site whether or not they're given anything, so whether everyone can open a site
-  now comes from what it grants, directly or through its SharePoint groups. Nor does it say a site with no
-  Microsoft 365 group has no owner (a high finding from **Every site has at least two owners**) when its
-  owners are in the site's owners group: their members now count as owners once the client has approved the
-  SharePoint permission, and until then the report and the check say they can't count them yet.
-- **Teams** no longer lists every team older than 90 days as inactive where Microsoft hides names in usage
-  reports, its default: Microsoft then hides team IDs in the activity report too, so the report says inactive
-  teams can't be told until names are shown, and how to show them.
-
 ## [2.3.0] - 2026-10-12
 
 ### Action required
