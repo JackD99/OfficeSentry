@@ -34,7 +34,7 @@
 <div class="callout as-of">{{ icon('clock') }}<div><strong>As it was on {{ day.label }}</strong>
   <p class="m0">{{ day.note or 'This is the data Office Sentry held at the end of that day.' }}
     <a href="{{ request.path }}{{ ('?' ~ view_query) if view_query }}">Back to today</a> ·
-    <a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id, **{'from': day.on.isoformat()}) }}">What changed since then</a></p></div></div>
+    <a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id, **{'from': day.changes_from.isoformat()}) }}">What changed since then</a></p></div></div>
 {% endif %}
 
 {% if report.unavailable %}

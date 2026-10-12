@@ -658,12 +658,16 @@ SP_REST = {
 }
 
 
-def mock_sharepoint_rest(rsps, *, approved=True, rest=None):
+def mock_sharepoint_rest(rsps, *, approved=True, rest=None, statuses=None):
     """SharePoint's REST API on the tenant's host: each site's answers from ``SP_REST`` (or ``rest``), or 401
-    everywhere until the client approves the SharePoint permission."""
+    everywhere until the client approves the SharePoint permission. ``statuses`` (site address -> HTTP status)
+    answers every call for those sites with that status instead."""
     table = SP_REST if rest is None else rest
 
     def callback(request):
+        site = unquote(request.url.split("?")[0].partition("/_api")[0])
+        if site in (statuses or {}):
+            return statuses[site], {}, json.dumps({"error": "No"})
         if not approved:
             body = {"error_description": "Unsupported app only token."}
             return 401, {}, json.dumps(body)

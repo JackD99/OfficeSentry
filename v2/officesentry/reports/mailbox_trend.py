@@ -1,16 +1,16 @@
-"""Mailbox size trend: how mailboxes have grown, from Office Sentry's own retained snapshots.
+"""Mailbox size trend: how mailboxes have grown, from Office Sentry's own collections.
 
 Microsoft only says how big a mailbox is now. Every night's ``mailbox_size`` objects (``collectors/mail_usage.py``)
-are kept by the retention policy (one a day for 30 days, one a month for 12, by default), so each mailbox's size
-a month and three months ago is read from those, and the tenant's total from the ``mail.storage_bytes`` metric,
-which is never pruned. Growth over the last month gives each mailbox's forecast date for reaching its quota.
+are kept in the snapshots and then the daily history (``state_history.py``, 25 months by default), so each
+mailbox's size a month and three months ago is read from those, and the tenant's total from the
+``mail.storage_bytes`` metric, which is never pruned. Growth over the last month gives each mailbox's forecast
+date for reaching its quota.
 """
 
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from .. import store
 from ..devices import parse_ts
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
@@ -35,29 +35,33 @@ def _signed(n: float) -> str:
     return ("+" if n > 0 else "-") + _size(abs(int(n)))
 
 
-def _sizes_at(snap: TenantSnapshot, now: datetime) -> list[tuple[datetime, dict[str, int]]]:
-    """(collected at, sizes by mailbox) for each retained Mailbox size collection, oldest first, up to ``now``."""
+def _collections(snap: TenantSnapshot, now: datetime) -> list[tuple[datetime, int]]:
+    """(collected at, run ID) of each Mailbox size collection that can still be read, from its snapshot or the
+    daily history once retention has removed that, oldest first, up to ``now``."""
+    from .. import state_history  # here: the history imports the worker's schedule
+
     cutoff = snap.as_of or now.strftime("%Y-%m-%dT%H:%M:%SZ")
     runs = snap.conn.execute(
         "SELECT id, finished_at FROM runs WHERE tenant_id = ? AND collector = 'mailbox_usage'"
         " AND status IN ('succeeded', 'partial') AND finished_at <= ? AND object_count > 0"
-        " ORDER BY finished_at, id",
+        f" AND {state_history.READABLE} ORDER BY finished_at, id",
         (snap.tenant["id"], cutoff),
     ).fetchall()
-    out = []
-    for run in runs:
-        when = parse_ts(run["finished_at"])
-        sizes = {
-            m["_id"]: m["totalBytes"]
-            for m in store.run_objects(snap.conn, run["id"], "mailbox_size")
-            if isinstance(m.get("totalBytes"), int)
-        }
-        if when and sizes:
-            out.append((when, sizes))
-    return out
+    return [(when, run["id"]) for run in runs if (when := parse_ts(run["finished_at"]))]
 
 
-def _baseline(history: list[tuple[datetime, dict[str, int]]], latest: datetime, days: int, fallback: bool):
+def _sizes(snap: TenantSnapshot, run_id: int) -> dict[str, int]:
+    """Sizes by mailbox in one collection."""
+    from .. import state_history
+
+    return {
+        m["_id"]: m["totalBytes"]
+        for m in state_history.objects_of(snap.conn, run_id, "mailbox_size")
+        if isinstance(m.get("totalBytes"), int)
+    }
+
+
+def _baseline(history: list[tuple[datetime, int]], latest: datetime, days: int, fallback: bool):
     """The newest collection at least ``days`` old; with ``fallback``, else the oldest one if it's at least
     ``MIN_SPAN`` days old (so the month's growth shows from the first week)."""
     target = latest - timedelta(days=days)
@@ -96,9 +100,12 @@ def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     if _no_exchange(snap):
         out.unavailable = "This tenant has no Exchange Online licence."
         return
-    history = _sizes_at(snap, now)
+    history = _collections(snap, now)
     latest = history[-1][0] if history else now
-    bases = {days: _baseline(history, latest, days, days == SPANS[0]) for days in SPANS}
+    bases = {}
+    for days in SPANS:
+        base = _baseline(history, latest, days, days == SPANS[0])
+        bases[days] = (base[0], _sizes(snap, base[1])) if base else None
     month_base = bases[SPANS[0]]
     span = (latest - month_base[0]).days if month_base else 0
 

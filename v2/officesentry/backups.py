@@ -224,6 +224,7 @@ def mirror_events(source: Path, dest: Path) -> tuple[int, int]:
 
 def _write_manifest(dest: Path, manifest: dict) -> None:
     part = dest / f"{MANIFEST}.part"
+    _private(part)  # 0600 like the copies, whatever the umask (docker compose exec runs with 0000)
     part.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
     os.replace(part, dest / MANIFEST)
 
@@ -458,7 +459,14 @@ def _is_gzip(path: Path) -> bool:
 @contextmanager
 def _unpacked(source: Path, folder: Path) -> Iterator[Path]:
     """``source`` itself, or for a gzipped backup a temporary uncompressed copy of it in ``folder``."""
-    if not source.is_file() or not _is_gzip(source):
+    try:
+        packed = source.is_file() and _is_gzip(source)
+    except OSError as exc:  # say, copied in as root, so the portal's own user can't read it
+        raise RestoreError(
+            f"{source} can't be read ({exc.strerror or exc}). The portal's user (uid 10001 in Docker) needs to "
+            "be able to read it."
+        ) from exc
+    if not packed:
         yield source
         return
     folder.mkdir(parents=True, exist_ok=True)
@@ -474,6 +482,8 @@ def _unpacked(source: Path, folder: Path) -> Iterator[Path]:
         yield plain
     finally:
         plain.unlink(missing_ok=True)
+        for suffix in SIDE_FILES:  # a backup is a WAL database: opening it, even read-only, makes these
+            Path(f"{plain}{suffix}").unlink(missing_ok=True)
 
 
 def restore(db_path: Path, source: Path, worker_running: bool, force: bool = False) -> dict:
@@ -536,7 +546,30 @@ def _restore(db_path: Path, source: Path, plain: Path, worker_running: bool, for
         kept = f" The previous one is in {saved}." if saved else ""
         raise RestoreError(f"The restored database failed its check ({problem}).{kept}")
     events = restore_events(source.parent / EVENTS, db_path.parent / EVENTS)
-    return {"version": version, "saved": saved, "damaged": damaged is not None, "events": events}
+    forgotten = 0 if _event_files(db_path.parent / EVENTS) else _forget_history(db_path)
+    return {
+        "version": version,
+        "saved": saved,
+        "damaged": damaged is not None,
+        "events": events,
+        "history_forgotten": forgotten,
+    }
+
+
+def _forget_history(db_path: Path) -> int:
+    """For a backup restored without its activity history (no ``events`` folder beside it, and none in the data
+    folder), forget how far each client's sign-in and audit logs were read. Otherwise the restored cursors say
+    months were read that aren't there, and the next collection only reads on from the backup's time; without
+    them it reads back as far as Microsoft keeps the logs. Returns how many clients had a cursor."""
+    conn = connect(db_path)
+    try:
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'event_cursors'").fetchone():
+            return 0  # from before the activity history
+        clients = conn.execute("SELECT COUNT(DISTINCT tenant_id) FROM event_cursors").fetchone()[0]
+        conn.execute("DELETE FROM event_cursors")
+        return clients
+    finally:
+        conn.close()
 
 
 def _save_live(db_path: Path, folder: Path) -> Path:

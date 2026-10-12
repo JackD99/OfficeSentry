@@ -96,10 +96,10 @@ the recovery codes. Nothing shown? The install may still be running: `cloud-init
 Run commands with **Run command** (or open port 22 to your own address and SSH in as `azureuser`), in
 `/opt/officesentry`. Everything in [Running it on your own server](../../DEPLOY.md) works as written there:
 
-- **Updating:** read the [release notes](https://github.com/JackD99/OfficeSentry/releases), set
-  `OFFICESENTRY_VERSION` in `.env` to the new release, then `docker compose pull && docker compose up -d`. If
-  the release changes `docker-compose.yml` or `Caddyfile`, run `sh /opt/officesentry/install.sh` first: it
-  downloads the newest files and keeps your `.env`. Or turn on the [Update
+- **Updating:** read the [release notes](https://github.com/JackD99/OfficeSentry/releases), run
+  `sh /opt/officesentry/install.sh` (it downloads the newest release's `docker-compose.yml` and `Caddyfile`,
+  which releases change without always saying so, and keeps your `.env`), set `OFFICESENTRY_VERSION` in `.env`
+  to the new release, then `docker compose pull && docker compose up -d`. Or turn on the [Update
   button](../../DEPLOY.md#the-update-button) once and update from *Settings → Updates*.
 - **Settings:** in `/opt/officesentry/.env` ([When things run](../../DEPLOY.md#when-things-run)), then
   `docker compose up -d`.

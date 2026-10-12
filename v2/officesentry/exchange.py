@@ -135,7 +135,8 @@ class ExchangeClient:
             try:
                 return provider()
             except TokenError as exc:
-                raise ExchangeError(401, exc.code, exc.message) from exc
+                # Not reaching Microsoft is a network failure like any other, not a refused sign-in.
+                raise ExchangeError(0 if exc.code == "network_error" else 401, exc.code, exc.message) from exc
 
         return cls(tenant_ref, token, cloud=cloud, app=client_id, **kwargs)
 

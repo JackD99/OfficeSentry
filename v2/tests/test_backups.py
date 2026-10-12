@@ -120,6 +120,23 @@ def test_backup_and_restore(env, db, two_tenants, capsys):
     assert [r["name"] for r in db.execute("SELECT name FROM tenants ORDER BY id")] == ["Alpha Ltd", "Bravo Inc"]
     with closing(connect(env.db_path)) as fresh:
         assert fresh.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    # Nothing is left of the unpacked copy, SQLite's -shm and -wal beside it included.
+    assert not list(env.data_dir.glob("restore-*"))
+    main(["check-backup", str(saved)])
+    assert sorted(p.name for p in saved.parent.iterdir() if p.name.startswith("officesentry-")) == [saved.name]
+
+
+def test_a_backup_the_portal_cant_read_says_so(env, db, two_tenants, monkeypatch):
+    main(["backup"])
+    saved = next((env.data_dir / "backups").glob("officesentry-*.db.gz"))
+
+    def denied(path):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(backups, "_is_gzip", denied)  # as for a file copied in as root
+    with pytest.raises(SystemExit, match=r"can't be read \(Permission denied\)\. The portal's user"):
+        main(["restore", str(saved)])
+    assert _tenants(env.db_path) == ["Alpha Ltd", "Bravo Inc"]
 
 
 def test_restore_refuses_while_the_worker_runs(env, db, two_tenants):

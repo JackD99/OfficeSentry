@@ -18,10 +18,12 @@ from __future__ import annotations
 import time
 from datetime import timedelta
 
+from ..entra import SHAREPOINT_APP_ID, label
 from ..graph import PermissionMissing
 from ..sharepoint_api import SharePointAccessDenied, SharePointError, beside, host_of
 from ..text import plural
 from .base import Collector, RunContext, register
+from .connection import granted
 from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups
 from .site_access import classify_login, guest_address
 
@@ -43,6 +45,7 @@ LIST_PARAMS = {
 }
 WEB_LIST_PARAMS = {"$select": "Title,Url,HasUniqueRoleAssignments", "$top": "5000"}
 
+SITES_READ = label(SHAREPOINT_APP_ID, "Sites.Read.All")  # as the connection check names it
 MAX_SITES = 3000
 MAX_REQUESTS = 12_000  # per run, across every site
 UNIQUE_LISTS_READ = 50  # lists with their own permissions whose grants are read, per site
@@ -132,7 +135,7 @@ class _Budget:
 
 
 class _NotApproved(Exception):
-    """SharePoint refused the app on the first site: the client hasn't approved the permission yet."""
+    """SharePoint refused the app before any site was read: the client hasn't approved the permission yet."""
 
 
 @register
@@ -175,7 +178,10 @@ class SitePermissions(Collector):
         clients: dict[str, object] = {}
         budget = _Budget()
         stored: list[tuple[str, dict]] = []
-        unreadable = 0
+        unreadable = refusals = 0
+        # SharePoint refusing the app means the client hasn't approved the permission, unless the connection
+        # check says it's granted: then the site itself is locked, and only that site is unreadable.
+        approved = granted(ctx, SITES_READ) is True
         stopped = None
         try:
             for n, site in enumerate(team_sites):
@@ -195,13 +201,16 @@ class SitePermissions(Collector):
                 try:
                     stored.append((site["id"], self._site(ctx, client, site, budget)))
                 except SharePointAccessDenied as exc:
-                    if not stored and not unreadable:
+                    if not stored and not unreadable and not approved:
                         raise _NotApproved(exc.message) from exc
                     unreadable += 1
+                    refusals += 1
                     ctx.log(f"SharePoint refused access to {site['webUrl']}: {exc.message}", "warning")
                 except SharePointError as exc:
                     unreadable += 1
                     ctx.log(f"Couldn't read the permissions of {site['webUrl']}: {exc.message}", "warning")
+            if refusals and not stored and not approved:  # the first site failed another way, the rest refused
+                raise _NotApproved(f"{plural(refusals, 'site')} refused")
         except _NotApproved as exc:
             ctx.log(
                 "SharePoint refused the app: the client hasn't approved the SharePoint permission yet "
@@ -218,6 +227,13 @@ class SitePermissions(Collector):
         if unreadable:
             ctx.warn(f"The permissions of {plural(unreadable, 'site')} couldn't be read")
         catalog.save()
+        if unreadable and not stored:
+            # Not one site was read: say why, rather than report a tenant whose sites grant nothing.
+            reason = "denied" if refusals == unreadable else "unreadable"
+            ctx.objects(
+                "permissions_status", [("status", {"available": False, "reason": reason, "unreadable": unreadable})]
+            )
+            return
         ctx.objects("site", stored)
         ctx.objects(
             "permissions_status",

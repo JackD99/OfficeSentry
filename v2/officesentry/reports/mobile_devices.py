@@ -144,7 +144,8 @@ def devices_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None
                     "Remove-MobileDevice in Exchange Online PowerShell",
                 )
             )
-        if days is not None and days >= STALE_DAYS:
+        # By calendar day, as the table's "Older than 90 days" filter counts, so the figure opens these rows.
+        if last and (now.date() - last.date()).days > STALE_DAYS:
             stale += 1
             reasons.append(("low", f"Not synced for {days} days: the partnership can be removed"))
         if days is not None and days < ACTIVE_DAYS:

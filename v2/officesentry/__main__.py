@@ -327,6 +327,12 @@ def cmd_restore(args, cfg):
     print(f"Restored {args.file} (database version {result['version']}).")
     if result.get("events"):
         print(f"Put back {plural(result['events'], 'missing activity history file')} from the backup folder.")
+    if result.get("history_forgotten"):
+        print(
+            "No activity history came with this backup (no events folder beside it), so sign-ins and audit "
+            "events from before what Microsoft still keeps (30 days) are gone. The next collection reads back "
+            f"what Microsoft has for {plural(result['history_forgotten'], 'client')}."
+        )
     if result["version"] < latest_version():
         print(f"It's upgraded to version {latest_version()} when the portal starts.")
     print(

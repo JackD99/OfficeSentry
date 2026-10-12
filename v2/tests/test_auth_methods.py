@@ -276,6 +276,19 @@ def test_report_password_hygiene(db, tenant):
     assert expiry["parked.com"][0][2:4] == ["90 days", "14 days"] and expiry["parked.com"][1] == "low"
 
 
+def test_password_age_counts_calendar_days_like_its_link(db, tenant):
+    """Ann's password was set at midnight on 1 January 2026. At noon on 1 January 2027 that is over a year by the
+    clock, but not "Older than a year" on the table, which counts calendar days. The figure counts what its link
+    opens."""
+    from officesentry.reports import views
+
+    report = data_reports.build(db, tenant, "auth-methods", datetime(2027, 1, 1, 12, tzinfo=UTC))
+    old = next(h for h in report.highlights if h.label == "Password over a year old")
+    view, _ = views.rows_view(report, old.rows)
+    opened = [r[0] for s in views.apply(report, view).sections if s.title == old.rows.table for r in s.rows]
+    assert sorted(opened) == ["bg@x.com", "carl@x.com"] and old.value == 2
+
+
 def test_report_without_registration_or_policy(db, two_tenants):
     alpha, _ = two_tenants
     tenant = store.get_tenant(db, alpha)

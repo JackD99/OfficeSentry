@@ -110,7 +110,7 @@ def scheme_text(tenant_id: int, scheme: str):
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{scheme}.txt")
     return Response(
         scheme_export.to_text(r, branding.load(g.db).display_name),
-        mimetype="text/plain; charset=utf-8",
+        mimetype="text/plain",
         headers={"Content-Disposition": f'attachment; filename="{_name(t, scheme, "txt")}"'},
     )
 
@@ -150,6 +150,6 @@ def scheme_csv(tenant_id: int, scheme: str):
     table = tables.Table(r.scheme.title, scheme_export.COLUMNS, scheme_export.rows(r))
     return Response(
         tables.to_csv(table),
-        mimetype="text/csv; charset=utf-8",
+        mimetype="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{_name(t, scheme, "csv")}"'},
     )

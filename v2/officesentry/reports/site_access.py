@@ -21,8 +21,9 @@ EVERYONE_WORDS = {"all": "Yes, including guests", "members": "Yes"}
 WAITING_NOTE = (
     "Members of SharePoint groups on {sites} with no Microsoft 365 group aren't listed here; those sites show "
     "their site administrators and what the default library grants. The Site permissions report lists every "
-    "SharePoint group and its members once the client approves the SharePoint permission."
+    "SharePoint group and its members{once}."
 )
+ONCE_APPROVED = " once the client approves the SharePoint permission"
 
 
 def _site_cell(row: dict):
@@ -190,7 +191,11 @@ def site_access(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
     ]
     waiting = [r for r in rows if not r.get("group") and r.get("userList")]
     if waiting:
-        report.notes.append(WAITING_NOTE.format(sites=plural(len(waiting), "site")))
+        permissions = (snap.objects("site_permissions", "permissions_status") or [None])[0]
+        pending = not isinstance(permissions, dict) or permissions.get("reason") == "consent"
+        report.notes.append(
+            WAITING_NOTE.format(sites=plural(len(waiting), "site"), once=ONCE_APPROVED if pending else "")
+        )
     if status.get("unreadable"):
         report.notes.append(
             f"The user list of {plural(status['unreadable'], 'site')} couldn't be read; those sites show only "

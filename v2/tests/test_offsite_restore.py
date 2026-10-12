@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -39,6 +40,8 @@ if args[:3] == ["compose", "--profile", "offsite"]:
         target = root / "restore" / "data" / "backups"
         target.mkdir(parents=True, exist_ok=True)
         shutil.copy(os.environ["FAKE_BACKUP"], target / "{name}")
+        if "/data/backups/events" in rest and os.environ.get("FAKE_EVENTS"):
+            shutil.copytree(os.environ["FAKE_EVENTS"], target / "events")
     sys.exit(0)
 if args[:2] == ["compose", "run"] and "officesentry" in args and "restore" in args:
     file = args[-1]
@@ -115,3 +118,24 @@ def test_a_failed_offsite_restore_leaves_the_portal_stopped(cfg, db, two_tenants
     assert "compose stop web worker" in calls
     assert "compose up -d" not in calls  # nothing starts on what's left
     assert _tenants(cfg.db_path) == ["Alpha Ltd", "Bravo Inc"]
+
+
+def test_the_offsite_restore_brings_back_the_activity_history(cfg, db, two_tenants, server, monkeypatch):
+    month = cfg.data_dir / "events" / "signins" / "2026-09.db"
+    month.parent.mkdir(parents=True)
+    with closing(sqlite3.connect(month)) as conn:
+        conn.execute("CREATE TABLE signin (id TEXT)")
+        conn.execute("INSERT INTO signin VALUES ('one sign-in')")
+        conn.commit()
+    main(["backup"])
+    copies = cfg.data_dir / "backups"
+    monkeypatch.setenv("FAKE_BACKUP", str(next(copies.glob("officesentry-*.db.gz"))))
+    monkeypatch.setenv("FAKE_EVENTS", str(copies / "events"))
+    shutil.rmtree(cfg.data_dir / "events")  # a new server: no history yet
+
+    done, calls = _restore_job(server)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert any("--include /data/backups/events" in c for c in calls)
+    assert "Put back 1 missing activity history file" in done.stdout
+    with closing(sqlite3.connect(month)) as conn:
+        assert conn.execute("SELECT id FROM signin").fetchall() == [("one sign-in",)]

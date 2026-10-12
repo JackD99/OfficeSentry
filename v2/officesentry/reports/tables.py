@@ -14,6 +14,9 @@ from dataclasses import dataclass, field
 from io import StringIO
 
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r", "\n")
+# A change that is only a signed number ("+2", "-1.5", "+4.6%", "+£23.00") can't be a formula: no prefix.
+SIGNED_NUMBER = re.compile(r"[+-][£$€]?\d[\d,]*(?:\.\d+)?%?")
+RESERVED_SHEET = "history"  # Excel keeps this sheet name for itself and offers to repair a workbook that uses it
 
 
 @dataclass
@@ -33,7 +36,7 @@ def csv_cell(value) -> str | int | float:
     if isinstance(value, (list, tuple, set)):
         value = ", ".join(str(v) for v in value)
     text = str(value)
-    if text.startswith(FORMULA_START):
+    if text.startswith(FORMULA_START) and not SIGNED_NUMBER.fullmatch(text):
         return "'" + text
     return text
 
@@ -48,9 +51,9 @@ def to_csv(table: Table) -> bytes:
 
 
 def sheet_name(title: str, used: set[str]) -> str:
-    name = re.sub(r"[\[\]:*?/\\]", " ", title).strip()[:31] or "Sheet"
+    name = re.sub(r"[\[\]:*?/\\\x00-\x1f]", " ", title).strip()[:31] or "Sheet"
     base, n = name, 2
-    while name.lower() in used:
+    while name.lower() in used or name.lower() == RESERVED_SHEET:
         suffix = f" ({n})"
         name = base[: 31 - len(suffix)] + suffix
         n += 1

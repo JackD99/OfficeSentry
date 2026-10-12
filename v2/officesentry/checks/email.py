@@ -127,6 +127,8 @@ def auto_forward_policy(snap: TenantSnapshot, now: datetime):
     policies = snap.objects("mailboxes", "outbound_spam_policy")
     if policies is None:
         return _unavailable("Exchange data hasn't been collected yet")
+    if not policies:  # every Exchange Online organisation has a default policy, so none means it wasn't read
+        return _unavailable("Exchange returned no outbound spam policy")
     allowing = [p for p in policies if p.get("AutoForwardingMode") == "On"]
     # The default policy covers everyone no other policy names. A scoped policy that allows forwarding
     # is what the recommendation asks for: it opens forwarding only for the mailboxes it lists.

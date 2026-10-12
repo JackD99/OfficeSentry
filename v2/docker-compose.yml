@@ -102,7 +102,7 @@ services:
 
   # Optional encrypted off-site backups with restic (https://restic.net) to any
   # S3-compatible storage, set in .env.backup. Never runs by itself:
-  # deploy/backups.sh runs it after each nightly backup (DEPLOY.md, "Off-site
+  # deploy/jobs.sh runs it after each nightly backup (DEPLOY.md, "Off-site
   # backups"). It reads the backups folder only; its password and storage keys
   # are in .env.backup alone, not in the portal's settings or volumes.
   offsite:
