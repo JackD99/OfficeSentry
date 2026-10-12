@@ -288,6 +288,78 @@ SECTIONS = [
 ]
 GUIDES = "Guides"  # v2/docs/*.md not listed above
 
+# The front page's "What's new" band: one release's headline changes, in words for the people who'd use them,
+# each linking to where it's explained. It says "New in 2.3" once CHANGELOG.md gives the version a date and
+# "Coming in 2.3" until then, and it's left out while it has no items. Add an item only once its change is on
+# main. `icon` is one of the icons in templates/home.html.
+WHATS_NEW = {
+    "version": "2.3.0",
+    "title": "Your clients sign in with Microsoft, and updates take one click",  # the band's heading
+    # a sentence under it
+    "summary": "Your clients' people sign in with the account they already use, new releases install from the "
+    "portal, and each client's month-end report is yours to finish.",
+    "chip": "Client sign-in, one-click updates",  # a few words for the link at the top of the page
+    "items": [  # {"icon", "title", "text", "href", "link"}: "link" names the page "href" opens
+        {
+            "icon": "sign-in",
+            "title": "Clients sign in with their own Microsoft account",
+            "text": "Your clients' people use the work account they already have, under their own organisation's "
+            "MFA, and see only their own company's reports. Nobody is added to your tenant as a guest.",
+            "href": "/docs/client-sign-in/",
+            "link": "Client sign-in",
+        },
+        {
+            "icon": "update",
+            "title": "Update from the portal",
+            "text": "Settings → Updates lists each new release and what it asks of you first. With the optional "
+            "updater on, Update checks the release is genuine, installs it and goes back to the old version by "
+            "itself if the new one doesn't start.",
+            "href": "/docs/install/#the-update-button",
+            "link": "The Update button",
+        },
+        {
+            "icon": "review",
+            "title": "Each client's month-end report, your way",
+            "text": "Leave a check, a key figure or a whole part of the report out of one client's copy for one "
+            "month, with a preview of what they'll get beside you, and send failed emails again in one go.",
+            "href": "/docs/reference/#report-designs-your-own-client-reports",
+            "link": "Report designs and the review",
+        },
+        {
+            "icon": "device",
+            "title": "Intune policies and mail rules",
+            "text": "Two new reports: Intune policies, with platforms that have no compliance policy and paused "
+            "update rings, and Mail rules and protection, with rules that let mail skip the spam filter. Devices "
+            "shows which computers have their BitLocker key saved, without reading the key.",
+            "href": "/docs/reference/#reports",
+            "link": "See every report",
+        },
+        {
+            "icon": "project",
+            "title": "Projects you'd put on a quote",
+            "text": "Each proposal lists only the work that client's findings call for, and repairs such as a "
+            "stopped directory sync are quick fixes rather than something to sell.",
+        },
+        {
+            "icon": "table",
+            "title": "Reports that fit a laptop",
+            "text": "Wide reports open on the columns that matter, with the rest a click away, and the menu folds "
+            "away to its icons. Long lists fold into a short form you open in place, and All clients opens any "
+            "report from the All reports menu.",
+        },
+    ],
+    "also": [  # smaller changes, a few words each
+        "five more email checks",
+        "report designs previewed at the printed page's size, with undo and redo",
+        "setup notes for your team left out of the client's copy",
+        "release images with a signed build record you can check",
+        "roles limited to some clients stay within them everywhere",
+        "month-end emails sent at Microsoft's pace, however many go at once",
+        "PIM for groups in the Admins report",
+        "sign-in and sessions tested harder, on every page",
+    ],
+}
+
 # Copied into the site as they are, so the product page and docs can show and link them.
 COPIED = {"docs/screenshots": "screenshots", "examples": "examples"}
 # Also served from the site's root, where browsers, phones and crawlers look for them without being told.
@@ -514,6 +586,30 @@ def version() -> str:
     return ""
 
 
+_MONTHS = "January February March April May June July August September October November December".split()
+
+
+def whats_new() -> dict | None:
+    """The "What's new" band: WHATS_NEW with what CHANGELOG.md says of its version, or None to leave it out."""
+    wanted = WHATS_NEW["version"]
+    if not WHATS_NEW["items"]:
+        return None
+    for found in re.finditer(r"^## \[?v?(\d+\.\d+\.\d+)\]? - (.+)$", (ROOT / "CHANGELOG.md").read_text("utf-8"), re.M):
+        if found[1] != wanted:
+            continue
+        when = found[2].strip()
+        dated = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", when)
+        return {
+            **WHATS_NEW,
+            "short": wanted.removesuffix(".0"),  # "2.3" reads better than "2.3.0" in a heading
+            "released": bool(dated),
+            "date": f"{int(dated[3])} {_MONTHS[int(dated[2]) - 1]} {dated[1]}" if dated else "",
+            # The version's heading on the changelog page, with GitHub's anchor as render() gives it
+            "href": f"/docs/changelog/#{github_slug(f'{wanted} - {when}')}",
+        }
+    sys.exit(f"WHATS_NEW is for {wanted}, which has no '## [{wanted}] - ...' heading in CHANGELOG.md")
+
+
 # -- Search engines -------------------------------------------------------------------------------------------
 
 
@@ -612,7 +708,7 @@ def build() -> Path:
             env.get_template(template).render(path="/" + path.removesuffix("index.html"), **ctx), encoding="utf-8"
         )
 
-    page("home.html", "index.html", examples=examples(), structured_data=home_data(cfg))
+    page("home.html", "index.html", examples=examples(), whats_new=whats_new(), structured_data=home_data(cfg))
     page("docs_index.html", "docs/index.html", title="Documentation")
     for doc in docs:
         page(

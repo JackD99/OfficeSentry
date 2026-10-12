@@ -9,7 +9,10 @@ group and site; the Teams, Site access, Site permissions, File and folder permis
 flow, Administrative units and Licence changes reports; Cyber Essentials, cyber insurance and
 supplier questionnaires judged from the data; evidence packs for IASME Cyber Assurance, ISO
 27001, UK GDPR, CIS Microsoft 365, NIST CSF 2.0, SOC 2 and the Essential Eight; and roles and
-staff sign-in with Microsoft.
+staff sign-in with Microsoft. 2.3 brought client sign-in with Microsoft; an Update button that
+installs a release from the portal; a month-end review that leaves things out of one client's
+report; the Intune policies and Mail rules and protection reports, BitLocker recovery keys and
+PIM for groups; and projects you'd put on a quote.
 
 ## Next
 

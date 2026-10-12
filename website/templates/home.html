@@ -7,10 +7,23 @@
 <figure class="window"><div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>{{ shot(name, alt, eager=eager) }}</figure>
 {%- endmacro -%}
 {%- macro check() -%}<svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{%- endmacro -%}
+{#- The icons a "What's new" item can name (WHATS_NEW in build.py). -#}
+{%- set icons = {
+  'sign-in': '<path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4"/><path d="M10 16l4-4-4-4"/><path d="M14 12H4"/>',
+  'update': '<path d="M20 11a8 8 0 00-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0014.3 4.9L20 16"/><path d="M20 20v-4h-4"/>',
+  'review': '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 14l2 2 4-4"/>',
+  'device': '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/>',
+  'project': '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2"/><path d="M3 13h18"/>',
+  'table': '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/>',
+  'shield': '<path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/>',
+  'mail': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+} -%}
+{%- macro icon(name) -%}<svg viewBox="0 0 24 24" aria-hidden="true">{{ icons[name]|safe }}</svg>{%- endmacro -%}
 {% block main %}
 <section class="hero">
   <div class="wrap hero-inner">
     <div class="hero-copy">
+      {% if whats_new %}<a class="hero-chip" href="#whats-new"><span>{{ 'New in' if whats_new.released else 'Coming in' }} {{ whats_new.short }}</span><b>{{ whats_new.chip }}</b></a>{% endif %}
       <p class="eyebrow">{{ "Free and open source" if source_public else "Free software" }} · Built for MSPs</p>
       <h1>Microsoft 365 reports for every client, without the busywork</h1>
       <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, client reports you design yourself, evidence for Cyber Essentials and insurance forms, 49 detail reports, a page for every person, mailbox, group and site, a view across every client and what changed since last month.</p>
@@ -66,6 +79,7 @@
           <li>{{ check() }}At a glance: what was checked, what changed and the key figures</li>
           <li>{{ check() }}This month: findings found and fixed, what was done and what to do next</li>
           <li>{{ check() }}Each failing check, Secure Score and licence waste in money</li>
+          <li>{{ check() }}Leave anything out of one client's copy for a month, with a preview of what they'll get</li>
           <li>{{ check() }}A web page, a branded PDF, a two-page summary PDF and a spreadsheet</li>
         </ul>
         <a class="more" href="/examples/monthly-security-licensing-review.pdf">Open the example PDF</a>
@@ -83,7 +97,7 @@
         <ul class="ticks">
           <li>{{ check() }}Blocks for everything a report needs: a verdict, key figures, failing checks, what changed, licence spend, a table from any detail report and your own text</li>
           <li>{{ check() }}Drag blocks in, set each one up and put two side by side</li>
-          <li>{{ check() }}Preview it on any client and download the PDF in one click</li>
+          <li>{{ check() }}Preview it on any client at the printed page's size, with undo and redo, and download the PDF in one click</li>
           <li>{{ check() }}<span>Start from an executive summary, a full review, a licensing review or the Quarterly review (<a href="/examples/quarterly-review.pdf">example PDF</a>)</span></li>
         </ul>
         <a class="more" href="{{ demo_url }}/reporting/designs/1">See the designer in the demo</a>
@@ -97,6 +111,7 @@
         <p>Identity, email, files and Teams, devices and licences: MFA coverage, mail forwarding, mailbox permissions, mail flow per domain, mail flow rules and spam protection, sign-ins, Conditional Access, administrative units, Teams channels and their guests, who can reach each SharePoint site, Intune policies and BitLocker recovery keys, licence changes month by month, licence right-sizing and more.</p>
         <ul class="ticks">
           <li>{{ check() }}Filter by any value or date, sort and hide columns</li>
+          <li>{{ check() }}Tables fit a laptop: wide reports open on their key columns, and long lists fold to a short form</li>
           <li>{{ check() }}Save a view and reuse it on any client</li>
           <li>{{ check() }}PDF, XLSX and CSV downloads contain exactly the rows shown</li>
           <li>{{ check() }}Every headline figure opens the rows behind it</li>
@@ -165,7 +180,7 @@
       <article class="card">
         {{ shot('projects', 'Recommended projects for every client, worst first') }}
         <h3>Projects to recommend</h3>
-        <p>Findings become the projects an account manager can propose, with a branded proposal PDF. A project drops off once its findings are fixed.</p>
+        <p>Findings become projects you'd put on a quote, each listing only the work that client needs, with a branded proposal PDF. Repairs are quick fixes, and a project drops off once its findings are fixed.</p>
       </article>
       <article class="card">
         {{ shot('emailed-reports', 'Schedules, alerts, contacts and the delivery history') }}
@@ -175,7 +190,7 @@
       <article class="card">
         {{ shot('client-view', 'What a client sees when they sign in') }}
         <h3>A view for your clients</h3>
-        <p>Client users sign in and see only their own organisation's reports and downloads, never another client or how collection works.</p>
+        <p>Your clients' people sign in with their own Microsoft work account and see only their own organisation's reports and downloads, never another client or how collection works.</p>
       </article>
       <article class="card">
         {{ shot('upcoming', 'Coming up: renewals, expiring secrets and filling mailboxes across every client') }}
@@ -247,6 +262,32 @@
   </div>
 </section>
 
+{% if whats_new %}
+<section class="whats-new" id="whats-new">
+  <div class="wrap whats-new-inner">
+    <header class="section-head left">
+      <p class="eyebrow">{{ 'New in' if whats_new.released else 'Coming in' }} {{ whats_new.short }}{% if whats_new.date %} · {{ whats_new.date }}{% endif %}</p>
+      <h2>{{ whats_new.title }}</h2>
+      <p>{{ whats_new.summary }}</p>
+      <a class="more" href="{{ whats_new.href }}">Everything in {{ whats_new.version }}</a>
+    </header>
+    <div>
+      <ul class="new-grid">
+        {% for item in whats_new['items'] %}
+        <li>
+          {{ icon(item.icon) }}
+          <h3>{{ item.title }}</h3>
+          <p>{{ item.text }}</p>
+          {% if item.href %}<a class="more" href="{{ item.href }}">{{ item.link }}</a>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% if whats_new.also %}<p class="new-also"><strong>Also in {{ whats_new.short }}:</strong> {{ whats_new.also|join('; ') }}.</p>{% endif %}
+    </div>
+  </div>
+</section>
+
+{% endif %}
 <section class="demo-band" id="demo">
   <div class="wrap demo-inner">
     <div>
@@ -283,9 +324,10 @@
       <li><strong>Read-only in your clients' tenants.</strong> The app that reads them asks only for read permissions. The code has no way to write to Microsoft Graph, and only runs Exchange commands that start with Get-.</li>
       <li><strong>Sending email is separate and optional.</strong> Reports and alerts go out through your own mail server, or through a separate app in your own Microsoft 365 tenant that may send mail and nothing else, limited to one mailbox. It has no access to your clients.</li>
       <li><strong>Certificate sign-in, no stored passwords.</strong> The app signs in with a certificate whose private key is encrypted in the database. Secrets and private keys can never be downloaded.</li>
-      <li><strong>Every client kept apart.</strong> People see only the clients they're given, and only what their role opens there. Clients see only their own reports.</li>
+      <li><strong>Every client kept apart.</strong> People see only the clients they're given, and only what their role opens there. Clients see only their own reports, and when they sign in with Microsoft, only from their own organisation's tenant.</li>
       <li><strong>Your team signs in your way.</strong> Staff sign in with a password and a code from an authenticator app, or with their Microsoft work account under your own Conditional Access and MFA, through a sign-in app in your tenant that has no access to anything else.</li>
       <li><strong>Runs on your own server.</strong> Your clients' data stays with you. There's no telemetry: nothing is sent to us.</li>
+      <li><strong>Releases you can check.</strong> Each release image carries a signed record of how it was built, so you can check it came from this project's code before you run it. The Update button checks it before it installs anything.</li>
     </ul>
   </div>
 </section>
@@ -329,6 +371,7 @@
     <details><summary>Does it read anyone's email?</summary><p>No. It reads settings, mailbox details such as size, forwarding and permissions, and inbox rules, never message contents. <a href="/docs/what-it-reads/">What Office Sentry reads</a> lists every permission, written for your clients.</p></details>
     <details><summary>Can my team sign in with their Microsoft accounts?</summary><p>Yes. Office Sentry creates a small sign-in app in your own tenant, with no access to anything else, and your staff sign in under your Conditional Access and MFA. Their role comes from Entra at every sign-in; which clients they see is still set in Office Sentry. <a href="/docs/staff-sign-in/">Staff sign-in</a> has the steps.</p></details>
     <details><summary>Can my clients sign in with their own Microsoft accounts?</summary><p>Yes. Add each client's contacts by their work address and they sign in with the account they already use, under their own organisation's MFA, from their own company's tenant only. Nobody is invited into your tenant as a guest, and they only ever see their own company's reports. <a href="/docs/client-sign-in/">Client sign-in</a> has the steps.</p></details>
+    <details><summary>How do I update it?</summary><p><em>Settings → Updates</em> lists every newer release with its notes and anything to do first. Turn on the optional updater and its Update button installs a release, after checking it's genuine, and goes back to the old version by itself if the new one doesn't start. Updating by hand with Docker works as well. <a href="/docs/install/#updating">Updating</a> has both.</p></details>
     <details><summary>Where is the data kept?</summary><p>On your own server, in one database you can back up and restore. Office Sentry has no telemetry, so nothing is sent to us.</p></details>
     <details><summary>How is it different from Microsoft's own admin centres?</summary><p>Microsoft shows one tenant at a time, in its own words, with little history. Office Sentry keeps every night's results for every client, compares them month by month and across clients, and turns them into branded reports.</p></details>
   </div>

@@ -37,6 +37,16 @@ in `v2/docs/deploy/README.md` (`v2/tests/test_deploy_platforms.py` fails until b
 `assets/site.css` the styles (the same colours as the app, light and dark). Screenshots come from
 `docs/screenshots/` (made by `v2/scripts/screenshots.py`), so the page shows the app as it is.
 
+### What's new
+
+`WHATS_NEW` in `build.py` is a feature release's headlines: a heading, a sentence under it, a few words for
+the link at the top of the page, up to six items (an icon, a title, a sentence or two and a link to where it's
+explained) and a list of smaller changes. The front page shows them in a band after the features, and the
+link at the top of the page jumps to it. Until `CHANGELOG.md` gives that version a date the band says "Coming
+in 2.3"; from the release on it says "New in 2.3" with the date, and links to that version in the changelog.
+With no items there's no band and no link. Add an item when its change is on `main`, and start the next
+feature release's list when the last one is out.
+
 `assets/social-card.png` is the picture shown when someone shares a link to the site (LinkedIn, Reddit,
 Teams, Slack and so on). To change it, replace it with another 1200×630 PNG. `assets/favicon.svg` is the tab
 icon; `favicon.ico` and `apple-touch-icon.png` are the same icon for older browsers and phones, and the build
