@@ -33,9 +33,11 @@ import re
 import sqlite3
 import sys
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from . import __version__, logs, system_health
 from .config import ENV_PREFIX, Config
@@ -80,19 +82,33 @@ PLAIN_SETTING_PREFIXES = ("retention.", "state_history.", "system_alert.")
 
 # -- Redaction -----------------------------------------------------------------------------------------------
 
+
+def _quoted_removed(m: re.Match) -> str:
+    """``password: "two words"`` keeps its quotes, and loses the whole value, not just its first word."""
+    value = m.group(3)
+    quote = value[0] if value[0] in "'\"" else ""
+    return f"{m.group(1)}{m.group(2)}{quote}[removed]{quote}"
+
+
 # (what it matches, what replaces it). Order matters: PEM blocks and tokens before the long-value sweep.
-PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
+PATTERNS: tuple[tuple[re.Pattern, str | Callable[[re.Match], str]], ...] = (
     (re.compile(r"-----BEGIN [A-Z ]+-----.*?-----END [A-Z ]+-----", re.S), "[certificate or key removed]"),
-    (re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*"), "[token removed]"),
+    # A JWT, and the portal's own session cookie (whose middle part, a timestamp, is shorter).
+    (re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*"), "[token removed]"),
     (re.compile(r"\bgAAAAA[A-Za-z0-9_=-]{20,}"), "[encrypted value removed]"),
-    (re.compile(r"(?i)\b(authorization\s*[:=]\s*)(?:bearer\s+)?\S+"), r"\1[removed]"),
+    # A header line, or a header in a printed dict: {'Authorization': 'Bearer …'}.
+    (
+        re.compile(r"(?i)\b(authorization['\"]?\s*[:=]\s*['\"]?)(?:(?:bearer|basic|negotiate)\s+)?[^\s'\",;]+"),
+        r"\1[removed]",
+    ),
+    (re.compile(r"(?i)\b(bearer\s+)(?=[\w.~+/=-]*\d)[\w.~+/=-]{12,}"), r"\1[removed]"),
     (re.compile(r"(?i)\b((?:set-)?cookie\s*[:=]\s*)[^\r\n]+"), r"\1[removed]"),
     (
         re.compile(
             r"(?i)\b([\w-]*(?:password|passwd|pwd|secret|api[_-]?key|private_key|encryption_keys?|token|"
-            r"device_code|sid))\b(\s*[:=]\s*)(['\"]?)[^\s'\"&,;]+"
+            r"device_code|sid))\b(['\"]?\s*[:=]\s*)(\"[^\"\r\n]*\"|'[^'\r\n]*'|['\"]?[^\s'\"&,;]+)"
         ),
-        r"\1\2\3[removed]",
+        _quoted_removed,
     ),
     (
         re.compile(r"(?i)([?&](?:token|code|state|sig|signature|key|secret|password|access_token)=)[^&\s]+"),
@@ -106,7 +122,15 @@ PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
         "[tenant domain]",
     ),
     (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "[ip]"),
-    (re.compile(r"(?i)\b(?:[0-9a-f]{1,4}:){4,7}[0-9a-f]{1,4}\b|(?<![\w:])[0-9a-f]{0,4}::[0-9a-f:]{1,30}\b"), "[ip]"),
+    # IPv6, in full or shortened with "::", and with a prefix length (2001:db8::/32).
+    (
+        re.compile(
+            r"(?i)(?<![\w:])(?:[0-9a-f]{1,4}:){4,7}[0-9a-f]{1,4}(?:/\d{1,3})?(?![\w:])"
+            r"|(?<![\w:])(?=[:0-9a-f]*[0-9a-f])(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?::"
+            r"(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?(?:/\d{1,3})?(?![\w:])"
+        ),
+        "[ip]",
+    ),
     (re.compile(r"(?i)(C:\\Users\\|/home/|/Users/)[^\\/\s]+"), r"\1[user]"),
     (re.compile(r"[A-Za-z0-9_\-+/=]{40,}"), "[long value removed]"),
 )
@@ -138,9 +162,16 @@ class Redactor:
         return text
 
 
-def names_to_hide(conn) -> dict[str, str]:
-    """What identifies a client or a person in this install, and the label that stands in for it."""
+def names_to_hide(conn, cfg: Config | None = None) -> dict[str, str]:
+    """What identifies a client or a person in this install, and the label that stands in for it. The
+    portal's own address names the MSP too (OFFICESENTRY_DOMAIN is the bundled Caddy's, from the same .env)."""
     names: dict[str, str] = {}
+    hosts = {urlsplit(cfg.base_url).hostname if cfg else None, os.environ.get(ENV_PREFIX + "DOMAIN", "").strip()}
+    for host in hosts - {None, "", "localhost"}:
+        names[host] = "[portal]"
+    if conn is None:
+        return names
+    names.update(_past_names(conn))
     for row in conn.execute("SELECT id, name, tenant_ref FROM tenants").fetchall():
         names[row["name"]] = f"[client {row['id']}]"
         names[row["tenant_ref"]] = f"[client {row['id']}]"
@@ -150,6 +181,49 @@ def names_to_hide(conn) -> dict[str, str]:
         row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
         if row and row[0]:
             names[row[0]] = "[your company]"
+    return names
+
+
+TENANT_NAMED = ("tenant_paused", "tenant_resumed", "tenant_archived", "tenant_restored")
+USER_NAMED = (
+    "user_created",
+    "user_password_reset",
+    "user_two_step_reset",
+    "user_signed_out",
+    "user_unlocked",
+    "user_deleted",
+    "user_access_changed",
+)
+
+
+def _past_names(conn) -> dict[str, str]:
+    """The names the activity log keeps for clients renamed or deleted since, and for accounts deleted since,
+    read from its entries as ``web/tenant_admin.py``, ``lifecycle.py`` and ``web/admin.py`` write them.
+    Without these the Redactor only knows today's names."""
+    names: dict[str, str] = {}
+    for row in _tolerant(
+        conn,
+        "SELECT action, tenant_id, detail FROM audit_log"
+        " WHERE detail != '' AND (action LIKE 'tenant%' OR action LIKE 'user%') ORDER BY id",
+    ):
+        action, detail, client = row["action"], row["detail"], f"[client {row['tenant_id']}]"
+        if action in TENANT_NAMED:
+            names[detail] = client
+        elif action == "tenant_created":  # "<ref>", "<ref> (gcc-high)", "... (CSV import)"
+            names[detail.split(" ")[0]] = client
+        elif action == "tenant_updated":  # "name 'Old' -> 'New'; tenant old -> new; ..."
+            for change in detail.split("; "):
+                if m := re.fullmatch(r"name (['\"])(.+)\1 -> (['\"])(.+)\3", change):
+                    names[m[2]] = names[m[4]] = client
+                elif m := re.fullmatch(r"tenant (\S+) -> (\S+)", change):
+                    names[m[1]] = names[m[2]] = client
+        elif action == "tenant_deleted":  # "Name (ref): 3 runs, ...; client accounts deleted: a, b"
+            if m := re.match(r"(.+) \(([^()]+)\): ", detail):
+                names[m[1]] = names[m[2]] = client
+            _, _, accounts = detail.partition("; client accounts deleted: ")
+            names.update(dict.fromkeys(filter(None, accounts.split(", ")), "[user]"))
+        elif action in USER_NAMED and not detail.startswith("deleted client account #"):
+            names[re.split(r" \(|: ", detail, maxsplit=1)[0]] = "[user]"
     return names
 
 
@@ -218,9 +292,9 @@ def build(
     pkg = Package(now, include_identifiers)
     data_dir = Path(data_dir or (cfg.data_dir if cfg else os.environ.get(ENV_PREFIX + "DATA_DIR", "data")))
     try:
-        names = names_to_hide(conn) if conn is not None else {}
+        names = names_to_hide(conn, cfg)
     except sqlite3.Error:
-        names = {}
+        names = names_to_hide(None, cfg)
     redact = Redactor(names, keep_identifiers=include_identifiers)
 
     def part(name: str, title: str, holds: str, make, note=lambda data: ""):
@@ -236,7 +310,7 @@ def build(
         "summary.json",
         "Summary",
         "Office Sentry's version, Python, operating system, the database's version and size, disk space",
-        lambda: _summary(conn, cfg, data_dir, now, config_error),
+        lambda: _summary(conn, cfg, data_dir, now, config_error, redact),
     )
     part(
         "environment.json",
@@ -248,7 +322,7 @@ def build(
         "health.json",
         "Health checks",
         "The System status checks with their result and the suggested fix",
-        lambda: _health(conn, cfg, now),
+        lambda: _health(conn, cfg, now, redact),
         lambda d: f"{d['status']}" if d else "",
     )
     part(
@@ -275,7 +349,7 @@ def build(
     part(
         "worker.json",
         "Worker and queue",
-        "The worker's last heartbeat, what's queued and running, and the scheduled jobs' state",
+        "The worker's last heartbeat and what's queued and running",
         lambda: _worker(conn, now),
     )
     part(
@@ -334,7 +408,7 @@ def write(pkg: Package, out: Path | None) -> Path | None:
 # -- The parts -----------------------------------------------------------------------------------------------
 
 
-def _summary(conn, cfg, data_dir: Path, now: datetime, config_error: str | None) -> dict:
+def _summary(conn, cfg, data_dir: Path, now: datetime, config_error: str | None, redact: Redactor) -> dict:
     db_path = cfg.db_path if cfg else data_dir / "officesentry.db"
     summary = {
         "made_at": now.strftime(ISO),
@@ -342,7 +416,7 @@ def _summary(conn, cfg, data_dir: Path, now: datetime, config_error: str | None)
         "python": platform.python_version(),
         "platform": f"{platform.system()} {platform.release()} ({platform.machine()})",
         "docker": Path("/.dockerenv").exists(),
-        "data_dir": str(data_dir),
+        "data_dir": redact(data_dir),  # /home/<name>/... outside Docker
         "database_file_bytes": db_path.stat().st_size if db_path.exists() else None,
         "database_wal_bytes": wal.stat().st_size if (wal := db_path.with_name(db_path.name + "-wal")).exists() else 0,
         "events_folder_bytes": _folder_bytes(data_dir / "events"),
@@ -351,20 +425,20 @@ def _summary(conn, cfg, data_dir: Path, now: datetime, config_error: str | None)
         else 0,
         "log_bytes": logs.sizes(data_dir),
         "errors_last_24h": logs.recent_errors(data_dir, 24, now),
-        "config_error": config_error,
+        "config_error": redact(config_error) if config_error else None,
     }
     try:
         used, free, total = system_health.disk_usage(data_dir)
         summary["disk"] = {"used_percent": used, "free_bytes": free, "total_bytes": total}
     except OSError as exc:
-        summary["disk"] = {"error": str(exc)}
+        summary["disk"] = {"error": redact(exc)}
     if conn is not None:
         try:
             summary["schema_version"] = schema_version(conn)
             summary["schema_expected"] = latest_version()
             summary["upgraded_by_release"] = stored_app_version(conn)
         except sqlite3.Error as exc:
-            summary["database_error"] = f"{type(exc).__name__}: {exc}"
+            summary["database_error"] = redact(f"{type(exc).__name__}: {exc}")
     else:
         summary["database_error"] = "the database couldn't be opened"
     return summary
@@ -400,19 +474,31 @@ def _environment(cfg, redact: Redactor) -> dict:
             "session_hours": cfg.session_hours,
             "public_demo": cfg.public_demo,
             "encryption_keys": len(cfg.encryption_keys),
-            "secrets_file": str(cfg.secrets_file) if cfg.secrets_file else "(in the data folder)",
+            "secrets_file": redact(cfg.secrets_file) if cfg.secrets_file else "(in the data folder)",
         }
     return {"variables": env, "effective": effective}
 
 
-def _health(conn, cfg, now) -> dict | None:
+def _health(conn, cfg, now, redact: Redactor) -> dict | None:
+    """The checks as the System status page shows them. Their messages and fixes quote errors (a run's,
+    a backup's), so they're swept like any other free text."""
     if conn is None or cfg is None:
         return None
     health = system_health.assess(conn, cfg, now)
     data = health.as_json()
     for check in health.checks:
         data["checks"][check.key]["fix"] = check.fix
-    return data
+    return _redacted(data, redact)
+
+
+def _redacted(value, redact: Redactor):
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, dict):
+        return {k: _redacted(v, redact) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_redacted(v, redact) for v in value]
+    return value
 
 
 def _database(conn, cfg, redact: Redactor) -> dict:
@@ -623,13 +709,6 @@ def _worker(conn, now: datetime) -> dict:
             conn, "SELECT status, COUNT(*) FROM tasks WHERE status IN ('queued', 'running') GROUP BY status"
         )
     }
-    jobs = {
-        k: v
-        for k, v in _tolerant(
-            conn,
-            "SELECT key, value FROM settings WHERE key LIKE 'job.%' OR key LIKE 'periodic.%' OR key LIKE 'schedule.%'",
-        )
-    }
     return {
         "last_heartbeat": _iso(seen),
         "alive": worker.is_alive(conn, now),
@@ -640,7 +719,6 @@ def _worker(conn, now: datetime) -> dict:
         },
         "running_runs": running,
         "tasks": {"queued": tasks.get("queued", 0), "running": tasks.get("running", 0)},
-        "jobs": jobs,
     }
 
 

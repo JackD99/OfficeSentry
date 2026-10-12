@@ -5,8 +5,10 @@ version: 2
 updates:
   - package-ecosystem: pip
     # v2/pyproject.toml, the lock files made from it with pip-compile (v2/requirements.txt and
-    # requirements-dev.txt), and the tools CI installs (.github/requirements-ci.txt)
-    directories: ["/v2", "/.github"]
+    # requirements-dev.txt), the tools CI installs (.github/requirements-ci.txt, from requirements-ci.in) and
+    # the website build's (website/requirements.txt, from requirements.in). The browser tests' lock stays put:
+    # its Playwright matches the pinned browser image that made the screenshot baselines (ui.yml).
+    directories: ["/v2", "/.github", "/website"]
     schedule:
       interval: weekly
       day: monday

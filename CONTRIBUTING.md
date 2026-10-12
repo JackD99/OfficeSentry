@@ -53,8 +53,11 @@ is pinned, with hashes, in two lock files made from it with
 - `v2/requirements.txt`: the Docker image;
 - `v2/requirements-dev.txt`: CI, the same versions plus the test tools.
 
-CI's dependency audit (`pip-audit`) checks both, and the browser tests' and
-the website's own locks.
+CI's dependency audit (`pip-audit`) checks both, and the browser and nightly
+tests', the website's and CI's own locks. The tools CI installs for itself
+(`.github/requirements-ci.txt`) are locked the same way, from
+`.github/requirements-ci.in`: from `.github/`, `pip-compile --generate-hashes
+--strip-extras --output-file requirements-ci.txt requirements-ci.in`.
 
 Dependabot refreshes both every Monday. To change a dependency yourself, edit
 `pyproject.toml`, then from `v2/` with Python 3.12 (the image's):
@@ -232,7 +235,9 @@ does the work. To make a release:
    It builds the amd64 and arm64 images (arm64 natively on GitHub's Arm
    runner) with an SBOM and build provenance, starts each once, scans them,
    signs their provenance, publishes `ghcr.io/jackd99/officesentry:2.1.0` (and `2.1`,
-   `2` and `latest`), creates the `v2.1.0` tag and the GitHub release with
+   `2` and `latest`) and signs that published image's provenance too (what
+   `gh attestation verify` checks; SECURITY.md, "Checking a release"),
+   creates the `v2.1.0` tag and the GitHub release with
    the notes and install files, and removes images older than the last three
    releases. Nothing is published until the checks and the scan have passed.
    A run takes about 5 Actions minutes, which are free for a public repository.

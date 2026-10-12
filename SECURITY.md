@@ -82,9 +82,9 @@ little as possible with that access. Details and code references are in
 | Two-step sign-in | Authenticator-app codes (TOTP) with ten one-time recovery codes. New installs require it for everyone; installs from before October 2026 keep requiring it for staff (everyone but client accounts) until `OFFICESENTRY_REQUIRE_MFA=all` is set (the Users page recommends it). A code or recovery code works once, even when sent twice at the same moment. Recovery codes are stored as an HMAC under a random key that is itself encrypted with the encryption key, so a copy of the database alone can't be used to guess them; codes made before 2.2.0 (a plain SHA-256) are put under the key when the portal starts. Adding an authenticator from the account page, turning it off and replacing recovery codes ask for the password, and an admin resetting someone else's password, two-step sign-in or sessions gives their own password too. |
 | Passwords | At least 12 characters, not one of the 20,000 most commonly used passwords of that length (from the public list of 10 million leaked passwords), and not containing the username or the product's name; scrypt hash (Werkzeug). A password an admin set (new user or reset) has to be replaced at the next sign-in. |
 | Sign-in limits | Wrong passwords never lock an account. They slow down the address they come from: 5 per username or 20 in all per 15 minutes, counted before the password is checked so parallel requests can't get past them. A spread-out attack on one account slows only addresses that haven't signed in to it before. Five wrong two-step codes lock that step for 15 minutes. Five wrong passwords where a signed-in browser is asked for it again sign that browser out, and never lock the account, so a stolen session can't keep its owner from signing in to end it. The client address comes from `X-Forwarded-For` only behind `OFFICESENTRY_TRUSTED_PROXIES`. |
-| Sessions | Server-side: the cookie holds a random token, stored as a hash. 2 hours idle and 8 hours in total; ended on sign-out, disable, delete, role, password or two-step change. `__Host-` cookie, HttpOnly, SameSite=Lax, Secure over HTTPS. Same-site redirects only. |
+| Sessions | Server-side: the cookie holds a random token, stored as a hash. 2 hours idle and 8 hours in total by default (`OFFICESENTRY_SESSION_IDLE_MINUTES`, `OFFICESENTRY_SESSION_HOURS`); ended on sign-out, disable, delete, role, password or two-step change. `__Host-` cookie, HttpOnly, SameSite=Lax, Secure over HTTPS. Same-site redirects only. |
 | CSRF | Flask-WTF on every form. |
-| Headers | Nonce-based CSP with no external assets, HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy, Cross-Origin-Opener-Policy and Cross-Origin-Resource-Policy `same-origin`, `X-Permitted-Cross-Domain-Policies: none`, `Cache-Control: no-store`. The bundled Caddy drops the `Server` header. |
+| Headers | Nonce-based CSP with no external assets, HSTS over HTTPS, X-Frame-Options DENY (the portal's own email and design previews may be framed by the portal, under a stricter CSP), nosniff, Referrer-Policy, Permissions-Policy, Cross-Origin-Opener-Policy and Cross-Origin-Resource-Policy `same-origin`, `X-Permitted-Cross-Domain-Policies: none`. `Cache-Control: no-store` on everything but the static files and the brand colours and logo, which only the visitor's own browser may keep. Behind a proxy, the visitor's address, scheme and host come from the forwarded headers of `OFFICESENTRY_TRUSTED_PROXIES` hops; a path prefix never does. The bundled Caddy drops the `Server` header. |
 | Activity log | Sign-ins, every change, and every refusal (a page or tenant someone wasn't allowed, a form sent with a stale token), with the client address; admins read, filter and export it under *Settings → Activity log*. Failed sign-ins with unknown usernames and refusals are counted per address and hour, without storing what was typed, and sign-in noise is removed after 90 days. Someone given the activity log who doesn't see every client reads only the entries about their own clients. |
 | Secrets | Session key and encryption key are separate. `python -m officesentry rotate-keys` re-encrypts every encrypted value (the app's certificate keys, the staff sign-in certificate key, two-step secrets and the recovery code key, mail credentials, the alert webhook and its signing secret, and the setup wizard's sign-in code while it waits) and refuses if it finds one it doesn't know. Generated secrets are written with mode `0600`. |
 | PDFs | Rendered by WeasyPrint with a URL fetcher that only loads the app's own static files and `data:` URIs: no other files, no network. |
@@ -184,6 +184,30 @@ place, but nobody can sign in with the old one.
   backups never hold it.
 - Review the Entra app's permissions and sign-in logs in your own tenant
   from time to time.
+
+## Checking a release
+
+Every image at [`ghcr.io/jackd99/officesentry`](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry)
+is built by this repository's [release workflow](.github/workflows/release.yml) from a tagged commit on
+`main` that passed the full CI run, and scanned before it gets a version tag (a fixable vulnerability rated
+high or critical stops the release). Each one carries an SBOM and a build provenance saying which workflow,
+commit and tag made it, and the provenance is signed through GitHub's artifact attestations (Sigstore). To
+check an image before running it, with the [GitHub CLI](https://cli.github.com) and the version you're
+installing in place of `<version>`:
+
+```bash
+gh attestation verify oci://ghcr.io/jackd99/officesentry:<version> --repo JackD99/OfficeSentry
+```
+
+It passes only for an image this repository's workflow built; anything else, or a copy changed since, fails.
+Releases up to 2.2.0 signed each platform's build but not the multi-platform image the version tags point at,
+so for those, check the digest the release notes list instead (`oci://ghcr.io/jackd99/officesentry@sha256:…`).
+
+What goes into the image is pinned too: Python packages from hash-pinned lock files that CI audits for known
+vulnerabilities on every change and every week, and the base image by digest. The image runs as an
+unprivileged user and leaves out pip, which nothing needs once it's built. The GitHub Actions the workflows
+use are pinned to full commit hashes, and the jobs that can publish or deploy don't keep their token where
+the code they build could read it.
 
 ## Known limitations
 

@@ -384,7 +384,8 @@ docker compose --profile https up -d
 
 The image is [`ghcr.io/jackd99/officesentry`](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry),
 public, for amd64 (Intel and AMD) servers and, from 2.1.0, arm64 ones. It is built and
-scanned by GitHub Actions from a tagged release, with a signed build provenance. Each release lists what changed,
+scanned by GitHub Actions from a tagged release, with a signed build provenance you can check
+([SECURITY.md, "Checking a release"](SECURITY.md#checking-a-release)). Each release lists what changed,
 and anything to do before updating, in [CHANGELOG.md](CHANGELOG.md). **Settings → Updates** shows those notes for
 every newer release, and an optional **Update** button installs one: it checks the release's signature, restarts
 Office Sentry on it and goes back by itself if it doesn't start ([The Update button](v2/DEPLOY.md#the-update-button)).
