@@ -519,7 +519,9 @@ turning each step's `target` into a link.
   (`views._width`: `w-s` stays on one line, `w-m` and `w-l` wrap within limits), and long addresses may
   wrap after their "@", and a long part of one (a long name before the "@", a mail server's host name)
   after its dots too (`wrappable`). A table that still doesn't fit scrolls inside its card, never the
-  page, with the sideways scrollbar in view and its first column pinned (`tables.js`, `edges`).
+  page, with the sideways scrollbar in view and its first column pinned (`tables.js`, `edges`). Pages
+  draw in a fallback font until Inter arrives, so `tables.js` fits every table again once
+  `document.fonts.ready` resolves.
 - A report table that doesn't fit a 1366 px laptop opens on its default columns: the `Section` names the
   rest in `optional`, the Columns menu shows "7/11" and offers them (`show=` in the view, or a filter by
   one), and downloads keep them. Pick the columns that answer the report's question; leave out dates

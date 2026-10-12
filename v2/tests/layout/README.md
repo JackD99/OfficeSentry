@@ -17,6 +17,10 @@ edge is caught even when the HTML looks fine. Hidden things (closed `<details>`,
 screen-reader text) are left out. The browser tests (`tests/browser/test_pages.py`) run its page-scroll
 check alone on each of their pages, where it already blocks a merge.
 
+Pages are checked once their fonts are in, but they first draw in a fallback font, and a table measured then
+could overflow when Inter arrives. `test_tables_are_fitted_again_once_the_fonts_arrive` holds the fonts back
+until `tables.js` has measured a page, then checks its tables fit and match a fresh fit.
+
 ## Which pages, with what data
 
 `pages.py` works the list out from the portal's routes, so a new page is checked without being added
