@@ -792,20 +792,16 @@ def test_user_pages_never_show_a_client_account_of_a_client_out_of_scope(client,
 
 
 def test_the_support_package_names_clients_only_for_someone_who_sees_them_all(client, db, two_tenants):
-    """System status can be given to a role that only sees some clients. Its support package then keeps every
-    client as a number, whatever is ticked: the clients part would otherwise list every client's name."""
+    """System status given to a role that only sees some clients doesn't take effect (it covers every client,
+    ``permissions.EVERY_CLIENT``), so nobody limited to some clients builds the support package, whose clients
+    part would otherwise list every client's name."""
     alpha, _bravo = two_tenants
     make_user(db, "admin")
     ops = _custom_role(db, "Ops", {"system.manage"})
     _holder(db, "ops", ops, tenants=[alpha])
     login(client, "ops")
-    assert "Include client identifiers" not in client.get("/admin/support").get_data(as_text=True)
-    resp = client.post("/admin/support/package", data={"identifiers": "1"})
-    assert resp.status_code == 200
-    data = b"".join(
-        zipfile.ZipFile(io.BytesIO(resp.data)).read(n) for n in zipfile.ZipFile(io.BytesIO(resp.data)).namelist()
-    )
-    assert b"Bravo Inc" not in data and b"bravo.onmicrosoft.com" not in data and b"Alpha Ltd" not in data
+    assert client.get("/admin/support").status_code == 403
+    assert client.post("/admin/support/package", data={"identifiers": "1"}).status_code == 403
     client.post("/logout")
     login(client, "admin")
     resp = client.post("/admin/support/package", data={"identifiers": "1"})

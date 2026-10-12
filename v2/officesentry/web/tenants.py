@@ -16,7 +16,7 @@ from ..db import audit, transaction, utcnow
 from ..discovery import tenant_id_for_domain
 from ..entra import admin_consent_url
 from ..text import plural
-from .access import can, is_staff, login_required, needs, tenant_or_404, visible_tenants
+from .access import can, is_staff, login_required, manages_groups, needs, tenant_or_404, visible_tenants
 from .groups import group_aware, scoped_tenants
 from .reports import report_groups
 
@@ -124,15 +124,22 @@ def dashboard():
             r["tenant"]["name"].lower(),
         )
     )
-    scores = [r["kpis"]["secure_score.pct"].value for r in rows if r["kpis"]["secure_score.pct"].value is not None]
+    # The tiles add up only the clients whose cells the person may see: findings, and Secure Score (tenant).
+    secure = [r for r in rows if can("reports.security", r["tenant"]["id"])]
+    scored = [r for r in rows if can("reports.tenant", r["tenant"]["id"])]
+    scores = [r["kpis"]["secure_score.pct"].value for r in scored if r["kpis"]["secure_score.pct"].value is not None]
+    trends = dashboard_trends(g.db, secure)
+    if scored != secure:
+        trends.pop("score_trend", None)
+        trends |= {k: v for k, v in dashboard_trends(g.db, scored).items() if k == "score_trend"}
     summary = {
         "up_to_date": sum(r["health"][0] == "ok" for r in rows),
-        "urgent": sum(bool(r["counts"]["critical"] or r["counts"]["high"]) for r in rows),
-        "severe": sum(r["counts"]["critical"] + r["counts"]["high"] for r in rows),
+        "urgent": sum(bool(r["counts"]["critical"] or r["counts"]["high"]) for r in secure),
+        "severe": sum(r["counts"]["critical"] + r["counts"]["high"] for r in secure),
         "avg_score": sum(scores) / len(scores) if scores else None,
         "scored": len(scores),
         "data_issues": sum(r["health"][0] in ("bad", "warn") for r in rows),
-        **dashboard_trends(g.db, rows),
+        **trends,
     }
     from .home import get_started
 
@@ -174,9 +181,10 @@ def new_tenant():
                 if conn_id is None:
                     flash(clouds.app_needed(clouds.get(cloud)), "warning")
             tenant_id = store.create_tenant(g.db, name, ref, conn_id, cloud)
-            tenant_groups.set_tenant_groups(
-                g.db, tenant_id, {int(x) for x in request.form.getlist("groups") if x.isdigit()}
-            )
+            if manages_groups():
+                tenant_groups.set_tenant_groups(
+                    g.db, tenant_id, {int(x) for x in request.form.getlist("groups") if x.isdigit()}
+                )
             audit(
                 g.db,
                 g.user["username"],
@@ -185,7 +193,8 @@ def new_tenant():
                 ref + ("" if cloud == clouds.DEFAULT else f" ({cloud})"),
             )
             return redirect(url_for("tenants.tenant", tenant_id=tenant_id))
-    return render_template("tenant_new.html", connections=connections, groups=tenant_groups.all_groups(g.db))
+    groups = tenant_groups.all_groups(g.db) if manages_groups() else []
+    return render_template("tenant_new.html", connections=connections, groups=groups)
 
 
 CONSENT_LINK_LIFETIME = timedelta(hours=1)
