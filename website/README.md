@@ -35,7 +35,10 @@ in `v2/docs/deploy/README.md` (`v2/tests/test_deploy_platforms.py` fails until b
 
 `templates/home.html` is the front page, `templates/base.html` the header and footer, and
 `assets/site.css` the styles (the same colours as the app, light and dark). Screenshots come from
-`docs/screenshots/` (made by `v2/scripts/screenshots.py`), so the page shows the app as it is.
+`docs/screenshots/` (made by `v2/scripts/screenshots.py`), so the page shows the app as it is. Pages link
+the styles and script with a fingerprint of their contents (`site.css?v=...`), so a browser that kept the
+last deploy's copy for a day fetches the new one. A new stylesheet or script goes in `assets` in
+`build()` and is linked as `{{ assets['name'] }}`.
 
 ### What's new
 

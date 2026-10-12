@@ -23,7 +23,7 @@
 <section class="hero">
   <div class="wrap hero-inner">
     <div class="hero-copy">
-      {% if whats_new %}<a class="hero-chip" href="#whats-new"><span>{{ 'New in' if whats_new.released else 'Coming in' }} {{ whats_new.short }}</span><b>{{ whats_new.chip }}</b></a>{% endif %}
+      {% if whats_new %}<a class="hero-chip" href="#whats-new"><span>{{ 'New in' if whats_new.released else 'Coming in' }} {{ whats_new.short }}</span> <b>{{ whats_new.chip }}</b></a>{% endif %}
       <p class="eyebrow">{{ "Free and open source" if source_public else "Free software" }} · Built for MSPs</p>
       <h1>Microsoft 365 reports for every client, without the busywork</h1>
       <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, client reports you design yourself, evidence for Cyber Essentials and insurance forms, 49 detail reports, a page for every person, mailbox, group and site, a view across every client and what changed since last month.</p>
@@ -307,7 +307,7 @@
     </header>
     <ul class="example-grid">
       {% for e in examples %}
-      <li><a href="{{ e.href }}"><span class="file-kind">{{ e.kind }}</span><strong>{{ e.title }}</strong><span>{{ e.text }}</span></a></li>
+      <li><a href="{{ e.href }}"><span class="file-kind">{{ e.kind }}</span> <strong>{{ e.title }}</strong> <span>{{ e.text }}</span></a></li>
       {% endfor %}
     </ul>
   </div>
