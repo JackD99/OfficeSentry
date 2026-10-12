@@ -70,7 +70,11 @@ CAPABILITIES: tuple[Capability, ...] = (
         "reports.activity", "Activity history", "Kept sign-in and audit history beyond Microsoft's 30 days.", "see"
     ),
     Capability(
-        "emails.view", "Emailed reports", "A client's report schedules, previews and report history.", "see", True
+        "emails.view",
+        "Emailed reports",
+        "A client's report schedules and report history; previews also need security findings.",
+        "see",
+        True,
     ),
     Capability("projects.view", "Recommended projects", "Projects and quick fixes worked out from the checks.", "see"),
     Capability("export", "Download files", "PDF, Excel and CSV downloads of what they can see.", "see", True),
@@ -102,19 +106,30 @@ CAPABILITIES: tuple[Capability, ...] = (
         "settings.manage",
         "Settings",
         "App connection, email delivery, alerts, branding, licence prices, data retention, report plans and "
-        "team-wide emails.",
+        "team-wide emails. Only for someone who sees every client.",
         "run",
     ),
     Capability("activity_log.read", "Activity log", "Who did what in Office Sentry.", "run"),
-    Capability("system.manage", "System status", "Health checks, the monitoring token and support.", "run"),
+    Capability(
+        "system.manage",
+        "System status",
+        "Health checks, the monitoring token and support. Only for someone who sees every client.",
+        "run",
+    ),
     Capability(
         "system.update",
         "Install updates",
-        "Install a new release of Office Sentry with the Update button (the portal restarts).",
+        "Install a new release of Office Sentry with the Update button (the portal restarts). Only for someone "
+        "who sees every client.",
         "run",
     ),
 )
 BY_KEY: dict[str, Capability] = {c.key: c for c in CAPABILITIES}
+# Capabilities about every client at once (team-wide emails and alerts, report plans, the app connection,
+# system status and the support package, installing an update for everyone): they only take effect for
+# someone who sees every client, since with them a person limited to some clients would see or change the
+# others (``roles.access_for``).
+EVERY_CLIENT: frozenset[str] = frozenset({"settings.manage", "system.manage", "system.update"})
 KEYS: tuple[str, ...] = tuple(BY_KEY)
 CLIENT_KEYS: frozenset[str] = frozenset(c.key for c in CAPABILITIES if c.client_ok)
 # What a report area's reports need: the menu group (registry.GROUP_TITLES) -> capability.

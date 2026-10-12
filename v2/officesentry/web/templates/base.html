@@ -24,7 +24,7 @@
                    ('activity.index', 'Activity log', [], 'activity_log.read'), ('system.status', 'System status', [], 'system.manage'),
                    ('support.index', 'Support', [], 'system.manage'), ('updates.index', 'Updates', [], 'system.update')] %}
 {% set SETTINGS = [] %}
-{% for entry in ALL_SETTINGS %}{% if current_user and (not entry[3] or can(entry[3])) %}{% set _ = SETTINGS.append(entry) %}{% endif %}{% endfor %}
+{% for entry in ALL_SETTINGS %}{% if current_user and (not entry[3] or can(entry[3])) and (entry[0] != 'groups.index' or manages_groups()) %}{% set _ = SETTINGS.append(entry) %}{% endif %}{% endfor %}
 {% set SETTINGS_ENDPOINTS = SETTINGS|map(attribute=0)|list + SETTINGS|map(attribute=2)|sum(start=[]) %}
 {#- The Settings entry shows once there's a settings page beyond the client list. -#}
 {% set SHOW_SETTINGS = current_user and current_user.role != 'client' and SETTINGS|length > 1 %}

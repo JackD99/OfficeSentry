@@ -12,7 +12,7 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 
 from .. import permissions, roles
 from ..db import transaction
-from .access import current, needs
+from .access import current, needs, out_of_reach
 
 bp = Blueprint("roles", __name__, url_prefix="/admin/roles")
 
@@ -60,6 +60,17 @@ def _beyond(capabilities, scope: str, kind: str) -> bool:
 
 
 _HOLDS_MORE = "That role holds more than you do, so only an Administrator can {}."
+_HELD_BY_MORE = "Someone holding this role can see or do more than you can, so only an Administrator can change it."
+
+
+def _held_by_more(role: roles.Role) -> bool:
+    """Is the role held by an account the signed-in person couldn't change on its own page (an
+    Administrator, or someone who sees or does more than they do)? Changing the role would change that
+    account, so only an Administrator may (``access.out_of_reach``, which the user page uses)."""
+    if current().is_admin:
+        return False
+    holders = g.db.execute("SELECT * FROM users WHERE role_id = ?", (role.id,)).fetchall()
+    return any(out_of_reach(u) for u in holders)
 
 
 def _role_or_404(role_id: int) -> roles.Role:
@@ -133,6 +144,9 @@ def edit(role_id: int):
     if request.method == "POST":
         if not role.editable:
             abort(403)
+        if _held_by_more(role):
+            flash(_HELD_BY_MORE, "error")
+            return redirect(url_for("roles.edit", role_id=role_id))
         f = request.form
         # What the signed-in person doesn't hold themselves stays as it is (those boxes are greyed out).
         grantable = _grantable()
@@ -155,9 +169,12 @@ def edit(role_id: int):
         else:
             flash("Saved." if changed else "Nothing changed.", "success")
         return redirect(url_for("roles.edit", role_id=role_id))
+    held_by_more = role.editable and _held_by_more(role)
     return render_template(
         "role_edit.html",
         role=role,
+        editable=role.editable and not held_by_more,
+        held_by_more=held_by_more,
         template=role.template,
         groups=permissions.GROUPS,
         capabilities=_capabilities(role.kind),
@@ -180,6 +197,9 @@ def reset(role_id: int):
     t = role.template
     if t is not None and _beyond(t.capabilities, t.scope, t.kind):
         flash(_HOLDS_MORE.format("put it back to its default"), "error")
+        return redirect(url_for("roles.edit", role_id=role_id))
+    if _held_by_more(role):
+        flash(_HELD_BY_MORE, "error")
         return redirect(url_for("roles.edit", role_id=role_id))
     with transaction(g.db):
         changed = roles.reset(g.db, g.user["username"], role)

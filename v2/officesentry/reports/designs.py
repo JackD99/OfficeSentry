@@ -110,12 +110,22 @@ class Rendered:
 class Context:
     """Everything a tenant's blocks can draw on, built once each on first use and shared by every block."""
 
-    def __init__(self, conn, tenant, now: datetime | None = None, brand=None, month_end: dict | None = None):
+    def __init__(
+        self,
+        conn,
+        tenant,
+        now: datetime | None = None,
+        brand=None,
+        month_end: dict | None = None,
+        opens: Callable[[str], bool] | None = None,
+    ):
         self.conn = conn
         self.tenant = tenant
         self.now = now or datetime.now(UTC)
         self.brand = brand
         self.month_end = month_end or {}  # month_end.report_context(...)["month_end"], client-safe
+        # Whether the person viewing may open a detail report on this tenant (None: anyone, as in an email).
+        self.opens = opens or (lambda key: True)
         self._review = None
         self._summary = None
         self._evidence = None
@@ -311,6 +321,8 @@ def b_data_table(ctx: Context, s: dict) -> dict:
     key = s.get("report") or ""
     if key not in data_reports.REPORTS:
         return {"empty": "Choose a detail report."}
+    if not ctx.opens(key):
+        return {"empty": "Left out: you can't open this report for this client."}
     report = ctx.report(key)
     if report.unavailable:
         return {"empty": report.unavailable}
@@ -842,6 +854,11 @@ def get(conn, design_id: int):
     return conn.execute("SELECT * FROM report_designs WHERE id = ?", (design_id,)).fetchone()
 
 
+def detail_reports(row) -> set[str]:
+    """The detail reports a design's tables show, by report key."""
+    return {b["settings"].get("report") or "" for b in document(row)["blocks"] if b["kind"] == "data_table"} - {""}
+
+
 def list_designs(conn) -> list:
     return conn.execute("SELECT * FROM report_designs ORDER BY name COLLATE NOCASE, id").fetchall()
 
@@ -1029,11 +1046,20 @@ def contents(rows: list[list[Rendered]]) -> list[tuple[str, str]]:
 
 
 def context(
-    conn, tenant, row, now: datetime | None = None, *, brand=None, month_end: dict | None = None, preview: bool = False
+    conn,
+    tenant,
+    row,
+    now: datetime | None = None,
+    *,
+    brand=None,
+    month_end: dict | None = None,
+    preview: bool = False,
+    opens: Callable[[str], bool] | None = None,
 ) -> dict:
-    """Template context for ``reports/design.html``."""
+    """Template context for ``reports/design.html``. ``opens`` leaves out tables of detail reports the
+    person viewing can't open (``Context.opens``)."""
     doc = document(row)
-    ctx = Context(conn, tenant, now, brand=brand, month_end=month_end)
+    ctx = Context(conn, tenant, now, brand=brand, month_end=month_end, opens=opens)
     rows = render(ctx, doc)
     settings = doc["settings"]
     return {

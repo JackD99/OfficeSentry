@@ -21,7 +21,7 @@ from ..db import audit, audit_counted
 from ..entra import GRAPH_APP_ID, PERMISSIONS, admin_consent_url
 from ..reports import tables
 from . import public_demo
-from .access import can, needs, tenant_or_404, visible_tenants
+from .access import can, current, manages_groups, needs, tenant_or_404, visible_tenants
 from .branding import current_brand
 from .printing import pdf_response
 from .tenants import _cfg, cloud_mismatch
@@ -240,7 +240,8 @@ def import_tenants():
         text = onboarding.decode(data) if len(data) <= MAX_UPLOAD else "x" * (MAX_UPLOAD + 1)
     else:
         text = request.form.get("text", "")
-    parsed = onboarding.parse(g.db, text)
+    sees = None if current().sees_all else {t["id"] for t in visible_tenants(g.db, g.user, archived=True)}
+    parsed = onboarding.parse(g.db, text, sees=sees, groups_allowed=manages_groups())
     if request.form.get("confirm") == "1" and not parsed.error and parsed.new:
         ids = onboarding.create(g.db, parsed, g.user["username"])
         flash(

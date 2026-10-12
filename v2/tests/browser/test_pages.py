@@ -1,6 +1,6 @@
 """Every page in pages.py, at a laptop and a phone width, light and dark: a screenshot compared with its
-baseline in baselines/, a check that nothing makes the page wider than the window, and an axe-core
-accessibility check at the laptop width.
+baseline in baselines/, a check that nothing makes the page wider than the window (the page-scroll check
+of tests/layout/audit.js), and an axe-core accessibility check at the laptop width.
 
 Baselines are 256-colour PNGs (a few MB for all of them). A capture is mapped onto its baseline's colours
 before comparing, so the same page compares exactly; it fails when more than MAX_CHANGED of its pixels
@@ -23,6 +23,8 @@ HERE = Path(__file__).resolve().parent
 BASELINES = HERE / "baselines"
 OUTPUT = HERE / "output"
 AXE = (HERE / "vendor" / "axe-core" / "axe.min.js").read_text(encoding="utf-8")
+# The layout tests' audit, of which only its page-scroll check runs here.
+AUDIT = (HERE.parent / "layout" / "audit.js").read_text(encoding="utf-8")
 
 # Long pages are compared down to here: the top of a page is what people see, and phones run long.
 MAX_HEIGHT = {"laptop": 2400, "phone": 3200}
@@ -60,29 +62,12 @@ def test_page(spec, viewport, theme, site, contexts, request):
         page.close()
 
 
-# The page's width against the window's and, when it's wider, the smallest thing past the edge: usually the
-# culprit, such as hidden text a scroll box doesn't clip or a word that can't wrap.
-WIDTH_JS = """() => {
-  const root = document.documentElement, width = root.clientWidth;
-  if (root.scrollWidth <= width) return null;
-  let culprit = null, area = Infinity;
-  for (const el of document.body.querySelectorAll('*')) {
-    const r = el.getBoundingClientRect();
-    const size = r.width * r.height;
-    if (r.right > width + 1 && size > 0 && size < area) { culprit = el; area = size; }
-  }
-  const name = culprit
-    ? culprit.tagName.toLowerCase() + (culprit.id ? '#' + culprit.id : '')
-      + [...culprit.classList].map(c => '.' + c).join('') + ' "' + culprit.textContent.trim().slice(0, 40) + '"'
-    : 'text that runs past its box';
-  return root.scrollWidth + 'px wide in a ' + width + 'px window, past the edge: ' + name;
-}"""
-
-
 def _check_width(page) -> str | None:
-    """Pages never scroll sideways: a wide table scrolls in its own box."""
-    over = page.evaluate(WIDTH_JS)
-    return f"wider than the window: {over}" if over else None
+    """Pages never scroll sideways: a wide table scrolls in its own box. The layout tests' check, run alone,
+    names the outermost things past the edge, such as hidden text a scroll box doesn't clip or a word that
+    can't wrap."""
+    over = page.evaluate(AUDIT, {"only": "page-scroll"})
+    return "; ".join(f"{p['text']}, past the edge: {p['where']}" for p in over) or None
 
 
 def _check_screenshot(page, name: str, viewport: str, spec, config) -> str | None:
