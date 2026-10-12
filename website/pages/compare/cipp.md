@@ -20,7 +20,7 @@ Checked in October 2026 from CIPP's documentation and FAQ. If something here is 
 | **Runs on** | Azure (a static web app, functions and a key vault) | Two Docker containers on any Linux server, with SQLite |
 | **Reaches clients through** | GDAP relationships in Partner Center | One read-only app each client approves, or GDAP if you have it |
 | **History** | Not its focus | Every night kept: what changed since last month on every report, sign-ins and admin changes beyond Microsoft's 30 days |
-| **Reports for clients** | Reports you can brand | A branded monthly review, Cyber Essentials and insurance evidence, quarterly reviews, emailed on a schedule, and a sign-in for client users |
+| **Reports for clients** | Reports you can brand | A branded monthly review, Cyber Essentials and insurance evidence, quarterly reviews, emailed on a schedule, and client users who sign in with their own Microsoft account |
 
 ## Why use both
 

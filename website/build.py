@@ -294,13 +294,47 @@ GUIDES = "Guides"  # v2/docs/*.md not listed above
 # main. `icon` is one of the icons in templates/home.html.
 WHATS_NEW = {
     "version": "2.3.0",
-    "title": "",  # the band's heading
-    "summary": "",  # a sentence under it
-    "chip": "",  # a few words for the link at the top of the page, after "New in 2.3:"
-    "items": [],  # {"icon", "title", "text", "href", "link"}: "link" names the page "href" opens
+    "title": "Your clients sign in with Microsoft, and Intune gets its own report",  # the band's heading
+    # a sentence under it
+    "summary": "Your clients' people sign in with the account they already use, Intune policies and BitLocker "
+    "keys are reported, and recommended projects read like something you'd quote.",
+    "chip": "Client sign-in with Microsoft",  # a few words for the link at the top of the page
+    "items": [  # {"icon", "title", "text", "href", "link"}: "link" names the page "href" opens
+        {
+            "icon": "sign-in",
+            "title": "Clients sign in with their own Microsoft account",
+            "text": "Your clients' people use the work account they already have, under their own organisation's "
+            "MFA, and see only their own company's reports. Nobody is added to your tenant as a guest.",
+            "href": "/docs/client-sign-in/",
+            "link": "Client sign-in",
+        },
+        {
+            "icon": "device",
+            "title": "Intune policies and BitLocker keys",
+            "text": "A new Intune policies report shows platforms with no compliance policy, paused update rings and "
+            "phones without app protection. The Devices report shows which computers have their BitLocker key "
+            "saved, without reading the key.",
+            "href": "/docs/reference/#reports",
+            "link": "See every report",
+        },
+        {
+            "icon": "project",
+            "title": "Projects you'd put on a quote",
+            "text": "Each proposal lists only the work that client's findings call for, and repairs such as a "
+            "stopped directory sync are quick fixes rather than something to sell.",
+        },
+        {
+            "icon": "table",
+            "title": "Tables that fit the page",
+            "text": "Long lists fold into a short form you can open in place, columns get room by what's in them, "
+            "and All clients opens any report from the All reports menu.",
+        },
+    ],
     "also": [  # smaller changes, a few words each
+        "release images with a signed build record you can check",
+        "roles limited to some clients stay within them everywhere",
         "month-end emails sent at Microsoft's pace, however many clients you approve at once",
-        "All clients opens any report from the All reports menu",
+        "PIM for groups in the Admins report",
         "sign-in and sessions tested harder, on every page",
     ],
 }
