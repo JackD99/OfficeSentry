@@ -494,7 +494,9 @@ turning each step's `target` into a link.
   puts a control off the screen, or has a table that scrolls sideways on a
   laptop. Pages come from the routes, so a new page is checked by itself; a
   new kind of URL argument needs a resolver in its `conftest.py`. CI's Layout
-  job reports only for now (summary page and screenshots).
+  job fails a pull request on any of them (summary page and screenshots). A
+  matrix too wide for any laptop (the insurance evidence rollup, a column per
+  control) says so in `data-scrolls` (`Rollup.scrolls`) and only scrolls.
 - Admin settings are one sidebar entry. A new settings page goes in `SETTINGS`
   at the top of `base.html` (endpoint, label, other endpoints of the page),
   which gives it the row of settings links at the top of the page.

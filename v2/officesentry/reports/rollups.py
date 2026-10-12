@@ -81,6 +81,8 @@ class Rollup:
     currency: str = "GBP"
     tenant_link: str = "tenant"  # which per-tenant page a row links to: tenant | review | evidence | data
     footnote: str = ""
+    # Why the table scrolls sideways on a laptop, when it's a matrix too wide to fit (data-scrolls on the page)
+    scrolls: str = ""
     uncut: Rollup | None = None  # every client, when a PDF keeps only the first rows (printing.cap_rollup)
 
     @property
@@ -267,6 +269,7 @@ def evidence_rollup(conn, tenants, now: datetime | None = None, rebuild: bool = 
         now,
         tenant_link="evidence",
         footnote="Backups and training are outside Microsoft 365 data and are left out here.",
+        scrolls="a column per control",
     )
 
 

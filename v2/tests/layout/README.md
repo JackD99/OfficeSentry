@@ -55,6 +55,10 @@ the report from the `results-*.json` files in a folder.
 ## In CI
 
 The **Layout** job in `.github/workflows/ui.yml` runs them on pull requests that touch pages, weekly and by
-hand. It is **report only** for now: the job passes whatever it finds, the run's summary page lists every
-page with a problem, and the screenshots are the run's `layout` artifact (kept for a week). Once the pages
-listed there are fixed, remove `continue-on-error` from its test step so a new problem fails the pull request.
+hand, and fails the pull request on any problem: the run's summary page lists every page with one, and the
+screenshots are the run's `layout` artifact (kept for a week).
+
+A matrix that no laptop can show (one column per control, as on the insurance evidence rollup) scrolls by
+design, with its first column pinned: its scroll box says why in `data-scrolls`, and the sideways-table check
+leaves it alone at laptop widths (phones still check it). Anything else that doesn't fit gets fewer default
+columns (`Section.optional`, or `optional_across` for Every row) or lets its long values wrap.
