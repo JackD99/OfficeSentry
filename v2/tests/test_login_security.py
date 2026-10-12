@@ -112,18 +112,20 @@ def test_recovery_codes_are_stored_under_a_key(client, db, vault, staff_mfa):
     assert stored == {totp.hash_recovery_code(c, vault.decrypt(key).encode()) for c in codes}
 
 
-def test_recovery_codes_stored_before_keyed_hashes_still_work(client, db, vault, staff_mfa):
+def test_recovery_codes_stored_before_keyed_hashes_are_rekeyed_and_still_work(cfg, db, vault, staff_mfa):
+    """Codes stored before keyed hashes were a bare SHA-256, which a copy of the database could be used to
+    guess. The portal puts them under the key when it starts, and they keep working, once each."""
     import hashlib
 
     uid = make_user(db, "admin")
-    enrol(client, db, vault, "admin")
-    client.post("/logout")
+    enrol(create_app(cfg).test_client(), db, vault, "admin")
     db.execute("DELETE FROM user_recovery_codes")
-    old = "abcde-fghjk"
-    db.execute(
-        "INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, ?)",
-        (uid, hashlib.sha256(b"abcdefghjk").hexdigest()),
-    )
+    old, bare = "abcde-fghjk", hashlib.sha256(b"abcdefghjk").hexdigest()
+    db.execute("INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, ?)", (uid, bare))
+    client = create_app(cfg).test_client()  # the portal starting
+    stored = db.execute("SELECT code_hash FROM user_recovery_codes").fetchone()[0]
+    assert stored.startswith("hmac-sha256:") and bare not in stored
+    assert totp.rekey_old_codes(db, vault) == 0  # once only
     login(client, "admin")
     assert client.post("/login/code", data={"code": old}).status_code == 302
     assert client.get("/").status_code == 200
@@ -300,7 +302,7 @@ def test_admin_resets_need_the_admins_own_password(app, db, vault, staff_mfa):
     assert boss.get("/").status_code == 200  # the admin's own right password undid nothing
 
 
-def test_wrong_admin_passwords_lock_the_admin(app, db):
+def test_wrong_admin_passwords_sign_the_admin_out(app, db):
     from officesentry.web.auth import MAX_FAILURES
 
     uid = make_user(db, "ana", role="analyst")
@@ -309,9 +311,9 @@ def test_wrong_admin_passwords_lock_the_admin(app, db):
     login(boss, "boss")
     for _ in range(MAX_FAILURES):
         boss.post(f"/admin/users/{uid}/sign-out", data={"admin_password": "guess"})
-    resp = boss.post(f"/admin/users/{uid}/sign-out", data={"admin_password": PASSWORD}, follow_redirects=True)
-    assert "Too many wrong passwords" in resp.get_data(as_text=True)
-    assert db.execute("SELECT locked_until FROM users WHERE username = 'boss'").fetchone()[0]
+    resp = boss.post(f"/admin/users/{uid}/sign-out", data={"admin_password": PASSWORD})
+    assert resp.status_code == 302 and "/login" in resp.headers["Location"]
+    assert db.execute("SELECT locked_until FROM users WHERE username = 'boss'").fetchone()[0] is None
     assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'user_signed_out'").fetchone()[0] == 0
 
 
@@ -353,23 +355,29 @@ def test_password_change_signs_out_other_browsers(app, db):
     assert phone.get("/").status_code == 302
 
 
-def test_guessing_the_current_password_locks_the_account(app, db):
-    """A stolen session can't be used to guess the password on the change-password form."""
+def test_guessing_the_current_password_signs_the_browser_out(app, db):
+    """A stolen session can't be used to guess the password on the change-password form: the fifth wrong
+    one signs it out. It can't lock the owner out either, who signs in and changes the password."""
     from officesentry.web.auth import MAX_FAILURES
 
     make_user(db, "admin")
-    client = app.test_client()
-    login(client, "admin")
+    thief, owner = app.test_client(), app.test_client()
+    login(thief, "admin")
     before = db.execute("SELECT password_hash FROM users WHERE username = 'admin'").fetchone()[0]
     new = "a much longer new password"
-    for _ in range(MAX_FAILURES):
-        client.post("/account/password", data={"current": "wrong guess", "password": new, "confirm": new})
-    resp = client.post(
-        "/account/password", data={"current": PASSWORD, "password": new, "confirm": new}, follow_redirects=True
+    for _ in range(MAX_FAILURES - 1):
+        resp = thief.post("/account/password", data={"current": "wrong guess", "password": new, "confirm": new})
+        assert resp.headers["Location"] == "/account"
+    resp = thief.post(
+        "/account/password", data={"current": "wrong guess", "password": new, "confirm": new}, follow_redirects=True
     )
-    assert "Too many wrong passwords" in resp.get_data(as_text=True)
+    assert "so this browser was signed out" in resp.get_data(as_text=True)
+    assert thief.get("/account").status_code == 302
     row = db.execute("SELECT locked_until, password_hash FROM users WHERE username = 'admin'").fetchone()
-    assert row["locked_until"] and row["password_hash"] == before
+    assert row["locked_until"] is None and row["password_hash"] == before
+    assert login(owner, "admin").status_code == 302 and owner.get("/account").status_code == 200
+    owner.post("/account/password", data={"current": PASSWORD, "password": new, "confirm": new})
+    assert db.execute("SELECT password_hash FROM users WHERE username = 'admin'").fetchone()[0] != before
 
 
 def test_idle_session_expires(client, db, cfg):

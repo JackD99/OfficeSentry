@@ -11,35 +11,57 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.3.0] - Unreleased
 
+### Database upgrade
+
+Yes, applied on start as usual: migration 41 adds a count of wrong passwords to each signed-in browser.
+
+### Changed
+
+- **All clients opens reports from the All reports menu**, the same one as a client's Reports tab: every
+  report in columns with a search box, Monthly review, Insurance evidence and Checks included, instead of a
+  drop-down list as tall as the screen. One row per client and Every row sit beside it; phones keep a list.
+
 ### Fixed
 
+- **A large month-end no longer loses emails to Microsoft's sending limit.** Exchange Online takes 30
+  messages a minute from one mailbox; approving more clients than that at once had the rest refused ("429
+  ApplicationThrottled") and left Approved with "Send failed", to be sent again one by one. Approvals and
+  scheduled report emails now go out at that pace and wait out Microsoft's "too many messages" and "service
+  unavailable" answers, for up to ten minutes, before they count as failed (in a longer outage the rest fail
+  at once, as before). A test email or Send now from a page still sends at once.
+- **The month-end queue flags a client a whole data source never came in for** ("Mailboxes not collected",
+  or "2 data sources not collected") instead of marking it Ready, so a client whose Exchange access was
+  never granted isn't approved and sent a report with that part missing. A client that removed the app,
+  whose report could only say "Nothing has been collected, so no security checks could run", is flagged
+  "No checks could run": it was marked Ready and sent in bulk before.
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
+- Pages no longer scroll sideways past the edge of the window: the All clients Checks page and Projects
+  (hidden text in their tables widened the page), and on phones the monthly review's buttons and the
+  History list on person, mailbox, group and site pages, where a long address now wraps.
 
 ### Security
 
-- **Roles limited to some clients stay within them.** A custom role that sees only some clients, or a
-  person given a capability for themselves, could reach other clients through what runs Office Sentry:
-  client groups, editing a role held by someone with more access, the client import preview, the activity
-  log, the user list and team-wide settings. Now client groups can only be changed by someone who manages
-  clients and sees every one; a role held by anyone who sees or does more than you can only be changed by an
-  Administrator; the import preview, activity log and user list leave out other clients; and *Settings* and
-  *System status* only work for someone who sees every client. The built-in roles were never affected.
-- **A report area someone can't open stays closed everywhere.** A role without a report area (an Account
-  manager has no identity reports, for example), or someone with an area taken away on one client, could
-  still get that area's reports through a scheduled email, the report history or a report design, and the
-  home pages counted findings they couldn't open. Now a schedule only sends reports its maker can open on
-  that client, and only someone who can open everything a schedule sends can change it; the report history
-  lists only reports the person can open and downloads need *Download files*; designs leave out tables the
-  viewer can't open; and the Clients, Today and Accounts pages and a client's home page count and show only
-  what the person may see. Every report email opens with the client's security summary, so setting one up,
-  changing it or previewing it, and previewing alerts, now needs *Security findings and reviews*: First line
-  no longer previews emails.
-- **Draft commentary waits for approval in every email.** For a client whose month-end reports wait for
-  approval, a monthly review attached to another scheduled email carried the month's commentary while it was
-  still in review. It now carries it once the month is approved. Clients also no longer see which member of
-  your team sent an email by hand, and staff-only notes follow *Review month-end reports* on each client.
+- Someone who manages users without being an Administrator, and has a capability taken away on one client,
+  no longer counts as holding it everywhere: they can't give it to anyone, put it in a role, or change an
+  account that holds it.
+- The user pages no longer show a user manager who only sees some clients the client accounts of other
+  clients, and the activity log shows a custom role that only sees some clients only the entries about
+  those clients.
+- The support package keeps clients as numbers for anyone who doesn't see every client: *Include client
+  identifiers* is only offered to people who see them all.
+- Webhook signing secrets must be at least 16 characters, since a short one can be worked out from a single
+  signed request. A shorter secret already saved keeps working until it is changed; a long random one
+  (`openssl rand -hex 32`) is best.
+- Wrong passwords where a signed-in browser is asked for the password again (to change it, turn two-step
+  sign-in off, or reset someone else's) no longer lock the account: the fifth signs that browser out. Someone
+  holding a stolen session could otherwise keep its owner from signing in to end it.
+- Recovery codes made before 2.2.0, still stored as a plain SHA-256, are put under the recovery code key when
+  the portal starts, so a copy of the database can't be used to work them out. They keep working.
+- New tests attack sign-in, sessions and forms on every route: a form sent without this browser's own token
+  is refused, opening a page never changes stored data, sign-in answers the same whatever was wrong, and a
+  copied cookie stops working whenever its session ends.
 
 ## [2.2.0] - 2026-10-11
 

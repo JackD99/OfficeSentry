@@ -31,6 +31,9 @@ def pytest_addoption(parser):
     parser.addoption("--save-all", action="store_true", help="with --ui: save every capture in tests/browser/output")
     # tests/nightly: release upgrades, PDF snapshots and the 200-tenant timing run (tests/nightly/README.md).
     parser.addoption("--nightly", action="store_true", help="run the slow scheduled suite in tests/nightly")
+    # tests/layout: every page at three laptop widths and a phone, for sideways scrolling, cut-off text,
+    # overlaps and controls off the screen (tests/layout/README.md).
+    parser.addoption("--layout", action="store_true", help="run the layout checks in tests/layout")
     # CI splits the suite across machines that run at the same time (.github/workflows/v2.yml).
     parser.addoption("--shard", metavar="K/N", help="run only part K of N of the tests (every part, together: all)")
     parser.addoption(
@@ -42,6 +45,8 @@ def pytest_ignore_collect(collection_path, config):
     if collection_path.name == "browser" and not config.getoption("--ui"):
         return True
     if collection_path.name == "nightly" and not config.getoption("--nightly"):
+        return True
+    if collection_path.name == "layout" and not config.getoption("--layout"):
         return True
     return None
 
@@ -134,6 +139,14 @@ def _roomy_disk(monkeypatch):
     from officesentry import system_health
 
     monkeypatch.setattr(system_health, "disk_usage", lambda path: (40.0, 60 * 2**30, 100 * 2**30))
+
+
+@pytest.fixture(autouse=True)
+def _fresh_mail_pacer(monkeypatch):
+    """Each test starts with nothing sent this minute, so emails sent by earlier tests never make it wait."""
+    from officesentry import mailer
+
+    monkeypatch.setattr(mailer, "PACER", mailer.Pacer())
 
 
 @pytest.fixture

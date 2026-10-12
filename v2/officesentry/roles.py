@@ -302,6 +302,14 @@ class Access:
         extra = frozenset().union(*self.allows.values()) if self.allows else frozenset()
         return (self.capabilities | extra) - self.denied_everywhere
 
+    def everywhere(self) -> frozenset[str]:
+        """Every capability they hold on every client they see: ``capabilities`` less anything taken away on one
+        client. What a user manager may hand out, and the most an account they change may hold."""
+        if self.is_admin:
+            return frozenset(p.KEYS)
+        taken = frozenset().union(*self.denies.values()) if self.denies else frozenset()
+        return self.capabilities - taken
+
 
 def access_for(conn, user) -> Access:
     role = role_of(conn, user)

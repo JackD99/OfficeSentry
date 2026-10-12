@@ -11,7 +11,7 @@ from flask import Flask, g, render_template, request
 from flask_wtf.csrf import CSRFError, CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .. import __version__, logs, system_alerts, system_health, worker
+from .. import __version__, logs, system_alerts, system_health, totp, worker
 from .. import sso as staff_sign_in
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
@@ -96,6 +96,11 @@ def create_app(cfg: Config | None = None) -> Flask:
     conn = connect(cfg.db_path)
     try:
         migrate(conn)
+        try:
+            if rekeyed := totp.rekey_old_codes(conn, app.extensions["officesentry.vault"]):
+                log.info("Recovery codes stored before 2.2.0 now use the recovery code key (%d).", rekeyed)
+        except Exception:  # those codes stop working until it succeeds; the portal still starts
+            log.exception("Couldn't re-key recovery codes stored before 2.2.0")
         if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone() is None:
             app.logger.warning(
                 "No admin account yet. To create one, open %s/setup?token=%s", cfg.base_url, setup_token(cfg.data_dir)

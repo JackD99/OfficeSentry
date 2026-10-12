@@ -1,18 +1,15 @@
-"""Settings → Activity log: the audit log for admins, with filters, paging and a CSV export.
-
-Someone who holds the activity log but doesn't see every client (a custom role limited to some clients)
-gets the rows about their clients and the rows about no client, never another client's rows (whose
-details name that client's people and addresses), nor the sign-ins of another client's own accounts."""
+"""Settings → Activity log: the audit log for admins, with filters, paging and a CSV export."""
 
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 
 from flask import Blueprint, Response, g, render_template, request
 
 from ..db import AUDIT_NOISE, AUDIT_NOISE_DAYS, audit
 from ..reports.tables import Table, to_csv
-from .access import current, needs, visible_tenants
+from .access import current, needs, unseen_client_accounts, visible_tenants
 
 bp = Blueprint("activity", __name__)
 
@@ -38,33 +35,8 @@ def _filters() -> dict:
     }
 
 
-def _in_scope() -> tuple[str, list]:
-    """The rows this person may read: every row for someone who sees every client, otherwise their
-    clients' rows and rows about no client that no client account outside their scope wrote."""
-    if current().sees_all:
-        return "", []
-    ids = [t["id"] for t in visible_tenants(g.db, g.user, archived=True)]
-    marks = ",".join("?" * len(ids)) or "NULL"
-    return (
-        f"(a.tenant_id IN ({marks}) OR (a.tenant_id IS NULL AND (a.username IS NULL"
-        f" OR a.username NOT IN ({_OTHER_CLIENTS_ACCOUNTS.format(marks=marks)}))))",
-        [*ids, *ids],
-    )
-
-
-# Client accounts granted none of the given clients.
-_OTHER_CLIENTS_ACCOUNTS = (
-    "SELECT username FROM users WHERE role = 'client'"
-    " AND id NOT IN (SELECT user_id FROM user_tenants WHERE tenant_id IN ({marks}))"
-)
-
-
 def _where(f: dict) -> tuple[str, list]:
-    where, params = [], []
-    scope, scope_params = _in_scope()
-    if scope:
-        where.append(scope)
-        params.extend(scope_params)
+    where, params = _scope()
     if f["user"]:
         where.append("a.username = ?")
         params.append(f["user"])
@@ -81,6 +53,20 @@ def _where(f: dict) -> tuple[str, list]:
         where.append("a.ts < ?")
         params.append(f"{(f['to'] + timedelta(days=1)).isoformat()}T00:00:00Z")
     return (" WHERE " + " AND ".join(where)) if where else "", params
+
+
+def _scope() -> tuple[list[str], list]:
+    """For someone who doesn't see every client: only what happened on the clients they see, and portal-wide
+    rows that aren't by or about a client account of the others (whose name is one of that client's people:
+    the user pages start their detail with it)."""
+    if current().sees_all:
+        return [], []
+    unseen = sorted(unseen_client_accounts(g.db, g.user).values())
+    return [
+        "(a.tenant_id IS NULL OR a.tenant_id IN (SELECT value FROM json_each(?)))",
+        "NOT EXISTS (SELECT 1 FROM json_each(?) h WHERE a.username = h.value OR a.detail = h.value"
+        " OR a.detail LIKE h.value || ':%' OR a.detail LIKE h.value || ' %')",
+    ], [json.dumps(sorted(_tenant_names())), json.dumps(unseen)]
 
 
 def _tenant_names() -> dict[int, str]:
@@ -106,12 +92,12 @@ def index():
     ).fetchall()
     names = _tenant_names()
     actions = [r[0] for r in g.db.execute("SELECT DISTINCT action FROM audit_log ORDER BY action")]
-    users = [r[0] for r in g.db.execute("SELECT username FROM users ORDER BY username COLLATE NOCASE")]
-    if not current().sees_all:
-        ids = list(names)
-        marks = ",".join("?" * len(ids)) or "NULL"
-        hidden = {r[0] for r in g.db.execute(_OTHER_CLIENTS_ACCOUNTS.format(marks=marks), ids)}
-        users = [u for u in users if u not in hidden]
+    unseen = unseen_client_accounts(g.db, g.user)
+    users = [
+        r["username"]
+        for r in g.db.execute("SELECT id, username FROM users ORDER BY username COLLATE NOCASE")
+        if r["id"] not in unseen
+    ]
     query = {k: (v.isoformat() if isinstance(v, date) else v) for k, v in f.items() if v not in (None, "")}
     return render_template(
         "activity.html",

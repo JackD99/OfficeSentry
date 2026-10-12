@@ -17,7 +17,7 @@
     <span class="hint">Must start with https://. It's stored encrypted and never shown again.</span></label>
   {% if url_hint %}<label class="check"><input type="checkbox" name="clear_url" value="1"> Remove the saved URL</label>{% endif %}
   <label>Signing secret (optional) <input type="password" name="secret" autocomplete="new-password" placeholder="{{ 'Saved, leave blank to keep' if s['alerts.secret_enc'] else '' }}">
-    <span class="hint">For your own webhooks: each request gets <span class="mono">X-OfficeSentry-Timestamp</span>, <span class="mono">X-OfficeSentry-Key-Id</span> and <span class="mono">X-OfficeSentry-Signature: v1=…</span>, the HMAC-SHA256 with this secret of the timestamp, a full stop and the body. Refuse requests more than five minutes old, so a copied one can't be sent again (DEPLOY.md, "Signed webhooks").</span></label>
+    <span class="hint">For your own webhooks: each request gets <span class="mono">X-OfficeSentry-Timestamp</span>, <span class="mono">X-OfficeSentry-Key-Id</span> and <span class="mono">X-OfficeSentry-Signature: v1=…</span>, the HMAC-SHA256 with this secret of the timestamp, a full stop and the body. Use a long random secret (at least 16 characters; <span class="mono">openssl rand -hex 32</span> makes one). Refuse requests more than five minutes old, so a copied one can't be sent again (DEPLOY.md, "Signed webhooks").</span></label>
   {% if s['alerts.secret_enc'] %}<label class="check"><input type="checkbox" name="clear_secret" value="1"> Remove the saved secret</label>{% endif %}
   <h2>What to send</h2>
   <label>New findings rated <select name="min_severity">

@@ -79,7 +79,8 @@ v2/
     migrations/   numbered SQL files, applied in order, never edited once applied
   tests/          pytest suite; graphdata.py and friends are simulated Microsoft responses
   tests/browser/  screenshot and accessibility tests (their README says how to run them)
-  scripts/        demo data, screenshots, the check catalogue generator, scale data
+  tests/layout/   every page at four widths, for layouts that break (likewise)
+  scripts/        demo data, screenshots, the check catalogue generator, scale data, the month-end dry run
   docs/           guides for MSPs (onboarding, troubleshooting, checks.md)
 website/          officesentry.co.uk, built from these Markdown files
 ```
@@ -109,7 +110,10 @@ data (`test_robustness.py`).
 
 Templates and CSS also have browser tests that compare screenshots with
 baselines; see `tests/browser/README.md`. CI runs them on pull requests that
-touch the UI.
+touch the UI, along with the layout checks in `tests/layout/`: every page at
+1366, 1440 and 1920 px and on a phone, with long names and empty data, for
+pages that scroll sideways, cut text off, overlap or push controls off the
+screen.
 
 ## Simulating Microsoft at the HTTP level
 
