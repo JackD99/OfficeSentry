@@ -1139,6 +1139,24 @@ def prune(conn, store: str, cutoff: datetime, dry_run: bool = False) -> int:
     return total
 
 
+def trim_coverage(conn, source: str, before: datetime) -> int:
+    """After retention removed ``source``'s history from before ``before``: every tenant's history now starts
+    there, so pages stop saying it's "detailed from" a date it no longer holds, and gaps or lost stretches
+    older than that are forgotten. Returns how many tenants moved."""
+    edge = int(before.timestamp())
+    moved = 0
+    for (tenant_id,) in conn.execute("SELECT tenant_id FROM event_cursors WHERE source = ?", (source,)).fetchall():
+        cov = coverage(conn, tenant_id, source)
+        if cov.since is None or cov.since >= edge:
+            continue
+        cov.since = edge
+        cov.gaps = [[max(lo, edge), hi] for lo, hi in cov.gaps if hi > edge]
+        cov.lost = [[max(lo, edge), hi] for lo, hi in cov.lost if hi > edge]
+        save_coverage(conn, tenant_id, cov)
+        moved += 1
+    return moved
+
+
 def delete_tenant(base: Path | None, key: int) -> int:
     """Delete every event of one tenant key from every file. Returns the rows deleted."""
     deleted = 0
