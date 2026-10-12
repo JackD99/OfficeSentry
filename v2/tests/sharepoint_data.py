@@ -247,6 +247,10 @@ USER_INFO = {
         _uil("Pat Supplier", "i:0#.f|membership|pat_supplier.com#ext#@x.onmicrosoft.com", email="pat@supplier.com"),
         _uil("Old Guest", "i:0#.f|membership|old_gone.com#ext#@x.onmicrosoft.com", email="old@gone.com", deleted=True),
         _uil("Office Sentry", "i:0i.t|00000003-0000-0ff1-ce00-000000000000|app@sharepoint"),
+        # SharePoint records both "Everyone" claims on every site, given anything or not (as the test tenant's
+        # three sites show), so these say nothing about who can open it.
+        _uil("Everyone", "c:0(.s|true"),
+        _uil("Everyone except external users", EVERYONE_BUT_GUESTS),
     ],
     # Old Projects has no group: its only administrator is Bob, whose account is disabled.
     "site-old": [
