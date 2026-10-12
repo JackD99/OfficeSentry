@@ -712,7 +712,7 @@ reach staff on the web page, never a client or any PDF. A client's live report s
 of it until the month is approved or sent (`report_context(..., approved_only=True)`).
 
 The reviewer can leave things out of one client's copy of one month
-(`report_hidden`, migration 0041; `month_end.hidden`, `leave_out`, `put_back`,
+(`report_hidden`, migration 0043; `month_end.hidden`, `leave_out`, `put_back`,
 items checked by `valid_item`): `check:<key>`, `kpi:<key>` (`designs.KPI_OPTIONS`),
 `action:<id>`, `part:<key>` (`month_end.PARTS`, the monthly review's sections),
 `block:<design id>:<block id>` and `notes:<design id>`. `report_context` carries

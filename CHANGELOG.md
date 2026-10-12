@@ -13,47 +13,16 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ### Database upgrade
 
-Yes, applied on start as usual: migration 41 adds a small table for what the month-end review leaves out of
-each client's month. As ever, a copy of the database is made first.
-
-### Added
-
-- **Leave things out of one client's month-end report.** On the review screen, a failing check, a key
-  figure, a recommendation, a part of the monthly review (Licences, What changed, Accepted risks and the
-  rest) or a block of a report design can be left out of that client's copy for that month, and put back.
-  The design, other clients and next month stay as they are. Left-out items stay on the review screen,
-  greyed out with **Put back**, and the top of the page counts them with **Put everything back**; the sent
-  PDFs, the spreadsheet, the email and the client's portal copy never have them.
-- **A preview of the client's copy on the review screen**, beside the commentary and findings, switchable
-  between the plan's reports, and drawn again as things are left out or put back.
-- **Send failed months again from the queue.** After a mail outage, tick the clients whose email failed and
-  press **Approve and send selected**: each gets the same frozen files again, without opening it.
-- In the report designer: the preview is drawn at the printed page's width, so it lays out as the PDF does
-  (four key figures to a row, half-width blocks side by side); clicking a block in the preview opens its
-  settings; **Undo** and **Redo** (and Ctrl+Z); proper icons for move, half width, duplicate and remove; a
-  search box over the blocks; and a **Band on page one** cover for short reports, which the Executive summary
-  starter now uses.
+Yes, applied on start as usual: migration 41 adds a count of wrong passwords to each signed-in browser.
 
 ### Changed
 
-- Setup notes written for your team, like "Microsoft is hiding people's names… sign in to
-  admin.microsoft.com as a Global Admin", are left out of the client's copy of a report design. The portal
-  and the previews still show them, marked "Only your team sees this". A design can include them again
-  (**Include setup notes in the client's copy**), and the review can leave them out for one client and month.
 - **All clients opens reports from the All reports menu**, the same one as a client's Reports tab: every
   report in columns with a search box, Monthly review, Insurance evidence and Checks included, instead of a
   drop-down list as tall as the screen. One row per client and Every row sit beside it; phones keep a list.
 
 ### Fixed
 
-- The monthly review said a client's Microsoft 365 was "In good shape" when most checks couldn't run, for
-  example while only the tenant profile had been collected. It now says **Partly checked**, and how many of
-  the checks ran.
-- **Inactive accounts** said "Needs Entra ID P1" whatever the reason it had no figure. It now gives the
-  reason, such as "User data hasn't been collected yet".
-- In a report design, the headings of two half-width blocks side by side line up, on the page and in the PDF.
-- A report design previewed in dark mode drew its contact card dark on the light page; previews are light, as
-  the PDF is.
 - **A large month-end no longer loses emails to Microsoft's sending limit.** Exchange Online takes 30
   messages a minute from one mailbox; approving more clients than that at once had the rest refused ("429
   ApplicationThrottled") and left Approved with "Send failed", to be sent again one by one. Approvals and
@@ -71,6 +40,28 @@ each client's month. As ever, a copy of the database is made first.
 - Pages no longer scroll sideways past the edge of the window: the All clients Checks page and Projects
   (hidden text in their tables widened the page), and on phones the monthly review's buttons and the
   History list on person, mailbox, group and site pages, where a long address now wraps.
+
+### Security
+
+- Someone who manages users without being an Administrator, and has a capability taken away on one client,
+  no longer counts as holding it everywhere: they can't give it to anyone, put it in a role, or change an
+  account that holds it.
+- The user pages no longer show a user manager who only sees some clients the client accounts of other
+  clients, and the activity log shows a custom role that only sees some clients only the entries about
+  those clients.
+- The support package keeps clients as numbers for anyone who doesn't see every client: *Include client
+  identifiers* is only offered to people who see them all.
+- Webhook signing secrets must be at least 16 characters, since a short one can be worked out from a single
+  signed request. A shorter secret already saved keeps working until it is changed; a long random one
+  (`openssl rand -hex 32`) is best.
+- Wrong passwords where a signed-in browser is asked for the password again (to change it, turn two-step
+  sign-in off, or reset someone else's) no longer lock the account: the fifth signs that browser out. Someone
+  holding a stolen session could otherwise keep its owner from signing in to end it.
+- Recovery codes made before 2.2.0, still stored as a plain SHA-256, are put under the recovery code key when
+  the portal starts, so a copy of the database can't be used to work them out. They keep working.
+- New tests attack sign-in, sessions and forms on every route: a form sent without this browser's own token
+  is refused, opening a page never changes stored data, sign-in answers the same whatever was wrong, and a
+  copied cookie stops working whenever its session ends.
 
 ## [2.2.0] - 2026-10-11
 
