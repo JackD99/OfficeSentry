@@ -172,17 +172,29 @@ def setup_scope(cloud: str | None = None) -> str:
 
 
 def device_code_token(tenant: str, say: Callable[[str], None], cloud: str | None = None) -> str:
+    """The command line's device sign-in (create-app, update-app), waiting for the admin. Raises ``SignInError``
+    in words for people when Microsoft can't be reached or refuses."""
     import msal
 
     c = clouds.get(cloud)
-    app = msal.PublicClientApplication(GRAPH_CLI_CLIENT_ID, authority=f"{c.login}/{tenant}")
-    flow = app.initiate_device_flow(scopes=[setup_scope(c.key)])
-    if "user_code" not in flow:
-        raise RuntimeError(flow.get("error_description", "could not start device sign-in"))
-    say(flow["message"])
-    result = app.acquire_token_by_device_flow(flow)
+    try:
+        app = msal.PublicClientApplication(GRAPH_CLI_CLIENT_ID, authority=f"{c.login}/{tenant}")
+        flow = app.initiate_device_flow(scopes=[setup_scope(c.key)])
+        if "user_code" not in flow:
+            raise SignInError(_sign_in_problem(flow))
+        say(flow["message"])
+        result = app.acquire_token_by_device_flow(flow)
+    except requests.RequestException as exc:
+        raise SignInError(UNREACHABLE) from exc
+    except msal.exceptions.MsalServiceError as exc:  # an error status MSAL didn't expect, such as a 503
+        raise SignInError("Microsoft's sign-in service isn't working right now. Try again in a few minutes.") from exc
+    except ValueError as exc:  # MSAL couldn't read the tenant's sign-in settings: Microsoft has no such tenant
+        raise SignInError(
+            f"Microsoft doesn't know the tenant {tenant}. Give --tenant your tenant's ID or a domain it owns, "
+            "such as contoso.onmicrosoft.com."
+        ) from exc
     if "access_token" not in result:
-        raise RuntimeError(result.get("error_description", "sign-in failed"))
+        raise SignInError(_sign_in_problem(result))
     return result["access_token"]
 
 
@@ -309,6 +321,11 @@ class SignInError(Exception):
     """Creating the app can't go on; the message says why in words for people."""
 
 
+UNREACHABLE = (
+    "Office Sentry couldn't reach Microsoft's sign-in service. Check the server can reach the internet, then try again."
+)
+
+
 @dataclass(frozen=True)
 class DeviceCode:
     device_code: str  # secret: whoever holds it can collect the token once the admin signs in
@@ -359,10 +376,7 @@ def start_device_sign_in(
             timeout=30,
         )
     except requests.RequestException as exc:
-        raise SignInError(
-            "Office Sentry couldn't reach Microsoft's sign-in service. Check the server can reach "
-            "the internet, then try again."
-        ) from exc
+        raise SignInError(UNREACHABLE) from exc
     body = _json(resp)
     if not resp.ok or "device_code" not in body or "user_code" not in body:
         raise SignInError(_sign_in_problem(body))

@@ -396,6 +396,14 @@ def before_upgrade(db_file: Path, current: int, target: int, release: str | None
     return dest
 
 
+def _read_only(path: Path) -> sqlite3.Connection:
+    """A backup opened without writing beside it. A backup is a WAL database, so even a read-only connection
+    leaves -shm and -wal files next to it; ``immutable`` reads the file alone, which is the whole backup unless
+    it came with a WAL of its own (then that is read too, as before)."""
+    uri = f"{path.resolve().as_uri()}?mode=ro"
+    return sqlite3.connect(uri if Path(f"{path}-wal").exists() else f"{uri}&immutable=1", uri=True)
+
+
 def check_backup(path: Path, shown: Path | None = None) -> int:
     """Check that ``path`` is a sound Office Sentry database this version can open. Returns its schema version.
     Messages name ``shown``, the file the person gave, when ``path`` is that backup unpacked."""
@@ -403,7 +411,7 @@ def check_backup(path: Path, shown: Path | None = None) -> int:
     if not path.is_file():
         raise RestoreError(f"{name} doesn't exist.")
     try:
-        conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+        conn = _read_only(path)
     except sqlite3.Error as exc:
         raise RestoreError(f"{name} can't be opened: {exc}") from exc
     try:
@@ -530,7 +538,7 @@ def _restore(db_path: Path, source: Path, plain: Path, worker_running: bool, for
     _remove_stale_journal(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        src = sqlite3.connect(f"{plain.resolve().as_uri()}?mode=ro", uri=True)
+        src = _read_only(plain)
         dest = connect(db_path)
         try:
             src.backup(dest)
@@ -589,7 +597,7 @@ def inspect(source: Path) -> dict:
     source = Path(source)
     with _unpacked(source, source.parent) as plain:
         version = check_backup(plain, shown=source)
-        conn = sqlite3.connect(f"{plain.resolve().as_uri()}?mode=ro", uri=True)
+        conn = _read_only(plain)
         try:
             tenants = conn.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]
             newest = conn.execute("SELECT MAX(finished_at) FROM runs").fetchone()[0]

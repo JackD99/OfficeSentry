@@ -22,6 +22,14 @@ NOW = datetime.now(UTC)
 TODAY = NOW.date()
 
 
+@pytest.fixture(autouse=True)
+def _now():
+    """NOW and TODAY as each test starts, not as the module loaded: a run may pass midnight UTC in between."""
+    global NOW, TODAY
+    NOW = datetime.now(UTC)
+    TODAY = NOW.date()
+
+
 def day(days_ago: int) -> str:
     return (TODAY - timedelta(days=days_ago)).isoformat()
 

@@ -40,6 +40,8 @@ from pygments import highlight as pygments_highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
+from security_txt import PATH as SECURITY_TXT
+from security_txt import security_txt
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -740,6 +742,11 @@ def build() -> Path:
     )
     (OUT / "robots.txt").write_text(
         f"User-agent: *\nAllow: /\nSitemap: {cfg['site_url']}/sitemap.xml\n", encoding="utf-8"
+    )
+    (OUT / SECURITY_TXT).parent.mkdir(parents=True, exist_ok=True)
+    (OUT / SECURITY_TXT).write_text(
+        security_txt(cfg["site_url"], (ROOT / "SECURITY.md").read_text(encoding="utf-8"), form=cfg["source_public"]),
+        encoding="utf-8",
     )
     return OUT
 

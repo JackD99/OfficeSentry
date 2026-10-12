@@ -102,9 +102,9 @@ def cmd_create_app(args, cfg):
         vault = Vault(cfg.encryption_keys)
         cloud = clouds.get(args.cloud)
         print(f"Sign in as an admin of YOUR (the MSP's) {cloud.label} tenant who can create app registrations.")
-        token = device_code_token(args.tenant, print, cloud.key)
         redirect_uri = f"{cfg.base_url}/consent/callback"
         try:
+            token = device_code_token(args.tenant, print, cloud.key)
             conn_id, app = register_app(conn, vault, token, redirect_uri, args.name, cloud.key)
         except SignInError as exc:
             sys.exit(str(exc))
@@ -134,8 +134,8 @@ def cmd_update_app(args, cfg):
         connection = picked[0]
         cloud = clouds.of(connection)
         print(f"Sign in as an admin of YOUR (the MSP's) {cloud.label} tenant who can change app registrations.")
-        token = device_code_token(args.tenant, print, cloud.key)
         try:
+            token = device_code_token(args.tenant, print, cloud.key)
             added = update_app(conn, token, connection, "cli", "update-app command")
         except SignInError as exc:
             sys.exit(str(exc))
@@ -317,6 +317,9 @@ def cmd_restore(args, cfg):
         result = restore(cfg.db_path, Path(args.file), worker_running=running, force=args.force)
     except RestoreError as exc:
         sys.exit(f"Not restored: {exc}")
+    with closing(connect(cfg.db_path)) as conn:
+        if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+            clear_setup_token(cfg.data_dir)  # made while the new server had no admin; the backup has one
     if result.get("damaged"):
         print(
             f"The database it replaced was damaged, so it couldn't be copied: it was moved aside whole as "

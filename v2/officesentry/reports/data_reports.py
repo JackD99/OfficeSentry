@@ -74,6 +74,8 @@ class Section:
     # Columns the page leaves out until someone shows them (Columns), so a wide table fits a laptop with the
     # columns that answer its question. Downloads keep them (views._visible).
     optional: tuple[str, ...] = ()
+    # And columns only Every row leaves out (rollups.all_rows), where its Client column takes their room.
+    optional_across: tuple[str, ...] = ()
     keys: list = field(default_factory=list)
     review: bool = True  # False: rows already dealt with (accepted, resolved), so no "<n> to review"
     chart: Chart | None = None  # drawn from the rows the view leaves (views.chart)

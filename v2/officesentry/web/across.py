@@ -25,7 +25,7 @@ from ..reports import (
 from ..reports.monthly_review import build as build_review
 from ..reports.registry import DECLARED
 from . import as_of
-from .access import can, need_also, needs, require, tenant_or_404
+from .access import can, need_also, needs, opens_on, require, tenant_or_404
 from .groups import group_aware, scope, scoped_tenants
 from .printing import pdf_response
 from .reports import exists, hidden_reports, report_capability
@@ -324,7 +324,7 @@ def rollup_pdf(key: str):
 
 
 def _across_changes(days: int):
-    summaries = month_changes.across(g.db, scoped_tenants(), days)
+    summaries = month_changes.across(g.db, scoped_tenants(), days, opens=opens_on)
     scored = [
         s.figures["secure_score.pct"].delta
         for s in summaries
@@ -373,7 +373,7 @@ def changes_pdf():
 @group_aware
 def changes_download(ext: str):
     days = _days()
-    table = month_changes.across_table(month_changes.across(g.db, scoped_tenants(), days), days)
+    table = month_changes.across_table(month_changes.across(g.db, scoped_tenants(), days, opens=opens_on), days)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"changes-{days}d.{ext}")
     body = (
         tables.to_csv(table)
@@ -405,6 +405,7 @@ def _tenant_changes(t) -> dict:
         query = period.query
         slug = f"{period.start.isoformat()}-to-{end:%Y-%m-%d}"
         title = f"What changed from {period.start.day} {period.start:%b %Y} to {end.day} {end:%b %Y}"
+    report = month_changes.only(report, opens_on(t["id"]))
     unchanged = [r for r in report.reports if not r.count and not r.note]
     return {
         "report": report,
@@ -465,11 +466,12 @@ def tenant_changes_download(tenant_id: int, ext: str):
                 page["title"],
                 t["name"],
                 tenant_ref=t["tenant_ref"],
-                facts=[
-                    ("Changes", report.total, ""),
-                    ("New findings", len(report.new_findings), ""),
-                    ("Fixed findings", len(report.fixed_findings), ""),
-                ],
+                facts=[("Changes", report.total, "")]
+                + (
+                    [("New findings", len(report.new_findings), ""), ("Fixed findings", len(report.fixed_findings), "")]
+                    if report.findings_shown
+                    else []
+                ),
             ),
         )
     return _download(body, f"changes-{page['slug']}-{tables.slug(t['name'])}", ext)

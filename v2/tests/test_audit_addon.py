@@ -9,8 +9,8 @@ from urllib.parse import parse_qs, urlsplit
 
 import responses
 
-from officesentry import events, store, tasks
-from officesentry.auditlog import addon
+from officesentry import events, retention, store, tasks
+from officesentry.auditlog import addon, feed
 from officesentry.entra import MANAGEMENT_APP_ID
 from officesentry.reports.file_activity import KEY
 from officesentry.reports.profile import timeline as profile_timeline
@@ -122,6 +122,19 @@ def test_a_client_that_removed_the_app_is_shown_off(db, vault, two_tenants):
         status, _ = collect(db, alpha, {}, NOW, rsps=rsps)
     assert status == "partial"
     assert addon.row_for(db, alpha)["stop_reason"] == addon.REMOVED
+
+
+def test_retention_moves_where_the_addons_history_is_detailed_from(db, two_tenants):
+    alpha, _ = two_tenants
+    sources = [f"activity:{c}" for c in feed.CONTENT_TYPES]
+    assert set(sources) <= set(retention.HISTORY_SOURCES)
+    for source in sources:  # read for three years
+        cov = events.coverage(db, alpha, source)
+        cov.since, cov.read_to = int((NOW - timedelta(days=3 * 365)).timestamp()), int(NOW.timestamp())
+        events.save_coverage(db, alpha, cov)
+    retention.prune_history(db, retention.Policy(history_activity_months=24), NOW)
+    two_years_ago = int(datetime(2024, 10, 12, 9, 0, tzinfo=UTC).timestamp())
+    assert [events.coverage(db, alpha, s).since for s in sources] == [two_years_ago, two_years_ago]
 
 
 # -- From the link to the feed, and off again ----------------------------------------------------------------

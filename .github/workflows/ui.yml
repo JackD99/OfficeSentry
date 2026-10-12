@@ -1,8 +1,8 @@
 name: Browser tests
 # Screenshots and accessibility checks in a real browser (v2/tests/browser/README.md): about 34 pages at a
 # laptop and a phone width, light and dark, compared with the baselines in the repo, and axe-core on each.
-# Beside it, the Layout job opens every page at four widths for broken layouts (v2/tests/layout/README.md); it
-# reports only, for now, on the run's summary page.
+# Beside it, the Layout job opens every page at four widths for broken layouts (v2/tests/layout/README.md) and
+# fails on any; the run's summary page lists them.
 #
 # It runs on pull requests that touch what a page looks like, weekly, and by hand. Screenshots are uploaded only when a
 # comparison fails, and kept for three days.
@@ -91,9 +91,8 @@ jobs:
       - name: Install from the lock files
         run: pip install --root-user-action=ignore --require-hashes --no-deps -r requirements-dev.txt -r tests/browser/requirements.txt
       - name: Every page at four widths
-        # Report only until the pages it lists are fixed: the job passes whatever it finds, and the run's summary
-        # page lists every problem. Then remove continue-on-error so a new problem fails the pull request.
-        continue-on-error: true
+        # A problem fails the pull request; the run's summary page lists every one, and the layout download has
+        # each page's screenshot with the problem outlined.
         run: python -m pytest tests/layout --layout -n 4 -p no:cacheprovider -q --tb=no -rf
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2

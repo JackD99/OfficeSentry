@@ -15,8 +15,9 @@ from ..collectors import REGISTRY, core, for_tenant
 from ..db import audit, transaction, utcnow
 from ..discovery import tenant_id_for_domain
 from ..entra import admin_consent_url
+from ..reports.month_changes import CHANGE_REPORTS
 from ..text import plural
-from .access import can, is_staff, login_required, manages_groups, needs, tenant_or_404, visible_tenants
+from .access import can, is_staff, login_required, manages_groups, needs, opens_on, tenant_or_404, visible_tenants
 from .groups import group_aware, scoped_tenants
 from .reports import report_groups
 
@@ -276,6 +277,8 @@ def tenant(tenant_id: int):
     from .tenant_admin import _check_problem
 
     setup = tenant_health.assess(g.db, t)  # the onboarding checklist, until every step is done
+    opens = opens_on(t["id"])
+    key_changes = [c for c in report.changes if (key := CHANGE_REPORTS.get(c.area)) and opens(key)]
     cloud = clouds.of(t)
     cloud_problem = None
     if not cloud.is_default and (connection is None or cloud_mismatch(cloud.key, connection)):
@@ -287,6 +290,7 @@ def tenant(tenant_id: int):
         consent_link=_consent_link(t, connection),
         redirect_uri=_cfg().base_url + url_for("tenants.consent_callback"),
         report=report,
+        key_changes=key_changes,
         attention=attention,
         health=data_health(t, latest),
         report_groups=report_groups(t["id"]),

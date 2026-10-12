@@ -27,7 +27,8 @@ organisation (``_organisation``), whatever it was granted.
 
 from __future__ import annotations
 
-from functools import wraps
+from collections.abc import Callable
+from functools import cache, wraps
 from urllib.parse import urlsplit
 
 from flask import abort, g, has_request_context, redirect, request, url_for
@@ -89,6 +90,13 @@ def need_also(*capabilities: str, tenant_id: int | None = None) -> None:
 def report_capability(key: str) -> str:
     """The capability a detail report needs, from its menu group."""
     return permissions.area_capability(DECLARED[key].group if key in DECLARED else None)
+
+
+def opens_on(tenant_id: int) -> Callable[[str], bool]:
+    """Whether the signed-in person opens a report on this client, by its key or "findings" (the Findings
+    tab), for a page that shows parts of many reports (What changed). Each capability is asked about once."""
+    allowed = cache(lambda capability: can(capability, tenant_id))
+    return lambda key: allowed(permissions.SUMMARY_CAPABILITY.get(key) or report_capability(key))
 
 
 def is_staff() -> bool:

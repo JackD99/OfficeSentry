@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from .. import store
 from ..graph import GraphError, PermissionMissing
-from .base import Collector, RunContext, register
+from .base import Collector, NothingToRead, RunContext, register
 
 USER_LIMIT = 2000
 
@@ -23,6 +23,11 @@ class PerUserMfa(Collector):
     permissions = ("Policy.Read.All",)
 
     def collect(self, ctx: RunContext) -> None:
+        if ctx.capabilities.get("entra_p1") is None:
+            raise NothingToRead(
+                "This client's licences haven't been read yet (Tenant profile), so whether it needs per-user MFA "
+                "isn't known. The next collection reads them first, then this."
+            )
         if ctx.capabilities.get("entra_p1") is not False:
             ctx.log("Tenant has Entra ID P1, so MFA is enforced with Conditional Access; per-user MFA not read")
             ctx.objects("per_user_mfa_status", [("status", {"checked": False, "reason": "entra_p1"})])

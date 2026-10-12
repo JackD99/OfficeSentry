@@ -44,6 +44,7 @@ from . import (
 from .auditlog import addon
 from .auditlog.feed import FeedClient, FeedError
 from .collectors import REGISTRY, RunContext
+from .collectors.base import NothingToRead
 from .config import Config
 from .connection_check import explain
 from .crypto import Vault
@@ -245,6 +246,7 @@ def _run_collector(
             ctx.note_exchange_cuts()
     except (
         NotConnected,
+        NothingToRead,
         PermissionMissing,
         LicenseRequired,
         GraphError,

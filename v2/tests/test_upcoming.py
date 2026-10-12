@@ -38,57 +38,59 @@ def _exchange(used_gb: float = 48):
     return data
 
 
-APPS = [
-    {
-        "id": "app1",
-        "appId": "a1",
-        "displayName": "Payroll sync",
-        "createdDateTime": "2024-01-01T00:00:00Z",
-        "passwordCredentials": [{"displayName": "prod", "endDateTime": _in(10)}],
-        "keyCredentials": [],
-    },
-    {
-        "id": "app2",
-        "appId": "a2",
-        "displayName": "Backup agent",
-        "createdDateTime": "2024-01-01T00:00:00Z",
-        "passwordCredentials": [],
-        "keyCredentials": [{"displayName": "cert", "endDateTime": _in(45)}],
-    },
-    {
-        "id": "app3",
-        "appId": "a3",
-        "displayName": "Old connector",
-        "createdDateTime": "2023-01-01T00:00:00Z",
-        "passwordCredentials": [{"displayName": "s1", "endDateTime": _in(-5)}],
-        "keyCredentials": [],
-    },
-    {
-        "id": "app4",
-        "appId": "a4",
-        "displayName": "Rotated app",
-        "createdDateTime": "2024-01-01T00:00:00Z",
-        "passwordCredentials": [
-            {"displayName": "old", "endDateTime": _in(20)},
-            {"displayName": "new", "endDateTime": _in(700)},
-        ],
-        "keyCredentials": [],
-    },
-    {
-        "id": "app5",
-        "appId": "a5",
-        "displayName": "Long gone",
-        "createdDateTime": "2020-01-01T00:00:00Z",
-        "passwordCredentials": [{"displayName": "s1", "endDateTime": "2021-01-01T00:00:00Z"}],
-        "keyCredentials": [],
-    },
-]
+def _apps() -> list[dict]:
+    """Dated when the test reads them (a run may pass midnight UTC after this module loads)."""
+    return [
+        {
+            "id": "app1",
+            "appId": "a1",
+            "displayName": "Payroll sync",
+            "createdDateTime": "2024-01-01T00:00:00Z",
+            "passwordCredentials": [{"displayName": "prod", "endDateTime": _in(10)}],
+            "keyCredentials": [],
+        },
+        {
+            "id": "app2",
+            "appId": "a2",
+            "displayName": "Backup agent",
+            "createdDateTime": "2024-01-01T00:00:00Z",
+            "passwordCredentials": [],
+            "keyCredentials": [{"displayName": "cert", "endDateTime": _in(45)}],
+        },
+        {
+            "id": "app3",
+            "appId": "a3",
+            "displayName": "Old connector",
+            "createdDateTime": "2023-01-01T00:00:00Z",
+            "passwordCredentials": [{"displayName": "s1", "endDateTime": _in(-5)}],
+            "keyCredentials": [],
+        },
+        {
+            "id": "app4",
+            "appId": "a4",
+            "displayName": "Rotated app",
+            "createdDateTime": "2024-01-01T00:00:00Z",
+            "passwordCredentials": [
+                {"displayName": "old", "endDateTime": _in(20)},
+                {"displayName": "new", "endDateTime": _in(700)},
+            ],
+            "keyCredentials": [],
+        },
+        {
+            "id": "app5",
+            "appId": "a5",
+            "displayName": "Long gone",
+            "createdDateTime": "2020-01-01T00:00:00Z",
+            "passwordCredentials": [{"displayName": "s1", "endDateTime": "2021-01-01T00:00:00Z"}],
+            "keyCredentials": [],
+        },
+    ]
 
 
 @pytest.fixture
 def tenant(db, two_tenants, monkeypatch):
     alpha, _ = two_tenants
-    monkeypatch.setattr(gd, "APPLICATIONS", APPS)
+    monkeypatch.setattr(gd, "APPLICATIONS", _apps())
     seed_tenant(db, alpha, skus=ld.SKUS, subscriptions=ld.TENANT_SUBSCRIPTIONS, exchange=_exchange())
     return store.get_tenant(db, alpha)
 

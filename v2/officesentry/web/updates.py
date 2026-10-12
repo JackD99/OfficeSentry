@@ -42,8 +42,8 @@ class Offer:
 
     @property
     def asks(self) -> bool:
-        """Whether any release it brings has an Action required section."""
-        return any(r.action for r in self.brings)
+        """Whether any release it brings asks something of people under Action required."""
+        return any(r.asks for r in self.brings)
 
     @property
     def upgrades_database(self) -> bool:

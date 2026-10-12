@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from .. import store
+from .. import events, store
 from ..devices import parse_ts
 from ..exchange import ExchangeError
 from .base import Collector, RunContext, register
@@ -100,7 +100,7 @@ class MailFlow(Collector):
             ctx.objects("mail_flow", [])
             ctx.objects("mail_flow_status", [("status", {"available": False, "reason": "no_exchange"})])
             return
-        now = datetime.now(UTC).replace(microsecond=0)
+        now = events.clock().replace(microsecond=0)
         accepted = {
             str(d["DomainName"]).lower() for d in ctx.exchange.invoke("Get-AcceptedDomain") if d.get("DomainName")
         }

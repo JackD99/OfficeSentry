@@ -13,9 +13,18 @@ from officesentry.reports import designs, export, monthly_review
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_email import _smtp_ready, fake_smtp, sends  # noqa: F401 (autouse fixture)
-from tests.test_month_end import PERIOD, _plan, work
+from tests.test_month_end import PERIOD, _plan, this_month, work
 
 JSON = {"Accept": "application/json"}
+
+
+@pytest.fixture(autouse=True)
+def _this_month():
+    """This month as the test starts, not as the module loaded: a run may pass midnight at a month's end."""
+    global PERIOD
+    PERIOD = this_month()
+
+
 NOTICE = "Microsoft is hiding people's names. Sign in to admin.microsoft.com as a Global Admin to show them."
 
 

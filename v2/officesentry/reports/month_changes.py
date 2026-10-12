@@ -23,7 +23,8 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
 from ..changes import Change, all_changes
@@ -56,6 +57,35 @@ FIGURES = (
     ("devices.noncompliant", "Non-compliant devices", "", "down"),
     ("groups.ownerless", "Groups without an owner", "", "down"),
 )
+
+# The report each key change (by its area) and key figure comes from. What changed only shows someone the
+# parts whose report they open on that client (``only``, ``narrowed``); a part named nowhere here is left out,
+# so a new feed or figure names its report too (test_report_areas_everywhere.py checks).
+CHANGE_REPORTS = {
+    "Admins": "admins",
+    "Conditional Access": "conditional-access",
+    "Accounts": "all-users",
+    "Licences": "licences",
+    "Mail": "mailboxes",
+    "Apps": "apps",
+    "Devices": "devices",
+    "Teams and groups": "groups",
+    "Admin activity": "admin-activity",
+}
+FIGURE_REPORTS = {
+    "secure_score.pct": "secure-score",
+    "mfa.registered_pct": "mfa",
+    "admins.privileged_principals": "admins",
+    "admins.global_admins": "admins",
+    "users.licensed": "licences",
+    "licences.unassigned": "licences",
+    "apps.third_party": "apps",
+    "mailboxes.forwarding": "mailboxes",
+    "ca.policies_enabled": "conditional-access",
+    "devices.noncompliant": "devices",
+    "groups.ownerless": "groups",
+}
+FINDINGS = "findings"  # what ``opens`` is asked for new and fixed findings: the Findings tab's key
 
 
 @dataclass
@@ -136,6 +166,8 @@ class TenantChanges:
     # The whole report, when a PDF keeps only the first rows of each list (printing.cap_changes), so its
     # figures still count every change and finding.
     uncut: TenantChanges | None = None
+    findings_shown: bool = True  # False when the person can't open findings on this client (``only``)
+    score_shown: bool = True  # and when they can't open the Secure Score trend, whose figure the tiles lead with
 
     @property
     def report_changes(self) -> int:
@@ -438,6 +470,33 @@ def build(
     )
 
 
+def _left_out(opens: Callable[[str], bool]) -> list[str]:
+    """What ``opens`` leaves out, in words: findings, then each report area with a report it doesn't open."""
+    out = [] if opens(FINDINGS) else ["Findings"]
+    return out + [g.title for g in data_reports.grouped() if not all(opens(key) for key, *_ in g.reports)]
+
+
+def only(tc: TenantChanges, opens: Callable[[str], bool]) -> TenantChanges:
+    """``tc`` with only what ``opens`` allows: ``opens(<report key>)`` for each report's changes and the key
+    changes and figures that come from it, and ``opens(FINDINGS)`` for new and fixed findings. Someone who
+    can't open a report area on this client doesn't see what changed in it either."""
+    left_out = _left_out(opens)
+    if not left_out:
+        return tc
+    findings = opens(FINDINGS)
+    return replace(
+        tc,
+        figures=[f for f in tc.figures if f.key in FIGURE_REPORTS and opens(FIGURE_REPORTS[f.key])],
+        new_findings=tc.new_findings if findings else [],
+        fixed_findings=tc.fixed_findings if findings else [],
+        key_changes=[c for c in tc.key_changes if c.area in CHANGE_REPORTS and opens(CHANGE_REPORTS[c.area])],
+        reports=[r for r in tc.reports if opens(r.key)],
+        notes=[*tc.notes, f"Left out, since you can't open them for this client: {', '.join(left_out)}."],
+        findings_shown=findings,
+        score_shown=opens(FIGURE_REPORTS["secure_score.pct"]),
+    )
+
+
 RULE_TITLES = {r.key: r.title for r in RULES}
 
 
@@ -492,6 +551,8 @@ def to_tables(tc: TenantChanges) -> list[Table]:
             ],
         ),
     ]
+    if not tc.findings_shown:
+        tables = [t for t in tables if t.title not in ("New findings", "Fixed findings")]
     tables.append(
         Table(
             "About",
@@ -534,10 +595,19 @@ class Summary:
     has_baseline: bool
     areas: list[str]
     error: str = ""
+    area_reports: list[str] = field(default_factory=list)  # the report each of ``areas`` comes from
+    by_report: dict[str, int] = field(default_factory=dict)  # changes per report, key changes under theirs
 
 
 def summarise(tc: TenantChanges) -> Summary:
-    areas = list(dict.fromkeys([c.area for c in tc.key_changes] + [r.title for r in tc.reports if r.count]))
+    named: dict[str, str] = {}  # each area and report with changes, in order, with the report it comes from
+    for c in tc.key_changes:
+        named.setdefault(c.area, CHANGE_REPORTS.get(c.area, ""))
+    for r in tc.reports:
+        if r.count:
+            named.setdefault(r.title, r.key)
+    by_report = Counter(CHANGE_REPORTS.get(c.area, "") for c in tc.key_changes)
+    by_report.update({r.key: r.count for r in tc.reports if r.count})
     return Summary(
         tc.tenant,
         tc.total,
@@ -546,18 +616,47 @@ def summarise(tc: TenantChanges) -> Summary:
         len(tc.fixed_findings),
         {f.key: f for f in tc.figures},
         tc.has_baseline,
-        areas,
+        list(named),
+        area_reports=list(named.values()),
+        by_report=dict(by_report),
+    )
+
+
+def narrowed(s: Summary, opens: Callable[[str], bool]) -> Summary:
+    """``s`` with only what ``opens`` allows, as ``only`` does for one client's report."""
+    if not _left_out(opens):
+        return s
+    findings = opens(FINDINGS)
+    kept = [(a, key) for a, key in zip(s.areas, s.area_reports, strict=False) if key and opens(key)]
+    by_report = {key: n for key, n in s.by_report.items() if key and opens(key)}
+    return replace(
+        s,
+        changes=sum(by_report.values()),
+        new_findings=s.new_findings if findings else 0,
+        new_severe=s.new_severe if findings else 0,
+        fixed=s.fixed if findings else 0,
+        figures={k: f for k, f in s.figures.items() if k in FIGURE_REPORTS and opens(FIGURE_REPORTS[k])},
+        areas=[a for a, _ in kept],
+        area_reports=[key for _, key in kept],
+        by_report=by_report,
     )
 
 
 def across(
-    conn, tenants, days: int = DEFAULT_DAYS, now: datetime | None = None, rebuild: bool = False
+    conn,
+    tenants,
+    days: int = DEFAULT_DAYS,
+    now: datetime | None = None,
+    rebuild: bool = False,
+    opens: Callable[[int], Callable[[str], bool]] | None = None,
 ) -> list[Summary]:
     """Every tenant's summary, most important first.
 
     Without ``now`` (the pages, which show the present), each tenant's change count and areas come
     from its stored row (``precomputed``) while that's current, and are built and stored when it
     isn't (always, with ``rebuild``). New and fixed findings and the key figures are read live.
+    ``opens(tenant id)`` says what the person opens on each client (``narrowed``); stored rows hold every
+    area's counts, never one person's.
     """
     live = now is None
     now = now or datetime.now(UTC)
@@ -565,10 +664,11 @@ def across(
     out = []
     for t in tenants:
         try:
-            out.append(_summary(conn, t, days, now, stored))
+            summary = _summary(conn, t, days, now, stored)
         except Exception as exc:
             logging.getLogger(__name__).exception("Change report failed for tenant %s", t["id"])
-            out.append(Summary(dict(t), 0, 0, 0, 0, {}, False, [], error=type(exc).__name__))
+            summary = Summary(dict(t), 0, 0, 0, 0, {}, False, [], error=type(exc).__name__)
+        out.append(narrowed(summary, opens(t["id"])) if opens else summary)
     out.sort(key=lambda s: (-s.new_severe, -s.changes - s.new_findings, s.tenant["name"].lower()))
     return out
 
@@ -584,7 +684,13 @@ def _summary(conn, tenant, days: int, now: datetime, stored: Rows | None) -> Sum
         stored.save(
             tenant,
             fingerprint,
-            {"changes": summary.changes, "areas": summary.areas, "has_baseline": summary.has_baseline},
+            {
+                "changes": summary.changes,
+                "areas": summary.areas,
+                "area_reports": summary.area_reports,
+                "by_report": summary.by_report,
+                "has_baseline": summary.has_baseline,
+            },
         )
         return summary
     since_iso = since.strftime(ISO)
@@ -598,6 +704,8 @@ def _summary(conn, tenant, days: int, now: datetime, stored: Rows | None) -> Sum
         {f.key: f for f in _figures(conn, tenant["id"], since_iso)},
         data["has_baseline"],
         data["areas"],
+        area_reports=data.get("area_reports", []),
+        by_report=data.get("by_report", {}),
     )
 
 

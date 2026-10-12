@@ -303,8 +303,31 @@ def test_unknown_p1_is_tried_like_a_tenant_with_p1(db, two_tenants, factory):
     _run(db, alpha, "mfa_registration", factory)
     assert any("userRegistrationDetails" in c.request.url for c in responses.calls)
     calls = len(responses.calls)
+    store.set_capabilities(db, alpha, {"entra_p1": True})
     _, status = _run(db, alpha, "per_user_mfa", factory)
     assert status == "succeeded" and len(responses.calls) == calls  # per-user MFA is only for tenants without P1
+
+
+@responses.activate
+@pytest.mark.parametrize(
+    ("collector", "reason"),
+    [
+        ("per_user_mfa", "licences haven't been read yet"),
+        ("inbox_rules", "Neither mailboxes nor users have been collected"),
+        ("auto_replies", "Neither mailboxes nor users have been collected"),
+    ],
+)
+def test_a_run_with_nothing_collected_before_it_to_read_fails_and_says_why(db, two_tenants, factory, collector, reason):
+    """Sign-in has never worked, so the sources these read never came in: the run asks Microsoft nothing,
+    and shows as failed on Data collection rather than as a green run with nothing in it."""
+    alpha, _ = two_tenants
+    run_id, status = _run(db, alpha, collector, factory)
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    assert status == "failed" and reason in run["error"] and not responses.calls
+
+    store.set_capabilities(db, alpha, {"entra_p1": True, "exchange": False})  # read now: none of them apply
+    _, status = _run(db, alpha, collector, factory)
+    assert status == "succeeded" and not responses.calls
 
 
 @responses.activate

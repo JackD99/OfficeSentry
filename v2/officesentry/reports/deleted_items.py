@@ -151,6 +151,7 @@ def _users(rows: list[dict], names: dict, now: datetime) -> Section:
         "their mailbox, OneDrive, group memberships and licences. Licensed members with "
         f"{EXPIRING_DAYS} days or less left are flagged.",
         empty="No deleted users: the recycle bin is empty.",
+        optional_across=("Department",),
     )
     out = []
     for u in rows:

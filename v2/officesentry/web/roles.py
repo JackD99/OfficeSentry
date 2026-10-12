@@ -73,6 +73,16 @@ def _held_by_more(role: roles.Role) -> bool:
     return any(out_of_reach(u) for u in holders)
 
 
+def _locked(role: roles.Role) -> str | None:
+    """Why the signed-in person may not change this role, or None: a role wider than their own (they could
+    only take things out of it) or one held by someone who sees or does more."""
+    if _beyond(role.capabilities, role.scope, role.kind):
+        return _HOLDS_MORE.format("change it")
+    if _held_by_more(role):
+        return _HELD_BY_MORE
+    return None
+
+
 def _role_or_404(role_id: int) -> roles.Role:
     role = roles.get(g.db, role_id)
     if role is None:
@@ -144,8 +154,8 @@ def edit(role_id: int):
     if request.method == "POST":
         if not role.editable:
             abort(403)
-        if _held_by_more(role):
-            flash(_HELD_BY_MORE, "error")
+        if problem := _locked(role):
+            flash(problem, "error")
             return redirect(url_for("roles.edit", role_id=role_id))
         f = request.form
         # What the signed-in person doesn't hold themselves stays as it is (those boxes are greyed out).
@@ -169,11 +179,13 @@ def edit(role_id: int):
         else:
             flash("Saved." if changed else "Nothing changed.", "success")
         return redirect(url_for("roles.edit", role_id=role_id))
-    held_by_more = role.editable and _held_by_more(role)
+    holds_more = role.editable and _beyond(role.capabilities, role.scope, role.kind)
+    held_by_more = role.editable and not holds_more and _held_by_more(role)
     return render_template(
         "role_edit.html",
         role=role,
-        editable=role.editable and not held_by_more,
+        editable=role.editable and not holds_more and not held_by_more,
+        holds_more=holds_more,
         held_by_more=held_by_more,
         template=role.template,
         groups=permissions.GROUPS,
@@ -198,8 +210,8 @@ def reset(role_id: int):
     if t is not None and _beyond(t.capabilities, t.scope, t.kind):
         flash(_HOLDS_MORE.format("put it back to its default"), "error")
         return redirect(url_for("roles.edit", role_id=role_id))
-    if _held_by_more(role):
-        flash(_HELD_BY_MORE, "error")
+    if problem := _locked(role):
+        flash(problem, "error")
         return redirect(url_for("roles.edit", role_id=role_id))
     with transaction(g.db):
         changed = roles.reset(g.db, g.user["username"], role)
@@ -211,6 +223,9 @@ def reset(role_id: int):
 @needs("users.manage")
 def delete(role_id: int):
     role = _role_or_404(role_id)
+    if problem := _locked(role):
+        flash(problem, "error")
+        return redirect(url_for("roles.edit", role_id=role_id))
     try:
         with transaction(g.db):
             roles.remove(g.db, g.user["username"], role)

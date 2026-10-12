@@ -8,7 +8,7 @@ import os
 import shutil
 import sqlite3
 from contextlib import closing
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
@@ -363,6 +363,30 @@ def test_retention_deletes_whole_old_months_and_counts_first(db, two_tenants, cf
     counts = retention.prune_history(db, retention.Policy(history_signin_days=20), NOW, dry_run=True)
     edge = _iso(NOW - timedelta(days=20))
     assert counts["history_signin_days"] == sum(1 for r in kept if r["createdDateTime"] < edge) > 0
+
+
+@responses.activate
+def test_retention_moves_where_the_history_is_detailed_from(db, two_tenants):
+    alpha, _ = two_tenants
+    _fake_log(_signins(50, end=NOW - timedelta(days=5), step_hours=24))
+    events.ingest(_ctx(db, alpha), events.SIGNIN_LOG, 60, 100)
+    cov = events.coverage(db, alpha, "signins")
+    old = int((NOW - timedelta(days=50)).timestamp())
+    cov.gaps, cov.lost = [[old, old + 3600]], [[old - 3600, old], [old + 86400 * 40, old + 86400 * 41]]
+    events.save_coverage(db, alpha, cov)
+    assert cov.detailed_from < int((NOW - timedelta(days=45)).timestamp())
+
+    # Sign-ins kept 20 days and their daily summaries a month: the history starts a month back.
+    policy = retention.Policy(history_signin_days=20, history_daily_months=1)
+    retention.prune_history(db, policy, NOW, dry_run=True)
+    assert events.coverage(db, alpha, "signins").since == cov.since  # a dry run moves nothing
+    retention.prune_history(db, policy, NOW)
+    after = events.coverage(db, alpha, "signins")
+    month_ago = int(datetime(2026, 9, 9, 17, 0, tzinfo=UTC).timestamp())
+    assert after.since == after.detailed_from == month_ago
+    assert after.gaps == [] and after.lost == [[old + 86400 * 40, old + 86400 * 41]]
+    page = activity_history.build(db, alpha, policy, NOW)
+    assert page.signins.since == date(2026, 9, 9)
 
 
 @responses.activate

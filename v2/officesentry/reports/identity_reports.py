@@ -530,6 +530,7 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         ],
         intro="Everyone who holds a role that can change security settings, users or data. Problems first.",
         empty="Nobody holds a privileged role.",
+        optional_across=("Synced from on-premises",),
     )
     privileged.chart = Chart("Roles", title="By role")
     others = Section(

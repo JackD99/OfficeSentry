@@ -398,6 +398,9 @@
       if (!(s.overflowX === "auto" || s.overflowX === "scroll")) continue;
       if (el.scrollWidth <= el.clientWidth + SLACK || el.clientWidth === 0 || isHidden(el)) continue;
       if (s.direction === "rtl") continue; // a time chart that opens on the newest days scrolls by design
+      // So does a matrix too wide for any laptop (one column per control), its first column pinned: the page
+      // says why in data-scrolls. Stacked on a phone, it's checked like any other table.
+      if (options.desktop && el.dataset.scrolls) continue;
       const stacked = [...el.querySelectorAll("table.stack-sm")].some((t) => t.tHead && style(t.tHead).display === "none");
       if (!options.desktop && !stacked) continue;
       const heads = [...el.querySelectorAll("thead th")]

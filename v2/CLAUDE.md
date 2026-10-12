@@ -67,7 +67,10 @@ overview and DEPLOY.md for running it on a server.
   history downloads need `export` and the file's area; designs leave out
   tables the viewer can't open (`designs.Context.opens`); Today
   (`home.today(shows=)`), the dashboard tiles and the Accounts page count only
-  what the person sees; `test_report_areas_everywhere.py` covers each. A new
+  what the person sees; What changed shows each key change, figure and report's
+  changes only to someone who opens its report there, and findings only with
+  findings (`month_changes.only`, `narrowed`, `CHANGE_REPORTS`, `access.opens_on`);
+  `test_report_areas_everywhere.py` covers each. A new
   place that shows a report from inside another page checks its area the same
   way. A new capability is a `Capability` in `permissions.CAPABILITIES`,
   added to the built-in roles that should hold it (`TEMPLATES`; the
@@ -498,7 +501,9 @@ turning each step's `target` into a link.
   puts a control off the screen, or has a table that scrolls sideways on a
   laptop. Pages come from the routes, so a new page is checked by itself; a
   new kind of URL argument needs a resolver in its `conftest.py`. CI's Layout
-  job reports only for now (summary page and screenshots).
+  job fails a pull request on any of them (summary page and screenshots). A
+  matrix too wide for any laptop (the insurance evidence rollup, a column per
+  control) says so in `data-scrolls` (`Rollup.scrolls`) and only scrolls.
 - Admin settings are one sidebar entry. A new settings page goes in `SETTINGS`
   at the top of `base.html` (endpoint, label, other endpoints of the page),
   which gives it the row of settings links at the top of the page.
@@ -519,12 +524,17 @@ turning each step's `target` into a link.
   in a stacked table on a phone.
 - Report tables fit their card on a laptop: each column gets a width class from its longest value
   (`views._width`: `w-s` stays on one line, `w-m` and `w-l` wrap within limits), and long addresses may
-  wrap after their "@" (`wrappable`). A table that still doesn't fit scrolls inside its card, never the
-  page, with the sideways scrollbar in view and its first column pinned (`tables.js`, `edges`).
+  wrap after their "@", and a long part of one (a long name before the "@", a mail server's host name)
+  after its dots too (`wrappable`). A table that still doesn't fit scrolls inside its card, never the
+  page, with the sideways scrollbar in view and its first column pinned (`tables.js`, `edges`). Pages
+  draw in a fallback font until Inter arrives, so `tables.js` fits every table again once
+  `document.fonts.ready` resolves.
 - A report table that doesn't fit a 1366 px laptop opens on its default columns: the `Section` names the
   rest in `optional`, the Columns menu shows "7/11" and offers them (`show=` in the view, or a filter by
   one), and downloads keep them. Pick the columns that answer the report's question; leave out dates
-  created, second sizes and details a person's page has. The Users lists (people, mailboxes, groups,
+  created, second sizes and details a person's page has. A table that fits its own page but not Every row,
+  where the Client column takes its room, names the columns only Every row leaves out in
+  `optional_across` (`rollups.all_rows`). The Users lists (people, mailboxes, groups,
   sites) use the same `.table-scroll` box and width classes, and the person and object pages draw their
   cells with `_report_table.html`'s `cell`.
 - The menu folds to its icons on laptops (`.menu-folded` on `<html>`, `[data-fold]` in `app.js`,
@@ -1075,7 +1085,9 @@ Settings values go in the package only when listed in `PLAIN_SETTINGS` (or a pre
 *Settings → Updates* (`web/updates.py`, capability `system.update`: admins by default, in `EVERY_CLIENT`)
 lists every release newer than the one running, with its notes split by `updates.parse_notes` (summary, Action required,
 New Microsoft permissions, Database upgrade, Security) and drawn by `web/release_notes.render`, which escapes
-everything and keeps only https links (relative ones point at the release's tag on GitHub). The list comes
+everything and keeps only https links (relative ones point at the release's tag on GitHub). Action required is
+a warning the admin ticks before Update, unless it says "None", as a release with nothing to do does
+(`Release.asks`; CONTRIBUTING.md, "Releases"). The list comes
 from `updates.check`: GitHub's releases API, once a day from the `updates` periodic job (setting
 `updates.check`, on unless an admin turns it off) or on *Check now*. The job never asks GitHub under
 `cfg.testing` or on the public demo; `tests/test_updates.py` mocks GitHub's answers with `responses`. The

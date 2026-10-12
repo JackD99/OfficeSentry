@@ -340,6 +340,9 @@ def test_inactive_without_p1_lists_only_what_it_can(db, free_tenant):
 
 
 def test_secure_score_trend_and_control_changes(db, p1_tenant):
+    # The score the collection stored is dated by the clock; date it in NOW's month, as the recorded scores are,
+    # or from November it starts a month of its own.
+    db.execute("UPDATE metrics SET captured_at = ? WHERE key = 'secure_score.pct'", (f"{NOW:%Y-%m-%dT%H:%M:%SZ}",))
     report = build(db, p1_tenant, "secure-score", NOW)
     s = sections(report)
     changes = s["Changes in the last 30 days"]

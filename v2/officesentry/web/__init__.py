@@ -113,7 +113,13 @@ def create_app(cfg: Config | None = None) -> Flask:
             log.exception("Couldn't re-key recovery codes stored before 2.2.0")
         if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone() is None:
             app.logger.warning(
-                "No admin account yet. To create one, open %s/setup?token=%s", cfg.base_url, setup_token(cfg.data_dir)
+                "No admin account yet. To create one, open %s/setup?token=%s",
+                cfg.base_url,
+                setup_token(cfg.data_dir),
+                extra={
+                    logs.IN_FILE: "No admin account yet. The link to create one is in the portal's own output "
+                    "(docker compose logs web), or run: python -m officesentry setup-link"
+                },
             )
     finally:
         conn.close()

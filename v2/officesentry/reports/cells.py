@@ -92,17 +92,27 @@ def breakable(text: str) -> Markup:
 
 WRAP_AFTER = re.compile(r"([@/\\])")
 WRAP_LONG = 30  # an address this long or longer may wrap on screen; most sign-in names stay whole
+WRAP_PART = 20  # and a part of it this long (between those breaks) may also wrap after its dots
+AFTER_DOT = re.compile(r"(?<=\.)(?=.)")
 
 
 def wrappable(text: str) -> Markup:
     """Escaped ``text`` for a table cell on screen: a long address or path may wrap after its "@" or a slash,
-    so it doesn't hold its column wide, while names and domains stay whole ("anna@" / "contoso.com")."""
+    so it doesn't hold its column wide, while names and domains stay whole ("anna@" / "contoso.com"). Only a
+    part that is itself long ("bartholomew.fitzwilliam-okonkwo@", a mail server's host name) may also wrap after
+    its dots."""
     out: list[Markup] = []
     for word in re.split(r"(\s+)", str(text)):
         if len(word) < WRAP_LONG or word.isspace():
             out.append(escape(word))
-        else:
-            out += [escape(p) + WBR if WRAP_AFTER.fullmatch(p) else escape(p) for p in WRAP_AFTER.split(word)]
+            continue
+        for part in WRAP_AFTER.split(word):
+            if WRAP_AFTER.fullmatch(part):
+                out.append(escape(part) + WBR)
+            elif len(part) >= WRAP_PART:
+                out.append(WBR.join(escape(p) for p in AFTER_DOT.split(part)))
+            else:
+                out.append(escape(part))
     return Markup().join(out)
 
 

@@ -17,6 +17,10 @@ edge is caught even when the HTML looks fine. Hidden things (closed `<details>`,
 screen-reader text) are left out. The browser tests (`tests/browser/test_pages.py`) run its page-scroll
 check alone on each of their pages, where it already blocks a merge.
 
+Pages are checked once their fonts are in, but they first draw in a fallback font, and a table measured then
+could overflow when Inter arrives. `test_tables_are_fitted_again_once_the_fonts_arrive` holds the fonts back
+until `tables.js` has measured a page, then checks its tables fit and match a fresh fit.
+
 ## Which pages, with what data
 
 `pages.py` works the list out from the portal's routes, so a new page is checked without being added
@@ -55,6 +59,10 @@ the report from the `results-*.json` files in a folder.
 ## In CI
 
 The **Layout** job in `.github/workflows/ui.yml` runs them on pull requests that touch pages, weekly and by
-hand. It is **report only** for now: the job passes whatever it finds, the run's summary page lists every
-page with a problem, and the screenshots are the run's `layout` artifact (kept for a week). Once the pages
-listed there are fixed, remove `continue-on-error` from its test step so a new problem fails the pull request.
+hand, and fails the pull request on any problem: the run's summary page lists every page with one, and the
+screenshots are the run's `layout` artifact (kept for a week).
+
+A matrix that no laptop can show (one column per control, as on the insurance evidence rollup) scrolls by
+design, with its first column pinned: its scroll box says why in `data-scrolls`, and the sideways-table check
+leaves it alone at laptop widths (phones still check it). Anything else that doesn't fit gets fewer default
+columns (`Section.optional`, or `optional_across` for Every row) or lets its long values wrap.

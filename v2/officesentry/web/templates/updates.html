@@ -44,7 +44,8 @@
   <article class="release-notes">
     {% if plan.brings|length > 1 %}<h3>{{ r.version }}{% if r.published_at %} <span class="muted small">{{ r.published_at|day }}</span>{% endif %}</h3>{% endif %}
     {% if r.summary %}<div class="notes">{{ notes(r.summary, r) }}</div>{% endif %}
-    {% if r.action %}<div class="callout warn">{{ icon('alert') }}<div class="grow notes"><strong>Action required</strong>{{ notes(r.action, r) }}</div></div>{% endif %}
+    {% if r.asks %}<div class="callout warn">{{ icon('alert') }}<div class="grow notes"><strong>Action required</strong>{{ notes(r.action, r) }}</div></div>
+    {% elif r.action %}<h4>Action required</h4><div class="notes">{{ notes(r.action, r) }}</div>{% endif %}
     {% for key, title in (('permissions', 'New Microsoft permissions'), ('database', 'Database upgrade'), ('security', 'Security')) %}{% if r.sections.get(key) %}
     <h4>{{ title }}</h4><div class="notes">{{ notes(r.sections[key], r) }}</div>{% endif %}{% endfor %}
     <p class="small m0"><a href="{{ r.url }}">Everything in {{ r.version }}</a> (on GitHub)</p>
