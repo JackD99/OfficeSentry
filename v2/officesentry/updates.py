@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import secrets
+import stat
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -119,7 +120,7 @@ class Release:
         """The notes' Action required section asks something of people. Every release fills it in, saying
         "None" when there's nothing to do (CONTRIBUTING.md, "Releases")."""
         text = self.action.strip().lower()
-        return bool(text) and not text.startswith("none")
+        return bool(text) and not re.match(r"none\b", text)  # "Nonetheless, ..." still asks
 
     @property
     def permissions(self) -> str:
@@ -137,7 +138,7 @@ class Release:
     def upgrades_database(self) -> bool:
         """The notes' Database upgrade section says yes (it starts "No" when there's none)."""
         text = self.database.strip().lower()
-        return bool(text) and not text.startswith("no")
+        return bool(text) and not re.match(r"(no|none)\b", text)  # "Note: ..." is still an upgrade
 
 
 def _cap(text: str) -> str:
@@ -311,17 +312,22 @@ def due(conn, now: datetime) -> bool:
 # -- The request and the updater's status ---------------------------------------------------------------------
 
 NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+NONBLOCK = getattr(os, "O_NONBLOCK", 0)
 
 
 def folder(data_dir: Path) -> Path:
     return Path(data_dir) / FOLDER
 
 
-def read_json(path: Path) -> dict | None:
-    """A small JSON object from ``path``, or None when it's missing, too big, not JSON or a symlink."""
+def read_json(path: Path, dir_fd: int | None = None) -> dict | None:
+    """A small JSON object from ``path``, or None when it's missing, too big, not JSON, a symlink or not a
+    regular file (a named pipe there is never waited on). With ``dir_fd``, ``path`` is a name in that folder."""
     try:
-        fd = os.open(path, os.O_RDONLY | NOFOLLOW)
+        fd = os.open(path, os.O_RDONLY | NOFOLLOW | NONBLOCK, dir_fd=dir_fd)
     except OSError:
+        return None
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
         return None
     with os.fdopen(fd, "rb") as f:
         data = f.read(MAX_FILE_BYTES + 1)
@@ -329,25 +335,29 @@ def read_json(path: Path) -> dict | None:
         return None
     try:
         value = json.loads(data)
-    except ValueError:
+    except (ValueError, RecursionError):  # RecursionError: nested deeper than Python parses
         return None
     return value if isinstance(value, dict) and value.get("format") == FORMAT else None
 
 
-def write_json(path: Path, value: dict, mode: int = 0o644) -> None:
+def write_json(path: Path, value: dict, mode: int = 0o644, dir_fd: int | None = None) -> None:
     """Replace ``path`` with ``value`` in one step (a reader never sees half a file), never following a link
-    someone left in its place."""
+    someone left in its place. With ``dir_fd``, ``path`` is a name in that folder."""
+    path = Path(path)
     tmp = path.with_name(f".{path.name}.{secrets.token_hex(4)}.tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | NOFOLLOW, mode)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | NOFOLLOW, mode, dir_fd=dir_fd)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(value, f, indent=1)
             f.flush()
             os.fsync(f.fileno())
-        os.chmod(tmp, mode)
-        os.replace(tmp, path)
+        os.chmod(tmp, mode, dir_fd=dir_fd)
+        os.replace(tmp, path, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
     except BaseException:
-        tmp.unlink(missing_ok=True)
+        try:
+            os.unlink(tmp, dir_fd=dir_fd)
+        except FileNotFoundError:
+            pass
         raise
 
 
