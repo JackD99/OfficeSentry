@@ -122,18 +122,17 @@ class Brand:
         light_soft, dark_soft = mix(self.accent, "#ffffff", 0.92), mix(self.accent, "#181e27", 0.82)
         light_ink = readable_on(light_soft, self.accent)
         dark_ink = readable_on(dark_soft, self.accent)
+        dark = f"--brand-ink:{dark_ink};--brand-soft:{dark_soft};--brand-line:{mix(self.accent, '#181e27', 0.55)};"
         return (
             ":root{"
             f"--brand:{self.accent};--brand-ink:{light_ink};--on-brand:{self.on_accent};"
             f"--brand-soft:{light_soft};--brand-line:{mix(self.accent, '#ffffff', 0.7)};"
             f"--brand-cover-2:{mix(self.accent, '#000000', 0.25)};--brand-ink-dark:{dark_ink};"
             "}"
-            # A page drawn light on purpose (data-theme="light": PDFs, print pages, report previews) keeps
-            # the light colours.
-            '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) body.report:not(.pdf){'
-            f"--brand-ink:{dark_ink};--brand-soft:{dark_soft};"
-            f"--brand-line:{mix(self.accent, '#181e27', 0.55)};"
-            "}}"
+            # A page drawn light on purpose (data-theme="light": PDFs, print pages, report previews, or a
+            # viewer who chose Light) keeps the light colours; one who chose Dark gets the dark ones anywhere.
+            '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) body.report:not(.pdf){' + dark + "}}"
+            ':root[data-theme="dark"] body.report:not(.pdf){' + dark + "}"
         )
 
 

@@ -12,7 +12,9 @@
    - Severity text (--sev-*) meets 4.5:1 on the surfaces and on its own --sev-*-soft; --sev-*-fill is for
      bars, dots and chart segments only.
    - One elevation per element: a border, or a shadow for what drops over the page (menus, notices).
-   - Dark mode follows the system unless <html data-theme="light">, which PDFs and print pages set.
+   - Dark mode follows the system unless <html data-theme="light">, which PDFs and print pages set, or the
+     person chose Light or Dark under Account, Appearance (data-theme on the portal's pages).
+   - A colour theme (themes.css, staff pages only) changes only the Accent and Sidebar groups.
    - Brand colours (--brand, --brand-ink, ...) are the MSP's and come from /brand.css, not from here. */
 
 /* Source Sans 3 for everything people read and use; Source Serif 4 (its Subhead size) for page and card
@@ -105,4 +107,25 @@
     --scroll-shade: rgba(0, 0, 0, .6);
     color-scheme: dark;
   }
+}
+
+/* Dark for someone who chose it under Account, Appearance, whatever their device says: the block above,
+   word for word (tests/test_appearance.py checks). */
+:root[data-theme="dark"] {
+  --bg: #0e1412; --surface: #141c19; --surface-2: #18211e; --sunken: #0b110f;
+  --text: #e7ede9; --text-2: #c9d3ce; --muted: #98a8a0; --faint: #8a9a92; --decor: #44554c;
+  --border: #24322c; --border-strong: #33453c; --rule: #c9d3ce;
+  --accent: #79c9aa; --accent-hover: #9edbc3; --accent-soft: #16302a; --accent-text: #0e1412;
+  --ok: #4ade80; --ok-soft: #0f2a1b; --warn: #fbbf24; --warn-soft: #2c2110;
+  --bad: #f87171; --bad-soft: #2d1416; --info: #94a3b8; --info-soft: #1a2433;
+  --sev-critical: #f97066; --sev-critical-soft: #3a1d1d;
+  --sev-high: #f79a5c; --sev-high-soft: #3a2618;
+  --sev-medium: #fdb022; --sev-medium-soft: #36290f;
+  --sev-low: #a6b0c0; --sev-low-soft: #242c38;
+  --on-sev: #0e1412;
+  --chart-series: #3987e5; --chart-2: #d95926; --chart-3: #199e70; --chart-grid: #24322c; --chart-track: #24322c;
+  --sidebar: #0a1613; --sidebar-active: #15302a; --sidebar-line: #18332c;
+  --shadow-menu: 0 12px 32px rgba(0, 0, 0, .5);
+  --scroll-shade: rgba(0, 0, 0, .6);
+  color-scheme: dark;
 }
