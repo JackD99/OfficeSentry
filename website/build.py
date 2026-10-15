@@ -336,9 +336,22 @@ WHATS_NEW = [
                 "href": "/docs/audit-log-addon/",
                 "link": "The audit log add-on",
             },
+            {
+                "icon": "review",
+                "title": "Clients read one story",
+                "text": "Their home page, the report email and the PDFs all show the month you approved, lead with "
+                "the verdict and name the most urgent gap, and the two-page summary fits on two pages.",
+                "href": "/docs/reference/#month-end-reporting",
+                "link": "Month-end reporting",
+            },
         ],
         "also": [  # smaller changes, a few words each
             "a check that each client's Microsoft 365 audit log is switched on",
+            "a month-end report changed after approval reaches the client only as a new version",
+            "only staff who can open every report in a client's plan can add people to it",
+            "the Update button installs only releases tagged on main",
+            "Updates lists every release since yours, however far behind, and never says Up to date before it "
+            "has checked",
         ],
     },
     {
