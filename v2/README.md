@@ -24,8 +24,8 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
   settings, and lists your saved views.
 - **All clients** (`/across/<report>`): a sortable, filterable table with one row
   per client for the monthly review, the insurance evidence pack and every
-  detail report, limited to the clients you can see. New detail reports appear
-  automatically.
+  detail report (its headline figures as the columns), limited to the clients
+  you can see. New detail reports appear automatically.
 - **What changed** (`/changes`, and each client's *Changes* tab): a standalone
   month-over-month report for the last 7, 30 or 90 days. It covers key
   figures then and now, new and fixed findings, admin, account, Conditional

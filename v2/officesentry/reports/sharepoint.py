@@ -242,7 +242,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Tile(
             "Sites",
             len(user_sites),
-            f"plus {plural(len(rows) - len(user_sites), 'system site')}",
+            f"plus {plural(len(rows) - len(user_sites), 'system site')}" if len(rows) > len(user_sites) else "",
             rows=Rows("All sites", {"Type": sorted({site_type(r) for r in user_sites})}),
         ),
         Tile(
@@ -571,7 +571,7 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         Tile(
             "Shared with people outside",
             len(outside),
-            f"{len({p for i in outside for p in i['externalPeople']})} outside address(es)",
+            plural(len({p for i in outside for p in i["externalPeople"]}), "outside address"),
             rows=Rows("Shared with people outside the organisation"),
             trend=metric_trend(snap, "sharing.external_items", now),
         ),

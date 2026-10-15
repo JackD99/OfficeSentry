@@ -46,7 +46,7 @@
   {% for t in report.tiles %}{% set href = links.tiles[loop.index0] %}
   <{{ 'a' if href else 'div' }} class="tile{% if t.tone %} tone-{{ t.tone }}{% endif %}{{ ' link' if href }}"{% if href %} href="{{ href }}" data-view title="Show the rows behind this figure"{% endif %}>
     <div class="label">{{ t.label }}{% if href %}{{ icon('arrow', 'go') }}{% endif %}</div>
-    <div class="value{{ ' has-spark' if t.trend }}"><span>{{ t.value }}</span>{% if t.trend %}{{ sparkline(t.trend.values, label=t.trend.label)|safe }}{% endif %}</div>
+    <div class="value{% if t.value is string and t.value|length > 9 %} wordy{% endif %}{{ ' has-spark' if t.trend }}"><span>{{ t.value }}</span>{% if t.trend %}{{ sparkline(t.trend.values, label=t.trend.label)|safe }}{% endif %}</div>
     <div class="foot">{% if t.foot %}{{ t.foot }}{% else %}&nbsp;{% endif %}</div>
   </{{ 'a' if href else 'div' }}>
   {% endfor %}

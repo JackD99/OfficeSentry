@@ -5,6 +5,7 @@ import csv
 import io
 import json
 import os
+import re
 import shutil
 import sqlite3
 from contextlib import closing
@@ -282,7 +283,7 @@ def test_directory_audits_are_kept_compressed_and_read_back_as_microsoft_sent_th
 
     # The What changed feed lists them with their own dates.
     found = changes.audit_changes(db, alpha, _iso(NOW - timedelta(days=7)))
-    assert [c.subject for c in found] and all("on 2026-10-0" in c.detail for c in found)
+    assert [c.subject for c in found] and all(re.search(r" on [1-9] Oct 2026", c.detail) for c in found)
 
 
 # -- Isolation, deletion, retention, backups ---------------------------------------------------

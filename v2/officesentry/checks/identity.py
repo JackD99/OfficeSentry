@@ -549,7 +549,12 @@ def admins_ca_mfa(snap: TenantSnapshot, now: datetime):
         seen.add(pid)
         c = coverage.coverage_for(pid, _label(a), a.get("userType") or "Member", policies, d)
         if not c.mfa:
-            why = f"excluded from {', '.join(c.excluded_from)}" if c.excluded_from else "no MFA policy applies"
+            names = ", ".join(c.excluded_from[:2])
+            if len(c.excluded_from) > 3:  # one line on the Findings tab; Conditional Access coverage has them all
+                names += f" and {plural(len(c.excluded_from) - 2, 'more policy')}"
+            elif len(c.excluded_from) == 3:
+                names += f", {c.excluded_from[2]}"
+            why = f"excluded from {names}" if names else "no MFA policy applies"
             findings.append(Finding("high", c.label, f"{_role(a)}: {why}", pid))
     if findings and no_p1:
         return ("fail", f"{plural(len(findings), 'admin')} not covered by MFA", findings, SECURITY_DEFAULTS_ADVICE)

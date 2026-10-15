@@ -11,6 +11,26 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
+### Added
+
+- **Headline figures on nine more reports.** Admin activity, Apps and consents, Conditional Access coverage,
+  Guests and sharing, Tenant settings, Email domains, Groups and Teams, Devices and Hybrid identity now open
+  with their key numbers, each opening the rows behind it, with a 90-day trend where Office Sentry keeps one.
+  Their **All clients** pages compare those figures across clients (changes to review in the last 30 days,
+  accounts MFA isn't required for, domains without DMARC enforced, teams without an owner, devices not
+  compliant or not encrypted, directory sync that stopped) instead of counting each table's rows.
+
+### Fixed
+
+- **What changed** shows admin activity dates as "23 Sep 2026" like everything else, and the Findings tab keeps
+  an admin excluded from many Conditional Access policies to one line (the first two and how many more).
+- Report wording: Secure Score changes are in points, not percent; the mailbox size change says since when in
+  words; **Inactive accounts** groups everyone who never signed in under one bar; **Shared files** no longer
+  says "address(es)" and **SharePoint sites** no longer says "plus 0 system sites"; **Tenant settings** calls
+  the self-service reset setting what Microsoft says it is (whether admins can reset their own password);
+  **Guests and sharing** says "Not reported" rather than leaving a setting blank; **Admins** no longer says
+  every role is permanent on a tenant without Entra ID P2 that lists eligible roles.
+
 ## [2.3.1] - 2026-10-12
 
 Fixes for 2.3. Nothing to do before updating: `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are

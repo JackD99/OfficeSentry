@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from . import adminactivity, store
 from .devices import clean as clean_device
 from .devices import parse_ts
+from .formatting import day
 from .licences import is_free, sku_name
 
 
@@ -311,7 +312,7 @@ def audit_changes(conn, tenant_id: int, before: str, until: str | None = None) -
         if not flag:
             continue
         targets = ", ".join(e.get("targets") or []) or "the tenant"
-        detail = f"{e.get('activity')} by {e.get('actor') or 'someone'} on {(e.get('time') or '')[:10]}"
+        detail = f"{e.get('activity')} by {e.get('actor') or 'someone'} on {day(e.get('time'))}"
         out.append(
             Change("Admin activity", "changed", targets, detail + (f": {e['detail']}" if e.get("detail") else ""))
         )
