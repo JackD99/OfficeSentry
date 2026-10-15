@@ -28,7 +28,8 @@ The defaults are the secure ones. Nothing below needs switching on.
 | Containers | The portal and worker run read-only, as a non-root user, with every Linux capability dropped, `no-new-privileges` and a process limit. The compose file binds the portal to `127.0.0.1` only. |
 | Logs | The access log records the path, status and timing of each request, never the query string or the referer. |
 | PDFs | Rendered on the server from the app's own templates, with a fetcher that loads only the app's static files: no other files, no network. |
-| Microsoft 365 | Read-only Graph permissions and `Get-` Exchange cmdlets only; the certificate's private key never leaves the server. [What Office Sentry reads](what-office-sentry-reads.md) lists every permission. |
+| Microsoft 365 | Read-only Graph permissions and `Get-` Exchange cmdlets only; the certificate's private key never leaves the server. [What Office Sentry reads](what-office-sentry-reads.md) lists every permission. Emailing reports through Microsoft 365 uses a separate app in your own tenant, with `Mail.Send` only. |
+| Audit log add-on | A second app with one permission, `ActivityFeed.Read`, that only clients you ask approve. Its only calls that aren't reads start and stop that client's activity feed. | <!-- since 2.4.0 -->
 
 ## What you have to do
 
@@ -53,10 +54,13 @@ The defaults are the secure ones. Nothing below needs switching on.
 - **Update.** Each release's notes say what changed; a line under *Security* in
   the changelog means update soon. The image is rebuilt with current base
   packages on every release.
-- **Watch the activity log** now and then, or send its sign-in failures to a
-  webhook ([Hear about problems without signing in](../DEPLOY.md#hear-about-problems-without-signing-in)).
-  Refused pages (someone opening a tenant they haven't been granted) and
-  stale form tokens are counted per person and hour.
+- **Watch the activity log** now and then: *Settings → Activity log*, filtered
+  by action, shows failed sign-ins, refused pages (someone opening a tenant
+  they haven't been granted) and stale form tokens, which are counted per
+  person and hour. Office Sentry emails and posts its own problems (a stopped
+  worker, failed backups, a full disk: [Hear about problems without signing
+  in](../DEPLOY.md#hear-about-problems-without-signing-in)), but not sign-in
+  failures.
 - **Give out the least.** A role is a set of capabilities and a scope.
   Administrator and Team leader see every client. Second line, First line,
   Account manager and Auditor see only the clients and client groups granted
@@ -91,9 +95,9 @@ of those headers and ignores anything the visitor put there themselves.
 The portal always runs at the root of its address, so it never takes a path
 prefix from `X-Forwarded-Prefix`.
 
-**Caddy** (the bundled `Caddyfile`, started with `--profile https`) does all
-of this by itself, including the certificate. Nothing to configure beyond
-`OFFICESENTRY_DOMAIN` in `.env`.
+**Caddy** (the bundled `Caddyfile`, started by `COMPOSE_PROFILES=https` in
+`.env`) does all of this by itself, including the certificate. Nothing to
+configure beyond `OFFICESENTRY_DOMAIN` in `.env`.
 
 **nginx**:
 
