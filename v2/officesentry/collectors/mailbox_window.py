@@ -30,9 +30,41 @@ class MailboxWindow:
     carried: list[tuple[str, dict]] = field(default_factory=list)  # earlier rows for the others
     carried_mailboxes: int = 0  # mailboxes not checked this run that have earlier results
     checked_at: dict[str, str] = field(default_factory=dict)
+    collector: str = ""
 
     def save(self, ctx: RunContext) -> None:
         ctx.objects(f"{self.kind}_coverage", [("checked", {"checkedAt": self.checked_at})])
+
+    def keep_unread(self, ctx: RunContext, unread: set[str]) -> int:
+        """Carry the previous run's rows for mailboxes this run tried and couldn't read (a timeout, a refusal),
+        as for those outside the window, so a rule found before doesn't vanish, and its finding look fixed,
+        because one request failed. They keep their earlier check time, so the next run reads them first.
+        Returns how many of them had earlier results."""
+        previous = store.latest_run(ctx.conn, ctx.tenant["id"], self.collector) if unread else None
+        earlier: dict[str, str] = {}
+        rows = []
+        if previous is not None:
+            for c in store.run_objects(ctx.conn, previous["id"], f"{self.kind}_coverage"):
+                earlier = c.get("checkedAt") or {}
+            rows = [
+                (r["_id"], {k: v for k, v in r.items() if k not in ("_id", "_kind")})
+                for r in store.run_objects(ctx.conn, previous["id"], self.kind)
+                if r.get("mailboxId") in unread
+            ]
+        self.carried += rows
+        kept = {i for i in unread if i in earlier} | {r["mailboxId"] for _, r in rows}
+        for i in unread:
+            if i in earlier:
+                self.checked_at[i] = earlier[i]
+            else:
+                self.checked_at.pop(i, None)
+        self.carried_mailboxes += len(kept)
+        return len(kept)
+
+
+def kept_note(kept: int) -> str:
+    """The end of a "Could not read ..." warning when ``MailboxWindow.keep_unread`` kept earlier results."""
+    return f"; showing their earlier results for {plural(kept, 'mailbox')}" if kept else ""
 
 
 def plan(
@@ -42,7 +74,7 @@ def plan(
     limit = PER_MAILBOX_LIMIT
     now = datetime.now(UTC).isoformat(timespec="microseconds")
     if len(mailboxes) <= limit:
-        return MailboxWindow(kind, mailboxes, checked_at={mailbox_id(m): now for m in mailboxes})
+        return MailboxWindow(kind, mailboxes, checked_at={mailbox_id(m): now for m in mailboxes}, collector=collector)
 
     previous = store.latest_run(ctx.conn, ctx.tenant["id"], collector)
     earlier: dict[str, str] = {}
@@ -74,5 +106,10 @@ def plan(
         message += f"; {plural(never, 'mailbox')} not checked yet"
     ctx.warn(message)
     return MailboxWindow(
-        kind, [m for m in mailboxes if mailbox_id(m) in chosen], carried, len(rest), rest | dict.fromkeys(chosen, now)
+        kind,
+        [m for m in mailboxes if mailbox_id(m) in chosen],
+        carried,
+        len(rest),
+        rest | dict.fromkeys(chosen, now),
+        collector,
     )

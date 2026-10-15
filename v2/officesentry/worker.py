@@ -243,6 +243,8 @@ def _run_collector(
             ctx.warn(why)  # Microsoft doesn't offer it in this national cloud: partial, not failed
         else:
             collector_cls().collect(ctx)
+            if failure := ctx.sign_in_failure():
+                raise failure  # what it read isn't the tenant's data: keep the last good run
             ctx.note_exchange_cuts()
     except (
         NotConnected,

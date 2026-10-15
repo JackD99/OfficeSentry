@@ -11,6 +11,17 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
+### Fixed
+
+- **Data collection** no longer marks a client's findings fixed when it can't sign in. Inbox rules, automatic
+  replies, mailbox permissions, mailbox sizes and mobile devices read one mailbox at a time and carried on past
+  each refusal, so a client that removed the app (or whose certificate stopped working) finished as partial
+  with nothing read: a suspicious inbox rule or forwarding showed as fixed, and the monthly review said so.
+  A run that can't sign in now fails with the reason and keeps the last good data.
+- **Data collection** keeps a mailbox's earlier inbox rules, automatic reply, permissions, size and device
+  sync times when Microsoft fails to answer about it one night, rather than leave it out, and says so in the
+  run's warning. Losing those rows made its findings look fixed until the next night.
+
 ## [2.3.1] - 2026-10-12
 
 Fixes for 2.3. Nothing to do before updating: `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are

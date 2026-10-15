@@ -72,6 +72,7 @@ class MailboxUsage(Collector):
             ctx.warn("Mailboxes haven't been collected yet, so there's nothing to size")
         window = mailbox_window.plan(ctx, self.key, "mailbox_size", boxes, lambda m: m["_id"], "mailbox sizes")
         rows, failed = [], 0
+        unread: set[str] = set()
         for m in window.mailboxes:
             try:
                 stats = ctx.exchange.invoke("Get-MailboxStatistics", {"Identity": m.get("Guid") or m["_id"]})
@@ -79,6 +80,7 @@ class MailboxUsage(Collector):
                 raise
             except ExchangeError:
                 failed += 1
+                unread.add(m["_id"])
                 continue
             s = stats[0] if stats else {}
             rows.append(
@@ -100,7 +102,8 @@ class MailboxUsage(Collector):
                 )
             )
         if failed:
-            ctx.warn(f"Could not read the size of {plural(failed, 'mailbox')}")
+            kept = window.keep_unread(ctx, unread)
+            ctx.warn(f"Could not read the size of {plural(failed, 'mailbox')}" + mailbox_window.kept_note(kept))
         rows += window.carried
         ctx.objects("mailbox_size", rows)
         window.save(ctx)
