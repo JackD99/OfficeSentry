@@ -29,9 +29,6 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
-
-### Fixed
-
 - **Month-end reporting** never sends a client the same month twice. An automatic plan's month that someone
   had started reviewing stayed In review after the timer sent it, so approving sent it again; Retry on a
   failed email sent it again after the automatic retry had already got it through (or sent a later month, or a
