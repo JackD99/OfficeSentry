@@ -321,7 +321,7 @@
 
 {% endif %}
 
-<footer class="about keep">
+<footer class="about keep{{ ' short' if not with_appendix }}">
   <h2>About this report</h2>
   {%- set stale = report.freshness|selectattr('stale')|list %}
   <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Everything here was read from Microsoft 365 with read-only access; nothing was changed. Changes are compared with the closest data from at least 4 weeks earlier.

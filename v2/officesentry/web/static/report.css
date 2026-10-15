@@ -380,9 +380,9 @@ body.pdf .cover.compact .cover-meta { padding: 3.5mm 0 4mm; grid-template-column
 body.pdf .cover.compact .cover-foot { display: none; }
 body.pdf .doc-compact h2 { margin: 5mm 0 2.2mm; }
 /* The summary's small print stays on its second page. */
-body.pdf .doc-compact .about { margin-top: 5mm; padding-top: 3mm; }
-body.pdf .doc-compact .about h2 { margin: 0 0 1.5mm; }
-body.pdf .doc-compact .about p { margin: 0 0 1.5mm; }
+body.pdf .about.short { margin-top: 5mm; padding-top: 3mm; }
+body.pdf .about.short h2 { margin: 0 0 1.5mm; }
+body.pdf .about.short p { margin: 0 0 1.5mm; }
 body.pdf .doc-compact .cta { margin-top: 5mm; padding: 4mm 6mm; }
 body.pdf .doc-compact .cta p { font-size: 9pt; }
 body.pdf .doc-compact table.kv tr.group td { padding-top: 1.2mm; padding-bottom: 1.2mm; }
