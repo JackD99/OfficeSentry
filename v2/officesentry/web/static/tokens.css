@@ -20,10 +20,10 @@
 @font-face { font-family: "Source Sans 3"; font-weight: 400; font-style: normal; font-display: swap; src: url("fonts/SourceSans3-Regular.woff2") format("woff2"); }
 @font-face { font-family: "Source Sans 3"; font-weight: 500; font-style: normal; font-display: swap; src: url("fonts/SourceSans3-Medium.woff2") format("woff2"); }
 @font-face { font-family: "Source Sans 3"; font-weight: 600; font-style: normal; font-display: swap; src: url("fonts/SourceSans3-Semibold.woff2") format("woff2"); }
-@font-face { font-family: "Source Sans 3"; font-weight: 700 800; font-style: normal; font-display: swap; src: url("fonts/SourceSans3-Bold.woff2") format("woff2"); }
+@font-face { font-family: "Source Sans 3"; font-weight: 700; font-style: normal; font-display: swap; src: url("fonts/SourceSans3-Bold.woff2") format("woff2"); }
 @font-face { font-family: "Source Serif 4"; font-weight: 400; font-style: normal; font-display: swap; src: url("fonts/SourceSerif4Subhead-Regular.woff2") format("woff2"); }
-@font-face { font-family: "Source Serif 4"; font-weight: 500 600; font-style: normal; font-display: swap; src: url("fonts/SourceSerif4Subhead-Semibold.woff2") format("woff2"); }
-@font-face { font-family: "Source Serif 4"; font-weight: 700 800; font-style: normal; font-display: swap; src: url("fonts/SourceSerif4Subhead-Bold.woff2") format("woff2"); }
+@font-face { font-family: "Source Serif 4"; font-weight: 600; font-style: normal; font-display: swap; src: url("fonts/SourceSerif4Subhead-Semibold.woff2") format("woff2"); }
+@font-face { font-family: "Source Serif 4"; font-weight: 700; font-style: normal; font-display: swap; src: url("fonts/SourceSerif4Subhead-Bold.woff2") format("woff2"); }
 
 :root {
   /* Surfaces and text: stone paper and green-black ink */
