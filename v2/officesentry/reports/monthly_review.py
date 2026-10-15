@@ -174,10 +174,11 @@ def _value_on_or_before(history: list[tuple[str, float]], when: datetime) -> flo
     return earlier[-1] if earlier else None
 
 
-def _kpi(snap: TenantSnapshot, key: str, label: str, now: datetime, **kwargs) -> Kpi:
+def _kpi(snap: TenantSnapshot, key: str, label: str, now: datetime, start: datetime, **kwargs) -> Kpi:
+    """The figure now, and ``previous`` as it stood at the start of the period (``start``)."""
     history = snap.history(key)
     value = history[-1][1] if history else None
-    previous = _value_on_or_before(history, now - timedelta(days=28))
+    previous = _value_on_or_before(history, start)
     since = (now - timedelta(days=SPARK_DAYS)).strftime(ISO)
     daily = {ts[:10]: v for ts, v in history if ts >= since}  # each day's last value
     return Kpi(key, label, value, previous=previous, history=[[d, daily[d]] for d in sorted(daily)], **kwargs)
@@ -263,12 +264,14 @@ def fixed_groups(resolved, results: list[RuleResult]) -> list[FixedGroup]:
     return sorted(groups.values(), key=lambda g: (-len(g.subjects), SEVERITY_RANK.get(g.severity, 9), g.title))
 
 
-def build(conn, tenant, now: datetime | None = None) -> Report:
+def build(conn, tenant, now: datetime | None = None, since: datetime | None = None) -> Report:
+    """The month's review. ``since`` starts the period somewhere else than four weeks ago (a quarterly review
+    compares with the start of its quarter): what is new, fixed and changed, and each figure's change."""
     now = now or datetime.now(UTC)
     snap = TenantSnapshot(conn, tenant)
     results = evaluate(snap, now)
     by_key = {r.key: r for r in results}
-    period_start = now - PERIOD
+    period_start = since or now - PERIOD
     since = period_start.strftime(ISO)
     baseline_end = _baseline_end(conn, tenant["id"], now)
     first_report = baseline_end > since
@@ -301,10 +304,10 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
 
     stale = by_key["stale_users"]
     kpis = [
-        _kpi(snap, "secure_score.pct", "Secure Score", now, unit="%"),
-        _kpi(snap, "mfa.registered_pct", "Users with MFA", now, unit="%"),
-        _kpi(snap, "admins.privileged_principals", "Privileged accounts", now, better="down"),
-        _kpi(snap, "users.licensed", "Licensed users", now, better="none"),
+        _kpi(snap, "secure_score.pct", "Secure Score", now, period_start, unit="%"),
+        _kpi(snap, "mfa.registered_pct", "Users with MFA", now, period_start, unit="%"),
+        _kpi(snap, "admins.privileged_principals", "Privileged accounts", now, period_start, better="down"),
+        _kpi(snap, "users.licensed", "Licensed users", now, period_start, better="none"),
         Kpi(
             "stale",
             "Inactive accounts",

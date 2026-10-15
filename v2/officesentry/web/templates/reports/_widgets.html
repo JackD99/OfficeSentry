@@ -251,7 +251,7 @@
 {% macro w_quarter_fixed(item) -%}
 {{ head(item) }}
 {% set d = item.data %}
-<p class="section-intro">{{ d.quarter.fixed_count|plural('finding') }} fixed between {{ d.quarter.label }}.</p>
+<p class="section-intro">{{ d.quarter.fixed_count|plural('finding') }} fixed from {{ d.quarter.label }}.</p>
 <ul class="did">
   {% for g in d.groups %}<li>{{ ui.change_tag('fixed') }} <strong>{{ g.title }}</strong> <span class="muted">· {{ g.subjects|length|plural('item') }}{% if d.subjects and g.subjects|length <= d.subjects %}: {{ g.subjects|map('subject_label')|join(', ') }}{% endif %}</span></li>{% endfor %}
   {% if d.more %}<li class="muted">…and {{ d.more|plural('more fix', 'more fixes') }}.</li>{% endif %}
@@ -306,7 +306,8 @@
 <div class="table-wrap"><table class="upcoming">
   <thead><tr><th>When</th><th>What</th><th>Detail</th></tr></thead>
   <tbody>
-  {% for i in item.data.rows %}<tr><td class="nowrap">{% if i.due %}{{ i.due|day }}<div class="muted small">{{ i.when }}</div>{% else %}{{ i.window }}{% endif %}</td>
+  {#- Items that need attention now lead and say so; their date (a lapsed renewal, a forecast) goes under it. -#}
+  {% for i in item.data.rows %}<tr><td class="nowrap">{% if i.window == 'Now' %}Now{% if i.due %}<div class="muted small">{{ i.due|day }}</div>{% endif %}{% elif i.due %}{{ i.due|day }}<div class="muted small">{{ i.when }}</div>{% else %}{{ i.window }}{% endif %}</td>
     <td><strong>{{ i.title }}</strong><div class="muted small">{{ i.type }}</div></td><td>{{ i.detail }}</td></tr>{% endfor %}
   </tbody>
 </table></div>
@@ -339,7 +340,7 @@
 {% macro w_about(item) -%}
 <footer class="about keep">
   <h2>About this report</h2>
-  <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Everything here was read from Microsoft 365 with read-only access; nothing was changed. Changes are compared with the closest data from at least 4 weeks earlier.
+  <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Everything here was read from Microsoft 365 with read-only access; nothing was changed. {% if item.data.quarter_since %}Changes are compared with the data from the start of the quarter ({{ item.data.quarter_since }}).{% else %}Changes are compared with the closest data from at least 4 weeks earlier.{% endif %}
   {{ ui.collected(item.data.fresh) }}</p>
   {% if item.data.stale %}<p><span class="stale">Out of date:</span> {% for f in item.data.stale %}{{ f.title }} ({{ ('last collected ' ~ f.finished_at|day) if f.finished_at else 'not collected yet' }}){{ ', ' if not loop.last else '.' }}{% endfor %} Figures that rely on these may not reflect the latest settings.</p>{% endif %}
 </footer>
