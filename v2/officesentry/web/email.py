@@ -229,14 +229,22 @@ def report_history(tenant_id: int):
     )
 
 
+def _file_needs(tenant_id: int, report_id: int, **_) -> tuple[str, ...]:
+    """``needs(also=...)`` for an issued file: what its report needs (``_needs``), once the file is looked up."""
+    row = g.db.execute(
+        "SELECT kind FROM issued_reports WHERE id = ? AND tenant_id = ?", (report_id, tenant_id)
+    ).fetchone()
+    return tuple(sorted(_needs(row["kind"]))) if row else ()
+
+
 @bp.get("/tenants/<int:tenant_id>/report-history/<int:report_id>")
-@needs("emails.view", "export")
+@needs("emails.view", "export", also=_file_needs)
 def issued_report(tenant_id: int, report_id: int):
     t = tenant_or_404(tenant_id)
     r = issued.get(g.db, t["id"], report_id)
     if r is None:
         abort(404)
-    require(*_needs(r["kind"]), tenant_id=t["id"])
+    require(*_file_needs(t["id"], report_id), tenant_id=t["id"])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"issued:{r['filename']}")
     return Response(
         bytes(r["data"]),

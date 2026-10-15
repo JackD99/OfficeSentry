@@ -14,7 +14,7 @@
   <div class="actions">
     {% if s %}
     <form method="post" action="{{ url_for('email.send_now', schedule_id=s.id) }}" data-busy="Sending…">{{ csrf() }}<input type="hidden" name="from" value="preview"><button class="primary">{{ icon('send') }} Send now</button></form>
-    <a class="btn" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>
+    {% if can_open('email.edit_schedule', schedule_id=s.id, tenant=s.tenant_id) %}<a class="btn" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>{% endif %}
     {% endif %}
     <a class="btn ghost" href="{{ back }}">Back</a>
   </div>

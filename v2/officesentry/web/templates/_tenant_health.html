@@ -34,7 +34,7 @@
         {% if c.action == 'consent' and consent_link %}{{ consent_button(consent_link, 'Open consent link') }}
         {% elif c.action == 'whats_new' and current_user.role == 'admin' %}<a class="btn sm" href="{{ url_for('onboarding.send', tenant_id=tenant.id) }}">What's new</a>
         {% elif c.action == 'check' and can_check %}{{ check_button(tenant, back) }}
-        {% elif c.action == 'collection' %}<a class="btn sm ghost" href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection</a>
+        {% elif c.action == 'collection' and can_open('tenants.collection', tenant_id=tenant.id) %}<a class="btn sm ghost" href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection</a>
         {% elif c.action == 'collect' and can_check %}<form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Collect everything</button></form>
         {% endif %}
       {% endif %}

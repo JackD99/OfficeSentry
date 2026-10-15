@@ -35,6 +35,9 @@ approved before the update show the month as it is now, as before, until they're
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
+- Pages no longer offer links that someone's role can't open. A person, group, site or report they can't
+  open shows as its name, and buttons such as *Edit*, *Data collection* or *Schedule a report* only show to
+  people who can use them.
 
 ### Security
 

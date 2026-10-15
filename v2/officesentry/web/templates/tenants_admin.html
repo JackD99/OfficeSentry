@@ -81,7 +81,7 @@
         {% else %}<span class="pill bad">Missing</span>{% endif %}
         {% if c.extra_roles %}<span class="pill warn" title="Also holds: {{ c.extra_roles|join(', ') }}">+ {{ c.extra_roles|length|plural('other role') }}</span>{% endif %}</td>
       <td data-label="Last good collection" class="nowrap">{{ ts(h.last_success) }}</td>
-      <td data-label="Failing">{% if c.failing %}<a class="pill bad" href="{{ url_for('tenants.collection', tenant_id=t.id) }}" title="{{ c.failing|map(attribute=1)|join(', ') }}">{{ c.failing|length|plural('source') }}</a>{% else %}<span class="faint">None</span>{% endif %}</td>
+      <td data-label="Failing">{% if c.failing %}{% set tag = 'a' if can_open('tenants.collection', tenant_id=t.id) else 'span' %}<{{ tag }} class="pill bad"{% if tag == 'a' %} href="{{ url_for('tenants.collection', tenant_id=t.id) }}"{% endif %} title="{{ c.failing|map(attribute=1)|join(', ') }}">{{ c.failing|length|plural('source') }}</{{ tag }}>{% else %}<span class="faint">None</span>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>

@@ -25,7 +25,7 @@ from ..reports import (
 from ..reports.monthly_review import build as build_review
 from ..reports.registry import DECLARED
 from . import as_of
-from .access import can, need_also, needs, opens_on, require, tenant_or_404
+from .access import by_report, can, need_also, needs, opens_on, require, tenant_or_404
 from .groups import group_aware, scope, scoped_tenants
 from .printing import pdf_response
 from .reports import exists, hidden_reports, report_capability
@@ -88,6 +88,11 @@ def _rollup_capability(key: str) -> str:
     return "reports.security" if key in ("review", "evidence") else report_capability(key)
 
 
+def _by_rollup(key: str, **_) -> tuple[str, ...]:
+    """``needs(also=...)`` for a rollup's pages: the summary's or the report's capability."""
+    return (_rollup_capability(key),)
+
+
 def _tenants_for(key: str) -> list:
     """The tenants in scope that have this report: an add-on's report only those it's on for."""
     tenants = scoped_tenants()
@@ -99,7 +104,7 @@ def _tenants_for(key: str) -> list:
 def _rollup_or_404(key: str):
     if key not in dict(rollups.available()) or key in hidden_reports():
         abort(404)
-    need_also(_rollup_capability(key))  # so the tenants listed leave out per-client denies
+    need_also(*_by_rollup(key))  # so the tenants listed leave out per-client denies
     return rollups.build(g.db, _tenants_for(key), key)
 
 
@@ -109,7 +114,7 @@ def _picker() -> dict:
 
 
 @bp.get("/across/<key>")
-@needs("clients.compare")
+@needs("clients.compare", also=_by_rollup)
 @group_aware
 def rollup(key: str):
     data = _rollup_or_404(key)
@@ -122,7 +127,7 @@ def rollup(key: str):
 def _all_rows(key: str) -> rollups.AllRows:
     if not exists(key):
         abort(404)
-    need_also(report_capability(key))
+    need_also(*by_report(key))
     return rollups.all_rows(
         g.db,
         _tenants_for(key),
@@ -140,7 +145,7 @@ def _table_or_404(data: rollups.AllRows, table: str) -> int:
 
 
 @bp.get("/across/<key>/rows")
-@needs("clients.compare")
+@needs("clients.compare", also=by_report)
 @group_aware
 def rows_index(key: str):
     """Every row: ``?table=`` (a table slug) or the first table with rows. Keeps the table view."""
@@ -160,7 +165,7 @@ def rows_index(key: str):
 
 
 @bp.get("/across/<key>/rows/<table>")
-@needs("clients.compare")
+@needs("clients.compare", also=by_report)
 @group_aware
 def rows(key: str, table: str):
     data = _all_rows(key)
@@ -193,7 +198,7 @@ def _rows_report(key: str, table: str):
 
 @bp.get("/across/<key>/rows/<table>.csv", defaults={"ext": "csv"})
 @bp.get("/across/<key>/rows/<table>.xlsx", defaults={"ext": "xlsx"})
-@needs("clients.compare", "export")
+@needs("clients.compare", "export", also=by_report)
 @group_aware
 def rows_download(key: str, table: str, ext: str):
     report = _rows_report(key, table)
@@ -205,7 +210,7 @@ def rows_download(key: str, table: str, ext: str):
 
 
 @bp.get("/across/<key>/rows/<table>.pdf")
-@needs("clients.compare", "export")
+@needs("clients.compare", "export", also=by_report)
 @group_aware
 def rows_pdf(key: str, table: str):
     report = _rows_report(key, table)
@@ -285,7 +290,7 @@ def checks_download(ext: str):
 
 @bp.get("/across/<key>.csv", defaults={"ext": "csv"})
 @bp.get("/across/<key>.xlsx", defaults={"ext": "xlsx"})
-@needs("clients.compare", "export")
+@needs("clients.compare", "export", also=_by_rollup)
 @group_aware
 def rollup_download(key: str, ext: str):
     data = _rollup_or_404(key)
@@ -312,7 +317,7 @@ def rollup_download(key: str, ext: str):
 
 
 @bp.get("/across/<key>.pdf")
-@needs("clients.compare", "export")
+@needs("clients.compare", "export", also=_by_rollup)
 @group_aware
 def rollup_pdf(key: str):
     data = _rollup_or_404(key)
@@ -481,12 +486,12 @@ def tenant_changes_download(tenant_id: int, ext: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>.csv")
-@needs("export")
+@needs("export", also=by_report)
 def data_report_csv(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
     if not exists(key, t["id"]):
         abort(404)
-    require(report_capability(key), tenant_id=t["id"])
+    require(*by_report(key), tenant_id=t["id"])
     day = as_of.day(g.db, t["id"], request.args.get("on"))
     report = views.apply(data_reports.build(g.db, t, key, as_of=day.as_of), views.View.parse(request.args))
     report_tables = data_reports.to_tables(report)

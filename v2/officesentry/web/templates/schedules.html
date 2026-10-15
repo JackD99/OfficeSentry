@@ -34,7 +34,7 @@
   <section class="card flush">
     <div class="card-head toolbar">
       <h2>{{ 'Scheduled emails' if staff else 'Reports emailed to your team' }}</h2>
-      {% if staff and schedules %}<a class="btn sm primary" href="{{ url_for('email.new_schedule', tenant_id=tenant.id) }}">{{ icon('plus') }} New scheduled email</a>{% endif %}
+      {% if staff and schedules and can_open('email.new_schedule', tenant_id=tenant.id) %}<a class="btn sm primary" href="{{ url_for('email.new_schedule', tenant_id=tenant.id) }}">{{ icon('plus') }} New scheduled email</a>{% endif %}
     </div>
     {% if schedules %}
     <ul class="list sched-list">{% for s in schedules %}{{ schedule_item(s, staff) }}{% endfor %}</ul>
@@ -42,7 +42,7 @@
     <div class="empty">
       <h3>No scheduled emails yet</h3>
       <p>Send {{ tenant.name }}'s reports to the client and your team every week, month or quarter.</p>
-      <a class="btn primary" href="{{ url_for('email.new_schedule', tenant_id=tenant.id) }}">{{ icon('plus') }} Schedule an email</a>
+      {% if can_open('email.new_schedule', tenant_id=tenant.id) %}<a class="btn primary" href="{{ url_for('email.new_schedule', tenant_id=tenant.id) }}">{{ icon('plus') }} Schedule an email</a>{% endif %}
     </div>
     {% else %}
     <div class="empty compact"><p>No reports are emailed to your team yet.</p></div>

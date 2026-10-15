@@ -576,6 +576,7 @@ recording, or only an empty one, and are tested with simulated data only:
   who holds more. Every page and download checks on the server; hidden
   clients return 404 and a capability taken away on one client answers 403
   there. There is always at least one Administrator.
+  Pages only link to what the person can open (`access.can_open`): a name or report they can't open shows as text. <!-- since 2.4.0 -->
 - **Every run is a snapshot** (`runs` → `objects` + `metrics`), so reports
   can show history and changes. Metrics and findings are kept forever; full
   snapshots for the last 30 days plus one per month for 12 months. The daily

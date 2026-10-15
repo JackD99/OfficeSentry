@@ -1,7 +1,7 @@
 {#- One page per mailbox, group or site (reports/object_page.py): the same shape as a person's page.
     page is an ObjectPage; tab is the tenant header key of the list the page belongs to. -#}
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, tenant_header, downloads with context %}
+{% from "_macros.html" import icon, ts, tenant_header, downloads, page_link with context %}
 {% block title %}{{ page.name }} · {{ tenant.name }}{% endblock %}
 {% set PILL = {'ok': 'ok', 'warn': 'warn', 'bad': 'bad'} %}
 {#- Cells as report tables draw them: links, long lists folded to a summary that opens in place, long addresses
@@ -55,7 +55,7 @@
 
     <section class="card">
       <div class="card-head"><h2>Open findings</h2>
-        {% if page.findings %}<a class="small" href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}">All findings</a>{% endif %}</div>
+        {% if page.findings and can_open('reports.tenant_findings', tenant_id=tenant.id) %}<a class="small" href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}">All findings</a>{% endif %}</div>
       {% if page.findings %}
       <ul class="list compact">
         {% for f in page.findings %}
@@ -79,7 +79,7 @@
     <section class="card">
       <div class="card-head"><h2>In the reports</h2></div>
       <ul class="link-list">
-        {% for title, href in page.reports %}<li><a href="{{ href }}">{{ title }}</a></li>{% endfor %}
+        {% for title, href in page.reports %}<li>{{ page_link(href, title) }}</li>{% endfor %}
       </ul>
       <p class="footnote">The reports these facts come from, opened at this {{ page.kind }} where they list it.</p>
     </section>

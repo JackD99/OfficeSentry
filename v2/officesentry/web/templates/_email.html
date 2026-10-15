@@ -48,11 +48,10 @@
     <div class="people-line">{{ people(s.recipients, staff) }}</div>
     {% if staff %}
     <div class="row-actions sched-actions">
-      {% set security = can('reports.security', s.tenant_id) %}
-      {% if security %}<a class="btn sm ghost" href="{{ url_for('email.preview_schedule', schedule_id=s.id) }}">{{ icon('eye') }} Preview</a>{% endif %}
-      {% if s.on_approval %}<a class="btn sm ghost" href="{{ url_for('reporting.index') }}">{{ icon('check') }} Review</a>
+      {% if can_open('email.preview_schedule', schedule_id=s.id, tenant=s.tenant_id) %}<a class="btn sm ghost" href="{{ url_for('email.preview_schedule', schedule_id=s.id) }}">{{ icon('eye') }} Preview</a>{% endif %}
+      {% if s.on_approval %}{% if can_open('reporting.index') %}<a class="btn sm ghost" href="{{ url_for('reporting.index') }}">{{ icon('check') }} Review</a>{% endif %}
       {% else %}<form method="post" action="{{ url_for('email.send_now', schedule_id=s.id) }}" data-busy="Sending…">{{ csrf() }}<button class="sm ghost">{{ icon('send') }} Send now</button></form>{% endif %}
-      {% if security %}<a class="btn sm ghost" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>{% endif %}
+      {% if can_open('email.edit_schedule', schedule_id=s.id, tenant=s.tenant_id) %}<a class="btn sm ghost" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>{% endif %}
     </div>
     {% endif %}
   </div>

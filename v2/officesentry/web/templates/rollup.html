@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, sev_counts, sev_legend, downloads %}
+{% from "_macros.html" import icon, sev_counts, sev_legend, downloads, page_link with context %}
 {% from "_across.html" import across_head with context %}
 {% block title %}{{ rollup.title }} · All clients · Office Sentry{% endblock %}
 {% macro cell(row, c) -%}
@@ -66,14 +66,14 @@
     <tbody>
     {% for row in rollup.rows %}{% set t = row.tenant %}
     <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}">
-      <td class="tenant-col" data-sort="{{ t.name|lower }}"><a class="strong" href="{{ tenant_href(t)|trim }}">{{ t.name }}</a>
+      <td class="tenant-col" data-sort="{{ t.name|lower }}">{{ page_link(tenant_href(t)|trim, t.name, 'strong') }}
         {% if row.note %}<span class="sub muted">{{ row.note }}</span>{% endif %}</td>
       {% if row.note %}
       <td colspan="{{ rollup.columns|length }}" class="muted" data-label="Status">Not available</td>
       {% else %}
       {% for c in rollup.columns %}{% set sv = row.sort_value(c) %}
       {% set link = row.links.get(c.key) %}
-      <td class="{{ 'num' if c.kind in ('num', 'pct', 'money') or c.key in figures }}" data-label="{{ c.label }}" data-sort="{{ '' if sv is none else sv }}">{% if link and row.values.get(c.key) not in (none, '') %}<a class="figure-link" href="{{ figure_href(t, link) }}" title="Open {{ t.name }}: {{ c.label }}">{{ cell(row, c) }}</a>{% else %}{{ cell(row, c) }}{% endif %}</td>
+      <td class="{{ 'num' if c.kind in ('num', 'pct', 'money') or c.key in figures }}" data-label="{{ c.label }}" data-sort="{{ '' if sv is none else sv }}">{% if link and row.values.get(c.key) not in (none, '') and can_open(figure_href(t, link)) %}<a class="figure-link" href="{{ figure_href(t, link) }}" title="Open {{ t.name }}: {{ c.label }}">{{ cell(row, c) }}</a>{% else %}{{ cell(row, c) }}{% endif %}</td>
       {% endfor %}
       {% endif %}
     </tr>

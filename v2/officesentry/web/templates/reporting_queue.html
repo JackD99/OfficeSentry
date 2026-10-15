@@ -14,8 +14,8 @@
     <a class="btn sm" href="{{ url_for('reporting.queue', period=prev, show=show) }}" aria-label="Previous month">&larr;</a>
     {% if period != current %}<a class="btn sm" href="{{ url_for('reporting.queue', period=current) }}">This month</a>{% endif %}
     <a class="btn sm" href="{{ url_for('reporting.queue', period=next, show=show) }}" aria-label="Next month">&rarr;</a>
-    {% if admin %}<a class="btn sm" href="{{ url_for('reporting.plans') }}">Report plans</a>{% endif %}
-    <a class="btn sm" href="{{ url_for('designs.index') }}">Report designs</a>
+    {% if can_open('reporting.plans') %}<a class="btn sm" href="{{ url_for('reporting.plans') }}">Report plans</a>{% endif %}
+    {% if can_open('designs.index') %}<a class="btn sm" href="{{ url_for('designs.index') }}">Report designs</a>{% endif %}
   </div>
 </div>
 
@@ -90,7 +90,7 @@
   {% else %}
   <div class="empty"><h3>No clients on a report plan</h3>
     <p>Put clients on a report plan and each one gets a draft here every month to review and approve.</p>
-    {% if admin %}<a class="btn primary" href="{{ url_for('reporting.new_plan') }}">{{ icon('plus') }} Create a plan</a>{% endif %}</div>
+    {% if can_open('reporting.new_plan') %}<a class="btn primary" href="{{ url_for('reporting.new_plan') }}">{{ icon('plus') }} Create a plan</a>{% endif %}</div>
   {% endif %}
 </section>
 {% if paused %}

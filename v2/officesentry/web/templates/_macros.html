@@ -170,12 +170,24 @@
 {%- endmacro %}
 
 
-{# One "Download" control for a page's formats. links: [(label, href, title)] #}
+{# A link to a page in the portal, drawn only for someone who opens it (can_open, from the route's own checks);
+   anyone else gets the text, in a span with the same class (a pill stays a pill). For text that names the
+   thing; a button that only makes sense with its link is left out with {% if can_open(...) %} instead. #}
+{% macro page_link(href, text, class='', title='') -%}
+{%- set attrs %}{% if class %} class="{{ class }}"{% endif %}{% if title %} title="{{ title }}"{% endif %}{% endset -%}
+{%- if can_open(href) %}<a href="{{ href }}"{{ attrs }}>{{ text }}</a>{% elif attrs %}<span{{ attrs }}>{{ text }}</span>{% else %}{{ text }}{% endif -%}
+{%- endmacro %}
+
+{# One "Download" control for a page's formats. links: [(label, href, title)]; only the ones the person
+   opens are drawn (can_open), and nothing when that's none of them. #}
 {% macro downloads(links) -%}
+{%- set shown = [] %}{% for link in links if link[1].startswith('#') or can_open(link[1]) %}{% set _ = shown.append(link) %}{% endfor %}
+{%- if shown %}
 <div class="downloads" role="group" aria-label="Download">
   <span class="downloads-label">{{ icon('download') }}<span>Download</span></span>
-  {% for label, href, title in links %}<a href="{{ href }}"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</a>{% endfor %}
+  {% for label, href, title in shown %}<a href="{{ href }}"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</a>{% endfor %}
 </div>
+{%- endif %}
 {%- endmacro %}
 
 {# The Reports tab's one report picker: every report the tenant has, grouped, with a search box. On

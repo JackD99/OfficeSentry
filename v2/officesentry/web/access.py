@@ -13,6 +13,7 @@
 Access is a role (``roles.py``: a set of capabilities, ``permissions.py``, and a scope) plus per-person
 overrides, worked out once per request (``current()``). ``@needs("reports.email", "export")`` says what a
 view needs; ``can()`` answers the same question inside views and templates; ``require()`` aborts with 403.
+``can_open()`` asks a page's own checks whether it would open, so templates only draw links that do.
 
 Scope (which tenants) is read here and nowhere else: ``visible_tenants`` and ``can_see_tenant`` share
 ``_GRANTED``. A role with scope "all", an admin, or a staff account with ``all_tenants`` sees every tenant;
@@ -29,9 +30,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import cache, wraps
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
-from flask import abort, g, has_request_context, redirect, request, url_for
+from flask import abort, current_app, g, has_request_context, redirect, request, url_for
+from werkzeug.exceptions import HTTPException
+from werkzeug.routing import RequestRedirect
 
 from .. import permissions, roles, sso
 from ..db import audit_counted
@@ -126,10 +129,15 @@ def _return_to() -> str | None:
     return ref.path + (f"?{ref.query}" if ref.query else "")
 
 
-def needs(*capabilities: str, kind: str | None = None):
+def needs(*capabilities: str, kind: str | None = None, also: Callable[..., tuple[str, ...]] | None = None):
     """The view needs these capabilities (somewhere; ``tenant_or_404`` then checks the tenant it opens) and,
     with ``kind="staff"``, a staff or admin role. The view function keeps them as ``needs`` and ``kind``,
-    so tests can walk every route as every role."""
+    so tests can walk every route as every role.
+
+    ``also`` is for a view that only knows part of what it needs from its URL (which report): a function of
+    the URL's values (``by_report``) giving the capabilities the URL adds, on the URL's client if it names
+    one. The view checks them itself with that same function (``require``, ``need_also``), once it has
+    looked the URL up; ``can_open`` asks it before drawing a link."""
     for cap in capabilities:
         if cap not in permissions.BY_KEY:
             raise ValueError(f"unknown capability {cap!r}")
@@ -140,22 +148,70 @@ def needs(*capabilities: str, kind: str | None = None):
         @wraps(view)
         @login_required
         def wrapper(*args, **kwargs):
-            a = current()
-            if (kind == "staff" and not a.is_staff) or (kind == "admin" and not a.is_admin):
+            if _turned_away(current(), capabilities, kind):
                 refused()
                 abort(403)
             g.needed = capabilities
-            for cap in capabilities:
-                if not a.can(cap):
-                    refused()
-                    abort(403)
             return view(*args, **kwargs)
 
         wrapper.needs = capabilities
         wrapper.kind = kind
+        wrapper.also = also
         return wrapper
 
     return decorator
+
+
+def _turned_away(a: roles.Access, capabilities, kind: str | None) -> bool:
+    """Whether ``needs(*capabilities, kind=kind)`` refuses this person, whatever the URL."""
+    if (kind == "staff" and not a.is_staff) or (kind == "admin" and not a.is_admin):
+        return True
+    return not all(a.can(cap) for cap in capabilities)
+
+
+def by_report(key: str, **_) -> tuple[str, ...]:
+    """``needs(also=by_report)``: a page whose URL names a detail report (``<key>``) also needs its area."""
+    return (report_capability(key),)
+
+
+def can_open(target: str, tenant: int | None = None, **values) -> bool:
+    """Would the signed-in person open this page, rather than be turned away by the access checks (a 403,
+    or a 404 for a client they don't see)? For templates, so a link is only drawn where it opens.
+
+    ``target`` is a path in the portal (a report cell's page, with or without a query string) or an endpoint
+    and its URL values, as ``url_for`` takes them; ``tenant`` names the client a page is about when its URL
+    doesn't (a schedule's). The answer comes from the checks the route makes: what the view declared with
+    ``needs`` (its kind, its capabilities and what its URL adds, ``also``) and ``tenant_or_404``'s, with the
+    person's overrides on that client. A page anyone signed in may open is always True; a path that isn't a
+    page is False. Worked out once per request for each page, client and report."""
+    a = current()
+    if a is None:
+        return False
+    if target.startswith("/"):
+        try:
+            endpoint, values = current_app.url_map.bind("").match(unquote(urlsplit(target).path), method="GET")
+        except RequestRedirect as moved:  # the same page with a slash added: ask about that page
+            return can_open(urlsplit(moved.new_url).path, tenant)
+        except HTTPException:
+            return False
+    else:
+        endpoint = target
+    view = current_app.view_functions.get(endpoint)
+    if view is None:
+        return False
+    if not hasattr(view, "needs"):
+        return True
+    added = tuple(view.also(**values)) if view.also else ()
+    tenant_id = values.get("tenant_id", tenant)
+    known = g.setdefault("can_open", {})
+    asked = (endpoint, tenant_id, added)
+    if asked not in known:
+        known[asked] = (
+            not _turned_away(a, view.needs, view.kind)
+            and all(a.can(cap, tenant_id) for cap in added)
+            and (tenant_id is None or _refusal(tenant_id, view.needs)[1] is None)
+        )
+    return known[asked]
 
 
 def roles_required(*names: str):
@@ -299,19 +355,25 @@ def can_see_tenant(conn, user, tenant_id: int) -> bool:
 def tenant_or_404(tenant_id: int):
     """The tenant, if this user may see it. An archived tenant is only there for someone who manages
     clients (to restore or delete). 403 when a capability the view needs is taken away on this client."""
+    tenant, status, why = _refusal(tenant_id, g.get("needed") or ())
+    if status is not None:
+        refused(why)
+        abort(status)
+    return tenant
+
+
+def _refusal(tenant_id: int, needed) -> tuple[object, int | None, str]:
+    """The tenant, and how ``tenant_or_404`` turns the signed-in person away from it for a view needing
+    ``needed``: 404 or 403 and what to note, or None."""
     tenant = g.db.execute("SELECT * FROM tenants WHERE id = ?", (tenant_id,)).fetchone()
     if tenant is None or not can_see_tenant(g.db, g.user, tenant_id):
-        refused(f"tenant {tenant_id}")
-        abort(404)
+        return tenant, 404, f"tenant {tenant_id}"
     a = current()
     if tenant["archived_at"] and not a.can("clients.manage"):
-        refused(f"tenant {tenant_id} (archived)")
-        abort(404)
-    needed = g.get("needed") or ()
+        return tenant, 404, f"tenant {tenant_id} (archived)"
     if not a.can_all(needed, tenant_id):
-        refused(f"tenant {tenant_id}")
-        abort(403)
-    return tenant
+        return tenant, 403, f"tenant {tenant_id}"
+    return tenant, None, ""
 
 
 def refused(what: str = "") -> None:
