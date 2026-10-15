@@ -29,10 +29,12 @@ on:
 permissions:
   contents: read
 
-# A newer push to a pull request cancels the run it replaces. Runs on main always finish, so every commit
-# that lands there is fully tested.
+# A newer push to a pull request cancels the run it replaces. Every other run is grouped by its commit, so
+# runs on main never wait for each other and every commit that lands there is fully tested. (Grouped by
+# branch, they queued: GitHub keeps one waiting run per group and cancels it when a newer one arrives, so a
+# merge landing between two others went untested, as c52d6b8 did on 12 October.)
 concurrency:
-  group: v2-${{ github.event.pull_request.number || github.ref }}
+  group: v2-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
