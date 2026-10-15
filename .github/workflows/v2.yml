@@ -5,10 +5,10 @@ name: CI
 # private fork on GitHub Free, where minutes are limited, pull requests run Python 3.12 only and the Windows
 # job waits for main and the weekly run: the jobs below check github.event.repository.private.)
 #
-# Each Python's tests run in four parts on separate machines at the same time (pytest --shard,
-# tests/conftest.py), and Windows' in three, so a run takes minutes rather than a quarter of an hour. The
-# coverage job then adds up the parts' coverage for the 90% floor and checks that every test ran in exactly
-# one part (scripts/check_shards.py).
+# Each Python's tests run in parts on separate machines at the same time (pytest --shard, tests/conftest.py):
+# four for 3.12, which measures coverage, two each for 3.11 and 3.13, and three for Windows' subset, so a run
+# takes minutes rather than a quarter of an hour. The coverage job then adds up the parts' coverage for the
+# 90% floor and checks that every test ran in exactly one part (scripts/check_shards.py).
 #
 # Pull requests and pushes to main that only touch Markdown, docs/, examples/ or website/ skip the jobs
 # (website.yml builds the site), but "CI passed" always runs and reports, so it can be the one required check
@@ -29,10 +29,12 @@ on:
 permissions:
   contents: read
 
-# A newer push to a pull request cancels the run it replaces. Runs on main always finish, so every commit
-# that lands there is fully tested.
+# A newer push to a pull request cancels the run it replaces. Every other run is grouped by its commit, so
+# runs on main never wait for each other and every commit that lands there is fully tested. (Grouped by
+# branch, they queued: GitHub keeps one waiting run per group and cancels it when a newer one arrives, so a
+# merge landing between two others went untested, as c52d6b8 did on 12 October.)
 concurrency:
-  group: v2-${{ github.event.pull_request.number || github.ref }}
+  group: v2-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
@@ -111,7 +113,7 @@ jobs:
         run: git ls-files -z '*.sh' | xargs -0 shellcheck --severity=style
 
   test:
-    name: test (Python ${{ matrix.python }}, part ${{ matrix.part }} of 4)
+    name: test (Python ${{ matrix.python }}, part ${{ matrix.part }} of ${{ matrix.python == '3.12' && 4 || 2 }})
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
@@ -122,13 +124,21 @@ jobs:
         # Pull requests in the private repo: 3.12 only (the Docker image's Python). Everything else, and every
         # pull request once the repo is public: 3.11, 3.12 and 3.13.
         python: ${{ fromJSON(github.event_name == 'pull_request' && github.event.repository.private && '["3.12"]' || '["3.11", "3.12", "3.13"]') }}
-        # Change PARTS below with this list; the coverage job fails if a part is missing.
+        # Change PARTS and the name above with these lists; the coverage job fails if a part is missing.
         part: [1, 2, 3, 4]
+        # 3.11 and 3.13 run without coverage, in half the time, so two parts each finish with 3.12's four.
+        # That's four machines fewer for every pull request: GitHub runs 20 of the account's jobs at once, and
+        # with several pull requests open, jobs waited for a machine longer than they ran.
+        exclude:
+          - {python: '3.11', part: 3}
+          - {python: '3.11', part: 4}
+          - {python: '3.13', part: 3}
+          - {python: '3.13', part: 4}
         include:
           - python: '3.12'  # the Docker image's Python
             coverage: true
     env:
-      PARTS: 4
+      PARTS: ${{ matrix.python == '3.12' && 4 || 2 }}
       PART: ${{ matrix.part }}
       NAME: tests-${{ matrix.python }}-${{ matrix.part }}
     steps:
@@ -243,8 +253,13 @@ jobs:
           cache: pip
           cache-dependency-path: v2/pyproject.toml
       - run: pip install -e ".[dev]"
+      # Six minutes a test rather than two: Windows runners are several times slower than Linux ones and vary
+      # more, and on 12 October the isolation walk ran past two minutes there, which ends the worker process
+      # (the only way the timeout can stop a test on Windows). Every thread's stack is logged ten seconds
+      # before the limit, and the slowest tests are listed at the end.
       - run: >-
-          pytest -n auto --shard ${{ matrix.part }}/3 tests/test_foundation.py tests/test_access.py tests/test_login_security.py
+          pytest -n auto --timeout=360 -o faulthandler_timeout=350 --durations=20
+          --shard ${{ matrix.part }}/3 tests/test_foundation.py tests/test_access.py tests/test_login_security.py
           tests/test_scheduling.py tests/test_backups.py tests/test_serve.py tests/test_recording.py
           tests/test_pdf_export.py tests/test_reports.py tests/test_email.py tests/test_encoding.py
           tests/test_user_profile.py tests/test_pages.py tests/test_isolation_walk.py
@@ -256,8 +271,27 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      # The base image by its digest, from the first registry that gives it: the Dockerfile's (AWS's copy of
+      # Docker Hub's official images), then Google's copy, then Docker Hub. Runners share addresses and each
+      # registry limits what one address pulls anonymously; on 15 October AWS's answered 429 ("Data limit
+      # exceeded") before anything was built. The digest names the bytes, so the image built is the same
+      # whichever answers, and it's built from the Dockerfile with only that line changed.
+      - name: Fetch the base image
+        run: |
+          from=$(sed -n 's/^FROM //p' Dockerfile)
+          digest=${from##*@}
+          repository=${from%%:*}
+          library=${repository#public.ecr.aws/docker/}
+          for source in "$repository" "mirror.gcr.io/$library" "docker.io/$library"; do
+            if docker pull -q "$source@$digest"; then
+              sed "s|^FROM .*|FROM $source@$digest|" Dockerfile > "$RUNNER_TEMP/Dockerfile"
+              exit 0
+            fi
+            echo "::warning::$source didn't give the base image; trying the next registry"
+          done
+          exit 1
       - name: Build the image (not pushed)
-        run: docker build -t officesentry:ci .
+        run: docker build -f "$RUNNER_TEMP/Dockerfile" -t officesentry:ci .
       - name: Start the portal and wait until it's healthy
         run: |
           docker run -d --name portal -e OFFICESENTRY_BASE_URL=https://sentry.example officesentry:ci

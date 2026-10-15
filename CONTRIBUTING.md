@@ -103,9 +103,10 @@ Windows. Changes that only touch Markdown, `docs/`, `examples/` or
 `website/` skip the tests, and the **CI passed** check sums it all up. The
 Python 3.12 run measures coverage and fails under 90%;
 `pytest -n auto --cov=officesentry` shows it locally. To finish in minutes,
-each Python's tests run in four parts on separate machines at once
-(`pytest --shard 2/4` runs the second part; every test is in exactly one),
-and a final check fails unless the parts together ran every test.
+each Python's tests run in parts on separate machines at once (four for
+3.12, two for the others; `pytest --shard 2/4` runs the second of four, and
+every test is in exactly one), and a final check fails unless the parts
+together ran every test.
 
 - Keep changes small and finished end to end. When behaviour changes, update
   the docs it affects in the same pull request (`README.md`, `v2/README.md`,
@@ -143,7 +144,8 @@ and a final check fails unless the parts together ran every test.
   page loses most of the seed and its tests fail.
 - Tests ignore any `OFFICESENTRY_*` variables in your shell, fail if they
   leave a database connection open, and fail after two minutes if they
-  hang. Coverage counts branches as well as lines.
+  hang (six on CI's Windows runners), logging every thread's stack just
+  before. Coverage counts branches as well as lines.
 - Never add a write call to a tenant or a non-read-only permission.
 - Every route says what it needs with `@needs(...)`: the capabilities
   (`permissions.py`) a person must hold, or `kind="staff"` for a page
