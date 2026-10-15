@@ -241,6 +241,12 @@ SECTIONS = [
                 blurb="Entra ID keeps sign-in and audit logs for 30 days. Ways to keep them longer, from PowerShell "
                 "exports to Log Analytics.",
             ),
+            Doc(
+                "website/pages/how-to/audit-log.md",
+                "how-to/audit-log",
+                blurb="Search the Microsoft 365 audit log for files deleted or shared, mail opened by someone else "
+                "and new inbox rules, and keep it for every client.",
+            ),
         ],
     ),
     (
