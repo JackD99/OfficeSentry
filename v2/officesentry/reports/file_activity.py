@@ -136,8 +136,10 @@ def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport)
         )
         return
     if row["stopped_at"]:  # why is on the add-on's page: the reason names the team, and clients read this
-        report.notice = (
-            "The audit log add-on is off for this client. What was collected before stays until retention removes it."
+        report.notice = "The audit log add-on is off for this client. " + (
+            "What was collected before stays until retention removes it."
+            if events.counts(conn, tenant["id"]).get("activity")
+            else "Nothing it collected is kept."
         )
 
     end = devices.parse_ts(snap.as_of) or now

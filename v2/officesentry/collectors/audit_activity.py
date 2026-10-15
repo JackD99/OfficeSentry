@@ -94,11 +94,17 @@ class _Run:
         self.kept += added.rows
         self.new += added.new
 
-    def content_type(self, client: feed.FeedClient, content_type: str, now: int, floor: int) -> events.Coverage:
-        """Read one content type's batches from where the last run stopped."""
+    def content_type(
+        self, client: feed.FeedClient, content_type: str, now: int, floor: int, started: int
+    ) -> events.Coverage:
+        """Read one content type's batches from where the last run stopped. On the first read, what the feed
+        made available since it ``started`` that Microsoft no longer lists is lost, not merely not there."""
         conn, tenant_id = self.ctx.conn, self.ctx.tenant["id"]
         cov = events.coverage(conn, tenant_id, f"activity:{content_type}")
+        first = cov.read_to is None
         events.extend(cov, now, floor, overlap=OVERLAP)
+        if first and cov.since is not None and started < cov.since:
+            cov.lost = [*cov.lost, [started, cov.since]][: events.MAX_LOST]
         events.save_coverage(conn, tenant_id, cov)
         while cov.gaps:
             if self.batches >= BATCH_BUDGET:
@@ -159,7 +165,7 @@ class AuditActivity(Collector):
         except feed.FeedError as exc:
             if not addon.removed(exc):
                 raise
-            addon.mark_off(conn, tenant["id"], addon.REMOVED)
+            addon.mark_removed(conn, tenant["id"])
             ctx.warn(addon.REMOVED)
             return
         if not addon.check_running(conn, tenant, subscriptions).ok:
@@ -176,11 +182,11 @@ class AuditActivity(Collector):
         covered: dict[str, events.Coverage] = {}
         try:
             for content_type in feed.CONTENT_TYPES:
-                covered[content_type] = run.content_type(ctx.feed, content_type, end, floor)
+                covered[content_type] = run.content_type(ctx.feed, content_type, end, floor, int(started.timestamp()))
         except feed.FeedError as exc:
             if not addon.removed(exc):
                 raise
-            addon.mark_off(conn, tenant["id"], addon.REMOVED)
+            addon.mark_removed(conn, tenant["id"])
             ctx.warn(addon.REMOVED)
             return
         ctx.log(

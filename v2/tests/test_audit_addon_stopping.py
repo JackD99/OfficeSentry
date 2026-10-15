@@ -23,7 +23,7 @@ from officesentry.reports.profile.base import Person
 from officesentry.snapshot import TenantSnapshot
 from tests.auditdata import TENANT, addon_on, collect, iso, sample
 from tests.conftest import login, make_user
-from tests.test_bulk_onboarding import _sign_in_works
+from tests.test_bulk_onboarding import LOGIN, _sign_in_works
 
 ROOT = f"https://manage.office.com/api/v1.0/{TENANT}/activity/feed"
 
@@ -79,10 +79,18 @@ class Microsoft:
     def __init__(self, status: str | None = "enabled"):
         self.status = dict.fromkeys(feed.CONTENT_TYPES, status) if status else {}
 
-    def tasks(self, app, db, vault, cfg) -> None:
-        """Run every queued task, highest priority first, against this feed."""
+    def tasks(self, app, db, vault, cfg, sign_in: str | None = None) -> None:
+        """Run every queued task, highest priority first, against this feed; with ``sign_in``, Microsoft refuses
+        the add-on app's sign-in with that error description."""
         with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
             _sign_in_works(rsps, guid=TENANT)
+            if sign_in:
+                rsps.replace(
+                    responses.POST,
+                    re.compile(re.escape(LOGIN) + r"/[^/]+/oauth2/v2\.0/token"),
+                    status=401,
+                    json={"error": "invalid_client", "error_description": sign_in},
+                )
             rsps.add_callback("GET", re.compile(re.escape(ROOT) + "/subscriptions/list"), callback=self._listing)
             rsps.add_callback(
                 "POST", re.compile(re.escape(ROOT) + "/subscriptions/(start|stop)"), callback=self._change

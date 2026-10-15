@@ -77,11 +77,13 @@ cloud too (**More options** before signing in).
 3. The client approves on Microsoft's consent page and lands on the thank-you page.
 4. Office Sentry confirms the approval by signing in as the add-on app and reading the client's feed
    subscriptions (one GET), checking every hour until it can, or now with **Check now**. Once it's
-   confirmed, it starts the feed and queues the first collection.
+   confirmed, it starts the feed and queues the first collection. A paused client isn't signed in to until
+   it's resumed.
 
 The onboarding tracker's **Audit log** column says whether each client's audit log is recording at all,
-and under it where the client has got with the add-on (Not asked, Sent, Approved, On, Off). If the audit
-log is off, the add-on has nothing to read, so have the client turn it on in Microsoft Purview first.
+and under it where the client has got with the add-on (Not asked, Sent, Approved, On, Off; *Approved,
+confirming* while Office Sentry hasn't signed in yet). If the audit log is off, the add-on has nothing to
+read, so have the client turn it on in Microsoft Purview first.
 
 Microsoft can take up to 12 hours after the feed starts to make the first records available, and doesn't
 give the past through the feed: the report fills from the day the feed started.
@@ -92,7 +94,8 @@ give the past through the feed: the report fills from the day the feed started.
   for (its link marked as sent, or switched on; a client whose admin approved unasked gets it once you switch
   it on). It leads with figures for the last 30 days (files deleted and downloaded, anyone links created,
   mailboxes opened by someone else, inbox rules changed, forwarding set) with their trends, then **Needs
-  attention** (an admin opening someone else's mailbox, forwarding, rules that forward or delete mail,
+  attention** (an admin opening someone else's mailbox, forwarding, inbox and mail flow rules that forward,
+  redirect, copy or delete mail,
   anyone links, auditing turned off, mailbox exports, malware, and mass deletes of 100 files or more by
   one person in an hour), then a table per kind of activity, who did most, and OneDrive sync per person
   and day. Like every detail report it has filters, saved views, PDF, XLSX and CSV, the All clients rollup
@@ -102,8 +105,8 @@ give the past through the feed: the report fills from the day the feed started.
 - **The client's Activity history page** says how many records are kept and where the add-on is up to.
 
 The records are read every night, with the rest of the client's collection. Microsoft keeps them in the
-feed for 7 days; if a client isn't collected for longer than that, the report says which hours couldn't be
-read.
+feed for 7 days; if a client isn't collected for longer than that, or its first collection comes more than 7
+days after the feed started, the report says which hours couldn't be read.
 
 ## 4. How long it's kept
 
@@ -117,9 +120,12 @@ database, and backed up and restored with it.
   collected; Office Sentry sends the stop calls, for whatever of the feed may be on, even if starting it
   only half worked. What was collected stays until retention removes it, unless you tick **Also delete the
   events collected**. **Switch on again** starts it again without asking the client, as long as they haven't
-  removed the app; while the stop calls are still being sent, the page says so and switching on waits.
+  removed the app; while the stop calls are still being sent, the page says so and switching on waits. If
+  Microsoft refuses a stop at your end (the add-on app's certificate, an outage), the page says why and
+  Office Sentry sends it again every hour for a week.
 - **By the client:** removing "Office Sentry audit log add-on" from *Enterprise applications* in their
-  tenant. Office Sentry notices at the next collection and shows the client as Off with the reason.
+  tenant. Office Sentry notices at the next collection and shows the client as Off with the reason. Their
+  approval went with the app, so switching it on again needs the link sent and approved again.
 - **At Microsoft:** if someone in the client's tenant turns the feed off for one kind of record, the next
   collection shows the client as Off with the reason, and Office Sentry stops the other kind too, so nothing
   is left on that nobody reads.
@@ -129,7 +135,8 @@ database, and backed up and restored with it.
   everywhere: its report, its pages, people's Timelines, report designs (a design that has its table leaves
   it out), and scheduled emails and month-end plans (a schedule that sends its report, or a saved view of
   it, sends the rest without them). It can't be switched off while any client's
-  feed is on or being started; switch those off first.
+  feed is on or being started, archived clients included (the page names them and lists them); switch those
+  off first.
 
 ## When something goes wrong
 

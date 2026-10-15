@@ -44,6 +44,8 @@ SYSTEM = {3, 4}
 
 FORWARDING = ("ForwardingSmtpAddress", "ForwardingAddress", "DeliverToMailboxAndForward")
 RULE_FORWARDS = ("ForwardTo", "ForwardAsAttachmentTo", "RedirectTo")
+# A mail flow rule that redirects mail, or sends a copy of it (Bcc, Cc, an added recipient) to someone else.
+FLOW_FORWARDS = ("RedirectMessageTo", "BlindCopyTo", "CopyTo", "AddToRecipients")
 RULE_DELETES = ("DeleteMessage", "SoftDeleteMessage", "PermanentDelete")
 EMPTY = {"", "$null", "null", "none", "false"}
 
@@ -301,7 +303,7 @@ def summary(record: dict, op: Operation) -> str:
     if op.name == "Set-Mailbox":
         return "; ".join(_changes(record, FORWARDING)) or "Forwarding removed"
     if op.group == "rules":
-        parts = _changes(record, RULE_FORWARDS + RULE_DELETES + ("MoveToFolder",))
+        parts = _changes(record, RULE_FORWARDS + FLOW_FORWARDS + RULE_DELETES + ("MoveToFolder",))
         props = properties(record)
         if not parts and props.get("ruleactions"):
             parts = [props["ruleactions"][:200]]
@@ -329,7 +331,7 @@ def attention(record: dict, op: Operation) -> str:
     if op.group == "rules" and op.name not in ("Remove-InboxRule", "Remove-TransportRule"):
         actions = " ".join(_changes(record, RULE_FORWARDS + RULE_DELETES)).lower()
         actions += " " + properties(record).get("ruleactions", "").lower()
-        if any(w in actions for w in ("forward", "redirect")):
+        if any(w in actions for w in ("forward", "redirect")) or _changes(record, FLOW_FORWARDS):
             return "A rule forwards mail."
         if "delete" in actions:
             return "A rule deletes mail."

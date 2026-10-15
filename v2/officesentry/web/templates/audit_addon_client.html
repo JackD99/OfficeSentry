@@ -14,7 +14,7 @@
     <div class="foot">{{ state.detail }}</div></div>
   <div class="tile"><div class="label">Last read</div>
     <div class="value small-value">{% if last_run %}{{ ts(last_run.finished_at or last_run.created_at) }}{% else %}Not yet{% endif %}</div>
-    <div class="foot">{% if last_run and last_run.status == 'failed' %}Failed: {{ last_run.error }}{% elif last_run %}Read every night with the rest of {{ tenant.name }}'s data.{% else %}Once the feed is on, every night.{% endif %}</div></div>
+    <div class="foot">{% if last_run and last_run.status == 'failed' %}Failed: {{ last_run.error }}{% elif last_run %}Read every night with the rest of {{ tenant.name|possessive }} data.{% else %}Once the feed is on, every night.{% endif %}</div></div>
   <div class="tile"><div class="label">Events kept</div>
     <div class="value">{{ '{:,}'.format(stored) }}</div>
     <div class="foot">Kept {{ retention }}.</div></div>
@@ -54,7 +54,7 @@
   <li class="{{ 'done' if confirmed else ('current' if sent else '') }}">
     <div class="step-title">The client approves</div>
     <div class="step-body">
-      {% if confirmed %}Confirmed {{ ts(row.consented_at) }}: Office Sentry signed in as the add-on and read {{ tenant.name }}'s feed settings.
+      {% if confirmed %}Confirmed {{ ts(row.consented_at) }}: Office Sentry signed in as the add-on and read {{ tenant.name|possessive }} feed settings.
       {% else %}
       A Global Administrator of {{ tenant.name }} opens the link, checks the one permission and presses <em>Accept</em>. Office Sentry then signs in as the add-on to confirm.
       {% if row and row.approved_at %}<p class="small">They came back from Microsoft saying they approved, {{ ts(row.approved_at) }}.</p>{% endif %}

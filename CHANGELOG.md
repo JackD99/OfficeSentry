@@ -29,6 +29,23 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
+- **Audit log add-on:**
+  - A client first collected more than 7 days after its feed started no longer says every night that its
+    first hours haven't been read yet: the report says which hours couldn't be read.
+  - A stop Microsoft refuses because of the add-on app's own certificate, or an outage, no longer says the
+    client removed the add-on, and is sent again every hour for a week.
+  - Switching a client on again after they removed the app no longer shows it as Approved: it asks for the
+    link to be sent again.
+  - An approval Office Sentry hasn't confirmed by signing in yet reads *Approved, confirming*, as onboarding's
+    does.
+  - A paused client is no longer signed in to, or its feed started, until it's resumed.
+  - An archived client whose feed is on, which keeps the add-on from being switched off for the install, is
+    named in the refusal and listed on the add-on's page.
+  - Mail flow rules that redirect mail or copy it to someone else are flagged in **Needs attention**, like
+    inbox rules that forward it.
+  - Once what was collected is deleted, the report no longer says it's kept until retention removes it.
+  - A client whose name ends in s reads "Northwind Traders'" on the add-on's page and in its email, not
+    "Northwind Traders's".
 
 ### Security
 

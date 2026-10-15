@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from ..formatting import capability, day, money, parse, strftime, when
 from ..reports.cells import breakable, display, pdf_cell, wrappable
+from ..reports.summary import possessive
 from ..text import plural, subject_label
 
 _strftime = strftime  # its old name, still used by templates' datefmt and email.py
@@ -80,6 +81,7 @@ def register(app) -> None:
         fromjson=fromjson,
         run_error=run_error,
         plural=plural,
+        possessive=possessive,  # "Northwind Traders'", not "Northwind Traders's"
         figure_columns=figure_columns,
         pdf_cell=pdf_cell,
         readable=display,
