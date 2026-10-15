@@ -1,12 +1,13 @@
 """No secret or private key reaches a browser, whoever asks.
 
 One of every kind of secret Office Sentry holds is planted (each app connection's private key and the one
-waiting to replace it, the mail app's key, client secret and SMTP password, the Microsoft sign-in app's
-keys, the alert webhook's address and signing secret, the monitoring token, a device code in flight,
-someone else's two-step secret, recovery codes, password hash and session, the session and encryption keys,
-and every encrypted value as stored; private keys as PEM text and as DER). Then every GET route in the URL
-map is opened, each download in every format, as an Administrator, an analyst, a client account and a client
-account signed in with its own Microsoft account, and every byte of every answer is searched: the page, its
+waiting to replace it, the audit log add-on app's too, the mail app's key, client secret and SMTP password,
+the Microsoft sign-in app's keys, the alert webhook's address and signing secret, the monitoring token, a
+device code in flight, someone else's two-step secret, recovery codes, password hash and session, the session
+and encryption keys, and every encrypted value as stored; private keys as PEM text and as DER). Then every GET
+route in the URL map is opened, each download in every format, as an Administrator, an analyst, a client
+account and a client account signed in with its own Microsoft account, and every byte of every answer is
+searched: the page, its
 headers, each file inside a spreadsheet, Word file or zip, and the page a PDF is made from. So are the log
 files the crawl wrote. The support package has its own test of this (``test_support.py``).
 """
@@ -66,6 +67,10 @@ def planted(app, db, vault, cfg, world):  # noqa: F811
     connection = store.get_connection(db, ids["connection_id"])
     secrets |= _key("app connection key", vault.decrypt(connection["key_enc"]))
     secrets |= _key("app connection's next key", cert_lifecycle.start(db, vault, ids["connection_id"], "x").key_pem)
+    # The audit log add-on's own app (the walk's world switches the add-on on).
+    [addon_app] = db.execute("SELECT * FROM app_connections WHERE kind = ?", (store.AUDIT,)).fetchall()
+    secrets |= _key("add-on app key", vault.decrypt(addon_app["key_enc"]))
+    secrets |= _key("add-on app's next key", cert_lifecycle.start(db, vault, addon_app["id"], "x").key_pem)
 
     mail = generate_certificate("mail")
     for key, value in {

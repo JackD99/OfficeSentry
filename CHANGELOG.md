@@ -35,6 +35,12 @@ approved before the update show the month as it is now, as before, until they're
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
+- **Settings → Updates:** an Action required that starts "Nonetheless" still asks for the tick, and a
+  Database upgrade that starts "Note" still shows its warning (only "None" and "No" as words count as
+  nothing to do). Release notes holding a NUL character no longer break the page.
+- **Update button:** when the data volume is full once the new version is running, the updater still goes
+  back to the version before if the new one isn't healthy, and an update that stops part way never says
+  "before anything was changed".
 - A mailbox's **History** shows its inbox rules removed when the client has none left, the usual end of a
   clean-up. The collection that found no rules was skipped, so the rules never showed as removed.
 - **As of** (a report shown as it was on a past day) no longer offers days with no data once the daily history
@@ -47,6 +53,24 @@ approved before the update show the month as it is now, as before, until they're
 - **Search** lists every domain of a client that matches, not only the first, and finds names and addresses
   that look like the start of an IP address (`cafe.de`) whether or not its index is up to date.
 - **Report history** names a week as the email does: "Week of 5 Oct 2026" rather than "Week 41, 2026".
+
+### Security
+
+- **Update button:** the updater only installs a release whose tag is on a commit in main's history, so a tag
+  pushed on another branch's commit (which runs that commit's own release workflow) is refused even though
+  its image is signed. The updater, which runs as root, never follows a link the portal could put in place of
+  its shared `updates` folder, when it makes the folder, writes its status or takes its lock, and a named pipe
+  or deeply nested file left as the request no longer stops it.
+- **Files and mailbox access:** only a file in the client's own SharePoint or OneDrive becomes a link shown by
+  its path. An inbox rule or other item named like an address on another host is shown whole and never as a
+  link, on the page, in the PDF and spreadsheet and in a person's timeline, so it can't pass for the client's
+  file.
+- **Connections:** the steps that add Office Sentry's permissions to an app registration only work on the
+  shared read-only app, never on the audit log add-on's app, which its clients approved for one permission.
+- **Clients:** a new client never gets the id of one that was deleted. Before, the next client added after
+  deleting the newest one took its id, and with it the deleted client's rows in the **Activity log**, its
+  name and domain included, for anyone granted the new client. Rows from before a client was added no longer
+  show as its own, so an id already reused this way stops showing the old client's history too.
 
 ### Security
 
