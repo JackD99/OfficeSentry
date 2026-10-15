@@ -19,6 +19,11 @@ OFFICESENTRY_INSECURE_COOKIES=1 python -m officesentry web   # http://127.0.0.1:
 python -m officesentry worker                                 # second terminal
 ```
 
+On a new data folder the portal prints a one-time link for creating the
+first admin (`python -m officesentry setup-link` prints it again). To work
+with fictional clients instead of an empty portal, load the demo data as the
+[developer guide](DEVELOPING.md#run-it-locally) shows.
+
 Use a virtual environment as above: on Debian or Ubuntu, installing into the
 system Python fails on the apt-installed `blinker` (if you must, add
 `--ignore-installed blinker`).
@@ -138,8 +143,10 @@ together ran every test.
   screenshots in the pinned browser and redraws the PDF pages (from your
   branch merged with main, as the checks compare them), commits what
   changed to the branch, takes the label off and starts the checks again.
-  It only works for branches of this repository, never main or a fork. Look
-  at the new images in the pull request before merging.
+  It only works for branches of this repository, never main or a fork. From
+  a fork, retake them with `--update` as `v2/tests/browser/README.md` and
+  `v2/tests/nightly/README.md` say, and commit them. Look at the new images
+  in the pull request before merging.
 - Mock Microsoft Graph at the HTTP layer with `responses`, never by
   replacing the client class. `tests/seed.py` answers every list a page at
   a time with a next link, as Microsoft does, so a collector that reads one

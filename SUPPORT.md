@@ -16,6 +16,7 @@ first answer can be the useful one.
 | Let your team sign in with their Microsoft accounts | [Staff sign-in with Microsoft](v2/docs/staff-sign-in.md) |
 | Let your clients' people sign in with their own work accounts | [Client sign-in with Microsoft](v2/docs/client-sign-in.md) |
 | Add a client and get consent | [Onboarding a client](v2/docs/onboarding-a-client.md) |
+| See who deleted, downloaded or shared a client's files, or opened someone else's mailbox | [The audit log add-on](v2/docs/audit-log-addon.md) | <!-- since 2.4.0 -->
 | Know what a report or check does, or what it reads | [Reports and features](v2/README.md), the [check catalogue](v2/docs/checks.md) and [What Office Sentry reads](v2/docs/what-office-sentry-reads.md) |
 | Ask "how do I...?" or "is it possible to...?" | [Discussions, Q&A](https://github.com/JackD99/OfficeSentry/discussions/categories/q-a) |
 | Report something that doesn't work | [Open a bug report](https://github.com/JackD99/OfficeSentry/issues/new?template=bug.yml) |
