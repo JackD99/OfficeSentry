@@ -54,6 +54,11 @@
 {% if flags and editable %}
 <div class="callout warn">{{ icon('alert') }}<div><strong>Needs your eyes:</strong> {{ flags|join(', ') }}.</div></div>
 {% endif %}
+{% if edited and not approving %}
+<div class="callout warn" id="changed">{{ icon('alert') }}<div class="grow"><strong>Changed since it was approved.</strong>
+  <span class="small">{{ tenant.name }} still sees the approved version. They get your changes when {{ 'you issue' if admin else 'an admin issues' }} a new version.</span></div>
+  {% if admin %}<a class="btn sm" href="#approve">Issue a new version</a>{% endif %}</div>
+{% endif %}
 <div class="callout" id="left-out" {% if not left_out %}hidden{% endif %}>{{ icon('hide') }}
   <div class="grow"><strong data-left-out-count>{{ left_out|length|plural('thing') }}</strong> left out of {{ tenant.name }}'s report this month. They stay on this page, greyed out; the client's PDF, email and portal don't have them.</div>
   <form method="post" action="{{ url_for('reporting.leave_out', period=period, tenant_id=tenant.id) }}" data-leave-out>{{ csrf() }}<button class="sm" name="op" value="all">Put everything back</button></form>
@@ -216,7 +221,7 @@
       <p class="small muted">The report is frozen as it is now, with your commentary, recommendations and client-visible notes, and {{ 'emailed to the client' if emailed else 'kept in the client\'s report history' if nobody else 'published to the client\'s report history' }}.</p>
       <form method="post" action="{{ url_for('reporting.approve', period=period, tenant_id=tenant.id) }}" data-busy="Approving…" id="approve-form">{{ csrf() }}<button class="primary">{{ icon('send') }} {{ 'Approve and send' if emailed else 'Approve' if nobody else 'Approve and publish' }}</button></form>
       {% else %}
-      <p class="small muted">Already issued. To change what the client has, issue a new version.</p>
+      <p class="small muted">{% if edited %}Already issued, and changed since. {{ tenant.name }} gets your changes with a new version.{% else %}Already issued. To change what the client has, issue a new version.{% endif %}</p>
       <form method="post" action="{{ url_for('reporting.approve', period=period, tenant_id=tenant.id) }}" data-busy="Issuing…">
         {{ csrf() }}
         <label>Why it's being issued again <input type="text" name="reason" maxlength="500" required aria-describedby="reason-hint">

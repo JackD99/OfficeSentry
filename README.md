@@ -60,7 +60,8 @@ can send just that.
 Before a month's reports go out, **Month-end** lists every client to review. On each one you write the commentary,
 pick what you recommend next, add notes to findings and leave out anything that client shouldn't get this month (a
 check, a key figure, a whole part of the report), with a preview of the client's copy beside you. Then approve
-one client or many: each is frozen as it is and emailed or published to the client's portal.
+one client or many: each is frozen as it is and emailed or published to the client's portal. Anything you change
+after approving waits for a new version, so the client's portal always matches what they were sent.
 
 **Report designs** let an account manager build their own client report without code: drag in blocks (a
 verdict, key figures, failing checks, what changed, licences, a table from any detail report, your own text),
