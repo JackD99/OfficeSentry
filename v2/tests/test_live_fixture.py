@@ -34,15 +34,12 @@ from tests.conftest import login, make_user
 
 FIXTURE = replay.load()
 # When the recording was made; checks that depend on dates (inactive accounts) use it.
-RECORDED = datetime(2026, 10, 12, 7, 20, tzinfo=UTC)
+RECORDED = datetime(2026, 10, 12, 18, 30, tzinfo=UTC)
 
 # Requests added since the recording, answered with Microsoft's documented response shape, and requests whose
 # $select asks for fields added since (the recorded response is served). Empty while the recording is current:
 # add an entry when a collector starts asking for something new, and re-record soon after.
-STAND_INS: dict[str, dict] = {
-    # Whether the Microsoft 365 audit log is on (2.4): Microsoft turns it on for new tenants.
-    "Get-AdminAuditLogConfig": {"value": [{"UnifiedAuditLogIngestionEnabled": True}]},
-}
+STAND_INS: dict[str, dict] = {}
 NEW_FIELDS: frozenset[str] = frozenset()
 
 
@@ -338,11 +335,12 @@ def test_directory_reports_on_real_data(db, live):
     apps = data_reports.build(db, live, "unused-apps", RECORDED)
     rows = {r[0]: (r, f) for r, f in zip(apps.sections[0].rows, apps.sections[0].flags, strict=True)}
     # Office Sentry's own test app signs in every night and is left out; Entra Connect's app signed in the day
-    # before; an in-house app and a third party's from an unverified publisher, both consented for everyone,
-    # have never signed in.
-    assert len(rows) == 3
+    # before; two in-house apps (one made that day) and a third party's from an unverified publisher, all
+    # consented for everyone, have never signed in.
+    assert len(rows) == 4
     assert sorted((r[1], r[3], f) for r, f in rows.values()) == [
         ("This organisation", "Last 30 days", None),
+        ("This organisation", "No sign-in on record", "medium"),
         ("This organisation", "No sign-in on record", "medium"),
         ("Unknown publisher", "No sign-in on record", "medium"),
     ]
@@ -406,13 +404,13 @@ def test_mail_protection_on_real_data(db, live):
 
 
 def test_mail_flow_on_real_data(db, live):
-    # Ten days of the message trace, read a day at a time: 20 messages, most of them received, and Microsoft's
+    # Ten days of the message trace, read a day at a time: 21 messages, most of them received, and Microsoft's
     # own summary of who got the most spam.
     report = data_reports.build(db, live, "mail-flow", RECORDED)
     tables = _tables(report)
     per_domain = tables["Mail per domain"].rows
-    assert sum(r[1] + r[2] + r[3] for r in per_domain) == 20
-    assert sum(r[4] + r[5] + r[6] + r[7] for r in per_domain) == 20  # delivered, junk, quarantined, failed
+    assert sum(r[1] + r[2] + r[3] for r in per_domain) == 21
+    assert sum(r[4] + r[5] + r[6] + r[7] for r in per_domain) == 21  # delivered, junk, quarantined, failed
     assert len(tables["Top spam recipients"].rows) == 1 and not tables["Top phishing recipients"].rows
 
 
