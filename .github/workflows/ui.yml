@@ -92,8 +92,9 @@ jobs:
         run: pip install --root-user-action=ignore --require-hashes --no-deps -r requirements-dev.txt -r tests/browser/requirements.txt
       - name: Every page at four widths
         # A problem fails the pull request; the run's summary page lists every one, and the layout download has
-        # each page's screenshot with the problem outlined.
-        run: python -m pytest tests/layout --layout -n 4 -p no:cacheprovider -q --tb=no -rf
+        # each page's screenshot with the problem outlined. -rfE names errors too (a check that broke while
+        # setting up or finishing, rather than finding a problem), with their first line.
+        run: python -m pytest tests/layout --layout -n 4 -p no:cacheprovider -q --tb=no -rfE
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
