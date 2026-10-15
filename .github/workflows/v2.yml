@@ -5,10 +5,10 @@ name: CI
 # private fork on GitHub Free, where minutes are limited, pull requests run Python 3.12 only and the Windows
 # job waits for main and the weekly run: the jobs below check github.event.repository.private.)
 #
-# Each Python's tests run in four parts on separate machines at the same time (pytest --shard,
-# tests/conftest.py), and Windows' in three, so a run takes minutes rather than a quarter of an hour. The
-# coverage job then adds up the parts' coverage for the 90% floor and checks that every test ran in exactly
-# one part (scripts/check_shards.py).
+# Each Python's tests run in parts on separate machines at the same time (pytest --shard, tests/conftest.py):
+# four for 3.12, which measures coverage, two each for 3.11 and 3.13, and three for Windows' subset, so a run
+# takes minutes rather than a quarter of an hour. The coverage job then adds up the parts' coverage for the
+# 90% floor and checks that every test ran in exactly one part (scripts/check_shards.py).
 #
 # Pull requests and pushes to main that only touch Markdown, docs/, examples/ or website/ skip the jobs
 # (website.yml builds the site), but "CI passed" always runs and reports, so it can be the one required check
@@ -113,7 +113,7 @@ jobs:
         run: git ls-files -z '*.sh' | xargs -0 shellcheck --severity=style
 
   test:
-    name: test (Python ${{ matrix.python }}, part ${{ matrix.part }} of 4)
+    name: test (Python ${{ matrix.python }}, part ${{ matrix.part }} of ${{ matrix.python == '3.12' && 4 || 2 }})
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
@@ -124,13 +124,21 @@ jobs:
         # Pull requests in the private repo: 3.12 only (the Docker image's Python). Everything else, and every
         # pull request once the repo is public: 3.11, 3.12 and 3.13.
         python: ${{ fromJSON(github.event_name == 'pull_request' && github.event.repository.private && '["3.12"]' || '["3.11", "3.12", "3.13"]') }}
-        # Change PARTS below with this list; the coverage job fails if a part is missing.
+        # Change PARTS and the name above with these lists; the coverage job fails if a part is missing.
         part: [1, 2, 3, 4]
+        # 3.11 and 3.13 run without coverage, in half the time, so two parts each finish with 3.12's four.
+        # That's four machines fewer for every pull request: GitHub runs 20 of the account's jobs at once, and
+        # with several pull requests open, jobs waited for a machine longer than they ran.
+        exclude:
+          - {python: '3.11', part: 3}
+          - {python: '3.11', part: 4}
+          - {python: '3.13', part: 3}
+          - {python: '3.13', part: 4}
         include:
           - python: '3.12'  # the Docker image's Python
             coverage: true
     env:
-      PARTS: 4
+      PARTS: ${{ matrix.python == '3.12' && 4 || 2 }}
       PART: ${{ matrix.part }}
       NAME: tests-${{ matrix.python }}-${{ matrix.part }}
     steps:
