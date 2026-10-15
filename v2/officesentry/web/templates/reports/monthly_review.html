@@ -45,8 +45,13 @@
 {% endblock %}
 {% block cover_meta %}
   {{ ui.meta('Prepared by', brand.display_name) }}
+  {%- if compact_cover %}{# four across in a band: short months, as other compact covers have #}
+  {{ ui.meta('Report date', report.generated_at|day) }}
+  {{ ui.meta('Period covered', (report.period_start|day if report.period_start.year != report.generated_at.year else report.period_start.day ~ ' ' ~ report.period_start.strftime('%b')) ~ ' to ' ~ report.generated_at|day) }}
+  {%- else %}
   {{ ui.meta('Report date', report.generated_at.day ~ ' ' ~ report.generated_at.strftime('%B %Y')) }}
   {{ ui.meta('Period covered', since ~ ' to ' ~ report.generated_at.day ~ ' ' ~ report.generated_at.strftime('%B %Y')) }}
+  {%- endif %}
   {{ ui.meta('Microsoft 365 tenant', report.tenant.tenant_ref) }}
 {% endblock %}
 {#- The account manager's words for the month. Under the verdict on a compact cover; on a full cover, whose

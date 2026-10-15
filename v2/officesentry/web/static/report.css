@@ -377,6 +377,8 @@ body.pdf .cover.compact .cover-logo img { height: 8mm; }
 body.pdf .cover.compact .cover-titles { position: static; flex: 1; }
 body.pdf .cover.compact h1 { font-size: 20pt; margin-bottom: 0; }
 body.pdf .cover.compact .cover-meta { padding: 3.5mm 0 4mm; grid-template-columns: repeat(4, 1fr); }
+/* On a portrait page, equal columns broke the period and the tenant's domain over two lines; size them to fit. */
+body.pdf article:not(.document) .cover.compact .cover-meta { grid-template-columns: repeat(4, auto); }
 body.pdf .cover.compact .cover-foot { display: none; }
 body.pdf .doc-compact h2 { margin: 5mm 0 2.2mm; }
 /* The summary's small print stays on its second page. */
