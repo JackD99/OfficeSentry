@@ -29,13 +29,14 @@ retention* settings.
 
 The 50 and 500 rows are scaled from the 200-client measurement. A client with
 twice the accounts takes about twice the room. "Disk to plan for" covers the
-operating system and Docker, the database, 7 nightly backups and the room a
-backup needs while it's being made (about the database's size again). Of the
+operating system and Docker, the database, 14 nightly backups (what the
+[nightly backup](#backups) keeps) and the room a backup needs while it's being
+made (about the database's size again). Of the
 4.0 GB, collected data is 0.8 GB (stored compressed); the rest is run history
 and trend figures, which grow by about 0.7 MB per client a month.
 
-Before collected data was compressed the same database was 13.8 GB and 7
-backups took about 97 GB. An existing install compresses its older data a few
+Before collected data was compressed the same database was 13.8 GB, and each
+backup about 14 GB. An existing install compresses its older data a few
 seconds a minute in the background after updating; the file then stops
 growing for a long while but doesn't shrink by itself. To get the space back
 at once, run this at a quiet time (it pauses collections while it runs; on a
@@ -91,27 +92,43 @@ size, not on the server: see `OFFICESENTRY_WORKER_CONCURRENCY` below.
 Running Portainer, a NAS, Kubernetes, Azure, AWS or another cloud? The [deploy guides](docs/deploy/README.md)
 start from there.
 
-1. Make a folder on the server (say `/opt/officesentry`) and open a terminal in it.
-   From the newest [release](https://github.com/JackD99/OfficeSentry/releases),
-   download `docker-compose.yml`, `Caddyfile` and `env.example` into it.
-   They run that release: the image `ghcr.io/jackd99/officesentry`, built,
-   tested and scanned by GitHub Actions, for amd64 (Intel and AMD) servers and, from 2.1.0,
-   arm64 (such as Ampere and Raspberry Pi 4 or 5).
+1. Make a folder on the server for Office Sentry, and download the newest
+   [release](https://github.com/JackD99/OfficeSentry/releases)'s `docker-compose.yml`, `Caddyfile` and
+   `env.example` into it, as a user who can run `docker`:
+
+   ```bash
+   sudo mkdir -p /opt/officesentry && sudo chown "$USER" /opt/officesentry && cd /opt/officesentry
+   release=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/JackD99/OfficeSentry/releases/latest)
+   release=${release##*/}
+   for f in docker-compose.yml Caddyfile env.example; do
+     curl -fsSLO "https://github.com/JackD99/OfficeSentry/releases/download/$release/$f"
+   done
+   ```
+
+   They run that release: the image `ghcr.io/jackd99/officesentry`, built, tested and scanned by GitHub
+   Actions, for amd64 (Intel and AMD) and arm64 (such as Ampere and Raspberry Pi 4 or 5) servers.
 2. Create your settings file: `cp env.example .env`
 3. Open `.env` in an editor (`nano .env`) and set at least:
    - `OFFICESENTRY_BASE_URL` to the address people will use, e.g. `https://sentry.yourmsp.com`
    - `OFFICESENTRY_DOMAIN` to the domain alone, e.g. `sentry.yourmsp.com`
    - `OFFICESENTRY_TIMEZONE` to your timezone, e.g. `Europe/London`
 
-   `OFFICESENTRY_VERSION` is already set to the release you downloaded.
-4. Start it, with automatic HTTPS:
+   and add this line, so that every `docker compose` command in this folder includes Caddy, which gets and
+   renews the HTTPS certificate:
 
-   ```bash
-   docker compose --profile https up -d
+   ```
+   COMPOSE_PROFILES=https
    ```
 
-   Already have a reverse proxy (nginx, Traefik)? Leave out `--profile https`
-   and point the proxy at `http://127.0.0.1:8000`.
+   Already have a reverse proxy (nginx, Traefik)? Leave that line out and point the proxy at
+   `http://127.0.0.1:8000`. `OFFICESENTRY_VERSION` is already set to the release you downloaded.
+4. Point your domain's DNS at the server and open ports 80 and 443 in its firewall (Let's Encrypt checks
+   the domain on port 80), then start it:
+
+   ```bash
+   docker compose up -d
+   ```
+
 5. Create the first admin account. Run `docker compose logs web`, find the line
    starting **No admin account yet** and open the link on it (`docker compose exec
    web python -m officesentry setup-link` prints it again). Choose a username and
@@ -121,6 +138,15 @@ start from there.
    connection** (or open **Settings → App connection**) and press **Sign in to Microsoft**. Enter the code it
    shows on Microsoft's page and sign in as an admin of your own tenant who can create app registrations.
    Office Sentry creates its read-only app and then offers to add your first client. No command needed.
+7. Save the key that decrypts the stored certificates and passwords somewhere safe, away from the server
+   and its backups, such as your password manager. `docker compose exec web cat /keys/secrets.json`
+   prints it ([Where the keys are](#where-the-keys-are)). Without it, a backup can't be used on a new
+   server.
+8. Set up the nightly backup and an off-site copy ([Backups](#backups)), so that losing the server doesn't
+   lose the data.
+
+When something doesn't work, [Troubleshooting](docs/troubleshooting.md) covers the usual causes, and
+[Getting help](docs/getting-help.md) says where to ask.
 
 ## Is it working?
 
@@ -294,6 +320,7 @@ hosts (login.microsoftonline.us, graph.microsoft.us, outlook.office365.us for
 GCC High; login.microsoftonline.us, dod-graph.microsoft.us, webmail.apps.mil
 for DoD; login.chinacloudapi.cn, microsoftgraph.chinacloudapi.cn,
 partner.outlook.cn for China), so allow them if outbound traffic is filtered.
+The audit log add-on also reads manage.office365.us (GCC High) or manage.protection.apps.mil (DoD). <!-- since 2.4.0 -->
 
 Each of those clouds needs its own app registration, made in that cloud, and
 its own app connection in Office Sentry with the matching cloud: on **App connection**, open
@@ -345,6 +372,7 @@ are overwritten in the database file where that costs no extra I/O
 | Activity history: every sign-in | **180 days** | 30 days to 10 years |
 | Activity history: daily sign-in summaries | **25 months** | 1 to 120 months, or forever |
 | Activity history: directory audit events | **7 years** | 1 year or more, or forever |
+| Activity history: files and mailbox events (the audit log add-on) | **2 years** | 6 months to 7 years, or forever | <!-- since 2.4.0 -->
 | Resolved findings | forever | 30 days or more after they were resolved |
 | Run log info lines (warnings and errors always stay) | 90 days | 7 days or more, or forever |
 | Activity log | forever | 365 days or more |
@@ -626,8 +654,8 @@ client asks for their data to be erased.
    folder when you have it; a file restored without it says so, and the history
    then starts again from what Microsoft still keeps (30 days). Older,
    uncompressed `.db` backups restore the same way.
-   Versions of Office Sentry from before 2.2.0 can't read `.db.gz`
-   files: unpack one first with `gunzip -k <file>` and restore the `.db`.
+   Builds of Office Sentry from before its first release (2.0.0) can't read
+   `.db.gz` files: unpack one first with `gunzip -k <file>` and restore the `.db`.
 
    It checks that the file is a sound Office Sentry database, saves the
    database it replaces as `/data/backups/pre-restore-<time>.db.gz`, and copies
@@ -665,11 +693,12 @@ is the activity history.
 2. Copy the folder to the new server (`scp -r` or `rsync -a`), say to
    `/srv/officesentry-backups`, and give it to the container's user there:
    `sudo chown -R 10001 /srv/officesentry-backups`.
-3. Install as in *First start* (skip creating the admin), with the
-   `docker-compose.override.yml` from [Backups](#backups) that mounts the folder
-   at `/backups`.
-4. Stop both containers and put back `secrets.json` as in step 3 of
-   [Restoring a backup](#restoring-a-backup).
+3. Copy the folder with `docker-compose.yml` from the old server to the same place on the new one (such as
+   `/opt/officesentry`): `docker-compose.yml`, `Caddyfile` and `.env`, and, when you have them,
+   `.env.backup`, `.env.uptime`, `docker-compose.override.yml` and `deploy/jobs.sh`. If you don't have the
+   override, make the one from [Backups](#backups) that mounts the backups folder at `/backups`.
+4. Start Office Sentry (`docker compose up -d`), then stop both containers and put back `secrets.json` as
+   in step 3 of [Restoring a backup](#restoring-a-backup).
 5. Restore the newest backup from the folder. It says how many activity history
    files it put back:
 
@@ -677,8 +706,10 @@ is the activity history.
    docker compose run --rm --no-deps web python -m officesentry restore /backups/officesentry-20261005-033000.db.gz
    ```
 
-6. Start again: `docker compose --profile https up -d`, then point your domain
-   at the new server.
+6. Start again: `docker compose up -d`, then point your domain at the new server.
+7. If the old server ran `deploy/jobs.sh`, schedule it on the new one (`OFFICESENTRY_DIR=$PWD bash
+   deploy/jobs.sh schedule`), and take the lines out of the old server's crontab (`crontab -e`) so that both
+   don't send copies to the same off-site storage.
 
 ### Restoring from the off-site copy
 
@@ -762,22 +793,25 @@ Then install it with the **Update button** (below), or by hand:
    gave the keys their own volume, 2.2.0 gave the portal longer to start and
    hardened Caddy). Keep changes of your own in `docker-compose.override.yml`,
    which a new download doesn't touch.
-2. Set the new version in `.env` (`OFFICESENTRY_VERSION=2.3.1`).
+2. Set the new version in `.env`: `OFFICESENTRY_VERSION=` and the release's
+   number, without its `v`.
 3. Run:
 
    ```bash
-   docker compose --profile https pull
-   docker compose --profile https up -d
+   docker compose pull
+   docker compose up -d
    docker compose restart caddy
    ```
 
    The last line makes Caddy read the new `Caddyfile`, which it only reads when
-   it starts. Running your own reverse proxy (*First start*, step 4)? Leave out
-   `--profile https` and the last line. With Caddy, leaving out the profile
-   keeps Caddy on its old container and settings. Turned the updater on (*The
-   Update button*, below)? Then the `COMPOSE_PROFILES` line in `.env` names your
-   profiles: leave out `--profile https`, since it would replace that line and
-   leave the updater on the old version.
+   it starts. Running your own reverse proxy (*First start*, step 3)? Leave out
+   the last line.
+
+   Installed before the `COMPOSE_PROFILES=https` line was in *First start*, and
+   started Office Sentry with `docker compose --profile https up -d`? Add
+   `COMPOSE_PROFILES=https` to `.env` once (or `COMPOSE_PROFILES=https,updater`
+   with the updater). Without it, these commands leave Caddy on its old container
+   and settings.
 
 The portal upgrades the database on start, before the worker starts, after
 saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept. The
@@ -790,8 +824,8 @@ running shows at the foot of the menu and at `/health`.
 Updated from a release before 2.1.0? `docker compose exec web cat
 /keys/secrets.json` should now print the key. If it says *No such file*, the
 `docker-compose.yml` is still the old one, which keeps the key in the data
-volume: download the release's and run `docker compose --profile https up -d`
-again. The portal's log then says **Moved the key file**.
+volume: download the release's and run `docker compose up -d` again. The
+portal's log then says **Moved the key file**.
 
 ### The Update button
 
@@ -810,10 +844,10 @@ out giving a container the Docker socket, leave it off and update by hand.
 
 To turn it on, once:
 
-1. In the folder with `docker-compose.yml`, add `COMPOSE_PROFILES=updater` to `.env`, or add `updater`
-   to the `COMPOSE_PROFILES` line already there (`COMPOSE_PROFILES=https,updater`). Start Office Sentry
-   with `--profile https`? Put `COMPOSE_PROFILES=https,updater` in `.env` instead and leave the flag out
-   from now on: a `--profile` on the command line overrides the line in `.env`.
+1. In the folder with `docker-compose.yml`, add `updater` to the `COMPOSE_PROFILES` line in `.env`
+   (`COMPOSE_PROFILES=https,updater`), or add `COMPOSE_PROFILES=updater` if there isn't one. Still
+   starting Office Sentry with `--profile https`? Put `COMPOSE_PROFILES=https,updater` in `.env` instead,
+   and leave the flag out from now on: a `--profile` on the command line overrides the line in `.env`.
 2. If your `docker-compose.yml` came with a release before 2.3.0, download the one attached to the
    newest release: it has the `updater` service.
 3. Run `docker compose up -d`. Within a minute *Settings → Updates* shows the updater as *Ready*.
@@ -829,7 +863,7 @@ Pressing **Update** then:
    at (checked with [cosign](https://github.com/sigstore/cosign)).
 3. **Downloads it** by its digest, so Docker checks every byte against what was verified.
 4. **Restarts on the new version**: the `OFFICESENTRY_VERSION` line in `.env` becomes the version and
-   the exact image it checked (`2.3.1@sha256:...`), and the old file is kept as `.env.before-update`;
+   the exact image it checked (`<version>@sha256:...`), and the old file is kept as `.env.before-update`;
    then `docker compose up -d web worker`, the same as updating by hand. The portal is down until the new
    one is up, longer while the database is upgraded (a `pre-upgrade-*` copy is made first, as always).
 5. **Checks it's working**: the portal and the worker must report healthy on exactly that image.
@@ -870,7 +904,7 @@ path (rootless Docker's is usually `/run/user/1000/docker.sock`).
 
 To turn it off, take `updater` out of `COMPOSE_PROFILES` and run
 `docker compose --profile updater rm --stop --force updater`. Updating by hand works the same with or
-without it, and a version pinned by the button (`2.3.1@sha256:...`) can be replaced by a plain one.
+without it, and a version pinned by the button (`<version>@sha256:...`) can be replaced by a plain one.
 
 ### When a release adds permissions
 
@@ -920,7 +954,8 @@ restore.
    `docker compose run --rm --no-deps -T --entrypoint sh web -c 'cp -p /keys/secrets.json /data/secrets.json'`.
 3. Go back to the version you had: set it in `.env` (`OFFICESENTRY_VERSION=2.0.0`)
    and run `docker compose pull`. After the Update button, `.env.before-update` is `.env` as it was
-   before. Building your own? `git checkout <commit>` and `docker compose build`.
+   before, so `cp .env.before-update .env` does the first part. Building your own? `git checkout <commit>`
+   and `docker compose build`.
 4. Restore the copy taken before the upgrade. Its name ends with the version
    that made it (`-from-2.0.0`), when it was made by 2.0.0 or later:
 
@@ -940,6 +975,26 @@ restore.
 progress is given up to two minutes to finish. Never use `down -v` unless you
 mean to delete all data.
 
+## Removing Office Sentry
+
+To take Office Sentry off a server for good, along with the access it was given:
+
+1. **Clients' tenants.** Each client's admin takes Global Reader away from the app and deletes the
+   enterprise application ("Office Sentry (read-only)" unless you named it otherwise) in the Entra admin
+   centre. They do the same for the sign-in app ("Office Sentry sign-in") if their people sign in to the portal
+   with Microsoft.
+   They also delete the audit log add-on's app if they approved it. <!-- since 2.4.0 -->
+   [What Office Sentry reads](docs/what-office-sentry-reads.md#how-to-remove-access) has the steps to send
+   them.
+2. **Your own tenant.** Under *Entra admin centre → App registrations*, delete the app registrations
+   Office Sentry made or you made for it: the read-only app, and the sign-in and mail apps if you have them.
+   The audit log add-on's app goes too. <!-- since 2.4.0 -->
+3. **The server.** In the folder with `docker-compose.yml`, run `docker compose down -v` (this deletes
+   the database, the keys and every backup inside the volumes), take the Office Sentry lines out of the
+   crontab (`crontab -e`), and delete the folder.
+4. **Copies elsewhere.** Delete the off-site storage bucket, any backup folder outside the volumes
+   (such as `/srv/officesentry-backups`), and the copy of `secrets.json` you saved.
+
 ## Running on Windows without Docker
 
 Docker is the supported way to run Office Sentry. A Windows server without
@@ -948,8 +1003,10 @@ Docker works too, with one difference: PDF buttons open a print-ready page
 without PDF attachments, because WeasyPrint's Pango libraries aren't
 available on Windows.
 
-1. Install Python 3.12 from python.org, and copy the `v2` folder to the
-   server (say `C:\OfficeSentry\v2`).
+1. Install Python 3.12 from python.org. From the newest
+   [release](https://github.com/JackD99/OfficeSentry/releases), download
+   **Source code (zip)** and copy the `v2` folder in it to the server (say
+   `C:\OfficeSentry\v2`).
 2. In PowerShell, in that folder:
 
    ```powershell
@@ -976,9 +1033,18 @@ available on Windows.
 6. Create the first admin from the link that
    `.venv\Scripts\python.exe -m officesentry setup-link` prints.
 7. Back up with a scheduled task running
-   `python.exe -m officesentry backup --dir D:\OfficeSentryBackups` (a
-   different disk from the data), and keep a copy of `secrets.json`
-   elsewhere. Restoring works as above: stop both services, run
-   `python -m officesentry restore <file>`, start them. To update, stop both
-   services, replace the `v2` folder, run `.venv\Scripts\pip install .` again
-   and start them.
+   `C:\OfficeSentry\v2\.venv\Scripts\python.exe -m officesentry backup --dir D:\OfficeSentryBackups --keep 14`
+   every night (a different disk from the data), and keep a copy of `secrets.json` somewhere safe, away
+   from the server.
+
+To restore, stop both services, run `.venv\Scripts\python.exe -m officesentry restore <file>` in the `v2`
+folder, and start them again.
+
+To update, read the release's notes as in [Updating](#updating), then:
+
+1. Stop both services.
+2. Download the new release's **Source code (zip)**, and replace everything in `C:\OfficeSentry\v2`
+   with its `v2` folder, except the `.venv` folder.
+3. In PowerShell, in `C:\OfficeSentry\v2`, run `.venv\Scripts\pip install .` again.
+4. Start both services. The portal upgrades the database when it starts, after saving a `pre-upgrade-*`
+   copy in the data folder's `backups`.

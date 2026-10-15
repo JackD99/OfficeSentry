@@ -47,6 +47,22 @@ collection run, saying when a failed run is tried again by itself and which fail
 
 ### Fixed
 
+- [v2/DEPLOY.md](v2/DEPLOY.md), *Running on Windows without Docker*: updating no longer deletes the virtual
+  environment. The steps said to replace the `v2` folder, which holds `.venv`; they now say to replace
+  everything in it except `.venv`.
+- [v2/DEPLOY.md](v2/DEPLOY.md), *First start*: it gives the commands that download the release's files, and
+  turns HTTPS on with `COMPOSE_PROFILES=https` in `.env`, as the cloud start-up file already did, so later
+  commands need no `--profile https`. It also ends with saving the key and setting up backups. *Updating* says
+  how an install started with `--profile https` moves over. *Moving to a new server* copies `.env.backup`, the
+  override and the backup jobs too. A new *Removing Office Sentry* section takes away the access Office
+  Sentry was given, as well as the server.
+- The deploy docs:
+  - [Troubleshooting](v2/docs/troubleshooting.md) covers an address that doesn't load, or a certificate
+    warning.
+  - [Securing the portal](v2/docs/securing-the-portal.md) no longer says sign-in failures can go to a webhook.
+  - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
+  - The NAS guide's backup copies no longer pile up.
+  - The Azure and AWS guides restart Caddy after an update.
 - **Off-site backups and the restore drill run from cron.** `deploy/jobs.sh schedule` wrote crontab lines that
   looked for Office Sentry in `/opt/officesentry/v2`, where only the project's own server keeps it, and kept
   its log and lock in the folder above, which a normal user can't write. The lines now name the folder they

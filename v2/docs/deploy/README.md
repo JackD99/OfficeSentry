@@ -53,12 +53,14 @@ Whichever guide you follow, these hold. They explain most of the choices in the 
   by user ID 10001 (`chown 10001 <folder>`), or the portal stops at start with
   `PermissionError: [Errno 1] Operation not permitted: '/data'`.
 - **Size.** At least 2 CPUs and 4 GB of memory for the two together, and disk by the number of clients
-  ([How much disk](../../DEPLOY.md#how-much-disk)). The image is published for amd64 (Intel and AMD) and,
-  from 2.1.0, arm64 (such as Ampere, AWS Graviton and Raspberry Pi 4 or 5).
-- **Network.** The server makes outbound HTTPS calls to Microsoft (sign-in, Graph and Exchange Online), to
-  `ghcr.io` for updates, and once a day to `api.github.com` for the list of releases (*Settings → Updates*
-  can turn that off). Nothing from Microsoft ever connects in: only the people using the portal need to
-  reach it, plus a client's administrator returning from Microsoft's consent page (`/consent/callback`).
+  ([How much disk](../../DEPLOY.md#how-much-disk)). The image is published for amd64 (Intel and AMD) and
+  arm64 (such as Ampere, AWS Graviton and Raspberry Pi 4 or 5).
+- **Network.** The server makes outbound HTTPS calls to Microsoft (sign-in, Graph, Exchange Online and each
+  client's SharePoint), to `ghcr.io` for updates, and once a day to `api.github.com` for the list of releases
+  (*Settings → Updates* can turn that off).
+  The audit log add-on also reads Microsoft's activity feed at `manage.office.com`. <!-- since 2.4.0 -->
+  Nothing from Microsoft ever connects in: only the people using the portal need to reach it, plus a
+  client's administrator returning from Microsoft's consent page (`/consent/callback`).
 - **Updating.** Each guide says how: change the release and redeploy. *Settings → Updates* lists every new
   release and what it asks of you. Its **Update button** needs the updater container that the release's
   `docker-compose.yml` adds, run by Docker Compose from a folder on the server
@@ -104,8 +106,13 @@ until both variables are set; to move, copy the two values out of it.
 
 Everything in [Running it on your own server](../../DEPLOY.md) that starts `docker compose exec web` works
 on every platform: run the same `python -m officesentry ...` command in the portal's container (a
-container manager's console, `docker exec`, or `kubectl exec`). Backups, restoring, the support package and
-rotating keys all work this way, and each guide says where its console is.
+container manager's console, `docker exec`, or `kubectl exec`). Backups, the support package and rotating
+keys all work this way, and each guide says where its console is.
+
+Restoring is the exception: it refuses while the worker runs, and the portal shouldn't be serving while its
+database is replaced. Stop both, run `restore` in a one-off container with the same two volumes, then start
+them again. [Portainer](portainer.md#keys-and-backups) shows the `docker run` command, which works on any Docker host,
+and [Kubernetes](kubernetes.md) has its own steps.
 
 ## Not supported, and why
 
