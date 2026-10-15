@@ -90,9 +90,11 @@ def test_long_addresses_wrap_after_the_at_sign_and_long_parts_after_their_dots()
     )  # a long name before the "@" may break at its dot; the short domain stays whole
     assert (
         str(wrappable("v=spf1 include:spf.protection.outlook.com -all"))
-        == "v=spf1 include:spf.<wbr>protection.<wbr>outlook.<wbr>com -all"
-    )  # and so may a long host name in a DNS record
-    assert str(wrappable("contoso-com.mail.protection.outlook.com.")).endswith("outlook.<wbr>com.")
+        == "v=spf1 include:spf.<wbr>protection.<wbr>outlook.com -all"
+    )  # and so may a long host name in a DNS record, though never before its short ending
+    assert str(wrappable("contoso-com.mail.protection.outlook.com.")).endswith("protection.<wbr>outlook.com.")
+    assert str(wrappable("northwindtraders.onmicrosoft.com")) == "northwindtraders.<wbr>onmicrosoft.com"
+    assert str(wrappable("fabrikamresidentialservices.co.uk")) == "fabrikamresidentialservices.<wbr>co.uk"
     assert "<wbr>" not in str(wrappable("Privileged Authentication Administrator"))
     assert str(wrappable("<b>" * 12)) == "&lt;b&gt;" * 12  # escaped
 

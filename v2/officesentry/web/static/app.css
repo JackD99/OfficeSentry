@@ -376,6 +376,7 @@ button[aria-busy="true"]::before { content: ""; flex: none; width: 13px; height:
   table.stack-sm td { display: flex; justify-content: flex-end; gap: var(--space-1) var(--space-3); border: 0; padding: 3px 0 !important; text-align: right; }
   table.stack-sm td::before { content: attr(data-label); margin-right: auto; color: var(--muted); font-size: var(--fs-sm); text-align: left; }
   table.stack-sm td:first-child { display: block; text-align: left; font-weight: 600; }
+  table.stack-sm td:first-child .sub { font-weight: normal; }
   table.stack-sm td:first-child::before { content: none; }
   table.stack-sm td:empty { display: none; }
   .card.flush table.stack-sm tr { padding-left: var(--space-4); padding-right: var(--space-4); }

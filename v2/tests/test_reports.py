@@ -94,6 +94,9 @@ def test_prices_page(client, db, two_tenants):
     assert db.execute("SELECT monthly_price FROM sku_prices WHERE sku_part_number = 'SPB'").fetchone()[0] == 22
     assert db.execute("SELECT 1 FROM sku_prices WHERE sku_part_number = 'OLD'").fetchone() is None
     assert db.execute("SELECT value FROM settings WHERE key = 'currency'").fetchone()[0] == "USD"
+    assert 'name="price:SPB" inputmode="decimal" placeholder="–" value="22.00"' in client.get("/admin/prices").get_data(
+        as_text=True
+    )  # prices read as money, "22.00" and "3.30" rather than "22.0" and "3.3"
     report = build(db, store.get_tenant(db, alpha))
     assert report.licences.monthly_waste == 22 * (3 + 1)  # 3 unassigned + Bob (disabled)
 

@@ -10,7 +10,7 @@ together and ``directory()`` lists every mailbox for the Mailboxes page.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from .. import store, usage
 from ..collectors.exchange import SYSTEM_MAILBOX_TYPES
@@ -203,13 +203,15 @@ def size_part(m: Mailbox) -> Part:
     if len(history) >= 2:
         points = [(when.date(), float(size)) for when, size in history]
         result.chart = storage_chart(points, "Mailbox size over time", m.now, float(quota) if quota else None)
-        months: dict[str, int] = {}
+        months: dict[tuple[int, int], int] = {}
         for when, size in history:
-            months[when.strftime("%Y-%m")] = size
+            months[(when.year, when.month)] = size
         table = Section("Size by month", ["Month", "Size", "Change"], intro="The last collection of each month.")
         previous = None
-        for month, size in sorted(months.items()):
-            table.add([month, _size(size), _signed(size - previous) if previous is not None else ""])
+        for (y, mo), size in sorted(months.items()):
+            table.add(
+                [f"{date(y, mo, 1):%B %Y}", _size(size), _signed(size - previous) if previous is not None else ""]
+            )
             previous = size
         table.rows.reverse()
         table.flags.reverse()

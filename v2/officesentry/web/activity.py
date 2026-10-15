@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, timedelta
 
 from flask import Blueprint, Response, g, render_template, request
 
+from .. import permissions
 from ..db import AUDIT_NOISE, AUDIT_NOISE_DAYS, audit
+from ..reports.evidence_answers import QUESTIONS as ANSWERED
 from ..reports.tables import Table, to_csv
 from .access import current, needs, unseen_client_accounts, visible_tenants
 
@@ -90,6 +93,39 @@ def tenant_label(row, names: dict[int, str], added: dict[int, str]) -> str:
     return f"Client #{tenant_id} (deleted or not visible)"
 
 
+QUESTIONS = {q.key: q.question for q in ANSWERED}
+ACCESS_WORD = re.compile(r"([+-])([a-z_.]+)(?:@(\d+))?")
+
+
+def detail_text(row, names: dict[int, str], added: dict[int, str]) -> str:
+    """A row's detail in words where it was stored as keys: "jordan.desk: +collect@2" reads "jordan.desk:
+    allowed Refresh data for Alpha Ltd" (a client named as the Client column names it), and an evidence answer
+    names its question. Everything else (and the CSV export) shows the detail as stored."""
+    action, detail = row["action"], row["detail"] or ""
+    if action == "user_access_changed" and ": " in detail:
+        who, words = detail.split(": ", 1)
+        if words == "none":
+            return f"{who}: no exceptions to their role"
+        parts = []
+        for word in words.split(", "):
+            m = ACCESS_WORD.fullmatch(word)
+            if not m:
+                return detail
+            sign, key, tid = m.groups()
+            cap = permissions.BY_KEY.get(key)
+            client = tenant_label({"tenant_id": int(tid), "ts": row["ts"]}, names, added) if tid else ""
+            what = (cap.title if cap else key) + (f" for {client}" if client else "")
+            parts.append(f"{'allowed' if sign == '+' else 'not allowed'} {what}")
+        return f"{who}: {'; '.join(parts)}"
+    if action == "evidence_answer_set":
+        m = re.fullmatch(r"([a-z0-9_]+): (.+) \(suggested (.+)\)", detail)
+        if m and m[1] in QUESTIONS:
+            return f"{QUESTIONS[m[1]]} Answer: {m[2]} (suggested: {m[3]})"
+    if action == "evidence_answer_cleared" and detail in QUESTIONS:
+        return f"{QUESTIONS[detail]} Back to the suggested answer"
+    return detail
+
+
 @bp.get("/admin/activity")
 @needs("activity_log.read")
 def index():
@@ -119,6 +155,7 @@ def index():
         names=names,
         tenant_label=tenant_label,
         added=_added(),
+        detail_text=detail_text,
         actions=actions,
         users=users,
         tenants=sorted(names.items(), key=lambda kv: kv[1].lower()),
