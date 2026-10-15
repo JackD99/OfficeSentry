@@ -245,8 +245,13 @@ jobs:
           cache: pip
           cache-dependency-path: v2/pyproject.toml
       - run: pip install -e ".[dev]"
+      # Six minutes a test rather than two: Windows runners are several times slower than Linux ones and vary
+      # more, and on 12 October the isolation walk ran past two minutes there, which ends the worker process
+      # (the only way the timeout can stop a test on Windows). Every thread's stack is logged ten seconds
+      # before the limit, and the slowest tests are listed at the end.
       - run: >-
-          pytest -n auto --shard ${{ matrix.part }}/3 tests/test_foundation.py tests/test_access.py tests/test_login_security.py
+          pytest -n auto --timeout=360 -o faulthandler_timeout=350 --durations=20
+          --shard ${{ matrix.part }}/3 tests/test_foundation.py tests/test_access.py tests/test_login_security.py
           tests/test_scheduling.py tests/test_backups.py tests/test_serve.py tests/test_recording.py
           tests/test_pdf_export.py tests/test_reports.py tests/test_email.py tests/test_encoding.py
           tests/test_user_profile.py tests/test_pages.py tests/test_isolation_walk.py

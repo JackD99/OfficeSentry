@@ -134,7 +134,8 @@ and a final check fails unless the parts together ran every test.
   page loses most of the seed and its tests fail.
 - Tests ignore any `OFFICESENTRY_*` variables in your shell, fail if they
   leave a database connection open, and fail after two minutes if they
-  hang. Coverage counts branches as well as lines.
+  hang (six on CI's Windows runners), logging every thread's stack just
+  before. Coverage counts branches as well as lines.
 - Never add a write call to a tenant or a non-read-only permission.
 - Every route says what it needs with `@needs(...)`: the capabilities
   (`permissions.py`) a person must hold, or `kind="staff"` for a page
