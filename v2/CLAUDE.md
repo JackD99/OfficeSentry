@@ -1108,8 +1108,8 @@ put in its place: it opens the folder with `O_NOFOLLOW` (`open_folder`) and work
 and its copy of the status there is best effort (the `/state` one is what it goes by). A job is
 check, verify, download, switch, health, finish (`updater.STEPS`); it refuses (`Refused`) anything but a
 published, newer, same-major release of this repository whose tag is on a commit in main's history
-(`GitHub.on_main`), whose index digest has build provenance signed by
-`release.yml` for the tag's commit and whose `docker-compose.yml` and `Caddyfile` at that commit are the
+(`GitHub.on_main`), whose index digest has build provenance signed by `release.yml` for the tag's commit
+and whose `docker-compose.yml` and `Caddyfile` at that commit are the
 install's (`same_files`, `RELEASE_FILES`: the button only changes the image, so a release that changes them,
 or a file edited on the server, is a hand update), and goes back by itself (`Broken`, `rollback`) when the new version
 doesn't start healthy, restoring the `pre-upgrade-*` copy `db.migrate` made when the database changed
