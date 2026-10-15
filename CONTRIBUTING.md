@@ -97,8 +97,9 @@ with [ShellCheck](https://www.shellcheck.net) at its strictest level:
 `shellcheck --severity=style <file>` (`tests/test_deploy_hardening.py` runs it
 too when it's installed).
 
-CI runs the same on Python 3.12 for every pull request, with a Docker image
-build, a dependency audit (`pip-audit`) and a subset on Windows, and on 3.11
+CI runs the same on Python 3.12 for every pull request, with the Docker image
+built as a release builds it (with its SBOM and build provenance), a
+dependency audit (`pip-audit`) and a subset on Windows, and on 3.11
 and 3.13 too once it's merged (and on a pull request that changes the
 dependencies or the CI workflow). Changes that only touch Markdown, `docs/`,
 `examples/` or `website/` skip the tests, and the **CI passed** check sums it
