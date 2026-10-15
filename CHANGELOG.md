@@ -19,8 +19,14 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   nobody reads. The add-on can't be switched off for the install while a client's feed is still being
   started. **Also delete the events collected** is no longer lost when an earlier stop is still waiting to be
   sent, and switching a client on again waits for that stop.
-- **Audit log add-on switched off for the install:** people's Timelines no longer list its records, and
-  schedules made while it was on no longer email its **Files and mailbox access** report or saved views of it.
+- **Audit log add-on switched off for the install:** people's Timelines no longer list its records, report
+  designs no longer offer its **Files and mailbox access** report or show its records, and schedules and
+  month-end plans made while it was on no longer email the report or saved views of it.
+- **Audit log add-on for one client:** its report is only there for a client the add-on was asked for, not one
+  whose request was taken back or whose admin opened the link unasked, and a client's own sign-in no longer
+  reads who on the team switched it off or what the team should do next. The add-on's nightly read no longer
+  counts as the client approving the shared app, so after the shared app's client ID changes, clients aren't
+  shown as approved and their other data sources aren't queued until they approve it.
 
 ## [2.3.1] - 2026-10-12
 

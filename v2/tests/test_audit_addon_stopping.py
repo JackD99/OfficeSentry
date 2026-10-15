@@ -1,7 +1,7 @@
 """The audit log add-on leaves nothing on at Microsoft, and nothing showing, once it's off: a feed that half
-started, or that Microsoft says is off for one content type, is stopped too; a delete asked for while a stop
-is queued isn't lost; and the add-on switched off for the install hides its records from people's timelines and
-its report from scheduled emails.
+started, or that Microsoft says is off for one content type, is stopped too; switching a client back on waits
+for its stop; a delete asked for while a stop is queued isn't lost; and the add-on switched off for the install
+hides its records from people's timelines and its report from scheduled emails.
 
 Every Microsoft call is simulated with ``responses``.
 """
@@ -71,6 +71,67 @@ def _half_started(app, client, db, vault, cfg, alpha) -> None:
     row = addon.row_for(db, alpha)
     assert json.loads(row["content_types"]) == {"Audit.SharePoint": "enabled"} and row["started_at"] is None
     assert addon.feed_left(row) == list(feed.CONTENT_TYPES)  # Exchange's start may have landed too
+
+
+class Microsoft:
+    """The client's feed at Microsoft: each content type's status, as the start and stop calls leave it."""
+
+    def __init__(self, status: str | None = "enabled"):
+        self.status = dict.fromkeys(feed.CONTENT_TYPES, status) if status else {}
+
+    def tasks(self, app, db, vault, cfg) -> None:
+        """Run every queued task, highest priority first, against this feed."""
+        with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+            _sign_in_works(rsps, guid=TENANT)
+            rsps.add_callback("GET", re.compile(re.escape(ROOT) + "/subscriptions/list"), callback=self._listing)
+            rsps.add_callback(
+                "POST", re.compile(re.escape(ROOT) + "/subscriptions/(start|stop)"), callback=self._change
+            )
+            tasks.drain(app, db, vault, cfg)
+
+    def _listing(self, request):
+        return 200, {}, json.dumps([{"contentType": c, "status": s} for c, s in self.status.items()])
+
+    def _change(self, request):
+        kind = re.search(r"contentType=([^&]+)", request.url).group(1)
+        started = "/subscriptions/start" in request.url
+        self.status[kind] = "enabled" if started else "disabled"
+        return 200, {}, json.dumps({"contentType": kind, "status": "enabled"}) if started else ""
+
+
+# -- Switching a client off and straight back on --------------------------------------------------------------
+
+
+def test_switching_on_straight_after_off_waits_for_the_stop_so_the_feed_ends_on(
+    app, client, db, vault, cfg, two_tenants
+):
+    """The check that switching on queues outranks the stop that switching off queued: run in that order, the
+    client would show as On with its feed stopped at Microsoft, and the next collection would blame the client.
+    So switching on waits until the stop has gone."""
+    alpha, _ = two_tenants
+    addon_on(db, vault, [alpha])
+    make_user(db, "admin")
+    login(client, "admin")
+    microsoft = Microsoft("enabled")
+
+    assert client.post(f"/tenants/{alpha}/audit-addon/off").status_code == 302
+    page = client.get(f"/tenants/{alpha}/audit-addon").get_data(as_text=True)
+    assert "Office Sentry is stopping the feed at Microsoft" in page and "Switch on again" not in page
+    resp = client.post(f"/tenants/{alpha}/audit-addon/on", follow_redirects=True)
+    assert "still stopping this client" in resp.get_data(as_text=True)
+    assert db.execute("SELECT COUNT(*) FROM tasks WHERE kind = 'audit_check'").fetchone()[0] == 0
+
+    microsoft.tasks(app, db, vault, cfg)
+    assert microsoft.status == dict.fromkeys(feed.CONTENT_TYPES, "disabled")
+    assert "Switch on again" in client.get(f"/tenants/{alpha}/audit-addon").get_data(as_text=True)
+    assert client.post(f"/tenants/{alpha}/audit-addon/on").status_code == 302
+    microsoft.tasks(app, db, vault, cfg)
+    assert microsoft.status == dict.fromkeys(feed.CONTENT_TYPES, "enabled")
+    assert addon.state(addon.row_for(db, alpha)).key == "on"
+
+    now = datetime.now(UTC).replace(second=0, microsecond=0)
+    assert collect(db, alpha, sample(now), now)[0] == "succeeded"
+    assert addon.active(db, store.get_tenant(db, alpha))
 
 
 # -- A feed that half started, or that Microsoft says is half off ---------------------------------------------

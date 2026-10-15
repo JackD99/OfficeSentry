@@ -142,6 +142,10 @@
       });
     } else if (f.type === 'select') {
       input = el('select');
+      if (v && !f.options.some(function (o) { return String(o[0]) === String(v); })) {
+        // A choice the editor no longer offers (an add-on's report while it's off) stays chosen until changed.
+        var kept = el('option', '', 'Not available'); kept.value = v; kept.selected = true; input.appendChild(kept);
+      }
       f.options.forEach(function (o) { var op = el('option', '', o[1]); op.value = o[0]; if (String(o[0]) === String(v)) op.selected = true; input.appendChild(op); });
     } else if (f.type === 'textarea') {
       input = el('textarea'); input.rows = 5; input.value = v || '';

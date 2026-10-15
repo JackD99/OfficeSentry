@@ -12,7 +12,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 
 from .. import month_end
 from ..db import audit
-from ..reports import branding, designs
+from ..reports import branding, data_reports, designs
 from ..reports.export import pdf_available
 from .access import can, needs, report_capability, tenant_or_404, visible_tenants
 from .printing import pdf_response
@@ -115,7 +115,7 @@ def edit(design_id: int):
         "design_editor.html",
         design=row,
         doc=designs.document(row),
-        palette=designs.palette(),
+        palette=designs.palette(data_reports.hidden(g.db)),
         tenants=tenants,
         tenant=tenant,
         pdf_available=pdf_available(),

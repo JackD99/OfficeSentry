@@ -748,8 +748,10 @@ WIDGETS: dict[str, Widget] = {
 GROUPS = ("Summary", "Checks", "Licences and data", "Text and layout")
 
 
-def palette() -> list[dict]:
-    """The widgets for the editor, by group, with their fields as plain data."""
+def palette(hide: frozenset[str] = frozenset()) -> list[dict]:
+    """The widgets for the editor, by group, with their fields as plain data. Reports in ``hide``
+    (``data_reports.hidden()``: an add-on's while it's off) aren't offered, though a design that has one keeps
+    it (the table says it isn't there)."""
     out = []
     for group in GROUPS:
         items = []
@@ -765,7 +767,7 @@ def palette() -> list[dict]:
                     "min": f.min,
                     "max": f.max,
                     "help": f.help,
-                    "options": [list(o) for o in f.choices()],
+                    "options": [list(o) for o in f.choices() if not (f.options is _report_options and o[0] in hide)],
                 }
                 for f in w.fields
             ]

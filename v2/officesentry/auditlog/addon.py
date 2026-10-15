@@ -215,6 +215,19 @@ def feed_left(row) -> list[str]:
     return [c for c in feed.CONTENT_TYPES if said.get(c) != "disabled"]
 
 
+def asked(row) -> bool:
+    """Whether the add-on was asked for on this client (its link sent, or switched on), or its feed was ever
+    on or switched off. A client that only came back from the consent link, or whose request was taken back
+    before anything started, wasn't."""
+    return row is not None and bool(row["sent_at"] or row["wanted_at"] or row["started_at"] or row["stopped_at"])
+
+
+def shown(conn, tenant_id: int) -> bool:
+    """Whether what the add-on collected shows for this client (its report, people's timelines): while the
+    add-on is on, for a client it was asked for."""
+    return enabled(conn) and asked(row_for(conn, tenant_id))
+
+
 def active(conn, tenant) -> bool:
     """Whether the add-on collects for this client now: switched on, the client's feed on, and the client
     neither paused nor archived."""

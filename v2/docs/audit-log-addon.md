@@ -89,7 +89,8 @@ give the past through the feed: the report fills from the day the feed started.
 ## 3. What you get
 
 - **Files and mailbox access**, a detail report under *Files and Teams*, only for clients the add-on was asked
-  for. It leads with figures for the last 30 days (files deleted and downloaded, anyone links created,
+  for (its link marked as sent, or switched on; a client whose admin approved unasked gets it once you switch
+  it on). It leads with figures for the last 30 days (files deleted and downloaded, anyone links created,
   mailboxes opened by someone else, inbox rules changed, forwarding set) with their trends, then **Needs
   attention** (an admin opening someone else's mailbox, forwarding, rules that forward or delete mail,
   anyone links, auditing turned off, mailbox exports, malware, and mass deletes of 100 files or more by
@@ -125,8 +126,9 @@ database, and backed up and restored with it.
 - **Deleting a client** stops whatever of its feed may be on, and deletes what was collected with everything
   else.
 - **Everywhere:** the switch on **Settings → App connection → Audit log add-on** hides the add-on
-  everywhere: its report, its pages, people's Timelines, and scheduled emails (a schedule that sends its
-  report, or a saved view of it, sends the rest without them). It can't be switched off while any client's
+  everywhere: its report, its pages, people's Timelines, report designs (a design that has its table leaves
+  it out), and scheduled emails and month-end plans (a schedule that sends its report, or a saved view of
+  it, sends the rest without them). It can't be switched off while any client's
   feed is on or being started; switch those off first.
 
 ## When something goes wrong

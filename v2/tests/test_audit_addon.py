@@ -343,3 +343,21 @@ def test_a_new_client_id_for_the_addon_app_asks_every_client_again(client, db, v
     assert addon.state(row).key == "off" and "app changed" in row["stop_reason"]
     assert not row["consented_at"] and not addon.active(db, store.get_tenant(db, alpha))
     assert store.get_tenant(db, alpha)["consented_at"]  # the shared app's consent stays
+
+
+def test_the_addons_collection_says_nothing_of_the_shared_apps_consent(client, db, vault, two_tenants, connection_id):
+    """The add-on reads as its own app: its collection working doesn't mean the client approved the shared app
+    (here, after the shared app's client ID changed), so it neither records that nor collects the rest."""
+    alpha, _ = two_tenants
+    now = datetime.now(UTC).replace(second=0, microsecond=0)
+    addon_on(db, vault, [alpha], started_at=iso(now - timedelta(hours=3)))
+    make_user(db, "admin")
+    login(client, "admin")
+    resp = client.post(f"/admin/connections/{connection_id}/client-id", data={"client_id": OTHER_APP})
+    assert resp.status_code == 302 and store.get_tenant(db, alpha)["consented_at"] is None
+
+    assert collect(db, alpha, sample(now), now)[0] == "succeeded"
+    assert store.get_tenant(db, alpha)["consented_at"] is None
+    assert (
+        db.execute("SELECT COUNT(*) FROM runs WHERE tenant_id = ? AND status = 'queued'", (alpha,)).fetchone()[0] == 0
+    )

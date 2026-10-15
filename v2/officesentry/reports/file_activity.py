@@ -69,10 +69,8 @@ TABLES = {  # operations.GROUPS key: (table title, columns, intro)
 
 
 def _shown(conn, tenant) -> bool:
-    """While the add-on is on, for a client it was asked for (and so may hold its history)."""
-    if not addon.enabled(conn):
-        return False
-    return tenant is None or addon.row_for(conn, tenant["id"]) is not None
+    """While the add-on is on, for a client it was asked for (``addon.shown``)."""
+    return addon.enabled(conn) if tenant is None else addon.shown(conn, tenant["id"])
 
 
 def _when(ts: int) -> str:
@@ -124,12 +122,12 @@ def _rows(a: events.Activity) -> list:
 def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     conn, tenant = snap.conn, snap.tenant
     row = addon.row_for(conn, tenant["id"])
-    if row is None:
+    if not _shown(conn, tenant):  # wherever it's built from: a design's table, a rollup, a saved view
         report.unavailable = "The audit log add-on isn't on for this client."
         return
     feed = (snap.objects("audit_activity", "audit_feed") or [None])[0]
     if feed is None and not row["started_at"]:
-        report.unavailable = f"The audit log add-on isn't on for this client yet. {addon.state(row).detail}"
+        report.unavailable = "The audit log add-on isn't on for this client yet."  # clients read it too
         return
     if feed is None:
         report.unavailable = (
@@ -137,10 +135,9 @@ def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport)
             "feed is started to make the first records available; it's read every night."
         )
         return
-    if row["stopped_at"]:
+    if row["stopped_at"]:  # why is on the add-on's page: the reason names the team, and clients read this
         report.notice = (
-            f"The audit log add-on is off for this client: {row['stop_reason'] or 'switched off'} What was collected "
-            "before stays until retention removes it."
+            "The audit log add-on is off for this client. What was collected before stays until retention removes it."
         )
 
     end = devices.parse_ts(snap.as_of) or now
