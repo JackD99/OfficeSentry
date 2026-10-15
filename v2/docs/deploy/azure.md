@@ -99,7 +99,8 @@ Run commands with **Run command** (or open port 22 to your own address and SSH i
 - **Updating:** read the [release notes](https://github.com/JackD99/OfficeSentry/releases), run
   `sh /opt/officesentry/install.sh` (it downloads the newest release's `docker-compose.yml` and `Caddyfile`,
   which releases change without always saying so, and keeps your `.env`), set `OFFICESENTRY_VERSION` in `.env`
-  to the new release, then `docker compose pull && docker compose up -d`. Or turn on the [Update
+  to the new release, then `docker compose pull && docker compose up -d && docker compose restart caddy`
+  (Caddy only reads a new `Caddyfile` when it starts). Or turn on the [Update
   button](../../DEPLOY.md#the-update-button) once and update from *Settings → Updates*.
 - **Settings:** in `/opt/officesentry/.env` ([When things run](../../DEPLOY.md#when-things-run)), then
   `docker compose up -d`.
