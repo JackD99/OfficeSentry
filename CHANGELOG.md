@@ -27,6 +27,12 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   its image is signed. The updater, which runs as root, never follows a link the portal could put in place of
   its shared `updates` folder, when it makes the folder, writes its status or takes its lock, and a named pipe
   or deeply nested file left as the request no longer stops it.
+- **Files and mailbox access:** only a file in the client's own SharePoint or OneDrive becomes a link shown by
+  its path. An inbox rule or other item named like an address on another host is shown whole and never as a
+  link, on the page, in the PDF and spreadsheet and in a person's timeline, so it can't pass for the client's
+  file.
+- **Connections:** the steps that add Office Sentry's permissions to an app registration only work on the
+  shared read-only app, never on the audit log add-on's app, which its clients approved for one permission.
 
 ## [2.3.1] - 2026-10-12
 
