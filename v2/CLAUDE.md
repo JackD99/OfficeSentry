@@ -368,9 +368,7 @@ as `grants` and drops grants past their expiry from exposure.
   into. `appendix=False` (the PDF route's `?appendix=0`, the report option
   `review-summary`, `monthly_review.SUMMARY_KEY`) leaves the appendix out: the summary then
   carries no links into it (`summary.next_steps(anchors=False)`) and says the full report is
-  available from the MSP, and has a band for a cover (`compact_cover`), so it's two pages; render it
-  with the month's commentary and recommendations and look at it. The full review's cover is a page of a
-  fixed height, so the month's commentary opens the page after it.
+  available from the MSP.
 - PDF routes return `web/printing.pdf_response(template, filename, ...)`: a
   WeasyPrint PDF, or without WeasyPrint (Windows without Docker) the same
   template as a print-ready page that opens the browser's print window. Table
@@ -469,8 +467,7 @@ account managers: licence waste from the cached rollup rows, renewals in 30 days
 reports to approve and projects to propose). Each opens with one sentence (`Today.sentence()`,
 `Clients.sentence()`), then the detail, from stored state only. A person's choice is `users.home` (Account
 settings, or "Make this my home page" on either page); `/home` (the sidebar's Home and the logo) opens it,
-and signing in without a page to go back to lands there. Client users get their own home (`web/client_home.py`),
-built from their copy of the month (`report_extras`, `leave_out`) as their report is. A new reason on Today
+and signing in without a page to go back to lands there. Client users keep the dashboard. A new reason on Today
 is a `Reason` with a `kind` in `home.KINDS` and a `target` that `web/home._link` turns into a URL.
 Until the first collection has run, admins see the **Get started** checklist (`first_run.py`,
 `_get_started.html`) on Today, Accounts and Clients instead of the empty state: the app connection, the first
@@ -928,9 +925,7 @@ the designs the editor offers to start from; the Quarterly review starter's
 blocks (`quarter_trend`, `quarter_fixed`, `projects`, `licence_spend`,
 `upcoming`) read `Context.quarter`, a `reports/quarterly.Quarter` built once
 per tenant from the monthly review, `findings`, `projects.assess` and
-`upcoming.collect`; text blocks also take `{quarter}` (`quarterly.quarter_label`). A design with
-`quarter_trend` or `quarter_fixed` (`QUARTER_BLOCKS`) compares with the quarter's first day
-(`Context.by_quarter`: `monthly_review.build(since=quarterly.start(now))`), not four weeks ago.
+`upcoming.collect`; text blocks also take `{quarter}` (`quarterly.quarter_label`).
 
 ## Tenant groups
 
