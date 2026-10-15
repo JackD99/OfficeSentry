@@ -545,6 +545,8 @@ body.pdf ul.did li { padding: 1.3mm 0; break-inside: avoid; }
 body.pdf .appendix-start { margin-top: 0; padding-top: 5mm; border-top-width: 1.2mm; }
 body.pdf .appendix-start h2 { font-size: 18pt; margin: 1mm 0 2mm; }
 body.pdf .appendix-start + section > h2:first-child { margin-top: 6mm; }
+/* The full review's note opens the page after the cover, with At a glance under it. */
+body.pdf .tl-commentary + section > h2:first-child { margin-top: 6mm; }
 /* -- Quarterly review blocks ---------------------------------------------------------------------------- */
 table.quarter td:first-child { width: 40%; }
 table.upcoming td:first-child { width: 22%; white-space: nowrap; }
