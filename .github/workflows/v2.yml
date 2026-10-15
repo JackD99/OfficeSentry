@@ -263,8 +263,27 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      # The base image by its digest, from the first registry that gives it: the Dockerfile's (AWS's copy of
+      # Docker Hub's official images), then Google's copy, then Docker Hub. Runners share addresses and each
+      # registry limits what one address pulls anonymously; on 15 October AWS's answered 429 ("Data limit
+      # exceeded") before anything was built. The digest names the bytes, so the image built is the same
+      # whichever answers, and it's built from the Dockerfile with only that line changed.
+      - name: Fetch the base image
+        run: |
+          from=$(sed -n 's/^FROM //p' Dockerfile)
+          digest=${from##*@}
+          repository=${from%%:*}
+          library=${repository#public.ecr.aws/docker/}
+          for source in "$repository" "mirror.gcr.io/$library" "docker.io/$library"; do
+            if docker pull -q "$source@$digest"; then
+              sed "s|^FROM .*|FROM $source@$digest|" Dockerfile > "$RUNNER_TEMP/Dockerfile"
+              exit 0
+            fi
+            echo "::warning::$source didn't give the base image; trying the next registry"
+          done
+          exit 1
       - name: Build the image (not pushed)
-        run: docker build -t officesentry:ci .
+        run: docker build -f "$RUNNER_TEMP/Dockerfile" -t officesentry:ci .
       - name: Start the portal and wait until it's healthy
         run: |
           docker run -d --name portal -e OFFICESENTRY_BASE_URL=https://sentry.example officesentry:ci
