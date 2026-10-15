@@ -11,8 +11,6 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
-In progress. What changed is listed here when 2.4.0 is released.
-
 ### Fixed
 
 - **Settings → Updates:** an Action required that starts "Nonetheless" still asks for the tick, and a
