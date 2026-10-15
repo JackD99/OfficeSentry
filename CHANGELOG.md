@@ -29,6 +29,10 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
+- The READMEs: [v2/README.md](v2/README.md) lists all 49 reports by area and links the 69 checks, and covers
+  month-end reporting, Every row, Coming up and search, which it had left out. The development notes moved to
+  the [developer guide](DEVELOPING.md), which no longer says the portal never calls Microsoft. The website's
+  compare pages give Office Sentry's history and cost as they are, and its front page links them.
 
 ## [2.3.1] - 2026-10-12
 

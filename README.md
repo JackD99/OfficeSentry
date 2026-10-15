@@ -142,6 +142,17 @@ from other organisations in them, the apps added to each team (custom uploads fl
   </tr>
 </table>
 
+<!-- since 2.4.0 -->
+### Who deleted, shared or opened what
+
+The optional **audit log add-on** reads each approving client's Microsoft 365 audit log every night. **Files and
+mailbox access** then shows who deleted, downloaded, moved or shared files, the anyone links made, mail read, sent
+or deleted by an admin or a delegate, and inbox rules, forwarding and mailbox permissions set up, with what needs a
+look first at the top. It keeps two years by default, where Microsoft's own search keeps 180 days, and never what's
+in a file or an email. Every client, with the add-on or not, is also checked for an audit log that's switched off.
+[Setting up the add-on](v2/docs/audit-log-addon.md)
+<!-- /since -->
+
 ### Detail reports you can filter, save and export
 
 49 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
@@ -380,6 +391,7 @@ Office Sentry holds read access to many clients, so it is built to do as little 
 - **Read-only by construction.** One multi-tenant Entra app asks only for read permissions (`*.Read*`, plus
   `Exchange.ManageAsApp`). The Graph client has no write methods, and the Exchange client refuses any cmdlet that
   isn't on a fixed allow-list of `Get-` cmdlets. It never creates or changes anything in a client's tenant.
+- **The audit log add-on is a second app with one permission** (`ActivityFeed.Read`), off until you turn it on and approved by each client you ask. It keeps file, sharing and mailbox events, never what's in a file or an email. <!-- since 2.4.0 -->
 - **Certificate sign-in, no credential files.** The app signs in with a certificate whose private key is encrypted
   in the database. Secrets and private keys are never downloadable; only the public `.cer` is, by admins.
 - **Tenant isolation and roles.** Deny by default: people see only the clients they're granted, every client
