@@ -2,8 +2,10 @@
 into the activity history, the opt-in from link to feed, switching off, and its pages."""
 
 import html
+import io
 import json
 import re
+import zipfile
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlsplit
 
@@ -12,12 +14,13 @@ import responses
 from officesentry import events, retention, store, tasks
 from officesentry.auditlog import addon, feed
 from officesentry.entra import MANAGEMENT_APP_ID
+from officesentry.reports import export
 from officesentry.reports.file_activity import KEY
 from officesentry.reports.profile import timeline as profile_timeline
 from officesentry.reports.profile.base import Person
 from officesentry.snapshot import TenantSnapshot
 from tests import test_setup_wizard as wizard
-from tests.auditdata import CLIENT_ID, MSP, TENANT, addon_on, collect, iso, sample
+from tests.auditdata import CLIENT_ID, MSP, TENANT, _ex, _params, addon_on, collect, iso, sample
 from tests.conftest import login, make_user
 from tests.test_bulk_onboarding import _sign_in_works
 
@@ -279,6 +282,55 @@ def test_the_report_shows_only_where_the_addon_is(client, db, vault, two_tenants
     assert resp.status_code == 302 and addon.enabled(db)  # not while a client's feed is on
     page = client.get(f"/tenants/{alpha}/audit-addon").get_data(as_text=True)
     assert "Switch off" in page and "delete the 10 events collected" in page
+
+
+def test_a_rule_named_like_a_file_never_hides_its_host(client, db, vault, two_tenants, monkeypatch):
+    """Anyone with a mailbox can name an inbox rule anything, here a SharePoint-looking address on another host.
+    It's shown whole and never as a link, while the client's own files keep their link with the path for text."""
+    fake = "https://contoso.sharepoint.com.evil.example/sites/finance/Shared%20Documents/Payroll%202027.xlsx"
+    monkeypatch.setattr(export, "to_pdf", lambda html, base_url: html.encode())
+    alpha, _ = two_tenants
+    now = datetime.now(UTC).replace(second=0, microsecond=0)
+    at = (now - timedelta(hours=1)).replace(tzinfo=None)
+    rule = _ex(
+        90,
+        at,
+        "New-InboxRule",
+        "jo@contoso.com",
+        ObjectId="jo@contoso.com\\x",
+        Parameters=_params(Identity="jo@contoso.com", Name=fake, ForwardTo="drop@mailbox.example"),
+    )
+    records = sample(now)
+    records["Audit.Exchange"][0][1].append(rule)
+    addon_on(db, vault, [alpha], started_at=iso(now - timedelta(hours=3)))
+    assert collect(db, alpha, records, now)[0] == "succeeded"
+    make_user(db, "admin")
+    login(client, "admin")
+
+    page = client.get(f"/tenants/{alpha}/data/{KEY}").get_data(as_text=True)
+    assert "evil.example" in page and 'href="https://contoso.sharepoint.com.evil' not in page
+    assert 'href="https://contoso.sharepoint.com/sites/finance/' in page  # a real file is still a link
+    pdf = client.get(f"/tenants/{alpha}/data/{KEY}.pdf").data.replace(b"<wbr>", b"")  # the page it's made from
+    assert b"evil.example" in pdf and b'href="https://contoso.sharepoint.com.evil' not in pdf
+    with zipfile.ZipFile(io.BytesIO(client.get(f"/tenants/{alpha}/data/{KEY}.xlsx").data)) as book:
+        links = "".join(book.read(n).decode() for n in book.namelist() if n.endswith(".rels"))
+    assert "evil.example" not in links and "contoso.sharepoint.com/sites/finance" in links
+
+    jo = Person(
+        TenantSnapshot(db, store.get_tenant(db, alpha)), {"_id": "jo", "userPrincipalName": "jo@contoso.com"}, now
+    )
+    assert any(fake in e.text for e in profile_timeline.timeline(jo))
+
+
+def test_the_addons_app_is_never_given_the_main_apps_permissions(client, db, vault):
+    """Its clients approved one permission; the update steps on Connections are for the shared app only."""
+    conn_id = addon_on(db, vault)
+    make_user(db, "admin")
+    login(client, "admin")
+    assert client.post(f"/admin/connections/{conn_id}/update", data={}).status_code == 404
+    assert client.post(f"/admin/connections/{conn_id}/updated-by-hand").status_code == 404
+    assert store.get_connection(db, conn_id)["permissions_release"] is None
+    assert db.execute("SELECT COUNT(*) FROM setup_sign_ins").fetchone()[0] == 0
 
 
 def test_a_persons_timeline_has_what_they_did_and_what_was_done_to_their_mailbox(db, vault, two_tenants):

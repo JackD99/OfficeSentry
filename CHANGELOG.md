@@ -11,6 +11,12 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
+### Database upgrade
+
+Yes, applied on start as usual, after a copy of the database is made: migration 45 adds a column that keeps
+each approved month-end report's commentary, recommendations and notes as the client was given them. Months
+approved before the update show the month as it is now, as before, until they're issued again.
+
 ### Fixed
 
 - [v2/DEPLOY.md](v2/DEPLOY.md), *Running on Windows without Docker*: updating no longer deletes the virtual
@@ -29,6 +35,12 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
+- **Settings → Updates:** an Action required that starts "Nonetheless" still asks for the tick, and a
+  Database upgrade that starts "Note" still shows its warning (only "None" and "No" as words count as
+  nothing to do). Release notes holding a NUL character no longer break the page.
+- **Update button:** when the data volume is full once the new version is running, the updater still goes
+  back to the version before if the new one isn't healthy, and an update that stops part way never says
+  "before anything was changed".
 - **Audit log add-on:**
   - A client first collected more than 7 days after its feed started no longer says every night that its
     first hours haven't been read yet: the report says which hours couldn't be read.
@@ -52,6 +64,21 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ### Security
 
+- **Update button:** the updater only installs a release whose tag is on a commit in main's history, so a tag
+  pushed on another branch's commit (which runs that commit's own release workflow) is refused even though
+  its image is signed. The updater, which runs as root, never follows a link the portal could put in place of
+  its shared `updates` folder, when it makes the folder, writes its status or takes its lock, and a named pipe
+  or deeply nested file left as the request no longer stops it.
+- **Files and mailbox access:** only a file in the client's own SharePoint or OneDrive becomes a link shown by
+  its path. An inbox rule or other item named like an address on another host is shown whole and never as a
+  link, on the page, in the PDF and spreadsheet and in a person's timeline, so it can't pass for the client's
+  file.
+- **Connections:** the steps that add Office Sentry's permissions to an app registration only work on the
+  shared read-only app, never on the audit log add-on's app, which its clients approved for one permission.
+- **Clients:** a new client never gets the id of one that was deleted. Before, the next client added after
+  deleting the newest one took its id, and with it the deleted client's rows in the **Activity log**, its
+  name and domain included, for anyone granted the new client. Rows from before a client was added no longer
+  show as its own, so an id already reused this way stops showing the old client's history too.
 - **Audit log add-on:** switching it off for a client, or deleting the client, stops whatever of the client's
   feed may still be on at Microsoft, including a start that worked for SharePoint and not Exchange, and when
   Microsoft says the feed is off for one kind of record, the other is stopped too, so no feed is left on that
@@ -66,6 +93,16 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   reads who on the team switched it off or what the team should do next. The add-on's nightly read no longer
   counts as the client approving the shared app, so after the shared app's client ID changes, clients aren't
   shown as approved and their other data sources aren't queued until they approve it.
+- **After approval, the client keeps the approved month-end report until a new version is issued.** Commentary,
+  recommendations and client-visible notes changed after a month was approved used to show on the client's live
+  report straight away. The client now sees what was approved (the same as their PDF), the review screen says the
+  month has changed since approval, and the month-end queue lists it under **Needs review** until someone issues
+  a new version.
+- **Only someone who can open every report a client's report plan emails can add a contact.** New contacts get
+  the plan's emails, so someone without one of those report areas could add a contact, their own address
+  included, and receive reports they can't open. The Contacts card and the schedule form now say who can add
+  one. Choosing who gets a client's new-finding alerts now needs *Security findings and reviews*, since alerts
+  name the findings.
 
 ## [2.3.1] - 2026-10-12
 

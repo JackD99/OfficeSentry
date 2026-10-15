@@ -12,6 +12,7 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -256,6 +257,7 @@ class FakeGitHub:
         self.releases = {"2.3.0": {}, "2.4.0": {"published_at": "2026-11-01T10:00:00Z"}}
         self.digests = {"2.4.0": DIGEST}
         self.commit = COMMIT
+        self.merged = True  # the tag's commit is on main
         self.files = {"v2/docker-compose.yml": COMPOSE.encode(), "v2/Caddyfile": CADDYFILE.encode()}
 
     def release(self, version: Version) -> dict:
@@ -268,6 +270,10 @@ class FakeGitHub:
 
     def tag_commit(self, version: Version) -> str:
         return self.commit
+
+    def on_main(self, commit: str) -> bool:
+        assert commit == self.commit
+        return self.merged
 
     def file(self, path: str, commit: str) -> bytes | None:
         assert commit == self.commit  # the files of the commit the image is checked against
@@ -464,6 +470,19 @@ def test_github_release_and_tag():
 
 
 @responses.activate
+@pytest.mark.parametrize(
+    ("status", "on_main"), [("behind", True), ("identical", True), ("ahead", False), ("diverged", False)]
+)
+def test_github_says_whether_the_tags_commit_is_on_main(status, on_main):
+    """main is the base, the tag's commit the head: on main, it's behind main or the same commit."""
+    responses.get(f"{GH}/compare/main...{COMMIT}", json={"status": status, "behind_by": 3})
+    assert up.GitHub().on_main(COMMIT) is on_main
+    responses.replace(responses.GET, f"{GH}/compare/main...{COMMIT}", status=404)
+    with pytest.raises(Refused, match="whether"):
+        up.GitHub().on_main(COMMIT)
+
+
+@responses.activate
 def test_github_file_at_the_release_commit():
     match = [responses.matchers.query_param_matcher({"ref": COMMIT})]
     responses.get(f"{GH}/contents/v2/docker-compose.yml", body=COMPOSE, match=match)
@@ -630,6 +649,19 @@ def test_an_unsigned_image_is_never_installed(server, docker, clock):
         "finish": "skipped",
     }
     assert not [c for c in docker.calls if c[0] in ("pull", "compose")]
+
+
+def test_a_tag_on_a_commit_that_isnt_on_main_is_refused(server, docker, clock):
+    """A tag pushed on a branch's commit gets its own release.yml run, signed like a real release."""
+    github = FakeGitHub()
+    github.merged = False
+    u = make(server, docker, clock, github)
+    ask(server)
+    u.tick()
+    job = updates.status(server / "data").job
+    assert job.state == "refused" and "isn't on main" in job.message
+    assert steps(job)["check"] == "failed"
+    assert not [c for c in docker.calls if c[0] in ("cosign", "pull", "compose")]
 
 
 def test_a_signature_for_another_commit_is_refused(server, docker, clock):
@@ -878,3 +910,107 @@ def test_main_runs_without_configuration(monkeypatch, tmp_path):
     monkeypatch.setattr(__main__, "load_config", lambda: pytest.fail("the updater loaded the configuration"))
     __main__.main(["updater"])
     assert ran == [True]
+
+
+# -- The shared folder is the portal's -----------------------------------------------------------------------
+#
+# The updater runs as root and the portal owns the data volume, so whatever the updater does in
+# <data>/updates, the portal may have put a link, a pipe or a file there first, or swap one in at any moment.
+
+
+def _fd_path(fd: int) -> str:
+    return os.readlink(f"/proc/self/fd/{fd}")
+
+
+def test_the_shared_folder_is_handed_to_the_portal_by_the_folder_made(tmp_path, monkeypatch):
+    """prepare() makes <data>/updates and gives it the data folder's owner through the folder it opened, so a
+    link swapped in after mkdir (to the compose folder's .env, or the Docker socket) is never handed over."""
+    data, victim = tmp_path / "data", tmp_path / "project" / ".env"
+    data.mkdir()
+    victim.parent.mkdir()
+    victim.write_text("OFFICESENTRY_VERSION=2.2.0\n", encoding="utf-8")
+    folder = updates.folder(data)
+    owned = []
+    monkeypatch.setattr(os, "fchown", lambda fd, uid, gid: owned.append(_fd_path(fd)))
+    monkeypatch.setattr(os, "chown", lambda *a, **k: pytest.fail("chown by name"))
+
+    up.Updater(None, data, project_dir=victim.parent, state_dir=tmp_path / "state").prepare()
+    assert owned == [str(folder)]
+
+    shutil.rmtree(folder)
+    owned.clear()
+    real_mkdir = Path.mkdir
+
+    def racing_mkdir(self, *args, **kwargs):
+        real_mkdir(self, *args, **kwargs)
+        if self == folder:  # what a compromised portal does the moment the folder appears
+            os.rename(self, data / "moved-aside")
+            os.symlink(victim, self)
+
+    monkeypatch.setattr(Path, "mkdir", racing_mkdir)
+    with pytest.raises(SystemExit, match="isn't a folder"):
+        up.Updater(None, data, project_dir=victim.parent, state_dir=tmp_path / "state").prepare()
+    assert owned == []
+
+
+def test_a_link_in_the_shared_folders_place_is_never_written_through(server, docker, clock, caplog):
+    """Swapped for a link after start-up, the folder isn't written into (here the compose folder would get
+    root's files); the updater's own record still is, and the update or going back carries on."""
+    u = make(server, docker, clock)
+    folder = updates.folder(server / "data")
+    shutil.rmtree(folder)
+    os.symlink(server / "project", folder)
+    u.save()
+    assert sorted(p.name for p in (server / "project").iterdir()) == [".env", "Caddyfile", "docker-compose.yml"]
+    assert json.loads((server / "state" / updates.STATUS_FILE).read_text(encoding="utf-8"))["seen_at"]
+    assert "couldn't write its status for the portal" in caplog.text
+
+
+def test_a_full_data_volume_doesnt_stop_it_going_back(server, docker, clock, monkeypatch):
+    """The portal's copy of the status failing to write (a full data volume) once the new version is running
+    must not leave it there: going back still happens, and the updater's own record says so."""
+    docker.health[NEW_ID] = "unhealthy"
+    u = make(server, docker, clock)
+    ask(server)
+    real = updates.write_json
+
+    def full(path, value, mode=0o644, dir_fd=None):
+        if dir_fd is not None and any(c[:2] == ("compose", "up") for c in docker.calls):
+            raise OSError(28, "No space left on device")
+        return real(path, value, mode, dir_fd)
+
+    monkeypatch.setattr(updates, "write_json", full)
+    u.tick()
+    job = updates.Job.load(json.loads((server / "state" / updates.STATUS_FILE).read_text(encoding="utf-8"))["job"])
+    assert job.state == "rolled_back"
+    assert env(server).endswith("OFFICESENTRY_VERSION=2.2.0\n")
+    assert docker.box["web"]["Image"] == OLD_ID
+
+
+def test_a_failure_after_the_switch_never_says_nothing_changed(server, docker, clock, monkeypatch):
+    """Going back itself failing unexpectedly is reported as part way, with the manual steps."""
+    docker.health[NEW_ID] = "unhealthy"
+    u = make(server, docker, clock)
+    ask(server)
+    monkeypatch.setattr(up.Updater, "rollback", lambda self, install, reason: (_ for _ in ()).throw(OSError("disk")))
+    u.tick()
+    job = updates.status(server / "data").job
+    assert job.state == "failed" and "part way" in job.message and "Rolling back an update" in job.message
+    assert "before anything was changed" not in job.message
+
+
+@pytest.mark.parametrize("planted", ["fifo", "nested", "folder"])
+def test_a_request_the_portal_made_odd_is_ignored(server, docker, clock, planted):
+    """A named pipe (which would block the updater in open()), JSON nested deeper than Python parses, or a
+    folder: none is a request, and the updater keeps checking in."""
+    u = make(server, docker, clock)
+    request = updates.folder(server / "data") / updates.REQUEST_FILE
+    if planted == "fifo":
+        os.mkfifo(request)
+    elif planted == "nested":
+        request.write_text('{"format": 1, "a": ' + "[" * 100_000 + "]" * 100_000 + "}", encoding="utf-8")
+    else:
+        request.mkdir()
+    assert updates.read_request(server / "data") is None
+    u.tick()
+    assert u.job is None

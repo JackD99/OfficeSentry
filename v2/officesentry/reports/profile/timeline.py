@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import unquote, urlsplit
 
+from ... import clouds, signins, store
 from ... import events as events_store
-from ... import signins, store
 from ...auditlog import addon, operations
 from ...checks.apps import SENSITIVE_DELEGATED
 from ...formatting import day
@@ -233,8 +233,13 @@ def timeline(p: Person) -> list[_Happened]:
     return out[:TIMELINE_LIMIT]
 
 
-def _item(value: str) -> str:
-    return unquote(urlsplit(value).path) or value if value.lower().startswith("https://") else value
+def _item(value: str, cloud: clouds.Cloud) -> str:
+    """A file in the client's SharePoint by its path; anything else whole, so a name written like an address
+    never hides its host."""
+    parts = urlsplit(value)
+    if cloud.is_sharepoint(f"{parts.scheme}://{parts.netloc}".lower()):
+        return unquote(parts.path) or value
+    return value
 
 
 def _audit_log(p: Person) -> list[_Happened]:
@@ -244,21 +249,22 @@ def _audit_log(p: Person) -> list[_Happened]:
     out: list[_Happened] = []
     files: Counter = Counter()
     last: dict[tuple[str, str], str] = {}
+    cloud = clouds.of(p.snap.tenant)
     start = p.end - timedelta(days=TIMELINE_DAYS)
     for a in events_store.activity_between(p.snap.conn, p.snap.tenant["id"], start, p.end, people=p.keys):
         at = f"{datetime.fromtimestamp(a.ts, UTC):%Y-%m-%dT%H:%M:%SZ}"
         group, what = operations.group(a.operation), operations.label(a.operation)
         if group == "files" and p.named(a.actor) and not a.attention:
             files[(at[:10], what)] += 1
-            last.setdefault((at[:10], what), _item(a.object))
+            last.setdefault((at[:10], what), _item(a.object, cloud))
             continue
         if p.named(a.actor):
-            about = a.owner if a.owner and not p.named(a.owner) else _item(a.object)
+            about = a.owner if a.owner and not p.named(a.owner) else _item(a.object, cloud)
             text = f"{what}: {about}" if about else what
         else:  # done to the account's mailbox (or shared with it) by someone else
             who = a.actor or "someone"
             text = what.replace("by someone else", f"by {who}").replace("someone else", "this account")
-            text = (text if who in text else f"{text} by {who}") + (f": {_item(a.object)}" if a.object else "")
+            text = (text if who in text else f"{text} by {who}") + (f": {_item(a.object, cloud)}" if a.object else "")
         text += f" ({a.summary})" if a.summary else ""
         out.append(_Happened(at, at_time(at), AREAS.get(group, "Mailbox"), text, "warn" if a.attention else None))
     for (on, what), n in files.items():
