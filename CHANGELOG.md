@@ -33,6 +33,10 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   file.
 - **Connections:** the steps that add Office Sentry's permissions to an app registration only work on the
   shared read-only app, never on the audit log add-on's app, which its clients approved for one permission.
+- **Clients:** a new client never gets the id of one that was deleted. Before, the next client added after
+  deleting the newest one took its id, and with it the deleted client's rows in the **Activity log**, its
+  name and domain included, for anyone granted the new client. Rows from before a client was added no longer
+  show as its own, so an id already reused this way stops showing the old client's history too.
 
 ## [2.3.1] - 2026-10-12
 
