@@ -11,8 +11,6 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
-In progress. What changed is listed here when 2.4.0 is released.
-
 ### Fixed
 
 - [v2/DEPLOY.md](v2/DEPLOY.md), *Running on Windows without Docker*: updating no longer deletes the virtual
