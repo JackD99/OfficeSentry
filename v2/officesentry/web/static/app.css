@@ -1162,6 +1162,12 @@ a.chk:hover, a.chk:focus-visible { outline: 2px solid var(--accent); outline-off
 .chk-legend .chk { width: 14px; height: 14px; }
 .check-matrix th.chk-col { min-width: 110px; white-space: normal; }
 .check-matrix th a { color: inherit; }
+/* The densest table, a column per area: its headings take the step below and its columns sit a little
+   closer, so every area fits a 1366px laptop. */
+@media (min-width: 641px) {
+  .check-matrix thead th { font-size: var(--fs-xs); letter-spacing: .02em; }
+  .table-scroll .check-matrix :is(td, th):not(:first-child):not(:last-child) { padding-left: var(--space-1-5); padding-right: var(--space-1-5); }
+}
 /* -- Tenant tabs, their second row, and accessibility -----------------------
    Seven tenant tabs; Reports and Settings list their pages in .tab-pages. */
 .tab-pages { display: flex; gap: var(--space-1); flex-wrap: wrap; margin: -12px 0 20px; }
