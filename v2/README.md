@@ -672,8 +672,9 @@ recording, or only an empty one, and are tested with simulated data only:
 ## Quick start (Docker)
 
 ```bash
-cp .env.example .env          # set OFFICESENTRY_BASE_URL at least
-docker compose --profile https up -d
+cp .env.example .env          # set OFFICESENTRY_BASE_URL, OFFICESENTRY_DOMAIN and OFFICESENTRY_TIMEZONE
+echo COMPOSE_PROFILES=https >> .env    # Caddy, for HTTPS
+docker compose up -d
 ```
 
 That runs the published release image. To run this folder's code instead,
