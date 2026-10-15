@@ -45,7 +45,7 @@
     <tbody>
     {% for h in rows %}{% set t = h.tenant %}
     <tr>
-      <td><a class="strong" href="{{ url_for('tenant_admin.manage', tenant_id=t.id) }}">{{ t.name }}</a><span class="sub mono">{{ t.tenant_ref }}</span></td>
+      <td><a class="strong" href="{{ url_for('tenant_admin.manage', tenant_id=t.id) }}">{{ t.name }}</a><span class="sub">{{ t.tenant_ref }}</span></td>
       <td data-label="Archived" class="nowrap">{{ ts(t.archived_at) }}</td>
       <td data-label="Last collected" class="nowrap">{{ ts(h.last_success) }}</td>
       <td class="num"><div class="row-actions">

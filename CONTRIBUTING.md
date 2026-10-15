@@ -122,6 +122,7 @@ and a final check fails unless the parts together ran every test.
   and the example reports with `python scripts/screenshots.py` (from `v2/`;
   needs `pip install playwright pillow`, a Chromium for Playwright and
   `pdftoppm`) and look at them before committing.
+- [DESIGN.md](DESIGN.md) describes the look: colour, type, shape and how components use them. <!-- since 2.4.0 -->
 - Styles use the tokens in `v2/officesentry/web/static/tokens.css`; `/styleguide`
   in a running portal shows them and every shared component. Pull requests
   that touch templates or CSS also run the browser tests (screenshots against

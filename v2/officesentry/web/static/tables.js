@@ -145,8 +145,8 @@
     if (box) edges(box);
   }, true);
   window.addEventListener('resize', function () { wide(document); });
-  // The page first draws in a fallback font (font-display: swap) and Inter's text is a little wider, so a
-  // table that fitted then may not now: measure again once the fonts are in.
+  // The page first draws in a fallback font (font-display: swap) and the bundled fonts set text a little
+  // differently, so a table that fitted then may not now: measure again once the fonts are in.
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { wide(document); });
 
   function init(root) { sortable(root); rowSearch(root); reportSearch(root); autosubmit(root); foldOnPhones(root); wide(root); }

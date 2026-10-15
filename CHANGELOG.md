@@ -11,7 +11,13 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
-In progress. What changed is listed here when 2.4.0 is released.
+### Changed
+
+- **A new look.** Office Sentry has a design of its own: text in Source Sans 3, page titles and headline
+  figures in Source Serif 4 with figures that line up, a stone background, a bottle-green menu and ruled
+  cards instead of floating ones, in light and dark. Client reports and their PDFs use the new type and
+  still take your branding colours. Both fonts ship with Office Sentry, so nothing is fetched from
+  elsewhere. [DESIGN.md](DESIGN.md) describes the look for anyone changing a page.
 
 ## [2.3.1] - 2026-10-12
 

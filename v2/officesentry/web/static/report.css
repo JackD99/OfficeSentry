@@ -11,7 +11,7 @@
 }
 
 * { box-sizing: border-box; }
-body.report { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 var(--font); -webkit-font-smoothing: antialiased; }
+body.report { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 var(--font); -webkit-font-smoothing: antialiased; }
 a { color: var(--brand-ink); text-decoration: none; }
 a:hover { text-decoration: underline; }
 p { margin: 0 0 var(--space-2-5); }
@@ -321,9 +321,9 @@ td .sub { display: block; color: var(--muted); font-size: .86em; }
 @page {
   size: A4; margin: 22mm 16mm 18mm;
   @top-left { content: element(runhead); vertical-align: bottom; padding-bottom: 4mm; }
-  @top-right { content: string(doctitle) "  ·  " string(client); font: 500 7.5pt "Inter", sans-serif; color: #8a93a3; vertical-align: bottom; padding-bottom: 4mm; }
-  @bottom-left { content: "Confidential  ·  " string(footer); font: 7.5pt "Inter", sans-serif; color: #8a93a3; }
-  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 7.5pt "Inter", sans-serif; color: #8a93a3; }
+  @top-right { content: string(doctitle) "  ·  " string(client); font: 500 8pt "Source Sans 3", sans-serif; color: #8a93a3; vertical-align: bottom; padding-bottom: 4mm; }
+  @bottom-left { content: "Confidential  ·  " string(footer); font: 8pt "Source Sans 3", sans-serif; color: #8a93a3; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt "Source Sans 3", sans-serif; color: #8a93a3; }
 }
 @page cover { margin: 0; @top-left { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-right { content: none; } }
 @page compact { margin: 13mm 16mm 13mm; @top-left { content: none; } @top-right { content: none; } }
@@ -336,7 +336,7 @@ td .sub { display: block; color: var(--muted); font-size: .86em; }
   .toolbar { display: none; }
   article { border: 0; max-width: none; margin: 0; box-shadow: none; border-radius: 0; }
 }
-body.pdf { background: #fff; font-size: 9.5pt; line-height: 1.5; }
+body.pdf { background: #fff; font-size: 10pt; line-height: 1.5; }
 body.pdf article { border: 0; max-width: none; margin: 0; box-shadow: none; border-radius: 0; overflow: visible; }
 body.pdf .content { padding: 0; }
 body.pdf .doc-strings { display: block; height: 0; overflow: hidden; }
