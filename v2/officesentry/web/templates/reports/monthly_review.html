@@ -328,13 +328,6 @@
   {%- set fresh = [] %}{% for f in report.freshness if not f.stale %}{% set _ = fresh.append((f.title, f.finished_at)) %}{% endfor %}
   {{ ui.collected(fresh) }}</p>
   {% if not with_appendix %}<p>This is the summary of the monthly review. Ask {{ brand.display_name }} for the full report, with every check, change and licence in detail.</p>{% endif %}
-  {% if stale|length > 3 %}
-  {#- Many at once (collection paused, or the app's access removed): one line, not a list of every source. -#}
-  {%- set dated = stale|selectattr('finished_at')|map(attribute='finished_at')|list -%}
-  {%- set never = stale|rejectattr('finished_at')|map(attribute='title')|list -%}
-  <p><span class="stale">Out of date:</span>
-  {%- if dated %} {{ dated|length|plural('data source') }} last collected {% if dated|min|day == dated|max|day %}{{ dated|max|day }}{% else %}between {{ dated|min|day }} and {{ dated|max|day }}{% endif %}{% endif %}
-  {%- if never %}{{ ',' if dated }} {% if never|length > 3 %}{{ never|length|plural('data source') }}{% else %}{{ never|join(', ') }}{% endif %} not collected yet{% endif %}. Figures that rely on these may not reflect the latest settings.</p>
-  {% elif stale %}<p><span class="stale">Out of date:</span> {% for f in stale %}{{ f.title }} ({{ ('last collected ' ~ f.finished_at|day) if f.finished_at else 'not collected yet' }}){{ ', ' if not loop.last else '.' }}{% endfor %} Figures that rely on these may not reflect the latest settings.</p>{% endif %}
+  {{ ui.out_of_date(stale) }}
 </footer>
 {% endblock %}
