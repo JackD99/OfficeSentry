@@ -39,6 +39,12 @@ collection run, saying when a failed run is tried again by itself and which fail
   DEPLOY.md, the cloud-init file, the Kubernetes CronJob, a NAS task) keeps doing so, wherever it writes, and
   the worker leaves those nights to it, stepping in if that job stops.
 
+### Changed
+
+- **The worker's nightly rebuild does about 40% less work.** What changed's three periods and every report's
+  All clients row now share one read of each client's data and one build of each report, rather than building
+  each report four times, so the night's work is done sooner on a large install.
+
 ### Fixed
 
 - **Off-site backups and the restore drill run from cron.** `deploy/jobs.sh schedule` wrote crontab lines that
@@ -51,6 +57,8 @@ collection run, saying when a failed run is tried again by itself and which fail
 - **Logs keep what matters through a month-end.** Each PDF wrote about 200 lines of the PDF and font libraries'
   own notes to the portal's and worker's logs, so a month-end's reports pushed every earlier line, errors
   included, out of the rolling log files the support package reads. Those libraries now only log their errors.
+- **The support package covers the audit log add-on**: whether it's switched on, each client's step (sent,
+  approved, on or off, with the reason the feed hasn't started), and which app connection is the add-on's.
 
 ## [2.3.1] - 2026-10-12
 

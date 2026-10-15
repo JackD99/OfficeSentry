@@ -129,6 +129,12 @@ def _world(db, cfg, two_tenants):
     )
     db.execute("INSERT INTO settings (key, value) VALUES ('retention.keep_daily', '45')")
     db.execute("INSERT INTO settings (key, value) VALUES ('brand_name', 'Northwind IT')")
+    db.execute("INSERT INTO settings (key, value) VALUES ('audit_addon', '1')")
+    db.execute(
+        "INSERT INTO audit_feeds (tenant_id, sent_at, sent_by, wanted_at, wanted_by, approved_at, checked_at,"
+        " check_error, created_at) VALUES (?, ?, 'jack', ?, 'jack', ?, ?, ?, ?)",
+        (alpha, *[utcnow()] * 4, f"Alpha Ltd ({GUID}) answered 401 for jack", utcnow()),
+    )
     conn_row = db.execute("SELECT cert_pem, key_enc, thumbprint FROM app_connections").fetchone()
     return {
         "run": run_id,
@@ -185,6 +191,10 @@ def test_package_carries_the_facts_and_none_of_the_secrets(cfg, db, two_tenants,
         and clients[bravo]["latest_runs"]["mfa"]["status"] == "succeeded"
     )
     assert "name" not in clients[alpha] and clients[alpha]["consented"] is True
+    assert database["settings"]["audit_addon"] == "1" and "audit_addon" not in clients[bravo]
+    assert clients[alpha]["audit_addon"]["state"] == "approved" and clients[alpha]["audit_addon"]["detail"] == (
+        f"The client approved, but Office Sentry can't sign in yet. [client {alpha}] ([guid]) answered 401 for [user]"
+    )
     failures = json.loads(pkg.files["failures.json"])
     assert failures["runs"][0]["run"] == world["run"] and failures["runs"][0]["tenant"] == alpha
     assert failures["runs"][0]["error"] == f"Sign-in failed: [client {alpha}] refused the app (tenant [guid])"
@@ -205,6 +215,7 @@ def test_package_carries_the_facts_and_none_of_the_secrets(cfg, db, two_tenants,
     assert (
         connections[0]["has_client_id"] is True and "client_id" not in connections[0] and connections[0]["tenants"] == 2
     )
+    assert connections[0]["kind"] == "main"
     assert f"[client {alpha}] page failed for [user] <[email]>" in pkg.files["logs/web.log"].decode()
     assert "Flask==" in pkg.files["packages.txt"].decode()
     assert json.loads(pkg.files["health.json"])["checks"]["worker"]["fix"]
