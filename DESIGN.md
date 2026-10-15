@@ -68,6 +68,9 @@ ink, lines and severity, but its accent is the MSP's brand (`--brand`, `--brand-
 `/brand.css`, inline in PDFs). A client report never shows Office Sentry's green where the MSP has set its
 own colour.
 
+Client reports and their PDFs also keep Source Sans 3 for their titles and headline figures: they are the
+MSP's documents, and the serif is Office Sentry's own voice, kept for the portal.
+
 ## Type
 
 Two families, both bundled in `v2/officesentry/web/static/fonts/` (Adobe's own files, SIL Open Font
