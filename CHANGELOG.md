@@ -35,6 +35,17 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - **Update button:** when the data volume is full once the new version is running, the updater still goes
   back to the version before if the new one isn't healthy, and an update that stops part way never says
   "before anything was changed".
+- **Settings → Updates** lists every release since the one running, however far behind it is. It kept the
+  newest 15, so an install further behind than that never saw the older ones' Action required and wasn't
+  asked for the tick. If there are ever more than it reads, it says so, sends you to GitHub for the rest and
+  asks for the tick.
+- **Settings → Updates** says "Up to date" only once a check has worked. Before the first check it says "Not
+  checked yet", and when the first checks fail it says "Couldn't check yet" with the reason.
+- **Settings → Updates** reads release notes written a little differently: a sub-heading inside Action
+  required, a heading ending with a colon, and "**None.**" or "**No.**" in bold. Numbered steps show as a
+  numbered list, and a link whose address has brackets in it keeps them.
+- **Settings → Updates** recognises Podman and Kubernetes as containers, so it no longer gives them the
+  Windows steps for updating by hand.
 
 ### Security
 
