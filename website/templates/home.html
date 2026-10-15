@@ -49,7 +49,7 @@
     <div class="pillar">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <h2>Keeps the history</h2>
-      <p>Every night's results are kept, so you can see what changed, when, and whether it got better.</p>
+      <p>Each day's results are kept for a month and each month's for a year, or longer, so you can see what changed, when, and whether it got better.</p>
     </div>
     <div class="pillar">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
@@ -139,7 +139,7 @@
       <div class="feature-copy">
         <h3>SharePoint storage: why it's full and what to clean up</h3>
         <p>See how full a client's SharePoint is and when it will run out at the current rate, where the space goes, and the biggest folders, files, version histories and recycle bin items, each with what to do about it.</p>
-        <a class="more" href="/examples/sharepoint-storage.pdf">Open the 19-page example</a>
+        <a class="more" href="/examples/sharepoint-storage.pdf">Open the example PDF</a>
       </div>
       <div class="feature-media">{{ window('sharepoint-storage', 'SharePoint storage: 88% used, full in about 3 months, and where the space goes') }}</div>
     </article>
@@ -314,6 +314,22 @@
   </div>
 </section>
 
+<section class="compare" id="compare">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow">Instead of a paid tool?</p>
+      <h2>How it compares</h2>
+      <p>Office Sentry reports and never changes a tenant, so it replaces the reporting you'd pay for and sits beside the tools that manage.</p>
+    </header>
+    <ul class="compare-grid">
+      <li><a href="/docs/compare/"><strong>Microsoft's admin centres</strong> <span>One tenant at a time, with 30 days of logs. Office Sentry puts every client side by side and keeps the history.</span></a></li>
+      <li><a href="/docs/compare/admindroid/"><strong>AdminDroid</strong> <span>Thousands of reports and a long audit trail in its paid editions, on a Windows server. Office Sentry is free, built for many clients, and writes the monthly review for you.</span></a></li>
+      <li><a href="/docs/compare/cipp/"><strong>CIPP</strong> <span>Built to make changes across tenants. Office Sentry only reads, and turns what it reads into reports for clients. Many MSPs run both.</span></a></li>
+    </ul>
+    <a class="more" href="/docs/compare/">Every tool compared, and what Office Sentry doesn't do</a>
+  </div>
+</section>
+
 <section class="security" id="security">
   <div class="wrap security-inner">
     <header class="section-head left">
@@ -373,8 +389,9 @@
     <details><summary>Can my team sign in with their Microsoft accounts?</summary><p>Yes. Office Sentry creates a small sign-in app in your own tenant, with no access to anything else, and your staff sign in under your Conditional Access and MFA. Their role comes from Entra at every sign-in; which clients they see is still set in Office Sentry. <a href="/docs/staff-sign-in/">Staff sign-in</a> has the steps.</p></details>
     <details><summary>Can my clients sign in with their own Microsoft accounts?</summary><p>Yes. Add each client's contacts by their work address and they sign in with the account they already use, under their own organisation's MFA, from their own company's tenant only. Nobody is invited into your tenant as a guest, and they only ever see their own company's reports. <a href="/docs/client-sign-in/">Client sign-in</a> has the steps.</p></details>
     <details><summary>How do I update it?</summary><p><em>Settings → Updates</em> lists every newer release with its notes and anything to do first. Turn on the optional updater and its Update button installs a release, after checking it's genuine, and goes back to the old version by itself if the new one doesn't start. Updating by hand with Docker works as well. <a href="/docs/install/#updating">Updating</a> has both.</p></details>
-    <details><summary>Where is the data kept?</summary><p>On your own server, in one database you can back up and restore. Office Sentry has no telemetry, so nothing is sent to us.</p></details>
-    <details><summary>How is it different from Microsoft's own admin centres?</summary><p>Microsoft shows one tenant at a time, in its own words, with little history. Office Sentry keeps every night's results for every client, compares them month by month and across clients, and turns them into branded reports.</p></details>
+    <details><summary>Where is the data kept?</summary><p>On your own server, in a database and the activity history beside it, which its backups copy, encrypted off the server if you like. Office Sentry has no telemetry, so nothing is sent to us: the only thing it asks for is GitHub's list of releases, once a day, which an admin can turn off.</p></details>
+    <details><summary>How is it different from Microsoft's own admin centres?</summary><p>Microsoft shows one tenant at a time, in its own words, with little history. Office Sentry collects every client every night, keeps the history, compares it month by month and across clients, and turns it into branded reports.</p></details>
+    <details><summary>Can it replace AdminDroid, CIPP or another paid tool?</summary><p>For reporting, yes: monthly client reviews, evidence for Cyber Essentials, ISO 27001 and insurers, 49 detail reports and 69 checks across every client, with history. It never changes a tenant, so for creating users or applying settings keep a management tool such as CIPP beside it. <a href="/docs/compare/">How it compares</a> sets out what each is good at.</p></details>
   </div>
 </section>
 {% endblock %}

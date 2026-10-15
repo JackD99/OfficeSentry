@@ -6,13 +6,20 @@ actually sends: a monthly review, evidence for Cyber Essentials and insurance fo
 every person, mailbox, group and site, a view across all clients, and what changed since last month. It never changes
 anything in a client's tenant.
 
+- **Free and open source** (AGPL-3.0), every feature included: no editions, no per-client pricing, no telemetry.
+- **Self-hosted** on a small server of your own: Linux with Docker (2 CPUs and 4 GB of memory), or Windows. Your
+  clients' data stays with you.
+- **One read-only app per client**, approved by the client's admin from a link you send, or by your technician
+  through GDAP. No agents, and no Partner Center needed.
+
 [![CI](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml/badge.svg)](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml)
 [![Release](https://img.shields.io/github/v/release/JackD99/OfficeSentry?label=release)](https://github.com/JackD99/OfficeSentry/releases/latest)
 [![Image](https://img.shields.io/badge/image-ghcr.io%2Fjackd99%2Fofficesentry-2563eb)](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry)
 [![Licence](https://img.shields.io/badge/licence-AGPL--3.0-blue)](LICENSE)
 
-[Website](https://officesentry.co.uk) · [Live demo](https://demo.officesentry.co.uk) · [Example reports (PDF)](examples/) · [Quick start](#quick-start) · [What it reads](v2/docs/what-office-sentry-reads.md) ·
-[Security model](#security-model) · [Getting help](SUPPORT.md) · [Technical reference](v2/README.md)
+[Website](https://officesentry.co.uk) · [Live demo](https://demo.officesentry.co.uk) (fictional clients, no sign-up) · [Example reports (PDF)](examples/) · [Quick start](#quick-start) ·
+[How it compares](website/pages/compare/reporting-tools.md) · [What it reads](v2/docs/what-office-sentry-reads.md) · [Security model](#security-model) · [Getting help](SUPPORT.md) ·
+[Technical reference](v2/README.md)
 
 ![A client's overview: key figures, what needs attention and what changed since last month](docs/screenshots/tenant-overview.png)
 
@@ -29,6 +36,22 @@ with no history.
 Office Sentry does the gathering every night for every client and keeps the results. The report is ready when you
 need it: branded with your logo, in plain English, with what changed since last time and what to fix first. You
 review it and send it, or let it email itself.
+
+### Instead of a paid tool?
+
+For reporting, it does the job paid tools are bought for: monthly client reviews, evidence for Cyber Essentials,
+ISO 27001, CIS and insurers, 49 detail reports and 69 checks across every client, with history. What it doesn't do,
+plainly:
+
+- **It reports; it doesn't manage.** It never creates users, changes settings or fixes findings, so it sits beside
+  CIPP or your RMM rather than replacing them.
+- **Nightly, not real time.** It collects every night, or when you ask, and alerts by email, Teams, Slack or a
+  webhook. There's no PSA integration.
+- **You run it.** There's no hosted version, and support is the docs and GitHub Discussions.
+
+[How it compares](website/pages/compare/reporting-tools.md) with Microsoft's admin centres, PowerShell, CIPP and
+AdminDroid, and [Office Sentry vs AdminDroid](website/pages/compare/admindroid.md) and
+[Office Sentry and CIPP](website/pages/compare/cipp.md) side by side.
 
 ## What you get
 
@@ -78,7 +101,7 @@ its licences) and when it will be full at the current rate, where the space goes
 recycle bins, Preservation Hold libraries), every site and library by size, and the largest folders and files,
 files with the most version history, large files nobody has touched for two years and the biggest recycle bin
 items, each with what to do about it. OneDrives that are nearly full get the same treatment.
-See the full 19-page [example PDF](examples/sharepoint-storage.pdf) for a client at 88%.
+See the full [example PDF](examples/sharepoint-storage.pdf) for a client at 88%.
 
 ![SharePoint storage: 88% used, full in about 3 months, and where the space goes](docs/screenshots/sharepoint-storage.png)
 
@@ -152,13 +175,15 @@ the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline f
   </tr>
 </table>
 
-The full list (mailboxes, inbox rules, shared mailboxes, mailbox size and its trend, automatic replies, mobile
+There are 49 in all: mailboxes, inbox rules, shared mailboxes, mailbox size and its trend, automatic replies, mobile
 devices, distribution lists, mail flow per domain, legacy sign-ins, passwords and sign-in methods, admins and roles,
 administrative units, apps and consents, guests and sharing, groups and Teams, Teams channels with their guests and
-apps, empty, nested and expiring groups, who can reach each SharePoint site and its permission levels, who can open each shared file and folder, email domains with SPF, DKIM, DMARC and
-MTA-STS, hybrid identity, admin activity, licence changes month by month, tenant settings, Microsoft 365 usage,
-Secure Score and more) is in the [technical reference](v2/README.md#reports). The **Reports** page finds any of them
-by name or by the job you're doing ("Offboarding check", "Insurance renewal", "Storage cleanup").
+apps, empty, nested and expiring groups, who can reach each SharePoint site and its permission levels, who can open
+each shared file and folder, email domains with SPF, DKIM, DMARC and MTA-STS, hybrid identity, admin activity,
+licence changes month by month, tenant settings, Microsoft 365 usage, Secure Score and more. The
+[technical reference](v2/README.md#reports) describes them by area, and the
+[catalogue](v2/docs/checks.md#detail-reports) lists every one with the data it reads. The **Reports** page finds any
+of them by name or by the job you're doing ("Offboarding check", "Insurance renewal", "Storage cleanup").
 
 ![The Reports page: every report, searchable, grouped by job](docs/screenshots/reports-library.png)
 
@@ -171,13 +196,13 @@ questions.
 
 ![An account page: needs attention, MFA, admin roles, licences and devices](docs/screenshots/person.png)
 
-Mailboxes get the same treatment: **Users > Mailboxes** lists every mailbox with its size, forwarding and who
+Mailboxes get the same treatment: **Users → Mailboxes** lists every mailbox with its size, forwarding and who
 else can open it, and each has a page with its size and growth over time, inbox rules, access, protocols, automatic
 reply, the phones syncing it and what changed. Mailbox addresses in reports and search results open it.
-So do groups: **Users > Groups and teams** lists every team, Microsoft 365 group, security group and distribution
+So do groups: **Users → Groups and teams** lists every team, Microsoft 365 group, security group and distribution
 list, and each has a page with its owners and members, what membership gives (Conditional Access, admin roles,
 licences), its mail and team site, how it's set up and what changed.
-And SharePoint sites: **Users > Sites** lists every site with its storage, sharing links and last activity, and
+And SharePoint sites: **Users → Sites** lists every site with its storage, sharing links and last activity, and
 each has a page with its storage and what fills it, how it's shared, the team behind it, its activity and what
 changed. Site addresses in reports and on group pages open it.
 
@@ -359,8 +384,10 @@ Office Sentry holds read access to many clients, so it is built to do as little 
   in the database. Secrets and private keys are never downloadable; only the public `.cer` is, by admins.
 - **Tenant isolation and roles.** Deny by default: people see only the clients they're granted, every client
   page goes through one access check, and anything else returns 404. What they may do there is a role made of
-  capabilities (built-in: Administrator, Team leader, Second line, First line, Account manager, Auditor and
-  Client viewer), narrowed or widened per person and per client by an admin. Clients see only their own reports.
+  capabilities ([Your team](#your-team-each-with-the-access-they-need)), narrowed or widened per person and per
+  client by an admin. Clients see only their own reports.
+- **The one thing it sends is your own email:** reports and alerts, through your mail server or a separate app in
+  your own tenant that can only send mail (`Mail.Send`).
 - **The portal itself:** staff can sign in with their own Microsoft account (Entra ID, under your Conditional
   Access and MFA; roles assigned in Entra), or with two-step sign-in, which is required for everyone on new
   installs, client accounts included; wrong passwords
@@ -368,7 +395,7 @@ Office Sentry holds read access to many clients, so it is built to do as little 
   server-side sessions, CSRF protection, a strict Content Security Policy with no external assets, and encrypted
   secrets with key rotation.
 
-Details are in [SECURITY.md](SECURITY.md) and the [technical reference](v2/README.md#what-it-does-differently-from-v1).
+Details are in [SECURITY.md](SECURITY.md) and [Securing the portal](v2/docs/securing-the-portal.md).
 
 ## What it reads
 
@@ -423,7 +450,7 @@ from there.
 
 ## Documentation
 
-- [Technical reference](v2/README.md): every report and check, Exchange data, sign-in security, setup and layout
+- [Technical reference](v2/README.md): every report and check by area, Exchange data, sign-in security and settings
 - [Running it on your own server](v2/DEPLOY.md)
 - [Deploy guides](v2/docs/deploy/README.md): Portainer and other container managers, Unraid, Synology and
   TrueNAS, Kubernetes, Azure, AWS, other clouds and Cloudflare
@@ -437,6 +464,8 @@ from there.
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
 - [Getting help](v2/docs/getting-help.md): where to look first, the support package and what it leaves out
 - [Securing the portal](v2/docs/securing-the-portal.md): hardening defaults, what you have to do, reverse proxies
+- [How it compares](website/pages/compare/reporting-tools.md): Office Sentry next to Microsoft's admin centres,
+  PowerShell, CIPP and AdminDroid
 - [Example reports](examples/)
 - [Roadmap](ROADMAP.md): what's planned next, and what never will be
 - [Changelog](CHANGELOG.md): what changed in each release
@@ -479,8 +508,3 @@ Please report vulnerabilities privately, as described in [SECURITY.md](SECURITY.
 Office Sentry is free software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only).
 You can use, change and share it; if you run a modified version for others over a network, you must offer them
 its source code under the same licence.
-
-## The old v1 portal
-
-The original v1 portal (MSP operations, 365Inspect, PowerShell scripts, AD agent, GDAP management, Graph Explorer)
-has been removed, and Office Sentry is now the read-only reporting tool described above.
