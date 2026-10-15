@@ -11,6 +11,12 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
+### Database upgrade
+
+Yes, applied on start as usual, after a copy of the database is made: migration 45 adds a column that keeps
+each approved month-end report's commentary, recommendations and notes as the client was given them. Months
+approved before the update show the month as it is now, as before, until they're issued again.
+
 ### Fixed
 
 - [v2/DEPLOY.md](v2/DEPLOY.md), *Running on Windows without Docker*: updating no longer deletes the virtual
@@ -29,6 +35,19 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
+
+### Security
+
+- **After approval, the client keeps the approved month-end report until a new version is issued.** Commentary,
+  recommendations and client-visible notes changed after a month was approved used to show on the client's live
+  report straight away. The client now sees what was approved (the same as their PDF), the review screen says the
+  month has changed since approval, and the month-end queue lists it under **Needs review** until someone issues
+  a new version.
+- **Only someone who can open every report a client's report plan emails can add a contact.** New contacts get
+  the plan's emails, so someone without one of those report areas could add a contact, their own address
+  included, and receive reports they can't open. The Contacts card and the schedule form now say who can add
+  one. Choosing who gets a client's new-finding alerts now needs *Security findings and reviews*, since alerts
+  name the findings.
 
 ## [2.3.1] - 2026-10-12
 
