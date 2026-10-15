@@ -1624,6 +1624,16 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
         )
     elif key_state == "failed":
         report.notes.append("BitLocker recovery keys couldn't be read; see the Devices collection's log.")
+    laps_state = devices.laps_state(snap)
+    if laps_state == "read":
+        sections.append(_laps_section(entra, devices.laps_backups(snap), now))
+    elif laps_state == "waiting":
+        report.notes.append(
+            "Whether each computer backs up its local admin password with Windows LAPS isn't shown yet. "
+            + waiting_text(snap.tenant["name"], [devices.LAPS])
+        )
+    elif laps_state == "failed":
+        report.notes.append("Windows LAPS backups couldn't be read; see the Devices collection's log.")
 
     records = Section(
         "Entra ID device records",
@@ -1661,6 +1671,17 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
                 "Encrypted computers with no BitLocker key in Entra ID",
                 "warn" if missing else "ok",
                 Rows(RECOVERY_KEYS, flagged=True),
+            )
+        )
+    if laps_state == "read":
+        without = sum(f is not None for f in next(s for s in sections if s.title == LAPS_SECTION).flags)
+        report.tiles.append(
+            Tile(
+                "No LAPS backup",
+                without,
+                "Entra joined computers whose local admin password isn't backed up",
+                "warn" if without else "ok",
+                Rows(LAPS_SECTION, {"Password backed up": "No", "Join type": JOIN_TYPES["AzureAd"]}),
             )
         )
     if not intune:
@@ -1747,6 +1768,41 @@ def _device_tiles(
 
 
 RECOVERY_KEYS = "BitLocker recovery keys"
+LAPS_SECTION = "Local admin passwords"
+
+
+def _laps_section(entra: list[dict], backups: dict[str, dict], now: datetime) -> Section:
+    """Joined Windows computers seen recently and whether Windows LAPS backs up their local admin password in
+    Entra ID. Without LAPS, a computer's local admin password is usually shared with every other computer, or
+    never changed, so one leak opens them all."""
+    section = Section(
+        LAPS_SECTION,
+        ["Device", "Join type", "Password backed up", "Last backed up", "Next change", "Last seen"],
+        intro="Windows computers joined to Entra ID and seen in the last "
+        f"{devices.STALE_DAYS} days, and whether Windows LAPS backs up their local administrator password in "
+        "Entra ID, which gives each computer its own password and changes it regularly. Hybrid joined computers "
+        "may back theirs up to on-premises Active Directory instead, which Office Sentry can't see, so they "
+        "aren't flagged. Office Sentry only reads that a password is backed up, never the password.",
+        empty="No Windows computers are joined to Entra ID.",
+    )
+    for d in sorted(entra, key=lambda d: (d.get("displayName") or "").lower()):
+        if not devices.escrows_keys(d, now):
+            continue
+        found = devices.laps_backup(d, backups) or {}
+        last, refresh = found.get("lastBackupDateTime"), found.get("refreshDateTime")
+        section.add(
+            [
+                d.get("displayName"),
+                JOIN_TYPES.get(d.get("trustType"), d.get("trustType") or "Unknown"),
+                bool(found),
+                _date(last if isinstance(last, str) else None),
+                _date(refresh if isinstance(refresh, str) else None),
+                _seen(d.get("approximateLastSignInDateTime"), now),
+            ],
+            "low" if not found and d.get("trustType") == "AzureAd" else None,
+        )
+    section.rows, section.flags = _by_flag(section)
+    return section
 
 
 def _recovery_key_section(entra: list[dict], managed: list[dict], keys: dict[str, dict], now: datetime) -> Section:

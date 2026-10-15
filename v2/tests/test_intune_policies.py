@@ -1,6 +1,6 @@
 """Intune policies: the collector, the report, the compliance coverage check, and the waiting and unlicensed
 states. Also BitLocker recovery keys (Devices report and check) and PIM for groups (Admins report), the
-other permissions of the 2.2 batch that nothing read until now."""
+other permissions of the 2.2 batch that nothing read until now, and Windows LAPS backups (2.4)."""
 
 import json
 from datetime import UTC, datetime
@@ -23,6 +23,7 @@ from tests.test_collectors import SKUS
 CONFIG = "DeviceManagementConfiguration.Read.All"
 APPS = "DeviceManagementApps.Read.All"
 BITLOCKER = "BitLockerKey.ReadBasic.All"
+LAPS = "DeviceLocalCredential.ReadBasic.All"
 PIM_GROUPS = "PrivilegedEligibilitySchedule.Read.AzureADGroup"
 
 
@@ -349,7 +350,11 @@ def test_devices_report_shows_which_computers_have_a_saved_key(db, two_tenants, 
     alpha, bravo = two_tenants
     seed_tenant(db, alpha)
     report = _report(db, alpha, "devices")
-    assert [s.title for s in report.sections][-2:] == ["BitLocker recovery keys", "Entra ID device records"]
+    assert [s.title for s in report.sections][-3:] == [
+        "BitLocker recovery keys",
+        "Local admin passwords",
+        "Entra ID device records",
+    ]
     keys = {r["Device"]: r for r in _table(report, "BitLocker recovery keys")}
     assert list(keys) == ["DESK-RECEPTION", "LAPTOP-ANN", "LAPTOP-BOB"]  # not OLD-PC (gone), not the iPhone
     assert (keys["LAPTOP-ANN"]["Recovery key saved"], keys["LAPTOP-ANN"]["Keys saved"]) == ("Yes", 3)
@@ -415,6 +420,99 @@ def test_a_refused_recovery_key_list_counts_as_waiting(db, two_tenants, monkeypa
     snap = TenantSnapshot(db, store.get_tenant(db, alpha))
     assert snap.objects("devices", "bitlocker_status")[0]["state"] == "waiting"
     assert snap.objects("devices", "recovery_key") == []
+
+
+# -- Windows LAPS ---------------------------------------------------------------------------------------------
+
+# A local admin password's shape, as Microsoft would send it with $select=credentials (never asked for).
+LAPS_PASSWORD = "Z2V0LW91dC1vZi1teS1sYXB0b3A="
+
+
+def test_laps_backups_are_read_without_the_password(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, laps=[{**b, "credentials": [{"passwordBase64": LAPS_PASSWORD}]} for b in dd.LAPS_BACKUPS])
+    run = _run(db, alpha, "devices")
+    assert run["status"] == "succeeded"
+    snap = TenantSnapshot(db, store.get_tenant(db, alpha))
+    backups = {r["_id"]: r for r in snap.objects("devices", "laps_backup")}
+    assert set(backups) == {"d-ann", "b0b-1", "d-old"}  # Microsoft's IDs are kept in lower case
+    assert backups["d-ann"]["lastBackupDateTime"] == dd.LAPS_BACKUPS[0]["lastBackupDateTime"]
+    assert "credentials" not in backups["d-ann"]
+    assert snap.metric("devices.laps_backed_up") == 3
+    # Only the list, with only these fields: the password comes back only with $select=credentials, which needs a
+    # permission Office Sentry never asks for.
+    asked = [e for e in _asked(db, run["id"]) if "deviceLocalCredentials" in e]
+    assert asked == ["v1.0 /directory/deviceLocalCredentials"]
+    assert "DeviceLocalCredential.Read.All" not in {e.permission for e in endpoints.GRAPH}
+    assert [e.path for e in endpoints.GRAPH if "deviceLocalCredentials" in e.path] == [
+        "/directory/deviceLocalCredentials"
+    ]
+    for (table,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall():
+        for row in db.execute(f"SELECT * FROM {table}"):  # noqa: S608 (table names from sqlite_master)
+            assert not any(isinstance(v, str) and LAPS_PASSWORD in v for v in tuple(row)), table
+    assert LAPS_PASSWORD not in json.dumps(store.run_objects(db, run["id"], "laps_backup"))
+
+
+def test_devices_report_and_check_show_which_computers_back_up_their_password(db, two_tenants, monkeypatch):
+    alpha, bravo = two_tenants
+    seed_tenant(db, alpha)
+    report = _report(db, alpha, "devices")
+    laps = {r["Device"]: r for r in _table(report, "Local admin passwords")}
+    assert list(laps) == ["DESK-RECEPTION", "LAPTOP-ANN", "LAPTOP-BOB"]  # not OLD-PC (gone), not the iPhone
+    assert laps["LAPTOP-ANN"]["Password backed up"] == "Yes"
+    assert laps["LAPTOP-ANN"]["Last backed up"] == dd.LAPS_BACKUPS[0]["lastBackupDateTime"][:10]
+    assert laps["LAPTOP-BOB"]["Password backed up"] == "Yes"  # matched by name: Microsoft's ID isn't the device's
+    assert laps["DESK-RECEPTION"]["Password backed up"] == "No"
+    # The hybrid joined desk PC may keep its password in on-premises AD, which Office Sentry can't see.
+    assert not any(_flags(report, "Local admin passwords").values())
+    tile = next(t for t in report.tiles if t.label == "No LAPS backup")
+    assert tile.value == 0 and tile.rows.table == "Local admin passwords"
+    result = _results(db, alpha)["laps_backups"]
+    assert result.status == "pass" and result.summary == "All 2 Entra joined Windows computers are backed up by LAPS"
+
+    # Bob's Entra joined laptop without one is flagged.
+    monkeypatch.setattr(dd, "LAPS_BACKUPS", [b for b in dd.LAPS_BACKUPS if b["deviceName"] != "LAPTOP-BOB"])
+    seed_tenant(db, bravo)
+    report = _report(db, bravo, "devices")
+    assert _flags(report, "Local admin passwords")["LAPTOP-BOB"] == "low"
+    assert next(t for t in report.tiles if t.label == "No LAPS backup").value == 1
+    result = _results(db, bravo)["laps_backups"]
+    assert result.status == "fail"
+    assert result.summary == "1 of 2 Entra joined Windows computers without a LAPS backup"
+    assert [(f.severity, f.subject) for f in result.findings] == [("low", "LAPTOP-BOB")]
+
+
+def test_laps_waits_for_approval(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, our_app={"missing": (LAPS,)})
+    run = _run(db, alpha, "devices")
+    assert run["status"] == "succeeded"
+    assert not [e for e in _asked(db, run["id"]) if "deviceLocalCredentials" in e]
+    report = _report(db, alpha, "devices")
+    assert "Local admin passwords" not in [s.title for s in report.sections]
+    assert "No LAPS backup" not in [t.label for t in report.tiles]
+    assert any(LAPS in n and "added in Office Sentry 2.4" in n for n in report.notes)
+    assert _results(db, alpha)["laps_backups"].status == "unavailable"
+
+
+def test_a_refused_laps_list_counts_as_waiting(db, two_tenants, monkeypatch):
+    alpha, _ = two_tenants
+    import tests.seed as seed
+
+    original = seed.paged
+
+    def refusing(rsps, url, items, **extra):
+        if url.endswith("/deviceLocalCredentials"):
+            rsps.get(url, status=403, json=idata.DENIED)
+        else:
+            original(rsps, url, items, **extra)
+
+    monkeypatch.setattr(seed, "paged", refusing)
+    seed_tenant(db, alpha)
+    assert _run(db, alpha, "devices")["status"] == "succeeded"
+    snap = TenantSnapshot(db, store.get_tenant(db, alpha))
+    assert snap.objects("devices", "laps_status")[0]["state"] == "waiting"
+    assert snap.objects("devices", "laps_backup") == []
 
 
 # -- PIM for groups -------------------------------------------------------------------------------------------

@@ -53,6 +53,7 @@ def test_collects_entra_and_intune_devices(db, two_tenants, factory):
     alpha, _ = two_tenants
     responses.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
     responses.get(f"{V1}/informationProtection/bitlocker/recoveryKeys", json={"value": dd.RECOVERY_KEYS})
+    responses.get(f"{V1}/directory/deviceLocalCredentials", json={"value": dd.LAPS_BACKUPS})
     responses.get(f"{V1}/deviceManagement/managedDevices", json={"value": dd.MANAGED_DEVICES})
     run_id, status = _run(db, alpha, "devices", factory)
     assert status == "succeeded"
@@ -94,6 +95,7 @@ def test_tenant_without_intune_collects_entra_only(db, two_tenants, factory):
     ]
     responses.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES + servers})
     responses.get(f"{V1}/informationProtection/bitlocker/recoveryKeys", json={"value": []})
+    responses.get(f"{V1}/directory/deviceLocalCredentials", json={"value": dd.LAPS_BACKUPS})
     assert _run(db, alpha, "tenant_profile", factory)[1] == "succeeded"
     assert _run(db, alpha, "devices", factory)[1] == "succeeded"
     assert not any("managedDevices" in c.request.url for c in responses.calls)
@@ -114,6 +116,7 @@ def test_intune_forbidden_is_partial_not_failed(db, two_tenants, factory):
     alpha, _ = two_tenants
     responses.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
     responses.get(f"{V1}/informationProtection/bitlocker/recoveryKeys", json={"value": dd.RECOVERY_KEYS})
+    responses.get(f"{V1}/directory/deviceLocalCredentials", json={"value": dd.LAPS_BACKUPS})
     responses.get(
         f"{V1}/deviceManagement/managedDevices",
         status=403,
@@ -218,6 +221,7 @@ def test_devices_report(db, two_tenants):
         "Needs attention",
         "Managed devices",
         "BitLocker recovery keys",
+        "Local admin passwords",
         "Entra ID device records",
     ]
     systems = {row[0]: row for row in sections["Operating systems"].rows}
@@ -255,5 +259,6 @@ def test_devices_page_and_xlsx(client, db, two_tenants):
         "Needs attention",
         "Managed devices",
         "BitLocker recovery keys",
+        "Local admin passwords",
         "Entra ID device records",
     ]

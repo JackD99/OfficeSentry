@@ -701,6 +701,14 @@ CLIENT_WORDS: dict[str, str] = {
     "DeviceManagementApps.Read.All": "Intune app protection policies and which managed apps are deployed.",
     "SharePoint Sites.Read.All": "Who has access to each SharePoint site and list, through SharePoint's own "
     "permission lists. Never what's in the files.",
+    # Added in 2.4
+    "DeviceLocalCredential.ReadBasic.All": "Whether each computer's local administrator password is backed up "
+    "in Entra ID (Windows LAPS), and when. Never the password itself.",
+    "SecurityAlert.Read.All": "Alerts raised by Microsoft Defender, such as a suspicious sign-in or a mailbox "
+    "sending spam: what, when, how severe and whether someone has dealt with it.",
+    "SecurityIncident.Read.All": "Incidents in Microsoft Defender (related alerts grouped together) and their status.",
+    "ServiceHealth.Read.All": "Microsoft 365 outages and advisories that affect you.",
+    "ServiceMessage.Read.All": "Microsoft's message centre posts about upcoming changes to Microsoft 365.",
 }
 NEVER_READS = (
     "Email, attachments, calendars or contacts.",

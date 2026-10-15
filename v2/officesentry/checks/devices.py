@@ -295,6 +295,45 @@ def bitlocker_keys(snap: TenantSnapshot, now: datetime):
 
 
 @rule(
+    "laps_backups",
+    "Windows computers back up their local admin password with LAPS",
+    "Devices",
+    "In Entra ID (Devices > Device settings), turn on Microsoft Entra Local Administrator Password Solution (LAPS), "
+    "then in Intune (Endpoint security > Account protection) create a Local admin password solution policy that "
+    "backs the password up to Entra ID and assign it to every Windows computer. Each computer then gets its own "
+    "local admin password, changed regularly, so one leaked password doesn't open every computer.",
+)
+def laps_backups(snap: TenantSnapshot, now: datetime):
+    entra = devices.objects(snap, "entra_device")
+    if entra is None:
+        return _unavailable("Device data hasn't been collected yet")
+    state = devices.laps_state(snap)
+    if state == "waiting":
+        return _unavailable(f"Waiting for the client to approve {devices.LAPS}")
+    if state != "read":
+        return _unavailable(
+            "Windows LAPS backups couldn't be read" if state else "Windows LAPS backups haven't been read yet"
+        )
+    # Hybrid joined computers may back theirs up to on-premises Active Directory, which Office Sentry can't see.
+    computers = [d for d in entra if devices.escrows_keys(d, now) and d.get("trustType") == "AzureAd"]
+    if not computers:
+        return _unavailable("No Windows computers are joined to Entra ID")
+    backups = devices.laps_backups(snap)
+    findings = [
+        Finding("low", d.get("displayName") or d["_id"], "No local admin password backed up in Entra ID", d["_id"])
+        for d in computers
+        if not devices.laps_backup(d, backups)
+    ]
+    if findings:
+        return (
+            "fail",
+            f"{len(findings)} of {plural(len(computers), 'Entra joined Windows computer')} without a LAPS backup",
+            findings,
+        )
+    return ("pass", _all_are(len(computers), "Entra joined Windows computer") + " backed up by LAPS", [])
+
+
+@rule(
     "intune_compliance_coverage",
     "Every platform in use has a compliance policy",
     "Devices",

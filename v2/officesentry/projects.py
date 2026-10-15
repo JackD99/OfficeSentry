@@ -351,6 +351,7 @@ CATALOG: list[Project] = [
                 "intune_compliance_coverage",
             ),
             _cover("BitLocker with recovery keys stored in Entra ID", "device_encryption", "bitlocker_keys"),
+            _cover("Windows LAPS, so each computer has its own local admin password", "laps_backups"),
             _cover("Clean-up of old devices and ones that stopped checking in", "device_checkin", "stale_devices"),
         ],
         checks={
@@ -359,6 +360,7 @@ CATALOG: list[Project] = [
             "device_encryption": Effort(fixed=0.5, each=0.25, most=12),
             # A low finding is a computer outside Intune: enrolling it (intune_enrolled) is the work.
             "bitlocker_keys": Effort(each=0.25, minor=0, most=8),
+            "laps_backups": Effort(fixed=1, each=0.05, most=3),  # one policy, then each computer checks it took
             "intune_compliance_coverage": Effort(each=0.5, most=3),
             "device_checkin": Effort(each=0.25, most=8),
             "stale_devices": Effort(fixed=0.5),  # one clean-up, however many

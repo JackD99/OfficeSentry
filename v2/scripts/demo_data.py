@@ -48,6 +48,7 @@ from tests import (  # noqa: E402  # noqa: E402
     hybriddata,
     licencedata,
     mailflowdata,
+    securitydata,
     sharepoint_data,
     tenantsettingsdata,
     usagedata,
@@ -64,6 +65,7 @@ FIXTURES = (
     sharepoint_data,
     usagedata,
     licencedata,
+    securitydata,
     fixture_users,
 )
 
@@ -1013,6 +1015,23 @@ def recovery_keys(managed: list[dict]) -> list[dict]:
     return keys
 
 
+def laps_backups(entra: list[dict]) -> list[dict]:
+    """A Windows LAPS backup for each demo PC, except every eighth, whose password isn't backed up (the Devices
+    report flags those)."""
+    backups = list(devicedata.LAPS_BACKUPS)
+    for i, d in enumerate(e for e in entra if e["id"].startswith("ed-d")):
+        if i % 8 != 5:
+            backups.append(
+                {
+                    "id": d["deviceId"],
+                    "deviceName": d["displayName"],
+                    "lastBackupDateTime": devicedata.days_ago(i % 30),
+                    "refreshDateTime": devicedata.days_ago(i % 30 - 30),
+                }
+            )
+    return backups
+
+
 def devices(users: list[dict], rng: random.Random) -> tuple[list[dict], list[dict]]:
     """A Windows PC per person: mostly current builds, a few on Windows 10, some not checking in or unencrypted."""
     entra, managed = list(devicedata.ENTRA_DEVICES), list(devicedata.MANAGED_DEVICES)
@@ -1950,7 +1969,12 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> 
                 },
                 "ROLE_DEFINITIONS": role_definitions(),
             },
-            devicedata: {"ENTRA_DEVICES": entra, "MANAGED_DEVICES": managed, "RECOVERY_KEYS": keys},
+            devicedata: {
+                "ENTRA_DEVICES": entra,
+                "MANAGED_DEVICES": managed,
+                "RECOVERY_KEYS": keys,
+                "LAPS_BACKUPS": laps_backups(entra),
+            },
             sharepoint_data: {**sharepoint(t, everyone, tenant_skus, now, first, rng), **access_extras},
             groupdata: {
                 "GROUPS": directory["GROUPS"] + group_extras["GROUPS"],
