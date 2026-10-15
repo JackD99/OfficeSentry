@@ -56,8 +56,10 @@ certificate. The portal still sees each visitor's address.
          security_opt: ["no-new-privileges:true"]
      ```
 
-     then `docker compose up -d` without `--profile https`: Cloudflare provides HTTPS, so Caddy isn't needed.
-     Remove the firewall's rules for ports 80 and 443.
+     then take `https` out of `COMPOSE_PROFILES` in `.env` (and `--profile https` out of your commands, if
+     you start it that way), and run `docker compose up -d` and then
+     `docker compose --profile https rm --stop --force caddy`. Cloudflare provides HTTPS, so Caddy isn't
+     needed. Remove the firewall's rules for ports 80 and 443.
    - **Kubernetes:** run `cloudflared` as its own Deployment, as Cloudflare's documentation describes, with
      the service URL `http://officesentry.officesentry.svc.cluster.local:8000`.
 4. In Office Sentry's settings, `OFFICESENTRY_BASE_URL` is `https://` and the tunnel's hostname, and
@@ -133,7 +135,7 @@ each needs; the firewall and the rest below are the same.
    ```
 
 3. **Two proxies.** Set `OFFICESENTRY_TRUSTED_PROXIES=2` in `.env` (Cloudflare, then Caddy), and run
-   `docker compose --profile https up -d`.
+   `docker compose up -d` (with `COMPOSE_PROFILES=https` in `.env`, as in *First start*).
 
 Then, in Cloudflare, turn the DNS record's proxy on (orange cloud). On the server's firewall, allow 443 from
 Cloudflare's addresses only (the same list), and close 80: otherwise anyone who finds the server's address can
