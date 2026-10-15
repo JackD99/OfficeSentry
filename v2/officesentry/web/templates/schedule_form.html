@@ -125,8 +125,9 @@
     <h2><span class="step-no">3</span> Who gets it</h2>
     {% if not digest %}
     <div class="label-sm">{{ tenant.name }} contacts <span class="muted">· see the email addressed to them</span></div>
-    {{ contact_checks(contacts, chosen, 'No contacts for ' ~ tenant.name ~ ' yet. Add one below.') }}
+    {{ contact_checks(contacts, chosen, 'No contacts for ' ~ tenant.name ~ ' yet.' ~ (' Add one below.' if adds_contacts else '')) }}
     {% endif %}
+    {% if adds_contacts %}
     <details class="add-person" {% if not digest and not contacts %}open{% endif %}>
       <summary class="small">{{ icon('plus') }} Add {{ 'a team member' if digest else 'a contact at ' ~ tenant.name }}</summary>
       <div class="form-row tight">
@@ -134,6 +135,9 @@
         <label>Email <input name="new_email" type="email" placeholder="{{ 'you@msp.com' if digest else 'sam@client.com' }}" autocomplete="off"></label>
       </div>
     </details>
+    {% else %}
+    <p class="footnote m0">New contacts get this client's report plan emails, which have reports you can't open, so someone who can open all of them adds contacts.</p>
+    {% endif %}
     <div class="label-sm">Your team <span class="muted">· {{ 'only your team gets this email' if coming_up or views_email else 'only your team gets digests' if digest else 'get a hidden copy, so clients never see them' }}</span></div>
     {{ contact_checks(team, chosen, 'No team members yet.' if not digest else 'No team members yet. Add one above.') }}
     {% if not team and not digest and can('settings.manage') %}<p class="footnote m0"><a href="{{ url_for('email.overview') }}#team">Add your team</a> to copy them in on client emails.</p>{% endif %}
@@ -179,7 +183,7 @@
     var hour = ('0' + form.hour.value).slice(-2) + ':00';
     var text = f === 'weekly' ? 'Every ' + days[form.day_of_week.value] :
       (f === 'monthly' ? 'Monthly on the ' : 'Quarterly on the ') + ordinal(+form.day_of_month.value);
-    var people = form.querySelectorAll('input[name=contacts]:checked').length + (form.new_email.value ? 1 : 0);
+    var people = form.querySelectorAll('input[name=contacts]:checked').length + (form.new_email && form.new_email.value ? 1 : 0);
     document.getElementById('summary').textContent = text + ' at ' + hour + ' to ' + people + (people === 1 ? ' person' : ' people') + '.';
     form.querySelectorAll('details.report-choices').forEach(function (d) {
       var all = d.querySelectorAll('input[name=reports]').length, on = d.querySelectorAll('input[name=reports]:checked').length;
