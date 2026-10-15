@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 from urllib.parse import unquote, urlsplit
 
-from .. import devices, events
+from .. import clouds, devices, events
 from ..auditlog import addon, operations
 from ..snapshot import TenantSnapshot
 from .data_reports import DataReport, Link, Rows, Section, Tile, metric_trend
@@ -79,12 +79,15 @@ def _when(ts: int) -> str:
     return datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%d %H:%M")
 
 
-def _item(value: str):
-    """A file's address as a link with its path for text; anything else as it is."""
-    if value.lower().startswith("https://"):
-        path = unquote(urlsplit(value).path) or value
-        return Link(path, value)
-    return value
+def _item(a: events.Activity, cloud: clouds.Cloud):
+    """A file's address in the client's SharePoint as a link with its path for text. Anything else is shown
+    whole: rules and other items are named by whoever made them, so one named like an address can't hide its
+    real host behind a SharePoint-looking path."""
+    parts = urlsplit(a.object)
+    on_sharepoint = cloud.is_sharepoint(f"{parts.scheme}://{parts.netloc}".lower())
+    if on_sharepoint and operations.group(a.operation) in ("files", "sharing"):
+        return Link(unquote(parts.path) or a.object, a.object)
+    return a.object
 
 
 def _mass_deletes(activities) -> list[tuple[int, str, int]]:
@@ -96,13 +99,13 @@ def _mass_deletes(activities) -> list[tuple[int, str, int]]:
     return sorted(((h, who, n) for (h, who), n in hours.items() if n >= MASS_DELETE), reverse=True)
 
 
-def _rows(a: events.Activity) -> list:
+def _rows(a: events.Activity, cloud: clouds.Cloud) -> list:
     label = operations.label(a.operation)
     group = operations.group(a.operation)
     if group == "files":
-        return [_when(a.ts), label, a.actor, _item(a.object), a.summary, a.ip]
+        return [_when(a.ts), label, a.actor, _item(a, cloud), a.summary, a.ip]
     if group == "sharing":
-        return [_when(a.ts), label, a.actor, a.owner, _item(a.object), a.summary]
+        return [_when(a.ts), label, a.actor, a.owner, _item(a, cloud), a.summary]
     if group == "audit":
         return [_when(a.ts), label, a.actor, a.object, a.summary]
     item = "" if a.object.lower() == a.owner.lower() else a.object  # forwarding set on a mailbox names it twice
@@ -123,6 +126,7 @@ def _rows(a: events.Activity) -> list:
 )
 def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     conn, tenant = snap.conn, snap.tenant
+    cloud = clouds.of(tenant)
     row = addon.row_for(conn, tenant["id"])
     if row is None:
         report.unavailable = "The audit log add-on isn't on for this client."
@@ -173,7 +177,7 @@ def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport)
     for a in activities:
         if a.attention:
             attention.add(
-                [_when(a.ts), operations.label(a.operation), a.actor, a.owner, _item(a.object), a.attention],
+                [_when(a.ts), operations.label(a.operation), a.actor, a.owner, _item(a, cloud), a.attention],
                 "high" if a.attention in HIGH else "medium",
             )
     attention.rows, attention.flags = _by_severity(attention)
@@ -193,7 +197,7 @@ def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport)
     for a in activities:
         group = operations.group(a.operation)
         if group in tables:
-            tables[group].add(_rows(a), "medium" if a.attention else None)
+            tables[group].add(_rows(a, cloud), "medium" if a.attention else None)
         people[a.actor or "Unknown"][_column(a)] += 1
 
     sync = Section(
