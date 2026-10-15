@@ -11,8 +11,6 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
-In progress. What changed is listed here when 2.4.0 is released.
-
 ### Added
 
 - **The sign-in page says who to ask.** Under the sign-in card, "Trouble signing in? Contact Harbour IT at
