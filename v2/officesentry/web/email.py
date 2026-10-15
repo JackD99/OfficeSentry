@@ -89,6 +89,24 @@ def _sends_only_what_they_open(s) -> bool:
     return all(_opens(k, s["tenant_id"]) for k in keys)
 
 
+PLAN_CONTACTS = (
+    "New contacts get this client's report plan emails, which have reports you can't open, so only someone who can"
+    " open all of them can add a contact."
+)
+
+
+def _plan_sends_more(tenant_id: int) -> bool:
+    """Whether the client's report plan emails a report the signed-in person can't open. A new contact joins
+    the plan's emails (``month_end.contact_added``, and whenever the plan is applied), so adding one would hand
+    those reports to whoever is added, themselves included: only someone who opens all of them adds contacts."""
+    plan, _ = month_end.plan_for(g.db, tenant_id)
+    return (
+        plan is not None
+        and plan["delivery"] == "email"
+        and not all(_opens(key, tenant_id) for key in json.loads(plan["reports"] or "[]"))
+    )
+
+
 def _alert_or_404(alert_id: int):
     a = g.db.execute("SELECT * FROM email_alerts WHERE id = ?", (alert_id,)).fetchone()
     if a is None:
@@ -175,6 +193,7 @@ def tenant_emails(tenant_id: int):
         deliveries=deliveries,
         alert=alert,
         contacts=contacts,
+        adds_contacts=staff and not _plan_sends_more(t["id"]),
         team=delivery.team_contacts(g.db),
         upcoming=upcoming[0] if upcoming else None,
         failing=failing,
@@ -300,6 +319,8 @@ def _chosen_contacts(tenant_id: int | None) -> tuple[list[int], list[str]]:
             errors.append(f"“{email}” isn't a valid email address.")
         elif tenant_id is None and not can("settings.manage"):
             abort(403)
+        elif tenant_id is not None and _plan_sends_more(tenant_id):
+            errors.append(PLAN_CONTACTS)
         else:
             ids.append(delivery.add_contact(g.db, tenant_id, request.form.get("new_name", "").strip()[:100], email))
     return list(dict.fromkeys(ids)), errors
@@ -386,6 +407,7 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
         catalog=_catalog(tenant_id),
         report_groups=report_groups(hidden_reports(tenant_id)),
         contacts=delivery.tenant_contacts(g.db, tenant["id"]) if tenant else [],
+        adds_contacts=not tenant or not _plan_sends_more(tenant["id"]),
         team=delivery.team_contacts(g.db),
         frequencies=delivery.FREQUENCIES,
         days=delivery.DAYS,
@@ -745,6 +767,9 @@ def _add_contact(tenant_id: int | None):
     if not mailer.valid_email(email):
         flash("Enter a valid email address.", "error")
         return
+    if tenant_id is not None and _plan_sends_more(tenant_id):
+        flash(PLAN_CONTACTS, "error")
+        return
     contact_id = delivery.add_contact(g.db, tenant_id, name, email)
     if tenant_id is not None:
         month_end.contact_added(g.db, tenant_id, contact_id)
@@ -819,7 +844,7 @@ def _save_alert(tenant_id: int | None):
 
 
 @bp.post("/tenants/<int:tenant_id>/alert")
-@needs("emails.manage")
+@needs("emails.manage", "reports.security")  # an alert names the client's new findings
 def save_tenant_alert(tenant_id: int):
     return _save_alert(tenant_or_404(tenant_id)["id"])
 
