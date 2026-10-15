@@ -637,9 +637,13 @@ body.branded .auth-card a { color: var(--brand-ink); }
 .auth-card .powered-by { color: var(--muted); text-align: center; padding: 0; }
 
 /* Client home: latest report, open recommendations, who to contact */
-.client-latest { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-4); }
-.client-latest h2 { margin: 0 0 var(--space-0-5); }
-.client-latest .actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+/* The verdict leads: a verdict-callout with the most urgent item, the MSP's note and the review's buttons. */
+.client-latest > .grow > .pill { background: var(--surface); }  /* the pill would vanish on its own tone */
+.client-latest .verdict-detail { color: var(--text-2); }
+.client-latest .client-note { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.client-latest .client-note p { margin: var(--space-1) 0 0; color: var(--text-2); }
+.client-latest .note-from { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
+.client-latest .actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin: var(--space-3-5) 0 var(--space-1-5); }
 .client-recs { margin-bottom: var(--space-4); }
 .client-recs ol { list-style: none; margin: 0; padding: 0; }
 .client-recs li { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-2-5) 0; border-top: 1px solid var(--border); }
