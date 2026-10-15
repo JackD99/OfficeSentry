@@ -29,6 +29,12 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
+- An address or form with a number too big for the database, such as a client number 25 digits long, gets the
+  not-found page or says the number is too big, instead of a server error.
+- The sign-ins download on a client's **Activity history** is not found for a month with a newline after it,
+  which reached the file's name, or for year 0000, which broke the download off.
+- The **Activity log** download says in its last row when it holds only the newest 100,000 rows, and the
+  log's user filter finds someone whatever case their name is typed in.
 
 ## [2.3.1] - 2026-10-12
 

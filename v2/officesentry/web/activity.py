@@ -38,7 +38,7 @@ def _filters() -> dict:
 def _where(f: dict) -> tuple[str, list]:
     where, params = _scope()
     if f["user"]:
-        where.append("a.username = ?")
+        where.append("a.username = ? COLLATE NOCASE")  # as users.username is: "ADMIN" is admin
         params.append(f["user"])
     if f["action"]:
         where.append("a.action = ?")
@@ -122,25 +122,25 @@ def export():
     f = _filters()
     where, params = _where(f)
     rows = g.db.execute(
-        f"SELECT a.* FROM audit_log a{where} ORDER BY a.id DESC LIMIT ?", (*params, CSV_LIMIT)
+        f"SELECT a.* FROM audit_log a{where} ORDER BY a.id DESC LIMIT ?", (*params, CSV_LIMIT + 1)
     ).fetchall()
+    cut, rows = len(rows) > CSV_LIMIT, rows[:CSV_LIMIT]
     names = _tenant_names()
-    table = Table(
-        "Activity log",
-        ["Time (UTC)", "User", "Action", "Client", "Address", "Detail"],
+    lines = [
         [
-            [
-                r["ts"],
-                r["username"] or "",
-                r["action"],
-                tenant_label(r["tenant_id"], names),
-                r["ip"] or "",
-                r["detail"] or "",
-            ]
-            for r in rows
-        ],
-    )
-    audit(g.db, g.user["username"], "activity_log_downloaded", detail=f"{len(rows)} rows")
+            r["ts"],
+            r["username"] or "",
+            r["action"],
+            tenant_label(r["tenant_id"], names),
+            r["ip"] or "",
+            r["detail"] or "",
+        ]
+        for r in rows
+    ]
+    if cut:  # said in the file itself, so nobody takes it for the whole log
+        lines.append([f"Only the newest {CSV_LIMIT:,} rows. Choose dates to download the rest.", "", "", "", "", ""])
+    table = Table("Activity log", ["Time (UTC)", "User", "Action", "Client", "Address", "Detail"], lines)
+    audit(g.db, g.user["username"], "activity_log_downloaded", detail=f"{len(rows)} rows" + (", cut" if cut else ""))
     return Response(
         to_csv(table),
         mimetype="text/csv",
