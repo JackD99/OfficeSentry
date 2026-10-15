@@ -387,6 +387,7 @@ class QueueRow:
     error: str | None = None
     paused: bool = False
     task: dict | None = None  # the latest approval task for the month (``approval_task``)
+    edited: bool = False  # changed since it was approved (``changed_since_approval``)
 
     @property
     def state_label(self) -> str:
@@ -533,6 +534,7 @@ def queue(conn, tenants, period: str, now: datetime | None = None, *, cached: bo
                 error=r["error"] if r else None,
                 paused=not t["enabled"],
                 task=dict(jobs[t["id"]]) if t["id"] in jobs else None,
+                edited=changed_since_approval(conn, t["id"], period, r, state),
             )
         )
     rows.sort(key=lambda q: (list(STATES).index(q.state), -len(q.flags), q.tenant["name"].lower()))
@@ -708,22 +710,32 @@ def report_context(conn, tenant_id: int, period: str, *, staff: bool, approved_o
 
     ``staff`` False for anything a client sees: their page and every PDF. Staff-only notes are then left out.
     ``approved_only`` (a client opening their live report) shows nothing until the month is approved or sent,
-    so work in progress isn't read before it's signed off. What the reviewer left out (``hidden``) is left
-    out either way, and callers drop the checks and figures with ``monthly_review.leave_out``.
+    so work in progress isn't read before it's signed off, and then the copy that was approved
+    (``approved_copy``): a change made since waits until the month is approved again. What the reviewer left
+    out (``hidden``) is left out either way, and callers drop the checks and figures with
+    ``monthly_review.leave_out``.
     """
     r = review(conn, tenant_id, period)
-    left_out = hidden(conn, tenant_id, period)
-    if approved_only and state_of(conn, tenant_id, period, r) not in ("approved", "sent"):
-        return {
-            "month_end": {
-                "commentary": "",
-                "actions": [],
-                "notes": {},
-                "staff": False,
-                "period": period,
-                "hidden": left_out,
+    if approved_only:
+        if state_of(conn, tenant_id, period, r) not in ("approved", "sent"):
+            return {
+                "month_end": {
+                    "commentary": "",
+                    "actions": [],
+                    "notes": {},
+                    "staff": False,
+                    "period": period,
+                    "hidden": hidden(conn, tenant_id, period),
+                }
             }
-        }
+        if (copy := approved_copy(r)) is not None:
+            return {"month_end": {**copy, "staff": False, "period": period}}
+    return {"month_end": {**_month_parts(conn, tenant_id, period, r, staff), "staff": staff, "period": period}}
+
+
+def _month_parts(conn, tenant_id: int, period: str, r, staff: bool) -> dict:
+    """The month's commentary, recommendations, notes and what's left out, as they are now."""
+    left_out = hidden(conn, tenant_id, period)
     recent = period_start(shift_period(period, -1))
     items = [
         dict(
@@ -737,16 +749,40 @@ def report_context(conn, tenant_id: int, period: str, *, staff: bool, approved_o
     by_rule: dict[str, list] = {}
     for n in notes(conn, tenant_id, staff):
         by_rule.setdefault(n["rule_key"], []).append(dict(n))
-    return {
-        "month_end": {
-            "commentary": r["commentary"] if r else "",
-            "actions": items,
-            "notes": by_rule,
-            "staff": staff,
-            "period": period,
-            "hidden": left_out,
-        }
-    }
+    return {"commentary": r["commentary"] if r else "", "actions": items, "notes": by_rule, "hidden": left_out}
+
+
+def _copy_json(month: dict) -> str:
+    """A client's copy of the month (``report_context(..., staff=False)["month_end"]``) as stored at approval."""
+    return json.dumps(
+        {
+            "commentary": month["commentary"],
+            "actions": month["actions"],
+            "notes": month["notes"],
+            "hidden": sorted(month["hidden"]),
+        },
+        sort_keys=True,
+    )
+
+
+def approved_copy(r) -> dict | None:
+    """The client's copy of the month as it was approved, or None: never approved, approved before the copy
+    was kept, or sent by an automatic plan."""
+    if r is None or not r["approved_copy"]:
+        return None
+    copy = json.loads(r["approved_copy"])
+    return {**copy, "hidden": set(copy["hidden"])}
+
+
+def changed_since_approval(conn, tenant_id: int, period: str, r=None, state: str | None = None) -> bool:
+    """Whether the commentary, recommendations, client-visible notes or what's left out changed since the month
+    was approved: the client still sees the approved copy until it's approved again."""
+    r = r if r is not None else review(conn, tenant_id, period)
+    state = state or state_of(conn, tenant_id, period, r)
+    if state not in ("approved", "sent") or r is None or not r["approved_copy"]:
+        return False
+    now = _copy_json(_month_parts(conn, tenant_id, period, r, staff=False))
+    return now != json.dumps(json.loads(r["approved_copy"]), sort_keys=True)
 
 
 # -- Approval ----------------------------------------------------------------------------------------
@@ -775,10 +811,15 @@ def frozen_files(conn, tenant_id: int, period: str) -> list:
     return batch[::-1]
 
 
-def render_files(app, conn, tenant, period: str, now: datetime | None = None) -> list[tuple[str, str, bytes]]:
+def render_files(
+    app, conn, tenant, period: str, now: datetime | None = None, *, month: dict | None = None
+) -> list[tuple[str, str, bytes]]:
     """Build the plan's files for the month (the slow part of approving). Reads only, so it runs outside
-    the write transaction and the worker's collections aren't held up while PDFs render."""
+    the write transaction and the worker's collections aren't held up while PDFs render. ``month`` is the
+    client's copy of the month to print (``report_context``), read now when not given."""
     now = now or datetime.now(UTC)
+    if month is None:
+        month = report_context(conn, tenant["id"], period, staff=False)["month_end"]
     plan, _ = plan_for(conn, tenant["id"])
     if plan is None:
         raise ApprovalError(f"{tenant['name']} isn't on a report plan")
@@ -792,7 +833,7 @@ def render_files(app, conn, tenant, period: str, now: datetime | None = None) ->
         bool(plan["include_xlsx"]),
         now,
         report,
-        review_context=report_context(conn, tenant["id"], period, staff=False),
+        review_context={"month_end": month},
     )
 
 
@@ -806,15 +847,22 @@ def freeze(
     reason: str | None = None,
     now: datetime | None = None,
     files: list[tuple[str, str, bytes]] | None = None,
+    month: dict | None = None,
 ) -> list[int]:
     """Store the plan's files for the month, with the month's commentary and client-visible notes, in
-    issued_reports and mark the month approved. ``files`` from ``render_files`` (built here when not given)."""
+    issued_reports and mark the month approved. ``files`` from ``render_files`` (built here when not given),
+    with ``month``, the client's copy they were built from: it's kept as the approved copy the client's live
+    report shows (``approved_copy``)."""
     now = now or datetime.now(UTC)
     plan, link = plan_for(conn, tenant["id"])
     if plan is None:
         raise ApprovalError(f"{tenant['name']} isn't on a report plan")
+    if month is None:
+        if files is not None:
+            raise ValueError("files need the month they were built from")
+        month = report_context(conn, tenant["id"], period, staff=False)["month_end"]
     if files is None:
-        files = render_files(app, conn, tenant, period, now)
+        files = render_files(app, conn, tenant, period, now, month=month)
     keys = json.loads(plan["reports"] or "[]")
     by_name = {name: key for key, name in delivery.attachment_plan(tenant, keys, bool(plan["include_xlsx"]), conn)}
     known = delivery.catalog_map(conn)
@@ -843,7 +891,17 @@ def freeze(
         f" WHERE id IN ({','.join('?' * len(ids))})",
         (user, stamp, reason, *ids),
     )
-    update_review(conn, tenant["id"], period, user, state="approved", approved_by=user, approved_at=stamp, error=None)
+    update_review(
+        conn,
+        tenant["id"],
+        period,
+        user,
+        state="approved",
+        approved_by=user,
+        approved_at=stamp,
+        approved_copy=_copy_json(month),
+        error=None,
+    )
     return ids
 
 
@@ -1013,8 +1071,11 @@ def _approve_task(ctx: tasks.TaskContext) -> dict:
         if _timer_sending(conn, ctx.cfg, tenant["id"]):
             raise tasks.TaskFailed(delivery.BEING_SENT)
         ctx.progress("Building the reports")
+        # Read once: the files and the approved copy the client's live report shows are the same month, even
+        # if someone edits the commentary while the files are built.
+        month = report_context(conn, tenant["id"], period, staff=False)["month_end"]
         try:
-            files = render_files(ctx.app, conn, tenant, period)
+            files = render_files(ctx.app, conn, tenant, period, month=month)
         except ApprovalError as exc:
             raise tasks.TaskFailed(str(exc)) from exc
         except Exception as exc:
@@ -1024,7 +1085,7 @@ def _approve_task(ctx: tasks.TaskContext) -> dict:
             # Checked again inside the write lock: someone may have approved it while the files were built.
             if state_of(conn, tenant["id"], period) in ("approved", "sent") and not reason:
                 return {"state": state_of(conn, tenant["id"], period), "skipped": "already issued"}
-            freeze(ctx.app, conn, tenant, period, user, reason=reason, files=files)
+            freeze(ctx.app, conn, tenant, period, user, reason=reason, files=files, month=month)
             audit(
                 conn,
                 user,
