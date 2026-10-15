@@ -818,6 +818,93 @@ def test_reissue_form_says_the_client_sees_the_reason(client, db, two_tenants, m
     assert "Corrected the licence count" in client.get(f"/tenants/{alpha}/report-history").get_data(as_text=True)
 
 
+def _client_report(client, db, tenant_id: int) -> str:
+    """The client's live monthly review, read as a client account."""
+    if not db.execute("SELECT 1 FROM users WHERE username = 'client'").fetchone():
+        make_user(db, "client", role="client", tenants=[tenant_id])
+    client.post("/logout")
+    login(client, "client")
+    page = client.get(f"/tenants/{tenant_id}/report").get_data(as_text=True)
+    client.post("/logout")
+    login(client, "admin")
+    return page
+
+
+def test_changes_after_approval_wait_for_a_new_version(client, db, two_tenants, monkeypatch):
+    """Once a month is approved, the client's report shows what was approved. Commentary, recommendations and
+    notes changed since reach them with a new version, as the issued files do, and the review screen and the
+    queue say the month has changed."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: b"%PDF-1.7")
+    _smtp_ready(db)
+    _admin(client, db)
+    delivery.add_contact(db, alpha, "IT", "it@alpha.com")
+    _plan(client, [alpha], include_xlsx="")
+    client.post(f"/reporting/{PERIOD}/{alpha}/commentary", data={"commentary": "Signed off."})
+    client.post(f"/reporting/{PERIOD}/{alpha}/approve")
+    assert work(client) == 1
+    assert not month_end.changed_since_approval(db, alpha, PERIOD)
+    assert "Signed off." in _client_report(client, db, alpha)
+
+    rule = month_end.monthly_review.build(db, store.get_tenant(db, alpha)).failing[0]
+    resp = client.post(
+        f"/reporting/{PERIOD}/{alpha}/commentary", data={"commentary": "Rewritten later."}, follow_redirects=True
+    )
+    assert "Alpha Ltd sees it once the month is issued again." in resp.get_data(as_text=True)
+    client.post(f"/tenants/{alpha}/report-actions", data={"title": "Added later", "period": PERIOD})
+    client.post(
+        f"/tenants/{alpha}/finding-notes", data={"rule_key": rule.key, "body": "Noted later", "visibility": "client"}
+    )
+    assert month_end.changed_since_approval(db, alpha, PERIOD)
+    assert "Changed since it was approved." in client.get(f"/reporting/{PERIOD}/{alpha}").get_data(as_text=True)
+    queue = client.get(f"/reporting/{PERIOD}?show=review").get_data(as_text=True)
+    assert "Alpha Ltd" in queue and "Changed since approval" in queue
+    page = _client_report(client, db, alpha)
+    assert "Signed off." in page
+    assert "Rewritten later." not in page and "Added later" not in page and "Noted later" not in page
+    # Nor does another of the client's emails carry the changes before they're approved.
+    context = month_end.report_context(db, alpha, PERIOD, staff=False, approved_only=True)["month_end"]
+    assert context["commentary"] == "Signed off."
+
+    client.post(f"/reporting/{PERIOD}/{alpha}/approve", data={"reason": "Updated our commentary"})
+    assert work(client) == 1
+    assert not month_end.changed_since_approval(db, alpha, PERIOD)
+    assert "Changed since it was approved." not in client.get(f"/reporting/{PERIOD}/{alpha}").get_data(as_text=True)
+    page = _client_report(client, db, alpha)
+    assert "Rewritten later." in page and "Added later" in page and "Noted later" in page
+    assert "Signed off." not in page
+
+
+def test_the_approved_copy_is_what_the_files_were_built_from(client, db, two_tenants, monkeypatch):
+    """Commentary edited while the approval builds the files isn't in them, so it isn't in the approved copy
+    either: the client's report matches their PDF, and the month shows as changed since approval."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    pdf_html = []
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: pdf_html.append(html) or b"%PDF-1.7")
+    _smtp_ready(db)
+    _admin(client, db)
+    delivery.add_contact(db, alpha, "IT", "it@alpha.com")
+    _plan(client, [alpha], include_xlsx="")
+    client.post(f"/reporting/{PERIOD}/{alpha}/commentary", data={"commentary": "As approved."})
+    real = month_end.render_files
+
+    def edited_meanwhile(*args, **kwargs):
+        files = real(*args, **kwargs)
+        month_end.update_review(db, alpha, PERIOD, "analyst", commentary="Typed while it was building.")
+        return files
+
+    monkeypatch.setattr(month_end, "render_files", edited_meanwhile)
+    client.post(f"/reporting/{PERIOD}/{alpha}/approve")
+    assert work(client) == 1
+    (html,) = pdf_html
+    assert "As approved." in html and "Typed while it was building." not in html
+    page = _client_report(client, db, alpha)
+    assert "As approved." in page and "Typed while it was building." not in page
+    assert month_end.changed_since_approval(db, alpha, PERIOD)
+
+
 def test_reissue_after_a_report_left_the_plan_sends_only_the_plans_files(app, db, two_tenants, vault, cfg, monkeypatch):
     alpha, _ = two_tenants
     monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: b"%PDF-1.7")

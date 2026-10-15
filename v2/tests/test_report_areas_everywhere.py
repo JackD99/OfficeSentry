@@ -121,6 +121,85 @@ def test_a_schedule_sending_more_than_you_open_only_changes_for_someone_who_can(
     assert client.get(f"/schedules/{sid}/edit").status_code == 200
 
 
+def _email_plan(db, tenant_id: int, reports: list[str]) -> int:
+    """``tenant_id`` on a send-on-approval plan that emails ``reports`` to its contacts."""
+    plan = month_end.save_plan(
+        db,
+        {
+            "name": "Monthly",
+            "reports": reports,
+            "include_xlsx": 0,
+            "day_of_month": 1,
+            "hour": 8,
+            "timezone": "UTC",
+            "subject": "",
+            "message": "",
+            "mode": "approval",
+            "delivery": "email",
+            "bcc_team": 0,
+        },
+        "admin",
+    )
+    month_end.apply_plan(db, month_end.get_plan(db, plan), [tenant_id], "admin", "UTC")
+    return plan
+
+
+def _plan_recipients(db, tenant_id: int) -> list[str]:
+    (schedule_id,) = db.execute(
+        "SELECT schedule_id FROM report_plan_tenants WHERE tenant_id = ?", (tenant_id,)
+    ).fetchone()
+    return [c["email"] for c in delivery.recipients(db, "schedule", schedule_id)]
+
+
+def test_only_someone_who_opens_every_plan_report_adds_contacts(client, db, alpha):
+    """A new contact gets the client's plan emails. While the plan sends an identity report, an account manager
+    (no identity reports) adds nobody, by any of the forms that take a new address, so they can't send it to
+    themselves; once the plan sends only what they open, they can."""
+    plan = _email_plan(db, alpha, ["review", "data:all-users"])
+    role_user(db, "am", "account_manager", tenants=[alpha])
+    login(client, "am")
+    page = client.get(f"/tenants/{alpha}/schedules").data.decode()
+    assert f"/tenants/{alpha}/contacts" not in page and "someone who can open all of them adds contacts" in page
+    assert 'name="new_email"' not in client.get(f"/tenants/{alpha}/schedules/new").data.decode()
+    resp = client.post(
+        f"/tenants/{alpha}/contacts", data={"name": "Me", "email": "me@home.example"}, follow_redirects=True
+    )
+    assert "only someone who can open all of them can add a contact" in resp.data.decode()
+    client.post(
+        f"/tenants/{alpha}/schedules/new", data={**FORM, "reports": ["data:licences"], "new_email": "me@home.example"}
+    )
+    client.post(f"/tenants/{alpha}/alert", data={"min_severity": "critical", "new_email": "me@home.example"})
+    assert db.execute("SELECT COUNT(*) FROM contacts").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM email_schedules WHERE plan_id IS NULL").fetchone()[0] == 0
+
+    # Someone who opens everything it sends adds contacts, and they join the plan.
+    make_user(db, "admin")
+    _switch(client, "admin")
+    client.post(f"/tenants/{alpha}/contacts", data={"name": "IT", "email": "it@alpha.example"})
+    assert _plan_recipients(db, alpha) == ["it@alpha.example"]
+
+    # A plan of reports the account manager opens takes their contacts too.
+    db.execute("UPDATE report_plans SET reports = ? WHERE id = ?", (json.dumps(["review", "data:licences"]), plan))
+    month_end.apply_plan(db, month_end.get_plan(db, plan), [alpha], "admin", "UTC")
+    _switch(client, "am")
+    assert f"/tenants/{alpha}/contacts" in client.get(f"/tenants/{alpha}/schedules").data.decode()
+    client.post(f"/tenants/{alpha}/contacts", data={"name": "Finance", "email": "finance@alpha.example"})
+    assert _plan_recipients(db, alpha) == ["finance@alpha.example", "it@alpha.example"]
+
+
+def test_choosing_who_gets_alerts_needs_security_findings(client, db, alpha):
+    """An alert names the client's new findings, so someone with those taken away doesn't choose who gets it."""
+    uid = role_user(db, "sl", "second_line", tenants=[alpha])
+    _deny(db, uid, "reports.security", alpha)
+    login(client, "sl")
+    page = client.get(f"/tenants/{alpha}/schedules").data.decode()
+    assert f"/tenants/{alpha}/alert" not in page and "someone who can see security findings chooses" in page
+    resp = client.post(f"/tenants/{alpha}/alert", data={"min_severity": "critical", "new_email": "me@home.example"})
+    assert resp.status_code == 403
+    assert db.execute("SELECT COUNT(*) FROM email_alerts").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM contacts").fetchone()[0] == 0
+
+
 @pytest.mark.parametrize("how", HOW)
 def test_report_history_needs_the_report_area_and_downloads(client, db, vault, alpha, two_tenants, how):
     sid = _schedule(db, alpha, ["data:all-users", "data:licences"])
