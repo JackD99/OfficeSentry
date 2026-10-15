@@ -11,6 +11,23 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
+### Fixed
+
+- **Settings → Updates:** an Action required that starts "Nonetheless" still asks for the tick, and a
+  Database upgrade that starts "Note" still shows its warning (only "None" and "No" as words count as
+  nothing to do). Release notes holding a NUL character no longer break the page.
+- **Update button:** when the data volume is full once the new version is running, the updater still goes
+  back to the version before if the new one isn't healthy, and an update that stops part way never says
+  "before anything was changed".
+
+### Security
+
+- **Update button:** the updater only installs a release whose tag is on a commit in main's history, so a tag
+  pushed on another branch's commit (which runs that commit's own release workflow) is refused even though
+  its image is signed. The updater, which runs as root, never follows a link the portal could put in place of
+  its shared `updates` folder, when it makes the folder, writes its status or takes its lock, and a named pipe
+  or deeply nested file left as the request no longer stops it.
+
 ## [2.3.1] - 2026-10-12
 
 Fixes for 2.3. Nothing to do before updating: `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are

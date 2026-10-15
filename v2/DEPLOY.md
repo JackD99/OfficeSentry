@@ -796,7 +796,8 @@ To turn it on, once:
 Pressing **Update** then:
 
 1. **Checks the release**: it's a published release of this repository on GitHub (not a draft or
-   pre-release), newer than yours with the same major version, its `docker-compose.yml` (and `Caddyfile`,
+   pre-release), newer than yours with the same major version, its tag is on a commit in `main`'s history,
+   its `docker-compose.yml` (and `Caddyfile`,
    when you run Caddy) is the same as yours, and there's room on the disk for the copy of the database
    an upgrade makes.
 2. **Verifies its signature**: the image GitHub's registry gives for that version must carry build

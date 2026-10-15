@@ -1102,9 +1102,13 @@ and the updater only share files on the data volume: the portal writes `updates/
 version and who asked; `request_update`) and reads `updates/updater.json` (`updates.Status`: heartbeat,
 readiness, the current `Job` and its `Step`s), which the page polls through `/admin/updates/progress`. The
 updater's own record of a job, which it resumes from after a restart, is `/state/updater.json` in the
-`updater-state` volume the portal never mounts, so a compromised portal can't forge a rollback. A job is
+`updater-state` volume the portal never mounts, so a compromised portal can't forge a rollback. The updater
+is root and the data volume is the portal's, so it never touches `updates/` by name where a link could be
+put in its place: it opens the folder with `O_NOFOLLOW` (`open_folder`) and works through that descriptor,
+and its copy of the status there is best effort (the `/state` one is what it goes by). A job is
 check, verify, download, switch, health, finish (`updater.STEPS`); it refuses (`Refused`) anything but a
-published, newer, same-major release of this repository whose index digest has build provenance signed by
+published, newer, same-major release of this repository whose tag is on a commit in main's history
+(`GitHub.on_main`), whose index digest has build provenance signed by
 `release.yml` for the tag's commit and whose `docker-compose.yml` and `Caddyfile` at that commit are the
 install's (`same_files`, `RELEASE_FILES`: the button only changes the image, so a release that changes them,
 or a file edited on the server, is a hand update), and goes back by itself (`Broken`, `rollback`) when the new version
