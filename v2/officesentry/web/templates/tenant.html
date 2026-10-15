@@ -35,7 +35,7 @@
     <div class="label">{{ k.label }}{% if target %}{{ icon('arrow', 'go') }}{% endif %}</div>
     <div class="value">{{ kpi_value(k) }}</div>
     <div class="foot">
-      {% if k.delta %}<span class="delta {{ k.trend }}">{{ '%+g'|format(k.delta) }}{{ k.unit if k.unit != 'currency' }}</span> in 4 weeks
+      {% if k.delta %}<span class="delta {{ k.trend }}">{{ '%+g'|format(k.delta) }}{{ ' pts' if k.unit == '%' }}</span> in 4 weeks
       {% elif k.note %}{{ k.note }}
       {% elif k.previous is not none %}No change in 4 weeks
       {% elif k.value is none %}Not collected yet

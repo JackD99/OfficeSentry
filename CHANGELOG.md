@@ -29,6 +29,13 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
+- A client's **Overview** no longer shows more licensed users in red: a figure that's neither better nor worse
+  for going up or down shows its change in grey, there and on **All clients → Monthly review**. The change in
+  a percentage, such as Secure Score or Users with MFA, reads "+9 pts" instead of "+9%", as in the monthly
+  review.
+- **Windows computers still get security updates** names the computers reaching end of support as well as
+  those past it ("5 of 36 Windows computers past end of support, 20 more reaching it within 90 days"), so
+  under **Needs attention** on Overview it agrees with the number of computers beside it.
 
 ## [2.3.1] - 2026-10-12
 

@@ -43,7 +43,8 @@ class Column:
     key: str
     label: str
     kind: str = "num"  # num | pct | money | sev | status | text
-    better: str | None = None  # up | down: which direction of change is good, when the row has a delta
+    # up | down: which direction of change is good, when the row has a delta (None: neither, so it's neutral)
+    better: str | None = None
     hint: str = ""
 
 

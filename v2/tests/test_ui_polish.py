@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 
 from openpyxl import load_workbook
@@ -23,6 +24,25 @@ def test_overview_numbers_open_their_reports(client, db, two_tenants):
     page = client.get(f"/tenants/{alpha}").get_data(as_text=True)
     for key in ("secure-score", "mfa", "admins#t-privileged-role-holders", "licences", "inactive#t-inactive-members"):
         assert f'class="tile link" href="/tenants/{alpha}/data/{key}"' in page, key
+
+
+def test_overview_changes_are_in_points_and_neutral_when_neither_way_is_better(client, db, two_tenants):
+    """Secure Score from 35% to 42% is 7 points, not 7%; more licensed users is neither good nor bad."""
+    alpha, _ = two_tenants
+    old = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for key, value in (("secure_score.pct", 35.0), ("users.licensed", 1.0)):  # now 42% and 2
+        db.execute(
+            "INSERT INTO metrics (run_id, tenant_id, key, value, captured_at) VALUES (NULL, ?, ?, ?, ?)",
+            (alpha, key, value, old),
+        )
+    seed_tenant(db, alpha)
+    make_user(db, "admin")
+    login(client, "admin")
+    page = client.get(f"/tenants/{alpha}").get_data(as_text=True)
+    assert '<span class="delta better">+7 pts</span> in 4 weeks' in page and "+7%" not in page
+    assert '<span class="delta flat">+1</span> in 4 weeks' in page
+    review = client.get("/across/review").get_data(as_text=True)  # All clients: the same figures, a row each
+    assert '<span class="delta better tiny">+7</span>' in review and '<span class="delta flat tiny">+1</span>' in review
 
 
 def test_empty_tables_are_one_line(client, db, two_tenants):

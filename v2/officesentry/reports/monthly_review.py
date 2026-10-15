@@ -46,7 +46,7 @@ class Kpi:
     value: float | None
     unit: str = ""
     previous: float | None = None
-    better: str = "up"  # which direction is good: up | down
+    better: str = "up"  # which direction is good: up | down | none (neither, so a change is neutral)
     note: str = ""
     history: list = field(default_factory=list)  # [[day, value], ...] for a sparkline: the last 90 days, oldest first
 
@@ -72,7 +72,7 @@ class Kpi:
     @property
     def trend(self) -> str:
         d = self.delta
-        if not d:
+        if not d or self.better == "none":
             return "flat"
         good = (d > 0) == (self.better == "up")
         return "better" if good else "worse"
