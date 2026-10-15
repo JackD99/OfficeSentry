@@ -35,10 +35,11 @@ to Office Sentry's "GET only" rule, and both are in `tests/test_no_writes.py`'s 
 | Call | When Office Sentry sends it | What it does |
 |---|---|---|
 | `POST .../activity/feed/subscriptions/start` | Once per kind of record (SharePoint and OneDrive, Exchange) for a client you asked for, after Office Sentry has confirmed the client approved the add-on | Asks Microsoft to make the client's new audit records available to the add-on's app |
-| `POST .../activity/feed/subscriptions/stop` | The same two, when you switch the add-on off for a client or delete the client | Asks Microsoft to stop |
+| `POST .../activity/feed/subscriptions/stop` | For each kind of record that may still be on (a start that worked for one kind and not the other counts), when you switch the add-on off for a client or delete the client, or when Microsoft says the client's feed is off for one kind (the other is stopped too) | Asks Microsoft to stop |
 
 Neither touches a user, mailbox, file, group, policy or setting, and the audit log itself carries on as
-before. A nightly collection never sends either. Both are in Office Sentry's activity log
+before. A nightly collection never sends either: when it finds part of a feed off, a task sends the stop
+for the rest afterwards. Both are in Office Sentry's activity log
 (`audit_feed_started`, `audit_feed_stopped`), and in the client's own logs at Microsoft.
 
 ## 1. Create the add-on's app
@@ -112,14 +113,21 @@ database, and backed up and restored with it.
 ## 5. Switching it off
 
 - **For one client:** **Settings → Audit log add-on → Switch off** on the client. Nothing more is
-  collected; Office Sentry sends the two stop calls. What was collected stays until retention removes it,
-  unless you tick **Also delete the events collected**. **Switch on again** starts it again without asking
-  the client, as long as they haven't removed the app.
+  collected; Office Sentry sends the stop calls, for whatever of the feed may be on, even if starting it
+  only half worked. What was collected stays until retention removes it, unless you tick **Also delete the
+  events collected**. **Switch on again** starts it again without asking the client, as long as they haven't
+  removed the app; while the stop calls are still being sent, the page says so and switching on waits.
 - **By the client:** removing "Office Sentry audit log add-on" from *Enterprise applications* in their
   tenant. Office Sentry notices at the next collection and shows the client as Off with the reason.
-- **Deleting a client** stops its feed and deletes what was collected with everything else.
+- **At Microsoft:** if someone in the client's tenant turns the feed off for one kind of record, the next
+  collection shows the client as Off with the reason, and Office Sentry stops the other kind too, so nothing
+  is left on that nobody reads.
+- **Deleting a client** stops whatever of its feed may be on, and deletes what was collected with everything
+  else.
 - **Everywhere:** the switch on **Settings → App connection → Audit log add-on** hides the add-on
-  everywhere. It can't be switched off while any client's feed is on; switch those off first.
+  everywhere: its report, its pages, people's Timelines, and scheduled emails (a schedule that sends its
+  report, or a saved view of it, sends the rest without them). It can't be switched off while any client's
+  feed is on; switch those off first.
 
 ## When something goes wrong
 

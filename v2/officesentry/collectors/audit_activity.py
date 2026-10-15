@@ -6,8 +6,8 @@ Only collected for clients the add-on is on for (``addon.active``); for everyone
 run reads only GETs, signed in as the add-on's own app:
 
 1. The feed's subscriptions. A content type that's off at Microsoft (the client's admin turned it off) marks
-   the client Off, and so does a client that removed the add-on app (``addon.removed``). Neither is started
-   again without an admin.
+   the client Off and queues a task that stops the rest of the feed (``addon.check_running``); a client that
+   removed the add-on app (``addon.removed``) is marked Off too. Neither is started again without an admin.
 2. Per content type, the batches Microsoft made available since the last run, newest first, six hours at a
    time, from the cursor the sign-in and directory audit logs use (``event_cursors``, source
    ``activity:<content type>``). Each batch is downloaded, the records ``auditlog/operations.py`` keeps are

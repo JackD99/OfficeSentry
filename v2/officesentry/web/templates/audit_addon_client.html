@@ -69,7 +69,7 @@
     <div class="step-title">The feed starts</div>
     <div class="step-body">
       {% if started %}Started {{ ts(row.started_at) }}{% if row.started_by %}, as {{ row.started_by }} asked{% endif %}. Office Sentry reads the client's new audit records every night.
-      {% elif confirmed and not row.wanted_at %}
+      {% elif confirmed and not row.wanted_at and not row.stopped_at %}
       The client approved, but nobody here has asked for the add-on on {{ tenant.name }} yet. Switching it on asks Microsoft to start the feed.
       <form method="post" action="{{ url_for('audit_addon.switch_on', tenant_id=tenant.id) }}" class="step-action">{{ csrf() }}<button class="sm primary">Switch on</button></form>
       {% else %}
@@ -87,11 +87,14 @@
   <h2>Off</h2>
   <p>{{ row.stop_reason or 'Switched off.' }} <span class="muted small">{{ ts(row.stopped_at) }}{% if row.stopped_by %}, {{ row.stopped_by }}{% endif %}.</span></p>
   {% if row.check_error %}<p class="small">When stopping it: {{ row.check_error }}</p>{% endif %}
-  {% if pending %}<p class="small muted">{{ icon('refresh') }} Office Sentry is stopping the feed at Microsoft.</p>{% endif %}
+  {% if pending %}
+  <p class="small muted">{{ icon('refresh') }} Office Sentry is stopping the feed at Microsoft. Reload in a minute to switch it on again.</p>
+  {% else %}
   <form method="post" action="{{ url_for('audit_addon.switch_on', tenant_id=tenant.id) }}" class="step-action">{{ csrf() }}
     <button class="sm">Switch on again</button>
     <span class="small muted">If the client removed the app, send them the link again first.</span>
   </form>
+  {% endif %}
 </section>
 {% elif row and (row.wanted_at or row.started_at) %}
 <section class="card" id="off">

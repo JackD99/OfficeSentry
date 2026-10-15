@@ -228,7 +228,7 @@ def _delete(conn, tenant, user: str, delete_users, allowed: dict[int, str]) -> d
         run_ids = [r["id"] for r in conn.execute("SELECT id FROM runs WHERE tenant_id = ?", (tenant["id"],))]
         for uid in delete_users:
             conn.execute("DELETE FROM users WHERE id = ?", (uid,))
-        addon.on_delete(conn, tenant, user)  # stops its audit log feed at Microsoft afterwards, if it's on
+        addon.on_delete(conn, tenant, user)  # stops its audit log feed at Microsoft afterwards, if any of it is on
         conn.execute("DELETE FROM tenants WHERE id = ?", (tenant["id"],))
         left = leftovers(conn, tenant["id"], run_ids)
         if left:

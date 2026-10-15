@@ -11,7 +11,15 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
-In progress. What changed is listed here when 2.4.0 is released.
+### Security
+
+- **Audit log add-on:** switching it off for a client, or deleting the client, stops whatever of the client's
+  feed may still be on at Microsoft, including a start that worked for SharePoint and not Exchange, and when
+  Microsoft says the feed is off for one kind of record, the other is stopped too, so no feed is left on that
+  nobody reads. **Also delete the events collected** is no longer lost when an earlier stop is still waiting to
+  be sent, and switching a client on again waits for that stop.
+- **Audit log add-on switched off for the install:** people's Timelines no longer list its records, and
+  schedules made while it was on no longer email its **Files and mailbox access** report or saved views of it.
 
 ## [2.3.1] - 2026-10-12
 

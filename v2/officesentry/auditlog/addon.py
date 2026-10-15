@@ -23,9 +23,11 @@ Each client (``audit_feeds``, one row per client the add-on was asked for), thro
   3. Once confirmed, and only for a client an admin asked for, the same task starts the feed: one POST per
      content type (``feed.start``). Then it queues the first collection.
   4. Switching off (``switch_off``) marks the client Off at once, so nothing more is collected, and queues an
-     ``audit_stop`` task that sends the two stop calls and, when asked, deletes what was collected. Deleting
-     the client does the same (``on_delete``). A client who removes the add-on app from their tenant is
-     noticed at the next collection and shown as Off with the reason.
+     ``audit_stop`` task that sends a stop call for each content type that may still be on (``feed_left``: a
+     start that half worked counts) and, when asked, deletes what was collected. Deleting the client does the
+     same (``on_delete``), and so does Microsoft saying part of the feed is off (``check_running``). A client
+     who removes the add-on app from their tenant is noticed at the next collection and shown as Off with the
+     reason.
 
 No step here writes to a client's tenant: the feed's start and stop only tell Microsoft whether to make the
 client's new audit records available to this app.
@@ -192,6 +194,25 @@ def is_on(row) -> bool:
     return row is not None and bool(row["started_at"]) and not row["stopped_at"]
 
 
+def _statuses(row) -> dict:
+    """What Microsoft last said of each of the client's content types (``content_types``), or {}."""
+    try:
+        said = json.loads(row["content_types"] or "{}") if row is not None else {}
+    except ValueError:
+        return {}
+    return said if isinstance(said, dict) else {}
+
+
+def feed_left(row) -> list[str]:
+    """The content types of the client's feed that may still be on at Microsoft for the add-on app: once the
+    client's approval was confirmed, each one Microsoft hasn't said is off. A start that worked for one content
+    type and failed for the other counts, and so does a feed Microsoft says is off for one of them."""
+    if row is None or not row["consented_at"]:
+        return []  # the app has never signed in to the client, so it can't have started anything
+    said = _statuses(row)
+    return [c for c in feed.CONTENT_TYPES if said.get(c) != "disabled"]
+
+
 def active(conn, tenant) -> bool:
     """Whether the add-on collects for this client now: switched on, the client's feed on, and the client
     neither paused nor archived."""
@@ -308,11 +329,17 @@ def queue_check(conn, tenant_id: int, priority: int = tasks.PRIORITY_BACKGROUND,
 
 def switch_on(conn, tenant, user: str) -> None:
     """Ask for the add-on on this client again (after it was switched off, or for a client that approved without
-    being asked): the feed is started once its approval is confirmed."""
+    being asked): the feed is started once its approval is confirmed. Refused while a stop is still to be sent,
+    which would otherwise stop the feed this starts."""
     if problem(conn, tenant) and not row_for(conn, tenant["id"]):
         raise AddonError(problem(conn, tenant))
     now = utcnow()
     with transaction(conn, immediate=True):
+        if tasks.pending(conn, _stop_key(tenant)):
+            raise AddonError(
+                "Office Sentry is still stopping this client's feed at Microsoft. Reload in a minute, then switch it "
+                "on again."
+            )
         _upsert(conn, tenant["id"], wanted_at=now, wanted_by=user)
         conn.execute(
             "UPDATE audit_feeds SET started_at = NULL, started_by = NULL, stopped_at = NULL, stopped_by = NULL,"
@@ -350,31 +377,52 @@ def switch_off(conn, tenant, user: str, delete: bool = False, reason: str | None
 
 
 def on_delete(conn, tenant, user: str) -> None:
-    """The client is being deleted (inside the delete's transaction): stop its feed at Microsoft afterwards.
-    Its collected events go with the rest of its activity history."""
+    """The client is being deleted (inside the delete's transaction): stop whatever of its feed may still be on
+    at Microsoft afterwards, whether it was on, half started or marked Off. Its collected events go with the
+    rest of its activity history."""
     row = row_for(conn, tenant["id"])
-    if is_on(row):
+    if feed_left(row):
         _queue_stop(conn, tenant, row, user, delete=False)
 
 
+def _stop_key(tenant) -> str:
+    return f"audit_stop:{tenant['id']}"
+
+
 def _queue_stop(conn, tenant, row, user: str, delete: bool) -> None:
-    """The stop task carries everything it needs, and no tenant id, so a delete straight after can't take it."""
-    tasks.enqueue(
-        conn,
-        "audit_stop",
-        key=f"audit_stop:{tenant['id']}",
-        payload={
-            "tenant_id": tenant["id"],
-            "tenant_ref": tenant["tenant_ref"],
-            "cloud": clouds.of(tenant).key,
-            "connection_id": row["connection_id"],
-            "name": tenant["name"],
-            "user": user,
-            "delete": delete,
-            "started": bool(row["started_at"]),
-        },
-        user=user,
-    )
+    """Queue the task that stops what may be left of the client's feed (``feed_left``) and, with ``delete``,
+    deletes what was collected; inside the caller's transaction. A stop already queued for the client takes on
+    this one's content types and its delete, so neither is lost. The task carries everything it needs, and no
+    tenant id, so a delete straight after can't take it."""
+    key, stop = _stop_key(tenant), feed_left(row)
+    queued = tasks.pending(conn, key)
+    if queued is None:
+        tasks.enqueue(
+            conn,
+            "audit_stop",
+            key=key,
+            payload={
+                "tenant_id": tenant["id"],
+                "tenant_ref": tenant["tenant_ref"],
+                "cloud": clouds.of(tenant).key,
+                "connection_id": row["connection_id"],
+                "name": tenant["name"],
+                "user": user,
+                "delete": delete,
+                "stop": stop,
+            },
+            user=user,
+        )
+    elif queued["status"] == "running":  # it read what to do when it began; a delete can't be added now
+        if delete:
+            raise AddonError(
+                "Office Sentry is stopping this client's feed at Microsoft right now. Try again in a minute."
+            )
+    else:
+        payload = json.loads(queued["payload"] or "{}")
+        payload["delete"] = bool(payload.get("delete")) or delete
+        payload["stop"] = [c for c in feed.CONTENT_TYPES if c in stop or c in (payload.get("stop") or [])]
+        conn.execute("UPDATE tasks SET payload = ? WHERE id = ?", (json.dumps(payload), queued["id"]))
 
 
 # -- Confirming, starting and stopping (background tasks) ------------------------------------------------------
@@ -509,31 +557,42 @@ def _start(conn, client: feed.FeedClient, tenant, row, subscriptions: dict[str, 
 
 def check_running(conn, tenant, subscriptions: dict[str, str]) -> Outcome:
     """For a client whose feed is on: when Microsoft says it's off for a content type (the client's admin
-    turned it off, say), the client is marked Off with the reason. It's never started again without an admin."""
+    turned it off, say), the client is marked Off with the reason, and a stop is queued for the rest of it, so
+    nothing is left on that nobody reads. It's never started again without an admin."""
     off = [c for c in feed.CONTENT_TYPES if subscriptions.get(c) != "enabled"]
     if not off:
         _note(conn, tenant["id"], None, content_types=json.dumps(subscriptions))
         return Outcome(True, "The feed is on.")
-    mark_off(
-        conn,
-        tenant["id"],
-        f"Microsoft says the feed is off ({', '.join(off)}): someone in the client's tenant may have turned it off. "
-        "Switch it on again to restart it.",
-    )
+    with transaction(conn, immediate=True):
+        _note(conn, tenant["id"], None, content_types=json.dumps(subscriptions))
+        row = row_for(conn, tenant["id"])
+        left = feed_left(row)
+        reason = (
+            f"Microsoft says the feed is off ({', '.join(off)}): someone in the client's tenant may have turned it "
+            "off. " + ("Office Sentry stops the rest of it too. " if left else "") + "Switch it on again to restart it."
+        )
+        if _mark_off(conn, tenant["id"], reason) and left:
+            _queue_stop(conn, tenant, row, ACTOR, delete=False)
     return Outcome(False, "The feed is off at Microsoft.")
 
 
 def mark_off(conn, tenant_id: int, reason: str) -> None:
-    """The client's feed stopped without an admin switching it off (it was turned off at Microsoft, or the client
-    removed the add-on app): shown as Off with ``reason``; nothing is sent to Microsoft."""
+    """The client's feed stopped without an admin switching it off (the client removed the add-on app, so it
+    can't be signed in to): shown as Off with ``reason``; nothing is sent to Microsoft."""
     with transaction(conn, immediate=True):
-        changed = conn.execute(
-            "UPDATE audit_feeds SET stopped_at = ?, stopped_by = ?, stop_reason = ?, wanted_at = NULL,"
-            " wanted_by = NULL WHERE tenant_id = ? AND stopped_at IS NULL",
-            (utcnow(), ACTOR, reason[:500], tenant_id),
-        ).rowcount
-        if changed:
-            audit(conn, ACTOR, "audit_feed_off", tenant_id, reason[:300])
+        _mark_off(conn, tenant_id, reason)
+
+
+def _mark_off(conn, tenant_id: int, reason: str) -> bool:
+    """Inside the caller's transaction. Returns whether the client was marked Off (it wasn't Off already)."""
+    changed = conn.execute(
+        "UPDATE audit_feeds SET stopped_at = ?, stopped_by = ?, stop_reason = ?, wanted_at = NULL,"
+        " wanted_by = NULL WHERE tenant_id = ? AND stopped_at IS NULL",
+        (utcnow(), ACTOR, reason[:500], tenant_id),
+    ).rowcount
+    if changed:
+        audit(conn, ACTOR, "audit_feed_off", tenant_id, reason[:300])
+    return bool(changed)
 
 
 @tasks.handler("audit_check")
@@ -547,15 +606,16 @@ def _check_task(ctx: tasks.TaskContext) -> dict:
 
 @tasks.handler("audit_stop")
 def _stop_task(ctx: tasks.TaskContext) -> dict:
-    """Stop a client's feed at Microsoft (one POST per content type), then, when asked, delete what was
-    collected. A client that removed the add-on can't be signed in to, and its feed can't be read anyway."""
+    """Stop a client's feed at Microsoft (one POST for each content type that may still be on), then, when
+    asked, delete what was collected. A client that removed the add-on can't be signed in to, and its feed can't
+    be read anyway."""
     from .. import events
 
     p = ctx.payload
     tenant_id = p.get("tenant_id")
     tenant = store.get_tenant(ctx.conn, tenant_id) if tenant_id else None
     stopped, problems = [], []
-    if p.get("started"):
+    if p.get("stop"):
         fake = {"tenant_ref": p.get("tenant_ref") or "", "cloud": p.get("cloud")}
         connection = store.get_connection(ctx.conn, p.get("connection_id") or 0, store.AUDIT)
         try:
@@ -563,7 +623,7 @@ def _stop_task(ctx: tasks.TaskContext) -> dict:
         except AddonError as exc:
             problems.append(str(exc))
         else:
-            for content_type in feed.CONTENT_TYPES:
+            for content_type in [c for c in feed.CONTENT_TYPES if c in p["stop"]]:
                 try:
                     client.stop(content_type)
                     stopped.append(content_type)
@@ -579,9 +639,11 @@ def _stop_task(ctx: tasks.TaskContext) -> dict:
         removed = events.delete_activity(ctx.conn, tenant["id"])
     with transaction(ctx.conn):
         if tenant is not None:
+            said = _statuses(row_for(ctx.conn, tenant["id"]))  # one that couldn't be stopped still shows as on
+            said.update({c: "disabled" for c in stopped})
             ctx.conn.execute(
                 "UPDATE audit_feeds SET content_types = ?, check_error = ? WHERE tenant_id = ?",
-                (json.dumps({c: "disabled" for c in stopped}), "; ".join(problems)[:500] or None, tenant["id"]),
+                (json.dumps(said), "; ".join(problems)[:500] or None, tenant["id"]),
             )
         detail = f"{p.get('name')}: " + (", ".join(stopped) if stopped else "nothing stopped")
         if removed:
