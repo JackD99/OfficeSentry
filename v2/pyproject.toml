@@ -47,6 +47,10 @@ addopts = "-q"
 # minutes with every thread's stack, instead of the whole run waiting for the CI job's limit. The slowest
 # test takes about 15 seconds on a loaded runner.
 timeout = 120
+# Ten seconds before that, every thread's stack goes to the log. Under pytest -n (xdist) on Windows the timeout
+# can only end the worker process, and its own stack dump is lost with it ("node down: Not properly
+# terminated"); this one isn't.
+faulthandler_timeout = 110
 filterwarnings = [
     # A thread that dies with an exception, or an exception Python could only print (from a __del__, a
     # callback), fails the test it happened in rather than passing with a note.
