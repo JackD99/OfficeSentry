@@ -13,6 +13,43 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 In progress. What changed is listed here when 2.4.0 is released.
 
+### Added
+
+- **The sign-in page says who to ask.** Under the sign-in card, "Trouble signing in? Contact Harbour IT at
+  help@... or 0161 ...", from the Branding page's support details, else the contact line the reports carry.
+
+### Changed
+
+- **A client's home page leads with where they stand**: the month's verdict, the account manager's note once
+  the month is approved, and buttons for the monthly review, its PDF and the two-page summary. Under it, the
+  MSP's own "What we recommend next" with each one's status and target, else what needs attention, led by
+  what was found ("1 admin without MFA") rather than the check's goal.
+- **The report email carries what the attached review does**: the verdict, the account manager's note ("From
+  Harbour IT") and their recommendations (else the top failing checks), in the HTML and the plain text.
+- **The verdict names the most urgent item** under it ("Most urgent: 1 admin without MFA"), on the review's
+  cover, report designs, the client's home page and the email.
+- **The two-page summary is two pages.** The summary PDF's cover is a band on page one, without a contents
+  list, so it's two pages with the account manager's note and recommendations, not three or four.
+- **A quarterly review compares with the start of the quarter.** A design with the quarter's blocks says
+  "Compared with 1 August", and its summary, key figures and What changed run from then, not from four weeks
+  ago.
+- **Check advice reads right to the client too.** "Review each app with the client", "the client's data" and
+  "Waiting for the client to approve" no longer reach a client's report, and admin MFA's advice no longer says
+  "each listed admin" where nothing is listed.
+- Charts of findings found and fixed name the first month and each January in full ("May 2026"), admin
+  activity in What changed gives dates in words ("6 Oct 2026"), and a quarterly review's Coming up shows
+  "Now" for what needs attention now.
+
+### Fixed
+
+- **A client's home page showed checks the month-end reviewer had left out of their copy.** It's now built
+  from the client's copy of the month, as their report, PDFs and email are.
+- **The email and the home page counted affected accounts as checks** ("46 checks need attention (1 critical,
+  30 high, 69 medium, 63 low findings)" beside a report saying 14 high). They count checks, as the report does.
+- In PDFs, the found-and-fixed chart's "Fixed" key was cut off at the right edge.
+- A full review whose month has commentary no longer runs its cover's contents list under the footer: the
+  account manager's note opens the page after the cover.
+
 ## [2.3.1] - 2026-10-12
 
 Fixes for 2.3. Nothing to do before updating: `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are
