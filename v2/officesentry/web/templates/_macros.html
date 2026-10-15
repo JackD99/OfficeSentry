@@ -109,9 +109,6 @@
 
 {# Header shared by every tenant page: breadcrumb, name, actions and the tab bar. On laptops the tab bar
    stays pinned to the top of the window as the page scrolls, with the tenant's name in it (app.js). #}
-{#- Beside the audit log add-on's name while it's a preview (auditlog/addon.PREVIEW). -#}
-{% macro addon_preview() -%}<span class="pill info" title="{{ audit_addon_preview }}">Preview</span>{%- endmacro %}
-
 {% macro tenant_header(tenant, active, title=None, counts=None, pin=true) -%}
 {% set staff = current_user.role != 'client' %}
 {% set tid = tenant.id %}

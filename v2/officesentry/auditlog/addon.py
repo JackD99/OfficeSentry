@@ -52,12 +52,6 @@ SETTING = "audit_addon"
 COLLECTOR = "audit_activity"  # the collector that reads the feed (collectors/audit_activity.py)
 ACTOR = "Audit log add-on"
 AUDIT_NAME = "Office Sentry audit log add-on"  # the add-on app's name in Entra
-# A preview in 2.4.0, marked beside its name wherever an MSP meets it (its settings, App connection, a client's
-# add-on page, its report), until it has been tried on real clients.
-PREVIEW = (
-    "A preview in 2.4: opt-in, it may change between releases, and it leaves preview in a 2.4.x update once it "
-    "has been tried on more clients. Like the rest of Office Sentry, it only reads."
-)
 
 # How often a client still waiting is checked by signing in (``due``), as for the main app's consent.
 CHECK_SOON = timedelta(minutes=2)  # just after the client came back from the consent page...

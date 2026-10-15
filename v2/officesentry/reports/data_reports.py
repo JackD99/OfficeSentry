@@ -346,7 +346,6 @@ class DataReport:
     # For a report read in parts, what each part held: "read", "waiting" (for the client to approve a new
     # permission) or "failed". What changed only compares two days that read the same parts.
     parts: dict[str, str] = field(default_factory=dict)
-    preview: str = ""  # why the report is a preview, marked beside its title for the team only
 
 
 def _cell(value):

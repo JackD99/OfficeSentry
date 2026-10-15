@@ -120,7 +120,6 @@ def _rows(a: events.Activity) -> list:
 )
 def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     conn, tenant = snap.conn, snap.tenant
-    report.preview = addon.PREVIEW
     row = addon.row_for(conn, tenant["id"])
     if not _shown(conn, tenant):  # wherever it's built from: a design's table, a rollup, a saved view
         report.unavailable = "The audit log add-on isn't on for this client."

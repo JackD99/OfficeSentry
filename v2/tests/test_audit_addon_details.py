@@ -242,29 +242,6 @@ def test_the_report_doesnt_say_deleted_records_are_kept(app, client, db, vault, 
     assert "stays until retention removes it" not in page and "Nothing it collected is kept." in page
 
 
-def test_the_addon_is_marked_a_preview_where_the_team_meets_it(app, client, db, vault, two_tenants):
-    alpha, _ = two_tenants
-    now = datetime.now(UTC).replace(second=0, microsecond=0)
-    addon_on(db, vault, [alpha], started_at=iso(now - timedelta(hours=3)))
-    assert collect(db, alpha, sample(now), now)[0] == "succeeded"
-    _admin(client, db)
-    mark = f'<span class="pill info" title="{addon.PREVIEW}">Preview</span>'
-    for path in (
-        "/admin/audit-addon",
-        "/admin/connections",
-        f"/tenants/{alpha}/audit-addon",
-        f"/tenants/{alpha}/data/{KEY}",
-    ):
-        assert mark in html.unescape(client.get(path).get_data(as_text=True)), path
-    settings = html.unescape(client.get("/admin/audit-addon").get_data(as_text=True))
-    assert settings.count(addon.PREVIEW) == 2  # in words too, not only when hovering over the mark
-
-    make_user(db, "it@alpha", role="client", tenants=[alpha])
-    viewer = app.test_client()
-    login(viewer, "it@alpha")
-    assert "Preview" not in viewer.get(f"/tenants/{alpha}/data/{KEY}").get_data(as_text=True)  # the team's mark
-
-
 def test_a_name_ending_in_s_reads_properly(client, db, vault, connection_id):
     tenant_id = store.create_tenant(db, "Northwind Traders", "northwind.onmicrosoft.com", connection_id)
     db.execute("UPDATE tenants SET consented_at = '2026-01-01T00:00:00Z'")

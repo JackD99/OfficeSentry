@@ -29,7 +29,7 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
-- **Audit log add-on (a preview in 2.4):**
+- **Audit log add-on:**
   - A client first collected more than 7 days after its feed started no longer says every night that its
     first hours haven't been read yet: the report says which hours couldn't be read.
   - A stop Microsoft refuses because of the add-on app's own certificate, or an outage, no longer says the
@@ -52,7 +52,7 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ### Security
 
-- **Audit log add-on (a preview in 2.4):** switching it off for a client, or deleting the client, stops whatever of the client's
+- **Audit log add-on:** switching it off for a client, or deleting the client, stops whatever of the client's
   feed may still be on at Microsoft, including a start that worked for SharePoint and not Exchange, and when
   Microsoft says the feed is off for one kind of record, the other is stopped too, so no feed is left on that
   nobody reads. The add-on can't be switched off for the install while a client's feed is still being
