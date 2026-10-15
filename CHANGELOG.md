@@ -22,8 +22,8 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ### Fixed
 
-- **What changed** shows admin activity dates as "23 Sep 2026" like everything else, and the Findings tab keeps
-  an admin excluded from many Conditional Access policies to one line (the first two and how many more).
+- **Findings** keeps an admin excluded from many Conditional Access policies to one line (the first two
+  policies and how many more).
 - Report wording: Secure Score changes are in points, not percent; the mailbox size change says since when in
   words; **Inactive accounts** groups everyone who never signed in under one bar; **Shared files** no longer
   says "address(es)" and **SharePoint sites** no longer says "plus 0 system sites"; **Tenant settings** calls

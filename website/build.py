@@ -15,6 +15,7 @@ Settings come from the environment (the Deploy workflow sets them):
   SITE_DEMO_URL       the demo's address (default: the site's with "demo." in front)
   SITE_SOURCE_PUBLIC  "true" once the repository is public: shows the GitHub links (default false)
   SITE_CONTACT        where interested MSPs get in touch: an email address or an https:// link (default none)
+  SITE_PREVIEW        "true" shows what the next release adds too, as it will look once released (default false)
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ from pygments import highlight as pygments_highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
+from releases import MarkerError, Releases, released_changes, released_only
 from security_txt import PATH as SECURITY_TXT
 from security_txt import security_txt
 
@@ -58,6 +60,7 @@ class Doc:
     title: str = ""  # default: the file's first heading
     section: str = ""  # only this "## " section of the file (for the root README's Quick start)
     blurb: str = ""  # one line for the docs home page
+    text: str = ""  # the Markdown the site shows: the file without what's not released yet
     html: str = ""
     toc: list = field(default_factory=list)
     search: list = field(default_factory=list)
@@ -98,6 +101,12 @@ SECTIONS = [
                 "v2/docs/client-sign-in.md",
                 "client-sign-in",
                 blurb="Let your clients' people sign in with their own work account, from their own tenant.",
+            ),
+            Doc(
+                "v2/docs/audit-log-addon.md",
+                "audit-log-addon",
+                blurb="An optional second app that keeps who deleted, downloaded or shared files and who opened "
+                "someone else's mailbox.",
             ),
             Doc(
                 "v2/docs/troubleshooting.md",
@@ -283,85 +292,110 @@ SECTIONS = [
             Doc(
                 "SUPPORT.md",
                 "support",
-                "Getting help",
-                blurb="Where to go for what, the support package, and what never goes in an issue.",
+                "Support",
+                blurb="Where to ask what, what to send with a bug report, and what never goes in an issue.",
             ),
         ],
     ),
 ]
 GUIDES = "Guides"  # v2/docs/*.md not listed above
 
-# The front page's "What's new" band: one release's headline changes, in words for the people who'd use them,
-# each linking to where it's explained. It says "New in 2.3" once CHANGELOG.md gives the version a date and
-# "Coming in 2.3" until then, and it's left out while it has no items. Add an item only once its change is on
-# main. `icon` is one of the icons in templates/home.html.
-WHATS_NEW = {
-    "version": "2.3.0",
-    "title": "Your clients sign in with Microsoft, and updates take one click",  # the band's heading
-    # a sentence under it
-    "summary": "Your clients' people sign in with the account they already use, new releases install from the "
-    "portal, and each client's month-end report is yours to finish.",
-    "chip": "Client sign-in, one-click updates",  # a few words for the link at the top of the page
-    "items": [  # {"icon", "title", "text", "href", "link"}: "link" names the page "href" opens
-        {
-            "icon": "sign-in",
-            "title": "Clients sign in with their own Microsoft account",
-            "text": "Your clients' people use the work account they already have, under their own organisation's "
-            "MFA, and see only their own company's reports. Nobody is added to your tenant as a guest.",
-            "href": "/docs/client-sign-in/",
-            "link": "Client sign-in",
-        },
-        {
-            "icon": "update",
-            "title": "Update from the portal",
-            "text": "Settings → Updates lists each new release and what it asks of you first. With the optional "
-            "updater on, Update checks the release is genuine, installs it and goes back to the old version by "
-            "itself if the new one doesn't start.",
-            "href": "/docs/install/#the-update-button",
-            "link": "The Update button",
-        },
-        {
-            "icon": "review",
-            "title": "Each client's month-end report, your way",
-            "text": "Leave a check, a key figure or a whole part of the report out of one client's copy for one "
-            "month, with a preview of what they'll get beside you, and send failed emails again in one go.",
-            "href": "/docs/reference/#report-designs-your-own-client-reports",
-            "link": "Report designs and the review",
-        },
-        {
-            "icon": "device",
-            "title": "Intune policies and mail rules",
-            "text": "Two new reports: Intune policies, with platforms that have no compliance policy and paused "
-            "update rings, and Mail rules and protection, with rules that let mail skip the spam filter. Devices "
-            "shows which computers have their BitLocker key saved, without reading the key.",
-            "href": "/docs/reference/#reports",
-            "link": "See every report",
-        },
-        {
-            "icon": "project",
-            "title": "Projects you'd put on a quote",
-            "text": "Each proposal lists only the work that client's findings call for, and repairs such as a "
-            "stopped directory sync are quick fixes rather than something to sell.",
-        },
-        {
-            "icon": "table",
-            "title": "Reports that fit a laptop",
-            "text": "Wide reports open on the columns that matter, with the rest a click away, and the menu folds "
-            "away to its icons. Long lists fold into a short form you open in place, and All clients opens any "
-            "report from the All reports menu.",
-        },
-    ],
-    "also": [  # smaller changes, a few words each
-        "five more email checks",
-        "report designs previewed at the printed page's size, with undo and redo",
-        "setup notes for your team left out of the client's copy",
-        "release images with a signed build record you can check",
-        "roles limited to some clients stay within them everywhere",
-        "month-end emails sent at Microsoft's pace, however many go at once",
-        "PIM for groups in the Admins report",
-        "sign-in and sessions tested harder, on every page",
-    ],
-}
+# The front page's "What's new" band: a feature release's headline changes, in words for the people who'd use
+# them, each linking to where it's explained. Newest release first: the site shows the newest one CHANGELOG.md
+# gives a date ("New in 2.3"), so the next release's list can grow on main, an item as each change merges,
+# without showing before the release is out. A preview build (SITE_PREVIEW) shows it as "Coming in 2.4".
+# `icon` is one of the icons in templates/home.html. Drop the oldest list once a newer one is released.
+WHATS_NEW = [
+    {
+        "version": "2.4.0",
+        # Working words until the release PR settles the heading, the chip and the order of the items.
+        "title": "See who deleted, shared or opened what in your clients' Microsoft 365",  # the band's heading
+        # a sentence under it
+        "summary": "An optional audit log add-on keeps who deleted, downloaded or shared a file and who opened "
+        "someone else's mailbox, and every client is checked for an audit log that's switched off.",
+        "chip": "The audit log add-on",  # a few words for the link at the top of the page
+        "items": [  # up to six {"icon", "title", "text", "href", "link"}: "link" names the page "href" opens
+            {
+                "icon": "history",
+                "title": "Who deleted, shared or opened what",
+                "text": "An optional second app reads each approving client's Microsoft 365 audit log every night: "
+                "files deleted, downloaded or shared, mail opened by someone other than its owner, and inbox rules "
+                "that forward or delete mail, kept for two years and never the contents.",
+                "href": "/docs/audit-log-addon/",
+                "link": "The audit log add-on",
+            },
+        ],
+        "also": [  # smaller changes, a few words each
+            "a check that each client's Microsoft 365 audit log is switched on",
+        ],
+    },
+    {
+        "version": "2.3.0",
+        "title": "Your clients sign in with Microsoft, and updates take one click",
+        "summary": "Your clients' people sign in with the account they already use, new releases install from the "
+        "portal, and each client's month-end report is yours to finish.",
+        "chip": "Client sign-in, one-click updates",
+        "items": [
+            {
+                "icon": "sign-in",
+                "title": "Clients sign in with their own Microsoft account",
+                "text": "Your clients' people use the work account they already have, under their own organisation's "
+                "MFA, and see only their own company's reports. Nobody is added to your tenant as a guest.",
+                "href": "/docs/client-sign-in/",
+                "link": "Client sign-in",
+            },
+            {
+                "icon": "update",
+                "title": "Update from the portal",
+                "text": "Settings → Updates lists each new release and what it asks of you first. With the optional "
+                "updater on, Update checks the release is genuine, installs it and goes back to the old version by "
+                "itself if the new one doesn't start.",
+                "href": "/docs/install/#the-update-button",
+                "link": "The Update button",
+            },
+            {
+                "icon": "review",
+                "title": "Each client's month-end report, your way",
+                "text": "Leave a check, a key figure or a whole part of the report out of one client's copy for one "
+                "month, with a preview of what they'll get beside you, and send failed emails again in one go.",
+                "href": "/docs/reference/#report-designs-your-own-client-reports",
+                "link": "Report designs and the review",
+            },
+            {
+                "icon": "device",
+                "title": "Intune policies and mail rules",
+                "text": "Two new reports: Intune policies, with platforms that have no compliance policy and paused "
+                "update rings, and Mail rules and protection, with rules that let mail skip the spam filter. Devices "
+                "shows which computers have their BitLocker key saved, without reading the key.",
+                "href": "/docs/reference/#reports",
+                "link": "See every report",
+            },
+            {
+                "icon": "project",
+                "title": "Projects you'd put on a quote",
+                "text": "Each proposal lists only the work that client's findings call for, and repairs such as a "
+                "stopped directory sync are quick fixes rather than something to sell.",
+            },
+            {
+                "icon": "table",
+                "title": "Reports that fit a laptop",
+                "text": "Wide reports open on the columns that matter, with the rest a click away, and the menu folds "
+                "away to its icons. Long lists fold into a short form you open in place, and All clients opens any "
+                "report from the All reports menu.",
+            },
+        ],
+        "also": [
+            "five more email checks",
+            "report designs previewed at the printed page's size, with undo and redo",
+            "setup notes for your team left out of the client's copy",
+            "release images with a signed build record you can check",
+            "roles limited to some clients stay within them everywhere",
+            "month-end emails sent at Microsoft's pace, however many go at once",
+            "PIM for groups in the Admins report",
+            "sign-in and sessions tested harder, on every page",
+        ],
+    },
+]
 
 # Copied into the site as they are, so the product page and docs can show and link them.
 COPIED = {"docs/screenshots": "screenshots", "examples": "examples"}
@@ -397,7 +431,33 @@ def settings() -> dict:
         "github": GITHUB,
         "contact": contact,
         "source_public": os.environ.get("SITE_SOURCE_PUBLIC", "").strip().lower() == "true",
+        "preview": os.environ.get("SITE_PREVIEW", "").strip().lower() == "true",
     }
+
+
+# -- What's released ------------------------------------------------------------------------------------------
+
+
+def shown_sections(sections: list, releases: Releases) -> list[tuple[str, list[Doc]]]:
+    """The sections with each doc's Markdown as the site shows it, leaving out pages with nothing released."""
+    kept = []
+    for name, docs in sections:
+        shown = []
+        for doc in docs:
+            try:
+                text = released_only((ROOT / doc.path).read_text(encoding="utf-8"), doc.path, releases)
+            except MarkerError as error:
+                sys.exit(str(error))
+            if doc.path == "CHANGELOG.md":
+                text = released_changes(text, releases)
+            if doc.section:
+                text = section_of(text, doc.section)
+            if text.strip():
+                doc.text = text
+                shown.append(doc)
+        if shown:
+            kept.append((name, shown))
+    return kept
 
 
 # -- Markdown -------------------------------------------------------------------------------------------------
@@ -474,10 +534,7 @@ _HTML_URL = re.compile(r'\b(href|src)="([^"]*)"')
 
 
 def render(md: MarkdownIt, doc: Doc, links: Links) -> None:
-    text = (ROOT / doc.path).read_text(encoding="utf-8")
-    if doc.section:
-        text = section_of(text, doc.section)
-    tokens = md.parse(text)
+    tokens = md.parse(doc.text)
     # The first heading is the page's title; the template shows it.
     if tokens and tokens[0].type == "heading_open" and tokens[0].tag == "h1":
         doc.title = doc.title or tokens[1].content
@@ -581,42 +638,38 @@ def example_title(name: str) -> str:
     return title[0].upper() + title[1:]
 
 
-def version() -> str:
-    """The newest released version in CHANGELOG.md, if there is one (not the "unreleased" section above it)."""
-    for found in re.finditer(r"^## \[?v?(\d+\.\d+\.\d+)\]?(.*)$", (ROOT / "CHANGELOG.md").read_text("utf-8"), re.M):
-        if "unreleased" not in found[2].lower():
-            return found[1]
-    return ""
-
-
 _MONTHS = "January February March April May June July August September October November December".split()
 
 
-def whats_new() -> dict | None:
-    """The "What's new" band: WHATS_NEW with what CHANGELOG.md says of its version, or None to leave it out."""
-    wanted = WHATS_NEW["version"]
-    if not WHATS_NEW["items"]:
-        return None
-    for found in re.finditer(r"^## \[?v?(\d+\.\d+\.\d+)\]? - (.+)$", (ROOT / "CHANGELOG.md").read_text("utf-8"), re.M):
-        if found[1] != wanted:
+def whats_new(releases: Releases) -> dict | None:
+    """The newest "What's new" list the site shows, with what CHANGELOG.md says of its version, or None."""
+    for release in WHATS_NEW:
+        if release["version"] not in releases.dates:
+            sys.exit(
+                f"WHATS_NEW has {release['version']}, which has no '## [{release['version']}] - ...' heading "
+                "in CHANGELOG.md"
+            )
+    for release in WHATS_NEW:
+        wanted = release["version"]
+        if not release["items"] or not releases.shown(wanted):
             continue
-        when = found[2].strip()
+        when = releases.dates[wanted]
         dated = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", when)
         return {
-            **WHATS_NEW,
+            **release,
             "short": wanted.removesuffix(".0"),  # "2.3" reads better than "2.3.0" in a heading
             "released": bool(dated),
             "date": f"{int(dated[3])} {_MONTHS[int(dated[2]) - 1]} {dated[1]}" if dated else "",
             # The version's heading on the changelog page, with GitHub's anchor as render() gives it
             "href": f"/docs/changelog/#{github_slug(f'{wanted} - {when}')}",
         }
-    sys.exit(f"WHATS_NEW is for {wanted}, which has no '## [{wanted}] - ...' heading in CHANGELOG.md")
+    return None
 
 
 # -- Search engines -------------------------------------------------------------------------------------------
 
 
-def home_data(cfg: dict) -> dict:
+def home_data(cfg: dict, released: str) -> dict:
     """Schema.org data for the front page: the site's name, and what Office Sentry is and costs."""
     site = cfg["site_url"]
     app = {
@@ -635,7 +688,7 @@ def home_data(cfg: dict) -> dict:
         "image": f"{site}/assets/social-card.png",
         "screenshot": f"{site}/screenshots/tenant-overview.png",
     }
-    if released := version():
+    if released:
         app["softwareVersion"] = released
     if cfg["source_public"]:
         app["sameAs"] = [GITHUB]
@@ -677,7 +730,8 @@ def all_sections() -> list[tuple[str, list[Doc]]]:
 
 def build() -> Path:
     cfg = settings()
-    sections = all_sections()
+    releases = Releases.parse((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), preview=cfg["preview"])
+    sections = shown_sections(all_sections(), releases)
     docs = [d for _, ds in sections for d in ds]
     md, links = markdown(), Links(docs)
     for doc in docs:
@@ -708,7 +762,7 @@ def build() -> Path:
         trim_blocks=True,
         lstrip_blocks=True,
     )
-    env.globals.update(cfg, sections=sections, shots=shots, assets=assets, version=version())
+    env.globals.update(cfg, sections=sections, shots=shots, assets=assets, version=releases.newest())
 
     def page(template: str, path: str, **ctx) -> None:
         target = OUT / path
@@ -717,7 +771,13 @@ def build() -> Path:
             env.get_template(template).render(path="/" + path.removesuffix("index.html"), **ctx), encoding="utf-8"
         )
 
-    page("home.html", "index.html", examples=examples(), whats_new=whats_new(), structured_data=home_data(cfg))
+    page(
+        "home.html",
+        "index.html",
+        examples=examples(),
+        whats_new=whats_new(releases),
+        structured_data=home_data(cfg, releases.newest()),
+    )
     page("docs_index.html", "docs/index.html", title="Documentation")
     for doc in docs:
         page(

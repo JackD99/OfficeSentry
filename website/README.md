@@ -31,6 +31,35 @@ in `v2/docs/deploy/README.md` (`v2/tests/test_deploy_platforms.py` fails until b
 - To add a page somewhere other than Guides, or to rename one, add it to `SECTIONS`. The build stops with
   an error if a listed file is missing.
 
+### Not released yet
+
+Docs follow the code, so a pull request that adds a feature describes it on `main` straight away. But the site
+should only show what people can install. Mark what the next release adds, and the site leaves it out until
+`CHANGELOG.md` gives that version a date:
+
+```markdown
+<!-- since 2.4.0 -->
+## The new section
+
+Everything up to the closing line, headings, lists and tables included.
+<!-- /since -->
+
+| A table row the release adds | ... | <!-- since 2.4.0 -->
+```
+
+- A block runs from a `<!-- since x.y.z -->` line to a `<!-- /since -->` line. A line that carries the marker
+  anywhere else (a table row, a one-line list item) is left out on its own.
+- A page that's all one block, such as a new guide, isn't built at all, and links to it go to GitHub.
+- GitHub hides the comments and shows everything, as it shows `main`. Once the version is released, the
+  markers do nothing, and the release pull request can delete them.
+- Text that a release *changes* can't be marked this way. Change it in the release pull request.
+- The changelog page leaves out the "Unreleased" section, and the [What's new](#whats-new) band waits for
+  the release too.
+- The build stops on a marker naming a version with no heading in `CHANGELOG.md`, and on a block that isn't
+  closed. `docs/checks.md` is generated, so a new check's row shows as soon as it merges.
+
+To see the site as it will look once the next release is out, build it with `SITE_PREVIEW=true`.
+
 ## Changing the page about Office Sentry
 
 `templates/home.html` is the front page, `templates/base.html` the header and footer, and
@@ -42,13 +71,14 @@ last deploy's copy for a day fetches the new one. A new stylesheet or script goe
 
 ### What's new
 
-`WHATS_NEW` in `build.py` is a feature release's headlines: a heading, a sentence under it, a few words for
-the link at the top of the page, up to six items (an icon, a title, a sentence or two and a link to where it's
-explained) and a list of smaller changes. The front page shows them in a band after the features, and the
-link at the top of the page jumps to it. Until `CHANGELOG.md` gives that version a date the band says "Coming
-in 2.3"; from the release on it says "New in 2.3" with the date, and links to that version in the changelog.
-With no items there's no band and no link. Add an item when its change is on `main`, and start the next
-feature release's list when the last one is out.
+`WHATS_NEW` in `build.py` lists feature releases' headlines, newest first. Each is a heading, a sentence
+under it, a few words for the link at the top of the page, up to six items (an icon, a title, a sentence or two
+and a link to where it's explained) and a list of smaller changes. The front page shows the newest release
+`CHANGELOG.md` gives a date, in a band after the features, says "New in 2.3" with the date, and links to that
+version in the changelog; the link at the top of the page jumps to it. So the next release's list grows on
+`main`, an item as each change merges, while the site keeps showing the last release's until the next one is
+out (a `SITE_PREVIEW` build shows it as "Coming in 2.4"). A list with no items is skipped. Drop the oldest list
+once a newer one is released.
 
 `assets/social-card.png` is the picture shown when someone shares a link to the site (LinkedIn, Reddit,
 Teams, Slack and so on). To change it, replace it with another 1200×630 PNG. `assets/favicon.svg` is the tab
@@ -95,6 +125,8 @@ Settings, all optional (the Deploy workflow sets them): `SITE_URL` (the site's a
 calls the project open source, which the workflow sets once the repository is public; until then the page
 says the source is coming) and `SITE_CONTACT` (an email address or `https://` link for "Get in touch" and
 "Ask for early access", from the `OFFICESENTRY_WEBSITE_CONTACT` variable; without it they're left out).
+`SITE_PREVIEW=true` shows what the next release adds as well ([Not released yet](#not-released-yet)); the
+Deploy workflow never sets it.
 
 ## Dependencies
 
