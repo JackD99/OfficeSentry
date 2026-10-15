@@ -331,12 +331,16 @@ def objects_of(conn, run_id: int, kind: str | None = None) -> list[dict]:
 
 
 def earliest(conn, tenant_id: int) -> str | None:
-    """When the oldest data that can still be read for a tenant was collected (None: nothing yet)."""
+    """When the oldest data that can still be read for a tenant was collected (None: nothing yet). Runs that
+    stored nothing don't count: a data source with nothing in it (no inbox rules, say) has nothing for pruning
+    to remove, so its first run would stay the earliest long after the rest of that day's data has gone."""
     found = [
-        conn.execute("SELECT MIN(finished_at) FROM state_runs WHERE tenant_id = ?", (tenant_id,)).fetchone()[0],
+        conn.execute(
+            "SELECT MIN(finished_at) FROM state_runs WHERE tenant_id = ? AND objects > 0", (tenant_id,)
+        ).fetchone()[0],
         conn.execute(
             "SELECT MIN(finished_at) FROM runs WHERE tenant_id = ? AND status IN ('succeeded', 'partial')"
-            f" AND {HOLDS_OBJECTS}",
+            " AND object_count > 0 AND EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id)",
             (tenant_id,),
         ).fetchone()[0],
     ]

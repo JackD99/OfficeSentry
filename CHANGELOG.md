@@ -29,6 +29,18 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
+- A mailbox's **History** shows its inbox rules removed when the client has none left, the usual end of a
+  clean-up. The collection that found no rules was skipped, so the rules never showed as removed.
+- **As of** (a report shown as it was on a past day) no longer offers days with no data once the daily history
+  has been pruned: a data source with nothing in it, such as no inbox rules, kept the first collection as the
+  day the data starts. A day that isn't held any more says the daily history doesn't go back that far, rather
+  than blaming the retention of snapshots. Switching reports keeps the day, and a CSV of a past day has the
+  day in its name, as the PDF and spreadsheet already did.
+- **Admin activity** on a past day from before Office Sentry started keeping the client's audit log shows that
+  day's changes instead of none, and so does a person's page.
+- **Search** lists every domain of a client that matches, not only the first, and finds names and addresses
+  that look like the start of an IP address (`cafe.de`) whether or not its index is up to date.
+- **Report history** names a week as the email does: "Week of 5 Oct 2026" rather than "Week 41, 2026".
 
 ## [2.3.1] - 2026-10-12
 

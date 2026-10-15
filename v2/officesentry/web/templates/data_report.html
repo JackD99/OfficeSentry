@@ -5,7 +5,7 @@
 {% block content %}
 {{ tenant_header(tenant, 'data') }}
 <div class="report-layout">
-{{ report_picker(tenant, report.key) }}
+{{ report_picker(tenant, report.key, day.on.isoformat() if day.on else None) }}
 {% if day.earliest %}
 {#- Any day the data reaches back to: the report as the tenant was at the end of it. Filters stay. -#}
 <form class="date-pick" method="get" action="{{ request.path }}">
