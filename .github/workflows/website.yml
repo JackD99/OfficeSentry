@@ -27,3 +27,7 @@ jobs:
           cache-dependency-path: website/requirements.txt
       - run: pip install --require-hashes -r website/requirements.txt
       - run: python website/build.py
+      # As it will look once the next release is out, so a mistake in what's marked as coming shows now too.
+      - run: python website/build.py
+        env:
+          SITE_PREVIEW: 'true'

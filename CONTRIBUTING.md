@@ -107,8 +107,17 @@ each Python's tests run in four parts on separate machines at once
 (`pytest --shard 2/4` runs the second part; every test is in exactly one),
 and a final check fails unless the parts together ran every test.
 
-- Keep changes small and finished end to end; update `v2/CLAUDE.md` and
-  `v2/README.md` in the same pull request when behaviour changes.
+- Keep changes small and finished end to end. When behaviour changes, update
+  the docs it affects in the same pull request (`README.md`, `v2/README.md`,
+  `v2/docs/`, the website's pages and `v2/CLAUDE.md`), and add a line to
+  [CHANGELOG.md](CHANGELOG.md) under the Unreleased heading: Added, Changed,
+  Fixed or Security, written for the people who run it, plus **Action
+  required**, **New Microsoft permissions** or **Database upgrade** when they
+  have to do something.
+- The website shows the docs from `main`, but only what's released. Mark
+  what the next release adds with `<!-- since 2.4.0 -->` (a block up to
+  `<!-- /since -->`, or one line), and the site leaves it out until that
+  version is released ([website/README.md](website/README.md#not-released-yet)).
 - When a page or report looks different, regenerate the README screenshots
   and the example reports with `python scripts/screenshots.py` (from `v2/`;
   needs `pip install playwright pillow`, a Chromium for Playwright and
@@ -147,6 +156,23 @@ and a final check fails unless the parts together ran every test.
   client's IDs; a new POST route goes in its `FORMS` (the form the route
   accepts) so the walk sends a form the route would act on, not an empty
   one.
+
+<!-- since 2.4.0 -->
+- A collection run that fails for a reason waiting fixes (`worker.passing`:
+  Microsoft busy, throttling or out of reach, the database locked; or a
+  worker that stopped mid-run, `store.expire_run_leases`) gets a `retry_at`
+  (`store.plan_retry`, `RETRY_DELAYS`). Housekeeping queues it again as a
+  run whose `retry_of` is the first failure (`store.queue_retries`), unless
+  something newer of that data source was queued or the client is paused.
+  `alerts.after_run` waits for the last try, and pages show such a failure
+  as being tried again (`store.retry_pending`, the `retrying` filter). A new
+  kind of failure that passes by itself goes in `worker.passing`.
+- The worker's nightly database backup is the `backup` task
+  (`nightly_backup.py`, at `cfg.backup_cron`). It leaves a night to a copy
+  the `backup` command made in the last 25 hours, wherever it wrote (the
+  command's record in `backup-status.json`, or the backups folder), and
+  makes one itself if no newer copy comes `nightly_backup.LATE` after it.
+<!-- /since -->
 
 ## Signing off your commits
 
@@ -231,7 +257,9 @@ does the work. To make a release:
    (`tests/test_deploy_platforms.py` fails until they match). For a feature release, the
    website's What's new band (`WHATS_NEW` in `website/build.py`, see
    [website/README.md](website/README.md#whats-new)) should list its headlines
-   by now. Merge it once CI is green.
+   by now. The `<!-- since x.y.z -->` markers for this version can go, and
+   text on the website that the release changes (rather than adds) is changed
+   here. Merge it once CI is green.
 2. On GitHub: **Actions** → **Release** → **Run workflow**, leave "Use
    workflow from" on `main`, type the version (`2.1.0`) and press **Run
    workflow**. (Pushing a tag, `git push origin v2.1.0`, does the same.)
