@@ -11,6 +11,8 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
+In progress. What changed is listed here when 2.4.0 is released.
+
 ### Fixed
 
 - **Data collection** no longer marks a client's findings fixed when it can't sign in. Inbox rules, automatic
