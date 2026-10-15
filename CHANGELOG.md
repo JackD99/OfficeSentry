@@ -29,9 +29,6 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
-
-### Fixed
-
 - **Data collection** no longer marks a client's findings fixed when it can't sign in. Inbox rules, automatic
   replies, mailbox permissions, mailbox sizes and mobile devices read one mailbox at a time and carried on past
   each refusal, so a client that removed the app (or whose certificate stopped working) finished as partial
