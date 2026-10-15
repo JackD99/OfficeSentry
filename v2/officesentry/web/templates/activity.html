@@ -31,7 +31,7 @@
     <tr><td class="nowrap">{{ ts(r.ts) }}</td>
       <td data-label="User">{{ r.username or '' }}</td>
       <td data-label="Action">{{ r.action|replace('tenant', 'client')|replace('_', ' ')|capitalize }}</td>
-      <td data-label="Client">{{ tenant_label(r.tenant_id, names) }}</td>
+      <td data-label="Client">{{ tenant_label(r, names, added) }}</td>
       <td data-label="Address" class="mono small">{{ r.ip or '' }}</td>
       <td data-label="Detail" class="small">{{ r.detail or '' }}</td></tr>
     {% endfor %}

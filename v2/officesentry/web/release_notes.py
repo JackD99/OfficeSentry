@@ -45,7 +45,7 @@ def inline(text: str, version: str) -> Markup:
             return match[1]
         return f'<a href="{escape(url)}" rel="noopener">{match[1]}</a>'
 
-    html = CODE.sub(keep, str(escape(text)))
+    html = CODE.sub(keep, str(escape(text.replace("\x00", ""))))  # NUL marks the code spans kept aside
     html = LINK.sub(link, html)
     html = BOLD.sub(r"<strong>\1</strong>", html)
     html = ITALIC.sub(r"<em>\1</em>", html)
