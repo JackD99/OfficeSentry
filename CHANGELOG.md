@@ -29,9 +29,6 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
-
-### Fixed
-
 - **Month-end reporting** never approves a month with nothing to send. Approving a client nothing had been
   collected for emailed a blank report, and a plan whose only report was a deleted design was marked Approved
   with nothing sent. Both are now refused with the reason, the queue has no tick box for them and flags "No
