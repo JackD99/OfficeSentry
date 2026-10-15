@@ -8,8 +8,8 @@ behind it, each with the one request that used to get through.
 
 from __future__ import annotations
 
+from officesentry import lifecycle, roles, store, tenant_groups
 from officesentry import permissions as p
-from officesentry import roles, tenant_groups
 from officesentry.db import audit
 from tests.conftest import login, make_user
 
@@ -125,6 +125,46 @@ def test_activity_log_shows_only_the_clients_someone_sees(client, db, two_tenant
     login(client, "admin")
     page = client.get("/admin/activity").data
     assert b"finance@bravo.example" in page and b"ceo@bravo.example" in page
+
+
+def test_a_new_client_never_gets_a_deleted_clients_id(client, db, connection_id, two_tenants):
+    """The activity log keeps a deleted client's rows. SQLite would give the next client the deleted newest
+    one's id, and with it those rows, its name and domain included."""
+    _, bravo = two_tenants
+    audit(db, "admin", "contact_added", bravo, "finance@bravo.example")
+    with db:
+        lifecycle.delete_tenant(db, store.get_tenant(db, bravo), "admin")
+    charlie = store.create_tenant(db, "Charlie Ltd", "charlie.onmicrosoft.com", connection_id)
+    assert charlie > bravo
+    with db:
+        lifecycle.delete_tenant(db, store.get_tenant(db, charlie), "admin")
+    db.execute("DELETE FROM audit_log")  # retention can empty the log; the ids handed out are still known
+    assert store.create_tenant(db, "Delta Ltd", "delta.onmicrosoft.com", connection_id) > charlie
+
+
+def test_rows_from_before_a_client_was_added_are_never_its_own(client, db, connection_id, two_tenants):
+    """Before 2.4.0 a new client could get a deleted one's id: the deleted one's rows stay out of its log."""
+    _, bravo = two_tenants
+    audit(db, "admin", "contact_added", bravo, "finance@bravo.example")
+    with db:
+        lifecycle.delete_tenant(db, store.get_tenant(db, bravo), "admin")
+    db.execute("UPDATE audit_log SET ts = '2026-01-01T00:00:00Z' WHERE tenant_id = ?", (bravo,))
+    db.execute(
+        "INSERT INTO tenants (id, name, tenant_ref, connection_id, created_at) VALUES (?, ?, ?, ?, ?)",
+        (bravo, "Charlie Ltd", "charlie.onmicrosoft.com", connection_id, "2026-02-01T00:00:00Z"),
+    )
+    audit(db, "admin", "contact_added", bravo, "finance@charlie.example")
+    _limited(db, "rev", [*p.SEE, "activity_log.read"], tenants=[bravo])
+    login(client, "rev")
+    for url in ("/admin/activity", f"/admin/activity?tenant={bravo}", "/admin/activity.csv"):
+        body = client.get(url).data
+        assert b"finance@charlie.example" in body and b"bravo" not in body.lower(), url
+    make_user(db, "admin")
+    client.post("/logout")
+    login(client, "admin")
+    page = client.get("/admin/activity").get_data(as_text=True)
+    assert "Bravo Inc" in page and f"Client #{bravo} (deleted or not visible)" in page  # not "Charlie Ltd"
+    assert "finance@bravo.example" not in client.get(f"/admin/activity?tenant={bravo}").get_data(as_text=True)
 
 
 def test_user_pages_leave_out_other_clients_accounts(client, db, two_tenants):

@@ -162,6 +162,9 @@ def test_a_database_upgrade_is_read_from_its_section():
     no = updates.from_github(gh("2.4.1", "### Database upgrade\n\nNo.\n"))
     assert yes.upgrades_database and not no.upgrades_database
     assert not updates.from_github(gh("2.4.2", "Nothing to say.")).upgrades_database
+    # "No" and "None" are words, not prefixes: a section starting "Note" or "Now" is still an upgrade.
+    for said, upgrades in (("None.", False), ("No, nothing changes.", False), ("Note: migration 45.", True)):
+        assert updates.from_github(gh("2.4.3", f"### Database upgrade\n\n{said}\n")).upgrades_database is upgrades
 
 
 def test_an_action_required_of_none_asks_nothing():
@@ -170,6 +173,8 @@ def test_an_action_required_of_none_asks_nothing():
     assert none.action and not none.asks
     assert updates.from_github(gh("2.4.0", NOTES)).asks
     assert not updates.from_github(gh("2.4.2", "Nothing to say.")).asks
+    # "None" is a word, not a prefix: "Nonetheless, ..." still asks for the tick.
+    assert updates.from_github(gh("2.4.3", "### Action required\n\nNonetheless, rotate the key first.\n")).asks
 
 
 def test_drafts_pre_releases_and_other_tags_are_not_releases():
@@ -359,6 +364,8 @@ def test_notes_are_escaped_and_links_kept_safe():
     assert "../../secrets" not in html
     assert '<a href="https://github.com/JackD99/OfficeSentry" rel="noopener">GitHub</a>' in html
     assert "<code>a **b** &lt;c&gt;</code>" in html
+    # NUL marks the code spans kept aside while the rest is drawn, so one in the notes is dropped, not believed.
+    assert release_notes.render("`a` then \x000\x00 and \x007\x00", "2.4.0") == "<p><code>a</code> then 0 and 7</p>"
 
 
 def test_notes_draw_lists_and_tables():
