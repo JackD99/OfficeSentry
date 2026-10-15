@@ -11,6 +11,12 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
+### Fixed
+
+- **Logs keep what matters through a month-end.** Each PDF wrote about 200 lines of the PDF and font libraries'
+  own notes to the portal's and worker's logs, so a month-end's reports pushed every earlier line, errors
+  included, out of the rolling log files the support package reads. Those libraries now only log their errors.
+
 ## [2.3.1] - 2026-10-12
 
 Fixes for 2.3. Nothing to do before updating: `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are

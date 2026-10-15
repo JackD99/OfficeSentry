@@ -515,6 +515,21 @@ def test_log_files_rotate_and_the_tail_crosses_them(cfg, monkeypatch):
     assert logs.tail(cfg.data_dir, "web", 1000) == ""
 
 
+def test_making_a_pdf_leaves_the_log_to_office_sentry(cfg):
+    pytest.importorskip("weasyprint")
+    from officesentry.reports import export
+
+    logs.setup(cfg.data_dir, "worker")
+    page = "<html><head><style>svg { fill: red } @media (max-width: 9px) { p { color: red } }</style></head>"
+    static = Path(export.__file__).resolve().parents[1] / "web" / "static"
+    export.to_pdf(page + "<body><p>Hello</p><svg><circle r='1'/></svg></body></html>", static.as_uri() + "/")
+    logging.getLogger("weasyprint").error("Failed to load image at %s", "static/missing.png")
+    text = logs.log_file(cfg.data_dir, "worker").read_text(encoding="utf-8")
+    # WeasyPrint's progress, its CSS notes and fontTools' subsetting stayed out; its errors still come through.
+    assert text.splitlines() == [ln for ln in text.splitlines() if "ERROR weasyprint" in ln]
+    assert "Failed to load image at static/missing.png" in text
+
+
 def test_setup_survives_an_unwritable_folder(cfg, tmp_path, caplog):
     blocked = tmp_path / "file"
     blocked.write_text("not a folder", encoding="utf-8")
