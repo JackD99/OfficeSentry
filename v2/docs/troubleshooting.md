@@ -2,8 +2,9 @@
 
 The errors people most often meet while setting up Office Sentry and adding
 their first clients, and how to fix each one. Commands are for a Docker
-install and run from the `v2` folder on the server; without Docker, run the
-same `python -m officesentry ...` part in the virtual environment.
+install and run in the folder with `docker-compose.yml` on the server (such as
+`/opt/officesentry`); without Docker, run the same `python -m officesentry ...`
+part in the virtual environment.
 
 For a failed collection, the run's own error message is usually the quickest
 guide: [Onboarding a client](onboarding-a-client.md#errors-on-failed-runs)
@@ -24,6 +25,7 @@ does the same for your clients' people.
 
 ## Contents
 
+- [The address doesn't load, or the browser warns about the certificate](#the-address-doesnt-load-or-the-browser-warns-about-the-certificate)
 - [The first-admin link doesn't work](#the-first-admin-link-doesnt-work)
 - [Signing in fails with "The CSRF session token is missing"](#signing-in-fails-with-the-csrf-session-token-is-missing)
 - [Creating the app fails](#creating-the-app-fails)
@@ -36,6 +38,26 @@ does the same for your clients' people.
 - [The Update button isn't offered, or an update didn't happen](#the-update-button-isnt-offered-or-an-update-didnt-happen)
 - [PDF buttons open a print window instead of a file](#pdf-buttons-open-a-print-window-instead-of-a-file)
 - [Asking for help](#asking-for-help)
+
+## The address doesn't load, or the browser warns about the certificate
+
+With `COMPOSE_PROFILES=https` in `.env` ([First start](../DEPLOY.md#first-start)), Caddy asks Let's Encrypt
+for a certificate for `OFFICESENTRY_DOMAIN` when it starts, and Let's Encrypt checks the domain by
+connecting to the server on port 80. Until that works, the address doesn't load or the browser warns that
+the connection isn't private. `docker compose logs caddy` says why; the usual causes are:
+
+- **Caddy isn't running.** `docker compose ps` should list `caddy`. If it doesn't, `.env` has no
+  `COMPOSE_PROFILES=https` line (add it and run `docker compose up -d`).
+- **The domain doesn't point at the server yet.** `nslookup sentry.yourmsp.com` should give the
+  server's public address. A new DNS record can take a while to reach everyone; Caddy keeps trying.
+- **Ports 80 and 443 are closed.** Open both to the internet in the cloud's firewall (Azure's network
+  security group, an AWS security group) or the router in front of the server. Docker opens them on the
+  server itself, past `ufw`.
+- **`OFFICESENTRY_DOMAIN` isn't the address people type.** It's the domain alone (`sentry.yourmsp.com`,
+  no `https://`), and `OFFICESENTRY_BASE_URL` is the same with `https://` in front. Change it, then run
+  `docker compose up -d`.
+
+Once the cause is fixed, `docker compose restart caddy` tries again at once.
 
 ## The first-admin link doesn't work
 
@@ -57,8 +79,8 @@ The sign-in cookie is marked *Secure*, so browsers only keep it over https.
 Opened over plain `http://` on a server's address, the browser drops it and
 every form says *Bad Request: The CSRF session token is missing*.
 
-Open the portal at its https address (the `--profile https` option in the
-Quick start, or your own reverse proxy). For a test on your own computer only,
+Open the portal at its https address (Caddy, from [First start](../DEPLOY.md#first-start),
+or your own reverse proxy). For a test on your own computer only,
 `OFFICESENTRY_INSECURE_COOKIES=1` turns the *Secure* flag off; never set it on
 a server other people reach.
 
