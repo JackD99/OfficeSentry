@@ -10,7 +10,7 @@ A NAS that runs containers can run Office Sentry: it uses the one-file stack,
 ## Before you start
 
 - **Memory and CPU.** Office Sentry wants 2 CPUs and 4 GB of memory of its own, on top of what the NAS
-  already uses. An Intel or AMD NAS works with any release; an ARM one (arm64) from 2.1.0.
+  already uses. Intel, AMD and ARM (arm64) NAS systems all work.
 - **HTTPS, and who can reach it.** The NAS's own web interface usually holds ports 80 and 443, so the stack's
   Caddy can't use them. The simplest way to reach the portal from outside the office, with HTTPS and no port
   opened on your router, is [Cloudflare Tunnel](cloudflare.md#cloudflare-tunnel), which the stack includes. On
@@ -19,6 +19,10 @@ A NAS that runs containers can run Office Sentry: it uses the one-file stack,
 - **The keys.** The key that decrypts the stored certificates is generated into its own folder or volume.
   Save a copy in your password manager ([Where the keys are](../../DEPLOY.md#where-the-keys-are)) and keep it
   out of your NAS backups where you can (each section says how).
+- **Restoring a backup.** Stop both containers, then run `restore` in a one-off container given the same
+  data and keys: [Portainer](portainer.md#keys-and-backups) has the `docker run` command. Use your own
+  folders in place of the volume names (on Unraid, `-v /mnt/user/appdata/officesentry/data:/data -v
+  /mnt/user/appdata/officesentry-keys:/keys`), and start the containers again afterwards.
 
 ## Unraid
 
@@ -68,6 +72,10 @@ Don't run *Tools → New Permissions* (or "Docker Safe New Perms") over these fo
 `nobody`, and the portal then stops with `PermissionError: [Errno 1] Operation not permitted: '/data'`. If
 it happens, run the `chown` line from step 1 again.
 
+To update, read the [release notes](https://github.com/JackD99/OfficeSentry/releases), change
+`OFFICESENTRY_VERSION` in **Edit Stack → ENV File**, then press **Compose Pull** and **Compose Up**. If the
+release changed the stack file, paste the new one in **Edit Stack → Compose File** first.
+
 ## Synology
 
 DSM 7.2 or later, with **Container Manager** (*Package Center*). Container Manager projects don't take
@@ -107,10 +115,12 @@ environment variables, so you write your settings into the stack itself; the fil
    /usr/local/bin/docker exec officesentry-web-1 python -m officesentry backup --keep 14
    mkdir -p /volume1/docker/officesentry/backups
    /usr/local/bin/docker cp officesentry-web-1:/data/backups/. /volume1/docker/officesentry/backups/
+   find /volume1/docker/officesentry/backups -maxdepth 1 -name 'officesentry-*.db.gz' -mtime +14 -delete
    ```
 
-   The second command copies the backups out of the Docker volume into the shared folder, where
-   **Hyper Backup** can take them off the NAS. The keys never go there.
+   The third line copies the backups out of the Docker volume into the shared folder, where
+   **Hyper Backup** can take them off the NAS, and the last one deletes copies older than two weeks there,
+   as the volume does. The keys never go there.
 
 **HTTPS on the office network:** *Control Panel → Login Portal → Advanced → Reverse Proxy → Create*: source
 HTTPS, your hostname, port 443; destination HTTP, `localhost`, port 8000. Give it a certificate under
@@ -135,11 +145,11 @@ apps on Kubernetes and aren't covered.
    the containers after the app with `ix-` in front; check with `docker ps` in *System → Shell*. The command:
 
    ```bash
-   docker exec ix-officesentry-web-1 python -m officesentry backup --keep 14 && mkdir -p /mnt/tank/backups/officesentry && docker cp ix-officesentry-web-1:/data/backups/. /mnt/tank/backups/officesentry/
+   docker exec ix-officesentry-web-1 python -m officesentry backup --keep 14 && mkdir -p /mnt/tank/backups/officesentry && docker cp ix-officesentry-web-1:/data/backups/. /mnt/tank/backups/officesentry/ && find /mnt/tank/backups/officesentry -maxdepth 1 -name 'officesentry-*.db.gz' -mtime +14 -delete
    ```
 
    with `/mnt/tank/backups` a dataset of yours that a replication or Cloud Sync task already takes off the
-   NAS.
+   NAS. The `find` at the end deletes copies older than two weeks there, as the volume does.
 5. Save the keys: `docker exec ix-officesentry-web-1 cat /keys/secrets.json` in *System → Shell*, into your
    password manager.
 

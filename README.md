@@ -386,18 +386,20 @@ Download `docker-compose.yml`, `Caddyfile` and `env.example` from the newest
 
 ```bash
 cp env.example .env           # set OFFICESENTRY_BASE_URL, OFFICESENTRY_DOMAIN and OFFICESENTRY_TIMEZONE
-docker compose --profile https up -d
+echo COMPOSE_PROFILES=https >> .env    # Caddy, for HTTPS with a certificate from Let's Encrypt
+docker compose up -d
 ```
 
 The image is [`ghcr.io/jackd99/officesentry`](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry),
-public, for amd64 (Intel and AMD) servers and, from 2.1.0, arm64 ones. It is built and
+public, for amd64 (Intel and AMD) and arm64 servers. It is built and
 scanned by GitHub Actions from a tagged release, with a signed build provenance you can check
 ([SECURITY.md, "Checking a release"](SECURITY.md#checking-a-release)). Each release lists what changed,
 and anything to do before updating, in [CHANGELOG.md](CHANGELOG.md). **Settings → Updates** shows those notes for
 every newer release, and an optional **Update** button installs one: it checks the release's signature, restarts
 Office Sentry on it and goes back by itself if it doesn't start ([The Update button](v2/DEPLOY.md#the-update-button)).
 
-Leave out `--profile https` if you already have a reverse proxy, and point it at `http://127.0.0.1:8000`. Then:
+Leave out the `COMPOSE_PROFILES` line if you already have a reverse proxy, and point it at
+`http://127.0.0.1:8000`. Then:
 
 1. Run `docker compose logs web` and open the link on the line starting **No admin account yet** to create the
    first admin (with two-step sign-in). Your home page then shows a **Get started** checklist (the app connection,
