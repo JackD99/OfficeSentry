@@ -46,7 +46,8 @@ def _period_or_404(period: str) -> str:
 def report_extras(tenant, *, page: bool) -> dict:
     """Template context for the monthly review page (``page``) or its PDF: this month's commentary,
     recommendations and notes. Staff-only notes only reach staff on the page; clients and PDFs never get them.
-    Clients see none of it until the month is approved (or an automatic plan sent it)."""
+    Clients see none of it until the month is approved (or an automatic plan sent it), and then what was
+    approved: a change made since waits for a new version (``month_end.approved_copy``)."""
     staff = is_staff() and can("month_end.review", tenant["id"])
     period = _period_now()
     extras = month_end.report_context(g.db, tenant["id"], period, staff=staff and page, approved_only=not staff)
@@ -259,7 +260,7 @@ def queue(period: str):
     counts = {
         "": len(rows),
         "mine": sum(r.reviewer == g.user["username"] for r in rows),
-        "review": sum(r.state in ("draft", "in_review") for r in rows),
+        "review": sum(_needs_review(r) for r in rows),
         "ready": sum(r.ready for r in rows),
     }
     shown = [
@@ -267,7 +268,7 @@ def queue(period: str):
         for r in rows
         if show == ""
         or (show == "mine" and r.reviewer == g.user["username"])
-        or (show == "review" and r.state in ("draft", "in_review"))
+        or (show == "review" and _needs_review(r))
         or (show == "ready" and r.ready)
     ]
     return render_template(
@@ -288,6 +289,11 @@ def queue(period: str):
         bulk=_bulk_progress(period, every),
         worker_running=worker.is_alive(g.db),
     )
+
+
+def _needs_review(row: month_end.QueueRow) -> bool:
+    """Not issued yet, or changed since it was approved (the client still has the approved copy)."""
+    return row.state in ("draft", "in_review") or row.edited
 
 
 def _waits_for_resume(row: month_end.QueueRow) -> bool:
@@ -440,6 +446,7 @@ def review(period: str, tenant_id: int):
         verdict=summary.monthly(report).verdict,
         review=r,
         state=state,
+        edited=month_end.changed_since_approval(g.db, t["id"], period, r, state),
         states=month_end.STATES,
         severe=severe,
         flags=flags,
@@ -573,7 +580,10 @@ def save_commentary(period: str, tenant_id: int):
         month_end.start_review(g.db, t["id"], period, g.user["username"])
         month_end.update_review(g.db, t["id"], period, g.user["username"], commentary=text)
         audit(g.db, g.user["username"], "report_commentary_saved", t["id"], f"{period}, {len(text)} characters")
-    flash("Commentary saved.", "success")
+    if month_end.changed_since_approval(g.db, t["id"], period):
+        flash(f"Commentary saved. {t['name']} sees it once the month is issued again.", "success")
+    else:
+        flash("Commentary saved.", "success")
     return _review_url(t["id"], period, "commentary")
 
 

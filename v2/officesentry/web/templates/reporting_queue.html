@@ -67,7 +67,8 @@
         {% elif r.error %}<span class="sub bad-text">Send failed</span>{% elif r.sent_at %}<span class="sub">{{ ts(r.sent_at) }}</span>{% endif %}</td>
       <td data-label="Verdict"><span class="pill {{ TONES.get(r.verdict.tone, '') }}">{{ r.verdict.label }}</span></td>
       <td data-label="New critical/high" class="num">{{ r.new_severe or '–' }}</td>
-      <td data-label="Needs your eyes" class="wrap">{% if r.flags and r.state in ('draft', 'in_review') %}<div class="flags">{% for f in r.flags %}<span class="pill warn">{{ f }}</span>{% endfor %}</div>{% elif r.state in ('draft', 'in_review') %}<span class="muted small">Nothing flagged</span>{% endif %}</td>
+      <td data-label="Needs your eyes" class="wrap">{% if r.flags and r.state in ('draft', 'in_review') %}<div class="flags">{% for f in r.flags %}<span class="pill warn">{{ f }}</span>{% endfor %}</div>{% elif r.state in ('draft', 'in_review') %}<span class="muted small">Nothing flagged</span>
+        {% elif r.edited %}<div class="flags"><span class="pill warn" title="The client still sees the approved version until a new version is issued">Changed since approval</span></div>{% endif %}</td>
       <td data-label="Reviewer">{% if r.reviewer %}{{ r.reviewer }}{% else %}
         <form method="post" action="{{ url_for('reporting.assign', period=period, tenant_id=r.tenant.id) }}">{{ csrf() }}<input type="hidden" name="reviewer" value="me"><input type="hidden" name="from" value="queue"><input type="hidden" name="show" value="{{ show }}"><button class="sm ghost">Take it</button></form>{% endif %}</td>
     </tr>
