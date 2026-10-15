@@ -214,7 +214,9 @@ def _every_connection_is_closed(_every_connection_is_closed, monkeypatch):
     """tests/conftest.py's check that a test leaves no database connection open, once the portal has finished
     what it was doing. The portal serves pages from threads of its own and runs its worker watchdog
     (system_alerts.start_watchdog) beside them, so a check can end while one of those still has a connection
-    open; each gets a few seconds to close it before the check counts it as left open."""
+    open; each gets up to half a minute to close it before the check counts it as left open. (Ten seconds
+    wasn't always enough on CI, where four browsers and four portals share a runner: on 12 October a page
+    passed and then failed this check.) A connection really left open still fails, only later."""
     connect, opened = sqlite3.connect, []
 
     def tracked(*args, **kwargs):
@@ -224,7 +226,7 @@ def _every_connection_is_closed(_every_connection_is_closed, monkeypatch):
 
     monkeypatch.setattr(sqlite3, "connect", tracked)
     yield
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + 30
     while time.monotonic() < deadline and not all(getattr(conn, "closed", True) for conn in opened):
         time.sleep(0.05)
 
