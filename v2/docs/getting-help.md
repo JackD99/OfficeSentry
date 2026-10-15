@@ -123,7 +123,10 @@ client is named by its number in the portal's address (`/tenants/<id>`).
 
 ## Reporting a problem
 
-Open an issue with the
+A question ("how do I...?", "is it possible to...?") goes to
+[Discussions, Q&A](https://github.com/JackD99/OfficeSentry/discussions/categories/q-a), where other MSPs
+can answer it too. For something that doesn't work, check *Settings → Updates* first: fixes only go into
+the newest release, so update if you're behind and try again. If it still happens, open an issue with the
 [Bug form](https://github.com/JackD99/OfficeSentry/issues/new?template=bug.yml)
 and say:
 
