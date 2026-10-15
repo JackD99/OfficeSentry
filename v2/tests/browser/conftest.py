@@ -22,6 +22,7 @@ import screenshots  # noqa: E402
 # Every page shows the same dates on every run: the demo data and "3 days ago" are relative to this.
 FROZEN = datetime(2026, 10, 5, 9, 30, tzinfo=UTC)
 VERSION = "2.1.0"  # what the menu says it's running, whatever the code's version is
+SCHEMA = 44  # the database version System status names, whatever the latest migration is
 
 VIEWPORTS = {"laptop": {"width": 1366, "height": 768}, "phone": {"width": 390, "height": 844}}
 THEMES = ("light", "dark")
@@ -30,15 +31,19 @@ THEMES = ("light", "dark")
 @pytest.fixture(scope="session")
 def site(tmp_path_factory):
     """(server, tenant ids, passwords): the demo portal on a free port, with time stopped at FROZEN."""
-    from officesentry import web
+    from officesentry import system_health, web
 
     traveller = time_machine.travel(FROZEN, tick=False)
     traveller.start()
     try:
         # The version at the foot of the menu is painted over, but a development version ("2.2.0.dev0") is
         # long enough to wrap the line and move everything above it, so the demo always runs as a release.
+        # System status says which database version it's on, and every new migration would change its
+        # screenshots, so that's pinned too.
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(web, "__version__", VERSION)
+            mp.setattr(system_health, "schema_version", lambda conn: SCHEMA)
+            mp.setattr(system_health, "latest_version", lambda: SCHEMA)
             cfg, ids, passwords, _ = screenshots.build_site(tmp_path_factory.mktemp("ui") / "data")
             with screenshots.Server(cfg) as server:
                 server.beat()  # a fresh worker heartbeat, so no "worker stopped" banner
