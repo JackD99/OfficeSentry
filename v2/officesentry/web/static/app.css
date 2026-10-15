@@ -127,7 +127,9 @@ main { max-width: 1600px; margin: 0 auto; padding: 28px 32px 64px; }
 /* -- Tables ---------------------------------------------------------------- */
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: var(--space-2-5) var(--space-3); border-bottom: 1px solid var(--border); vertical-align: top; }
-th { font-size: var(--fs-sm); font-weight: 600; font-variant-caps: all-small-caps; letter-spacing: .05em; color: var(--muted); background: var(--surface-2); white-space: nowrap; }
+th { font-size: var(--fs-sm); font-weight: 600; color: var(--muted); background: var(--surface-2); white-space: nowrap; }
+/* Column headings in small capitals; a heading inside the body (a group's title, a total) reads as text. */
+thead th { font-variant-caps: all-small-caps; letter-spacing: .05em; }
 td { font-variant-numeric: tabular-nums; }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover td { background: var(--surface-2); }
