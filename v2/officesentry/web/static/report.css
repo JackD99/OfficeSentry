@@ -517,7 +517,9 @@ body.pdf .cover.compact .cover-status:not(:empty) { padding: 0 0 3mm; }
 .sub-head { font-size: var(--fs-lg); margin: var(--space-6) 0 var(--space-2-5); }
 .exec .summary-text + .sub-head { margin-top: var(--space-5); }
 .chart-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-4); margin-bottom: var(--space-1); }
-.chart-head .legend { margin-top: 0; flex-wrap: nowrap; white-space: nowrap; }
+/* Margins, not gap: WeasyPrint leaves a flex gap out of the legend's width and the last key ran off the card. */
+.chart-head .legend { margin-top: 0; flex-wrap: nowrap; white-space: nowrap; gap: 0; }
+.chart-head .legend span + span { margin-left: var(--space-4); }
 .legend .k-found::before { background: var(--chart-2); } .legend .k-fixed::before { background: var(--chart-series); }
 svg.chart .part.tone-1 { fill: var(--chart-series); } svg.chart .part.tone-2 { fill: var(--chart-2); }
 svg.chart .count { fill: var(--muted); font-size: 9px; }
