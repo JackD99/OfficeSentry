@@ -429,6 +429,7 @@ On the **Manage** page, people who can manage clients can:
   and findings stay, and the client still shows (marked *Paused*) in lists and
   to its client users. Month-end names it under the queue instead, since
   nothing goes out for it. **Resume** picks up at the next nightly collection.
+- An emailed report that came due while the client was paused isn't sent the moment you resume it; the next one goes as usual, and a month-end month can still be approved and sent from **Month-end**. <!-- since 2.4.0 -->
 - **Archive** a client you've stopped working with but who may come back. An
   archived client is also paused, and is hidden from the Clients page, All
   clients, What changed, the Reports page, digests and its client users.

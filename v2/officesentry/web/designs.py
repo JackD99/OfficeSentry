@@ -172,9 +172,16 @@ def duplicate(design_id: int):
 @needs("designs.manage", "settings.manage")  # it also drops the design from every plan and schedule
 def delete(design_id: int):
     row = _design_or_404(design_id)
-    designs.remove(g.db, row["id"])
+    emptied = designs.remove(g.db, row["id"])
     audit(g.db, g.user["username"], "report_design_deleted", None, f"{row['id']}: {row['name']}")
     flash(f"Removed “{row['name']}”. Plans and schedules that sent it no longer do.", "success")
+    if emptied:
+        names = ", ".join(f"“{n}”" for n in emptied)
+        flash(
+            f"{names} {'has' if len(emptied) == 1 else 'have'} no reports left, so nothing is approved or sent"
+            f" from {'it' if len(emptied) == 1 else 'them'} until you choose one under Report plans.",
+            "error",
+        )
     return redirect(url_for("designs.index"))
 
 

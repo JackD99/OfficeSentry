@@ -30,6 +30,24 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
 
+### Fixed
+
+- **Month-end reporting** never approves a month with nothing to send. Approving a client nothing had been
+  collected for emailed a blank report, and a plan whose only report was a deleted design was marked Approved
+  with nothing sent. Both are now refused with the reason, the queue has no tick box for them and flags "No
+  report to send", the Report plans page marks a plan with no reports, and deleting a design that was a plan's
+  only report says so. What a reviewer left out of a deleted design no longer leaves blocks out of the next one.
+- **Paused clients get no email.** Send now, Retry and Month-end's Send again all emailed a paused client, its
+  Emails page said "Due now" for good, and resuming it sent the report it had missed straight away. Its
+  schedules now say "Client paused", nothing can be sent by hand, and resuming waits for the next send time.
+- **Saving a report plan changes its archived clients too.** They kept the plan's old settings, so a restored
+  client could go back to sending without approval after the plan was changed to wait for it.
+- **A month-end plan's email is changed on its plan.** Editing or deleting it on the client's Emails page left
+  the month waiting for an email that no longer existed; the page now points to the plan, and the email
+  preview no longer offers Send now for a plan that sends on approval.
+- **"New critical since the last report"** on the month-end queue counted back months for clients that also
+  get weekly or quarterly reports. It now counts from the last report the client was sent.
+
 ## [2.3.1] - 2026-10-12
 
 Fixes for 2.3. Nothing to do before updating: `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are

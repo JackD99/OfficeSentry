@@ -161,10 +161,14 @@ def _save_plan(existing=None):
     with transaction(g.db):
         plan_id = month_end.save_plan(g.db, values, user, existing["id"] if existing else None)
         plan = month_end.get_plan(g.db, plan_id)
-        dropped = [t for t in month_end.plan_tenant_ids(g.db, plan_id) if t not in chosen and t in allowed]
+        on_plan = month_end.plan_tenant_ids(g.db, plan_id)
+        dropped = [t for t in on_plan if t not in chosen and t in allowed]
         for tenant_id in dropped:
             month_end.remove_from_plan(g.db, tenant_id)
-        applied = month_end.apply_plan(g.db, plan, chosen, user, _cfg().timezone)
+        # Clients the form doesn't list (archived ones) stay on the plan, so they take its new settings too:
+        # otherwise a restored client went back to the plan's old ones, say sending without approval.
+        kept = [t for t in on_plan if t not in allowed]
+        applied = month_end.apply_plan(g.db, plan, chosen + kept, user, _cfg().timezone) - len(kept)
         audit(
             g.db,
             user,
@@ -323,21 +327,20 @@ def approve_many(period: str):
         flash("Tick the clients to approve first.", "error")
         return redirect(url_for("reporting.queue", period=period, show=request.form.get("show", "")))
     batch = month_end.new_batch(period)
-    queued, skipped, busy = 0, 0, 0
+    queued, skipped, busy, empty = 0, 0, 0, 0
     with transaction(g.db, immediate=True):
         for tenant_id in ids:
             t = visible[tenant_id]
             r = month_end.review(g.db, tenant_id, period)
             state = month_end.state_of(g.db, tenant_id, period, r)
             send_again = state == "approved" and r is not None and bool(r["error"])
-            if (
-                (state in ("approved", "sent") and not send_again)
-                or not t["enabled"]
-                or not month_end.plan_for(g.db, tenant_id)[0]
-            ):
+            plan = month_end.plan_for(g.db, tenant_id)[0]
+            if (state in ("approved", "sent") and not send_again) or not t["enabled"] or not plan:
                 skipped += 1  # bulk approval never re-issues; that needs a reason, one client at a time
             elif tasks.pending(g.db, month_end.approval_key(tenant_id, period)):
                 busy += 1
+            elif not send_again and month_end.nothing_to_send(g.db, t, plan):
+                empty += 1
             else:
                 month_end.queue_approval(g.db, t, period, g.user["username"], send_only=send_again, batch=batch)
                 queued += 1
@@ -345,6 +348,8 @@ def approve_many(period: str):
         flash(f"{plural(busy, 'client')} {'was' if busy == 1 else 'were'} already being approved.", "warning")
     if skipped:
         flash(f"Skipped {skipped}: already approved or sent, or the client is paused.", "warning")
+    if empty:
+        flash(f"Skipped {empty} with no report to send: nothing collected yet, or no reports on the plan.", "warning")
     return redirect(
         url_for(
             "reporting.queue", period=period, show=request.form.get("show", "") or None, batch=batch if queued else None
@@ -363,6 +368,9 @@ def _approve(tenant, period: str, reason: str | None = None) -> str | None:
             return "The client is paused, so nothing is sent. Resume it first."
         if month_end.state_of(g.db, tenant["id"], period) in ("approved", "sent") and not reason:
             return "It's already been issued. Say why it's being issued again."
+        plan, _ = month_end.plan_for(g.db, tenant["id"])
+        if plan is not None and (why := month_end.nothing_to_send(g.db, tenant, plan)):
+            return why
         month_end.queue_approval(g.db, tenant, period, g.user["username"], reason=reason)
     return None
 
@@ -447,6 +455,7 @@ def review(period: str, tenant_id: int):
         pending=tasks.PENDING,
         worker_running=worker.is_alive(g.db),
         emailed=month_end.emailed(plan, g.db, t["id"]) if plan else False,
+        blocked=month_end.nothing_to_send(g.db, t, plan) if plan else None,
         months=[month_end.shift_period(period, i) for i in range(0, 7)],
         admin=can("month_end.approve"),
         period_label=month_end.issued.period_label,
@@ -630,6 +639,9 @@ def send_again(period: str, tenant_id: int):
     """Send the frozen files again after a failed send, in the background. Nothing is rebuilt."""
     period = _period_or_404(period)
     t = tenant_or_404(tenant_id)
+    if refused := delivery.not_sending_to(t):
+        flash(refused, "error")
+        return _review_url(t["id"], period, "approve")
     with transaction(g.db, immediate=True):
         if month_end.state_of(g.db, t["id"], period) != "approved":
             abort(400)

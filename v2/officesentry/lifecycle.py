@@ -70,11 +70,16 @@ def pause(conn, tenant, user: str) -> int:
     return dropped
 
 
-def resume(conn, tenant, user: str) -> None:
+def resume(conn, tenant, user: str, default_tz: str) -> None:
+    """Collect and email again. An email that came due while paused isn't sent the moment the client is back
+    (``delivery.skip_missed``), so ``default_tz`` is the portal's timezone, for schedules without their own."""
+    from . import delivery
+
     if tenant["archived_at"]:
         raise ValueError("restore the client before resuming it")
     with transaction(conn, immediate=True):
         conn.execute("UPDATE tenants SET enabled = 1, paused_at = NULL WHERE id = ?", (tenant["id"],))
+        delivery.skip_missed(conn, tenant["id"], default_tz)
         audit(conn, user, "tenant_resumed", tenant["id"], tenant["name"])
 
 

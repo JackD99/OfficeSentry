@@ -220,10 +220,10 @@ def test_paused_and_archived_tenants_are_not_collected(db, cfg, two_tenants):
     )
     assert store.claim_next_run(db) is None
 
-    lifecycle.resume(db, store.get_tenant(db, alpha), "admin")
+    lifecycle.resume(db, store.get_tenant(db, alpha), "admin", "UTC")
     assert store.claim_next_run(db)["tenant_id"] == alpha
     with pytest.raises(ValueError):
-        lifecycle.resume(db, store.get_tenant(db, bravo), "admin")  # restore first
+        lifecycle.resume(db, store.get_tenant(db, bravo), "admin", "UTC")  # restore first
     lifecycle.restore(db, store.get_tenant(db, bravo), "admin")
     t = store.get_tenant(db, bravo)
     assert t["archived_at"] is None and not t["enabled"]  # restored, still paused

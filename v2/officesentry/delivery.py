@@ -403,6 +403,23 @@ def initial_period(frequency: str, day_of_week: int, day_of_month: int, hour: in
     return slot(frequency, day_of_week, day_of_month, hour, tz, now)[0]
 
 
+def skip_missed(conn, tenant_id: int, default_tz: str, now: datetime | None = None) -> None:
+    """A client resumed after a pause: its report emails count their latest send time as done, as resuming one
+    schedule does, so what came due while it was paused isn't emailed the moment it's back. A month-end
+    month can still be approved and sent from Month-end. Never moves a schedule back."""
+    now = now or datetime.now(UTC)
+    rows = conn.execute("SELECT * FROM email_schedules WHERE tenant_id = ? AND kind = 'report'", (tenant_id,))
+    for s in rows.fetchall():
+        fresh = initial_period(
+            s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"], schedule_tz(s, default_tz), now
+        )
+        if not period_done(s["last_period"], fresh):
+            conn.execute(
+                "UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
+                (fresh, s["id"]),
+            )
+
+
 def next_send(s, default_tz: str, now: datetime | None = None) -> datetime | None:
     """When the schedule will next send, in its own timezone. None when paused."""
     if not s["enabled"]:
@@ -1225,6 +1242,24 @@ def _send(
     return error
 
 
+def client_off(tenant) -> str | None:
+    """ "archived" or "paused" for a client nothing is collected for or emailed to, else None."""
+    if tenant is None:
+        return None
+    if tenant["archived_at"]:
+        return "archived"
+    return None if tenant["enabled"] else "paused"
+
+
+def not_sending_to(tenant) -> str | None:
+    """Why nothing is emailed to the client (by its timer or by hand), or None."""
+    if (off := client_off(tenant)) is None:
+        return None
+    return (
+        f"{tenant['name']} is {off}, so nothing is sent to it. {'Restore' if off == 'archived' else 'Resume'} it first."
+    )
+
+
 def send_schedule(
     app, conn, vault, schedule, *, trigger: str = "manual", user: str | None = None, now: datetime | None = None
 ) -> str | None:
@@ -1237,6 +1272,8 @@ def send_schedule(
     tenant = None
     if schedule["kind"] == "report":
         tenant = store.get_tenant(conn, schedule["tenant_id"])
+        if refused := not_sending_to(tenant):  # Send now and Retry: the timer skips these already
+            return refused
 
         def build():
             if nothing_collected(conn, tenant["id"]):  # a report with no data would tell the client nothing true
