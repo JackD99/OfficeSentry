@@ -29,7 +29,7 @@ INVITE_LEVELS = {
     "Files can't be shared with anonymous links",
     "Sharing",
     'Change SharePoint external sharing to "New and existing guests" so every external person signs in. '
-    "If the client relies on Anyone links, set them to expire and to view-only.",
+    "Where Anyone links are needed, set them to expire and to view-only.",
 )
 def sharepoint_sharing(snap: TenantSnapshot, now: datetime):
     rows = snap.objects("tenant_policies", "sharepoint_settings")
