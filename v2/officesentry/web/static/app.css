@@ -257,14 +257,9 @@ details.help > summary { font-size: var(--fs-base); }
 .client-tenant .tiles { margin-bottom: var(--space-3-5); }
 .footnote { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--space-2); max-width: 120ch; }
 
-/* -- Settings: one sidebar entry, and this row on top of every settings page ------------------------ */
-.settings-nav { display: flex; gap: var(--space-1); margin: -8px 0 20px; padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
-@media (min-width: 900px) { .settings-nav { flex-wrap: wrap; row-gap: var(--space-1-5); } }
-.settings-nav a { padding: 5px 11px; border-radius: var(--radius-pill); color: var(--muted); font-weight: 500; font-size: var(--fs-sm); white-space: nowrap; }
-.settings-nav a:hover { color: var(--text); background: var(--sunken); text-decoration: none; }
-.settings-nav a.active { background: var(--text); color: var(--surface); }
-/* On a laptop the row wraps rather than hiding its end; on a phone it scrolls sideways. */
-@media (min-width: 641px) { .settings-nav { flex-wrap: wrap; overflow: visible; row-gap: var(--space-1); } }
+/* -- Settings: one sidebar entry; on every settings page its four areas as tabs (.tabs), with the open
+   area's pages in a second row (.tab-pages), the way a client's pages are laid out. ------------------- */
+.settings-nav { margin-top: calc(-1 * var(--space-1)); }
 .package-form label.identifiers { align-items: flex-start; }
 .package-form label.identifiers input { margin-top: 4px; }
 .package-form .form-actions { margin-top: var(--space-3); }
@@ -817,6 +812,12 @@ td.tenant-col { min-width: 190px; max-width: 20em; } /* a long client name wraps
 .tenant-head .page-head { margin-bottom: var(--space-4); }
 .head-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); min-width: 0; }
 .head-title .sub { margin-top: 0; }
+/* The client switcher after the name: this page for another client, from a list with a filter box. */
+.client-switch { flex: none; margin-left: calc(-1 * var(--space-1)); }
+.client-switch > summary { display: inline-flex; align-items: center; gap: var(--space-1-5); color: var(--text-2); }
+.menu-panel.client-panel { left: 0; right: auto; width: 300px; max-height: none; overflow: visible; }
+.client-panel .picker-list { max-height: min(55vh, 420px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.client-panel .no-match { margin: var(--space-2) var(--space-2) 0; color: var(--muted); font-size: var(--fs-sm); }
 .tenant-head .tabs { margin-bottom: var(--space-6); }
 .pin-name { display: none; }
 @media (min-width: 961px) {
@@ -1016,7 +1017,7 @@ main[aria-busy="true"] .table-card, main[aria-busy="true"] .tiles { opacity: .7;
 .save-view input { margin-top: var(--space-1); }
 .save-view button { justify-self: start; }
 @media (max-width: 640px) {
-  .menu-panel, .menu-panel.wide { position: fixed; top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 75vh; border-radius: var(--radius) var(--radius) 0 0; padding: var(--space-3-5) var(--space-4) var(--space-5); }
+  .menu-panel, .menu-panel.wide, .menu-panel.client-panel { position: fixed; top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 75vh; border-radius: var(--radius) var(--radius) 0 0; padding: var(--space-3-5) var(--space-4) var(--space-5); }
   .table-scroll.tall { max-height: none; overflow: visible; }
   .table-scroll thead th { position: static; }
   .chips { padding: 0 var(--space-4) var(--space-2-5); }
@@ -1120,6 +1121,15 @@ textarea.copy-text { font-size: var(--fs-sm); resize: vertical; margin: var(--sp
 .nav-search input[type=search] { margin: 0; padding: 7px 10px 7px 32px; font-size: var(--fs-sm); background: var(--sidebar-active); border-color: var(--sidebar-active); color: var(--sidebar-strong); }
 .nav-search input[type=search]::placeholder { color: var(--sidebar-muted); }
 .nav-search input[type=search]:focus { border-color: var(--sidebar-marker); box-shadow: none; }
+/* "/" (or Ctrl+K, ⌘K) jumps to the box (app.js); the key shows in it where there's a keyboard (drawn by CSS,
+   so it isn't read out as part of the box's name). */
+@media (hover: hover) and (pointer: fine) {
+  .nav-search { position: relative; }
+  .nav-search::after { content: "/"; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); min-width: 20px; padding: 0 var(--space-1);
+    border: 1px solid color-mix(in srgb, var(--sidebar-muted) 50%, transparent); border-radius: var(--radius-sm); color: var(--sidebar-muted);
+    font-size: var(--fs-xs); line-height: 18px; text-align: center; pointer-events: none; }
+  .nav-search:focus-within::after, .nav-search:has(input:not(:placeholder-shown))::after { display: none; }
+}
 .mobile-bar .nav-search { margin: var(--space-1-5) 0 var(--space-2-5); }
 .search-group .card-head h2 a { color: var(--text); }
 .search-group .list > li { align-items: flex-start; }

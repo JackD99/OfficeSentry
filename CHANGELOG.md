@@ -11,6 +11,19 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
+### Added
+
+- **Switch client**, beside every client's name, opens the page you're on for another client you see (within
+  the group you picked), with a box to find one by name. From an account, mailbox, group or site it opens
+  that client's list instead.
+- Press **/** (or Ctrl+K, ⌘K) on any page to search all clients.
+
+### Changed
+
+- **Settings** are in four areas, Clients, Reports and email, Team and System, shown as tabs with the open
+  area's pages under them the way a client's pages are, instead of one row of fourteen links. Settings in the
+  menu opens Client settings.
+
 ## [2.3.1] - 2026-10-12
 
 Fixes for 2.3. Nothing to do before updating: `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are

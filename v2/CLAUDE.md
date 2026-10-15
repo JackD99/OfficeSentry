@@ -504,9 +504,11 @@ turning each step's `target` into a link.
   job fails a pull request on any of them (summary page and screenshots). A
   matrix too wide for any laptop (the insurance evidence rollup, a column per
   control) says so in `data-scrolls` (`Rollup.scrolls`) and only scrolls.
-- Admin settings are one sidebar entry. A new settings page goes in `SETTINGS`
-  at the top of `base.html` (endpoint, label, other endpoints of the page),
-  which gives it the row of settings links at the top of the page.
+- Admin settings are one sidebar entry, opening Client settings. A new settings page goes in its area
+  (Clients, Reports and email, Team, System) in `SETTINGS_GROUPS` at the top of `base.html` (endpoint,
+  label, other endpoints of the page, the capability that opens it), which gives every settings page the
+  areas as tabs and the open area's pages in a second row, as a client's pages have.
+- `/` (and Ctrl+K, ⌘K) puts the cursor in the menu's "Search all clients" box (`app.js`).
 - Every page loads `static/app.js` (PDF links show "Preparing your PDF…" until
   the file arrives) and `static/tables.js` (sorting, row search, in-place
   views, and long tables capped with "Show all N rows": several on a page
@@ -547,7 +549,11 @@ turning each step's `target` into a link.
 - Downloads on a page sit in one `downloads([(label, href, title)])` control
   from `_macros.html`, PDF first.
 - Every tenant page starts with `tenant_header(tenant, '<tab>')` from
-  `_macros.html` (import it `with context`). Its heading is always the client's name; a page its tabs
+  `_macros.html` (import it `with context`). Beside the name, staff who see another client get the client
+  switcher (`web/switcher.py`): the same page for each client in `scoped_tenants()`, a page about one
+  account, mailbox, group or site opening that list instead (`switcher.LISTS`), and a report another
+  client doesn't have opening its Reports tab. A page whose URL argument means the same on every client
+  lists it in `switcher.SHARED`; any other argument opens the client's Overview. Its heading is always the client's name; a page its tabs
   don't name passes `title=` for a heading under them, and a page in the Reports tab puts its title in
   the `toolbar report-title` under the picker, as detail reports do. There are seven tabs (Overview,
   Findings, Changes, Reports, Users, Emails, Settings); a page that belongs

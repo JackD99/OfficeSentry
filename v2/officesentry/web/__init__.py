@@ -49,6 +49,7 @@ from . import (
     site_pages,
     styleguide,
     support,
+    switcher,
     system,
     tenant_admin,
     tenants,
@@ -205,6 +206,8 @@ def create_app(cfg: Config | None = None) -> Flask:
         ),
         can=access.can,
         manages_groups=access.manages_groups,
+        # The client switcher beside a client's name (_macros.tenant_header): this page for the other clients.
+        client_switch=switcher.choices,
         report_areas_open=reports.report_groups,
         report_capability=reports.report_capability,
         entry_capability=reports.entry_capability,

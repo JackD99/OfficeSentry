@@ -17,44 +17,39 @@ from tests.seed import seed_tenant
 STATIC = Path(__file__).resolve().parents[1] / "officesentry" / "web" / "static"
 NOW = datetime.now(UTC)
 PERIOD = f"{NOW.year}-{NOW.month:02d}"
-SETTINGS = (
-    "/admin/tenants",
-    "/admin/groups",
-    "/admin/connections",
-    "/admin/prices",
-    "/admin/email",
-    "/admin/alerts",
-    "/admin/branding",
-    "/admin/retention",
-    "/admin/users",
-    "/admin/sign-in",
-    "/admin/activity",
-    "/admin/status",
-    "/admin/support",
-    "/admin/updates",
-)
+SETTINGS_AREAS = {
+    "Clients": ("/admin/tenants", "/admin/groups", "/admin/connections"),
+    "Reports and email": ("/admin/branding", "/admin/prices", "/admin/email", "/admin/alerts"),
+    "Team": ("/admin/users", "/admin/sign-in", "/admin/activity"),
+    "System": ("/admin/status", "/admin/retention", "/admin/updates", "/admin/support"),
+}
 
 
 # -- Sidebar -----------------------------------------------------------------------------------
 
 
-def test_settings_are_one_sidebar_entry_with_their_own_row(client, db):
+def test_settings_are_one_sidebar_entry_with_their_areas_as_tabs(client, db):
     make_user(db, "admin")
     login(client, "admin")
     home = client.get("/").get_data(as_text=True)
     sidebar = home[home.index('<aside class="sidebar"') : home.index("</aside>")]
     assert sidebar.count(">Settings</span></a>") == 1
+    assert '<a href="/admin/tenants">' in sidebar  # Settings opens Client settings
     assert "Client settings" not in sidebar and "Activity log" not in sidebar
     assert 'class="settings-nav"' not in home  # only on settings pages
-    for path in SETTINGS:
-        page = client.get(path).get_data(as_text=True)
-        nav = page[page.index('<nav class="settings-nav"') :]
-        nav = nav[: nav.index("</nav>")]
-        assert nav.count("<a ") == len(SETTINGS), path
-        assert nav.count('aria-current="page"') == 1, path
-        assert f'href="{path}" class="active"' in nav, path
-        side = page[page.index('<aside class="sidebar"') : page.index("</aside>")]
-        assert 'class="active" aria-current="page">' in side and side.count("aria-current") == 1, path
+    for area, paths in SETTINGS_AREAS.items():
+        for path in paths:
+            page = client.get(path).get_data(as_text=True)
+            nav = page[page.index('<nav class="settings-nav"') :]
+            nav = nav[: nav.index("</nav>")]
+            tabs, row = nav.split('<div class="tab-pages">')
+            assert tabs.count("<a ") == len(SETTINGS_AREAS), path
+            assert f'class="active" aria-current="true">{area}</a>' in tabs, path
+            assert row.count("<a ") == len(paths), path
+            assert f'href="{path}" class="active" aria-current="page"' in row, path
+            assert nav.count('aria-current="page"') == 1, path
+            side = page[page.index('<aside class="sidebar"') : page.index("</aside>")]
+            assert 'class="active" aria-current="page">' in side and side.count("aria-current") == 1, path
 
 
 def test_editing_a_user_keeps_users_selected(client, db):
