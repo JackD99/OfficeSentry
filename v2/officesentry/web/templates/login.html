@@ -25,4 +25,13 @@
   <button class="{{ 'secondary' if microsoft_sign_in else 'primary' }}">Sign in</button>
 </form>
 {% if microsoft_sign_in and staff_passwords_off %}</details>{% endif %}
+{#- A client who can't get in has someone to ask: the support details from the Branding page, else the
+    contact line its reports carry. -#}
+{% if brand.has_support %}
+<p class="small muted sign-in-help">Trouble signing in? Contact {{ brand.support_name or brand.display_name }}
+  {%- if brand.support_email %} at <a href="mailto:{{ brand.support_email }}">{{ brand.support_email }}</a>{% endif %}
+  {%- if brand.support_phone %} {{ 'or' if brand.support_email else 'on' }} <a href="tel:{{ brand.support_phone|replace(' ', '') }}">{{ brand.support_phone }}</a>{% endif %}.</p>
+{% elif brand.contact %}
+<p class="small muted sign-in-help">Trouble signing in? Contact {{ brand.display_name }} ({{ brand.contact }}).</p>
+{% endif %}
 {% endblock %}
