@@ -9,6 +9,7 @@
   <div class="verdict-body">
     <span class="status-pill">{{ v.label }}</span>
     <p class="headline">{{ v.headline }}</p>
+    {% if v.detail %}<p class="detail">{{ v.detail }}</p>{% endif %}
   </div>
 </div>
 {%- endmacro %}

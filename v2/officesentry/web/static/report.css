@@ -63,6 +63,7 @@ h3 { font-size: var(--fs-lg); font-weight: 600; margin: 0; }
 .verdict.tone-ok { border-left-color: var(--ok-fill); background: var(--ok-soft); border-color: transparent; border-left-color: var(--ok-fill); }
 .verdict .headline { font-size: 1.12rem; font-weight: 600; line-height: 1.35; margin: var(--space-1-5) 0 0; }
 .verdict-body { flex: 1; }
+.verdict .detail { margin: var(--space-1) 0 0; color: var(--text-2); }
 .summary-text { margin-top: var(--space-4); font-size: 1.02em; color: var(--text-2); }
 .summary-text p { margin-bottom: var(--space-2); }
 

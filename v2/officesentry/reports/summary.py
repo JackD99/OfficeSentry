@@ -20,6 +20,7 @@ class Verdict:
     tone: str  # critical | high | medium | ok: drives the colour
     label: str  # two or three words for a status pill
     headline: str  # one sentence
+    detail: str = ""  # what the headline is about, when one thing stands out ("Most urgent: ...")
 
 
 @dataclass
@@ -98,15 +99,18 @@ def monthly(report) -> ExecSummary:
     else:
         verdict = Verdict("ok", "In good shape", f"{whose} Microsoft 365 passed every security check we could run.")
 
+    # The verdict names the most urgent item, so the summary under it doesn't repeat it.
+    top = failing[0] if failing else None
+    if ran and top is not None and top.severity in ("critical", "high"):
+        verdict.detail = f"Most urgent: {_sentence(top.summary)}"
+
     paragraphs = []
     if failing:
         parts = [f"{len(by_sev[s])} {s}" for s in SEVERITIES if by_sev[s]]
         need = "needs" if len(failing) == 1 else "need"
-        text = f"We ran {ran} security checks and {len(failing)} {need} attention ({_join(parts)} priority)."
-        top = failing[0]
-        if top.severity in ("critical", "high"):
-            text += f" The most urgent: {_sentence(top.summary[0].lower() + top.summary[1:])}"
-        paragraphs.append(text)
+        paragraphs.append(
+            f"We ran {ran} security checks and {len(failing)} {need} attention ({_join(parts)} priority)."
+        )
         passing = report.passing
         if passing:
             named = _join([f"“{r.title}”" for r in passing[:3]])
