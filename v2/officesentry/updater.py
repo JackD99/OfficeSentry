@@ -9,7 +9,8 @@ So the most a compromised portal can do is ask for a newer, genuine, signed rele
 Installing release X.Y.Z, each step shown on the Updates page:
 
 1. **check**: X.Y.Z is a published GitHub release of this repository, newer than the one running, with the
-   same major version, its ``docker-compose.yml`` and ``Caddyfile`` are the ones in the install's folder
+   same major version, its tag is on a commit in main's history, its ``docker-compose.yml`` and ``Caddyfile``
+   are the ones in the install's folder
    (the button only changes the image), and there's room for the copy of the database an upgrade makes first.
 2. **verify**: the image digest GHCR gives for the tag has build provenance signed by this repository's own
    release workflow, naming the commit the release tag points at (cosign, as a helper container pinned by
@@ -232,6 +233,13 @@ def set_version(text: str, value: str) -> str:
     return f"{text}# Set by the Update button (Settings > Updates).{newline}OFFICESENTRY_VERSION={value}{newline}"
 
 
+def open_folder(path: Path) -> int:
+    """A descriptor for the folder at ``path`` itself. The shared folder is in the portal's data volume, so
+    the portal could put a link (or a file) in its place at any moment: this raises OSError then, rather than
+    have root follow it."""
+    return os.open(path, os.O_RDONLY | os.O_DIRECTORY | updates.NOFOLLOW)
+
+
 def rewrite(path: Path, data: bytes) -> None:
     """Write ``data`` into the file in place, so it keeps its owner and permissions: it can hold secrets, and
     the admin who made it must still be able to edit it."""
@@ -331,6 +339,14 @@ class GitHub:
             _, data = self._github(f"/git/tags/{target['sha']}")
             target = (data or {}).get("object") or {}
         raise Refused(f"GitHub didn't say which commit release {version} was built from.")
+
+    def on_main(self, commit: str) -> bool:
+        """Whether ``commit`` is in main's history. A tag can be pushed on any commit, and a tag's release runs
+        release.yml as that commit has it, so the signature alone doesn't say the code was ever merged."""
+        code, data = self._github(f"/compare/main...{commit}?per_page=1")
+        if data is None:
+            raise Refused(f"GitHub answered {code} when asked whether {commit[:7]} is on main; try again later.")
+        return data.get("status") in ("behind", "identical")  # main is the base: the commit is behind it
 
     def file(self, path: str, commit: str) -> bytes | None:
         """A file of the repository as it is at ``commit``, or None when there's none."""
@@ -508,15 +524,25 @@ class Updater:
         """The shared folder, owned like the data folder so the portal can write its request into it, and the
         last update, if there was one. That comes from the updater's own volume: the copy in the data folder
         is for the portal to show, and the portal could have changed it."""
-        if not self.folder.exists():
+        try:
             self.folder.mkdir(mode=0o700)
-            st = self.data_dir.stat()
-            try:
-                os.chown(self.folder, st.st_uid, st.st_gid)
-            except OSError:  # not root (tests)
-                pass
-        if self.folder.is_symlink() or not self.folder.is_dir():
-            raise SystemExit(f"{self.folder} isn't a folder; the updater won't write through it.")
+            made = True
+        except FileExistsError:
+            made = False
+        try:
+            fd = open_folder(self.folder)
+        except OSError:
+            raise SystemExit(f"{self.folder} isn't a folder; the updater won't write through it.") from None
+        try:
+            if made:
+                # By the folder opened, not its name: a link swapped in after mkdir would hand its target over.
+                st = self.data_dir.stat()
+                try:
+                    os.fchown(fd, st.st_uid, st.st_gid)
+                except OSError:  # not root (tests)
+                    pass
+        finally:
+            os.close(fd)
         if self.state_dir.is_dir():
             self.job = Job.load((updates.read_json(self.state_dir / updates.STATUS_FILE) or {}).get("job"))
         if self.job:
@@ -535,7 +561,17 @@ class Updater:
         }
         if self.state_dir.is_dir():
             updates.write_json(self.state_dir / updates.STATUS_FILE, status, mode=0o600)
-        updates.write_json(self.folder / updates.STATUS_FILE, status)
+        # The portal's copy, to show. It's written inside the shared folder itself, never through a link put in
+        # its place, and only the page misses it when it can't be written (a full data volume): the copy above
+        # is the one the updater goes by, so an update, or going back from one, never stops for this.
+        try:
+            fd = open_folder(self.folder)
+            try:
+                updates.write_json(updates.STATUS_FILE, status, dir_fd=fd)
+            finally:
+                os.close(fd)
+        except OSError as exc:
+            log.warning("The updater couldn't write its status for the portal (%s): %s", self.folder, exc)
 
     def refresh(self) -> None:
         """Look at the install again (its containers change with every update) and check in."""
@@ -586,7 +622,7 @@ class Updater:
 
     def run_forever(self) -> None:
         self.prepare()
-        with open((self.state_dir if self.state_dir.is_dir() else self.folder) / ".updater.lock", "ab") as lock:
+        with os.fdopen(self._lock_file(), "ab") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)  # a second updater waits here rather than act twice
             self.refresh()
             self.resume()
@@ -597,6 +633,18 @@ class Updater:
             while True:
                 self.tick()
                 self.sleep(POLL_SECONDS)
+
+    def _lock_file(self) -> int:
+        """The file a second updater waits on: in the updater's own volume, or without one (when it can't
+        update anyway) in the shared folder itself. Never through a link."""
+        flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | updates.NOFOLLOW
+        if self.state_dir.is_dir():
+            return os.open(self.state_dir / ".updater.lock", flags, 0o600)
+        fd = open_folder(self.folder)
+        try:
+            return os.open(".updater.lock", flags, 0o600, dir_fd=fd)
+        finally:
+            os.close(fd)
 
     # -- One update ----------------------------------------------------------------------------------------------
 
@@ -614,9 +662,18 @@ class Updater:
             self.switch(install, checked)
         except Refused as exc:
             self.finish("refused", str(exc))
-        except Exception as exc:  # before the switch nothing has changed, so this only reports
-            log.exception("The update stopped before anything was changed")
-            self.finish("failed", f"Something unexpected stopped the update before anything was changed: {exc}")
+        except Exception as exc:
+            if self._step("switch").state == "pending":  # before the switch nothing has changed, so this only reports
+                log.exception("The update stopped before anything was changed")
+                self.finish("failed", f"Something unexpected stopped the update before anything was changed: {exc}")
+                return
+            # Out of the switch itself, which goes back by itself: so going back is what failed.
+            log.exception("The update stopped part way")
+            self.finish(
+                "failed",
+                f"Something unexpected stopped the update part way: {sentence(str(exc))} Check the portal works; if "
+                'it doesn\'t, follow "Rolling back an update" in DEPLOY.md, or ask for help with a support package.',
+            )
 
     def check(self, request: updates.Request) -> tuple[Checked, Install]:
         """Steps 1 to 3. Refused when anything doesn't hold; nothing on the server has changed by then."""
@@ -644,6 +701,11 @@ class Updater:
             raise Refused(f"{target} is a new major version. Read its release notes and update by hand (DEPLOY.md).")
         release = self.github.release(target)
         commit = self.github.tag_commit(target)
+        if not self.github.on_main(commit):
+            raise Refused(
+                f"The v{target} tag points at a commit that isn't on main, so it isn't a release made the usual way. "
+                "Nothing was installed."
+            )
         self.same_files(install, target, commit)
         self.room()
         self.end("check", f"Release {target}, published {str(release.get('published_at') or '')[:10]}")
