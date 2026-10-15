@@ -93,6 +93,14 @@
     <button type="button" class="sm ghost">{{ icon('filter') }} Small ghost</button>
     {{ downloads([('PDF', '#buttons', 'A PDF'), ('XLSX', '#buttons', 'A spreadsheet'), ('CSV', '#buttons', '')]) }}
   </div>
+  <div class="sg-row">
+    <button type="button" class="primary" aria-busy="true" aria-disabled="true">Approving…</button>
+    <button type="button" aria-busy="true" aria-disabled="true">{{ icon('refresh') }} Retry</button>
+    <form method="get" action="#buttons" data-confirm="Delete the group Gold? Its clients are kept."><button class="danger">Delete Gold</button></form>
+  </div>
+  <p class="muted small">A form that posts shows its button working until the next page arrives (<code>data-busy</code> for words
+    instead of the spinner, <code>data-no-busy</code> for a download). <code>data-confirm</code> on a form or button asks first in the
+    dialog: its first question is the heading; <code>data-danger</code> makes the action red.</p>
 </section>
 
 {# -- Labels ---------------------------------------------------------------------------------------- #}

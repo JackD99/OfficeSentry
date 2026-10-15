@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, csrf %}
-{% from "_email.html" import contact_checks, busy_script with context %}
+{% from "_email.html" import contact_checks with context %}
 {% set digest = s.kind == 'digest' %}
 {% set coming_up = digest and 'upcoming' in s.reports %}
 {% set views_email = digest and 'views' in s.reports %}
@@ -169,7 +169,6 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
-{{ busy_script() }}
 <script nonce="{{ csp_nonce }}">
 (function () {
   var form = document.getElementById('schedule-form');

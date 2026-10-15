@@ -117,7 +117,9 @@ def accounts(db) -> list[str]:
 
 def _flash(resp) -> list[str]:
     """The messages a response shows."""
-    return re.findall(r'<div class="flash [^"]*" role="status">(.*?)</div>', resp.get_data(as_text=True))
+    return re.findall(
+        r'<div class="flash [^"]*" role="status"><svg .*?</svg><span>(.*?)</span></div>', resp.get_data(as_text=True)
+    )
 
 
 def signed_in_as(client) -> str | None:
