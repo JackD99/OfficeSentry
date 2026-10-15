@@ -44,8 +44,8 @@ def _where(f: dict) -> tuple[str, list]:
         where.append("a.action = ?")
         params.append(f["action"])
     if f["tenant"] is not None:
-        where.append("a.tenant_id = ?")
-        params.append(f["tenant"])
+        where.append("a.tenant_id = ? AND a.ts >= COALESCE((SELECT created_at FROM tenants WHERE id = ?), '')")
+        params.extend((f["tenant"], f["tenant"]))
     if f["from"]:
         where.append("a.ts >= ?")
         params.append(f"{f['from'].isoformat()}T00:00:00Z")
@@ -56,14 +56,16 @@ def _where(f: dict) -> tuple[str, list]:
 
 
 def _scope() -> tuple[list[str], list]:
-    """For someone who doesn't see every client: only what happened on the clients they see, and portal-wide
-    rows that aren't by or about a client account of the others (whose name is one of that client's people:
-    the user pages start their detail with it)."""
+    """For someone who doesn't see every client: only what happened on the clients they see since each was
+    added (before 2.4.0 a new client could get a deleted one's id, and with it the deleted one's rows), and
+    portal-wide rows that aren't by or about a client account of the others (whose name is one of that
+    client's people: the user pages start their detail with it)."""
     if current().sees_all:
         return [], []
     unseen = sorted(unseen_client_accounts(g.db, g.user).values())
     return [
-        "(a.tenant_id IS NULL OR a.tenant_id IN (SELECT value FROM json_each(?)))",
+        "(a.tenant_id IS NULL OR EXISTS (SELECT 1 FROM tenants t WHERE t.id = a.tenant_id AND a.ts >= t.created_at"
+        " AND t.id IN (SELECT value FROM json_each(?))))",
         "NOT EXISTS (SELECT 1 FROM json_each(?) h WHERE a.username = h.value OR a.detail = h.value"
         " OR a.detail LIKE h.value || ':%' OR a.detail LIKE h.value || ' %')",
     ], [json.dumps(sorted(_tenant_names())), json.dumps(unseen)]
@@ -74,10 +76,18 @@ def _tenant_names() -> dict[int, str]:
     return {t["id"]: t["name"] for t in visible_tenants(g.db, g.user, archived=True)}
 
 
-def tenant_label(tenant_id: int | None, names: dict[int, str]) -> str:
+def _added() -> dict[int, str]:
+    return {r["id"]: r["created_at"] for r in g.db.execute("SELECT id, created_at FROM tenants")}
+
+
+def tenant_label(row, names: dict[int, str], added: dict[int, str]) -> str:
+    """The row's client by name, unless the row is older than the client that has its id now."""
+    tenant_id = row["tenant_id"]
     if tenant_id is None:
         return ""
-    return names.get(tenant_id, f"Client #{tenant_id} (deleted or not visible)")
+    if tenant_id in names and row["ts"] >= added.get(tenant_id, ""):
+        return names[tenant_id]
+    return f"Client #{tenant_id} (deleted or not visible)"
 
 
 @bp.get("/admin/activity")
@@ -108,6 +118,7 @@ def index():
         query=query,
         names=names,
         tenant_label=tenant_label,
+        added=_added(),
         actions=actions,
         users=users,
         tenants=sorted(names.items(), key=lambda kv: kv[1].lower()),
@@ -124,7 +135,7 @@ def export():
     rows = g.db.execute(
         f"SELECT a.* FROM audit_log a{where} ORDER BY a.id DESC LIMIT ?", (*params, CSV_LIMIT)
     ).fetchall()
-    names = _tenant_names()
+    names, added = _tenant_names(), _added()
     table = Table(
         "Activity log",
         ["Time (UTC)", "User", "Action", "Client", "Address", "Detail"],
@@ -133,7 +144,7 @@ def export():
                 r["ts"],
                 r["username"] or "",
                 r["action"],
-                tenant_label(r["tenant_id"], names),
+                tenant_label(r, names, added),
                 r["ip"] or "",
                 r["detail"] or "",
             ]
