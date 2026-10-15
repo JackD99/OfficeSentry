@@ -184,6 +184,7 @@ its conditions (for example "subject contains *invoice*" or "from
 destination folder from the rule in Exchange (`Get-InboxRule`). It never opens
 the folder.
 
+<!-- since 2.4.0 -->
 ## The audit log add-on, if you approve it
 
 Your MSP may also ask you to approve a second, separate app, **Office Sentry
@@ -211,6 +212,7 @@ this page changes.
 
 It's removed the same way as the main app (see *How to remove access*,
 step 2), by deleting "Office Sentry audit log add-on" instead.
+<!-- /since -->
 
 ## Where the information is kept
 
@@ -240,8 +242,8 @@ data forever; ask them what they use.
 - **Activity history** (the sign-in and audit logs described under
   `AuditLog.Read.All` above): every sign-in for **180 days**, the daily
   sign-in summaries for **25 months** and every directory audit event for
-  **7 years**. If you approved the audit log add-on, the activities it keeps
-  are kept for **2 years**.
+  **7 years**.
+  If you approved the audit log add-on, the activities it keeps are kept for **2 years**. <!-- since 2.4.0 -->
 - **Detailed snapshots** (lists of users, mailboxes, policies and so on) are
   kept for the last 30 days, plus one per month for the last 12 months, and
   older ones are deleted automatically. The most recent collection of each
