@@ -187,9 +187,14 @@ def cfg(tmp_path, monkeypatch):
     for var in ("SECRET_KEY", "ENCRYPTION_KEYS", "DATA_DIR"):
         monkeypatch.delenv("OFFICESENTRY_" + var, raising=False)
     # Two-step sign-in is off here so other tests can sign in with a password;
-    # tests/test_login_security.py turns it on.
+    # tests/test_login_security.py turns it on. So is the worker's nightly backup (tests/test_backups.py).
     return load_config(
-        data_dir=tmp_path / "data", testing=True, secure_cookies=False, require_mfa="off", extra={"disable_csrf": True}
+        data_dir=tmp_path / "data",
+        testing=True,
+        secure_cookies=False,
+        require_mfa="off",
+        backup_cron="",
+        extra={"disable_csrf": True},
     )
 
 

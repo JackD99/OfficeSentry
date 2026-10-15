@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from ..formatting import capability, day, money, parse, strftime, when
 from ..reports.cells import breakable, display, pdf_cell, wrappable
+from ..store import retry_pending
 from ..text import plural, subject_label
 
 _strftime = strftime  # its old name, still used by templates' datefmt and email.py
@@ -52,6 +53,15 @@ def run_error(text: str | None) -> str:
     return f"Sign-in failed: {problem}" if problem else text
 
 
+def retrying(run) -> str:
+    """For a failed run still to be tried again by itself (``store.plan_retry``), when; else ""."""
+    if not run or not retry_pending(run):
+        return ""
+    minutes = max(1, round((parse(run["retry_at"]) - datetime.now(UTC)).total_seconds() / 60))
+    soon = plural(minutes, "minute") if minutes < 90 else plural(round(minutes / 60), "hour")
+    return f"Office Sentry tries again by itself in about {soon}."
+
+
 FIGURE = re.compile(r"^[-+]?[£$€]?\d[\d,.]*(%| of \d[\d,]*| [KMGT]?B)?$")
 
 
@@ -79,6 +89,7 @@ def register(app) -> None:
         money=money,
         fromjson=fromjson,
         run_error=run_error,
+        retrying=retrying,
         plural=plural,
         figure_columns=figure_columns,
         pdf_cell=pdf_cell,

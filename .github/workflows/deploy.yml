@@ -378,8 +378,9 @@ jobs:
       - name: Copy the app to the server
         if: env.DEPLOYS == 'true'
         run: |
+          # The server's backup jobs keep their log and lock in the folder (deploy/jobs.sh).
           rsync -az --delete --exclude docker-compose.override.yml --exclude data/ \
-            --exclude tests/ --exclude .coverage --exclude '__pycache__/' \
+            --exclude tests/ --exclude .coverage --exclude '__pycache__/' --exclude jobs.log --exclude jobs.lock \
             v2/ server:/opt/officesentry/v2/
 
       # Before the containers start, so Caddy finds the site's folder. Caddy serves the files as they are, so

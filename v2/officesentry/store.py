@@ -109,6 +109,63 @@ def lease_until(now: datetime | None = None) -> str:
     return ((now or datetime.now(UTC)) + LEASE).strftime(ISO)
 
 
+# A run that failed for a reason that passes by waiting (Microsoft busy or out of reach, the worker restarted
+# mid-run: ``worker.passing``) is tried again this long after each failure, so up to two more times, about
+# 20 minutes and then 2 hours later. A failure that needs someone to act first (a permission, a licence, the
+# client removed the app, a bug) is never tried again by itself.
+RETRY_DELAYS = (timedelta(minutes=20), timedelta(hours=2))
+WORKER_STOPPED = "The worker stopped before the run finished (a restart or an update)."
+
+
+def plan_retry(conn, run_id: int, now: datetime | None = None) -> str | None:
+    """Mark a failed run to be tried again (``retry_at``) unless its failure has had every try. Returns when."""
+    run = conn.execute("SELECT id, retry_of FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if run is None:
+        return None
+    first = run["retry_of"] or run["id"]
+    tries = conn.execute("SELECT COUNT(*) FROM runs WHERE retry_of = ?", (first,)).fetchone()[0]
+    if tries >= len(RETRY_DELAYS):
+        return None
+    when = ((now or datetime.now(UTC)) + RETRY_DELAYS[tries]).strftime(ISO)
+    conn.execute("UPDATE runs SET retry_at = ? WHERE id = ?", (when, run_id))
+    return when
+
+
+def retry_pending(run, now: datetime | None = None) -> bool:
+    """Whether this failed run is still to be tried again by itself (its retry isn't queued yet)."""
+    at = (now or datetime.now(UTC)).strftime(ISO)
+    return bool(run["status"] == "failed" and run["retry_at"] and run["retry_at"] > at)
+
+
+def queue_retries(conn, now: datetime | None = None) -> int:
+    """Queue the retries that are due (the worker's housekeeping, every minute). Returns how many it queued.
+
+    A retry isn't queued once anything newer of that tenant and data source has been (someone pressed Refresh,
+    the next night's run), or for a paused, archived or deleted client. Only failures planned in the last day
+    are looked at, through the partial index on ``retry_at``.
+    """
+    now = now or datetime.now(UTC)
+    due = conn.execute(
+        "SELECT r.* FROM runs r INDEXED BY idx_runs_retry_at JOIN tenants t ON t.id = r.tenant_id"
+        " WHERE r.retry_at > ? AND r.retry_at <= ? AND r.status = 'failed'"
+        " AND t.enabled = 1 AND t.archived_at IS NULL"
+        " AND NOT EXISTS (SELECT 1 FROM runs n WHERE n.tenant_id = r.tenant_id AND n.collector = r.collector"
+        " AND n.id > r.id) ORDER BY r.retry_at, r.id",
+        ((now - timedelta(days=1)).strftime(ISO), now.strftime(ISO)),
+    ).fetchall()
+    for run in due:
+        enqueue_run(
+            conn,
+            run["tenant_id"],
+            run["collector"],
+            trigger=run["trigger"],
+            scheduled_for=run["scheduled_for"],
+            priority=PRIORITY_NIGHTLY,  # nobody is waiting on the page for it
+            retry_of=run["retry_of"] or run["id"],
+        )
+    return len(due)
+
+
 def enqueue_run(
     conn,
     tenant_id: int,
@@ -117,11 +174,13 @@ def enqueue_run(
     requested_by: str | None = None,
     scheduled_for: str | None = None,
     priority: int | None = None,
+    retry_of: int | None = None,
 ) -> int:
     """Queue a run unless one for the same tenant+collector is already pending.
 
     Manual runs default to ``PRIORITY_WAITING``, so "Run now" goes ahead of the
     nightly backlog; asking again for a run already queued raises its priority.
+    ``retry_of`` makes it a retry (``queue_retries``) of that run's failure.
     """
     if priority is None:
         priority = PRIORITY_WAITING if trigger == "manual" else PRIORITY_NIGHTLY
@@ -137,8 +196,8 @@ def enqueue_run(
             return existing["id"]
         cur = conn.execute(
             "INSERT INTO runs (tenant_id, collector, status, trigger, requested_by, scheduled_for,"
-            " created_at, priority) VALUES (?, ?, 'queued', ?, ?, ?, ?, ?)",
-            (tenant_id, collector, trigger, requested_by, scheduled_for, utcnow(), priority),
+            " created_at, priority, retry_of) VALUES (?, ?, 'queued', ?, ?, ?, ?, ?, ?)",
+            (tenant_id, collector, trigger, requested_by, scheduled_for, utcnow(), priority, retry_of),
         )
         return cur.lastrowid
 
@@ -194,13 +253,16 @@ def expire_run_leases(conn, now: datetime | None = None, held=()) -> int:
     they never had one). ``held`` are runs this process is executing, never expired here."""
     now_iso = (now or datetime.now(UTC)).strftime(ISO)
     held = list(held)
-    cur = conn.execute(
-        "UPDATE runs SET status = 'failed', finished_at = ?, error = 'worker stopped before the run finished',"
-        " lease_until = NULL WHERE id IN (SELECT id FROM runs INDEXED BY idx_runs_status WHERE status = 'running'"
-        f" AND (lease_until IS NULL OR lease_until < ?)) AND id NOT IN ({','.join('?' * len(held))})",
-        (utcnow(), now_iso, *held),
-    )
-    return cur.rowcount
+    with atomic(conn):
+        stopped = conn.execute(
+            "UPDATE runs SET status = 'failed', finished_at = ?, error = ?, lease_until = NULL"
+            " WHERE id IN (SELECT id FROM runs INDEXED BY idx_runs_status WHERE status = 'running'"
+            f" AND (lease_until IS NULL OR lease_until < ?)) AND id NOT IN ({','.join('?' * len(held))}) RETURNING id",
+            (utcnow(), WORKER_STOPPED, now_iso, *held),
+        ).fetchall()
+        for row in stopped:  # nothing was wrong with the client: try again (a restart for an update, say)
+            plan_retry(conn, row["id"])
+    return len(stopped)
 
 
 def log_event(conn, run_id: int, level: str, message: str) -> None:

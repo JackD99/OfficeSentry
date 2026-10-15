@@ -11,8 +11,42 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
+### Action required
+
+- **If you set up off-site backups** (DEPLOY.md, "Off-site backups"): download this release's `jobs.sh` into
+  the `deploy` folder next to `docker-compose.yml`, then run `OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh schedule`
+  there again. The crontab lines the old one wrote never ran on an install in `/opt/officesentry`, so there
+  was no off-site copy and no Sunday restore drill. The Update button doesn't change this file.
+
+### Database upgrade
+
+Yes, applied on start as usual, after a copy of the database is made: migration 45 adds two columns to each
+collection run, saying when a failed run is tried again by itself and which failure a run tries again for.
+
+### Added
+
+- **A collection that fails because Microsoft was busy is tried again by itself.** A data source that failed
+  for a reason that passes by waiting (Microsoft throttling, a server error or outage, no answer at all, or the
+  worker restarted mid-run, as an update does) used to wait for the next night, so a bad few minutes at 02:00
+  left a client a day out of date and flagged on the month-end queue. It's now tried again about 20 minutes
+  later and once more two hours after that. The Data collection and run pages say when, Today and the client
+  list show it as a warning rather than a failure, and a collection-failure alert waits for the last try.
+  Failures someone has to fix first (a permission, a licence, the certificate) aren't retried.
+- **Every install backs itself up every night.** The worker now makes the nightly database copy itself, at
+  03:30 in Office Sentry's timezone, into `/data/backups`, keeping 7, so an install nobody added a crontab
+  line to has backups too. `OFFICESENTRY_BACKUP_CRON` changes when (or `off`) and `OFFICESENTRY_BACKUP_KEEP` how
+  many. A server that already makes a nightly copy there (the off-site job, the cloud-init file, the
+  Kubernetes CronJob, a NAS task) keeps doing so, and the worker leaves those nights to it.
+
 ### Fixed
 
+- **Off-site backups and the restore drill run from cron.** `deploy/jobs.sh schedule` wrote crontab lines that
+  looked for Office Sentry in `/opt/officesentry/v2`, where only the project's own server keeps it, and kept
+  its log and lock in the folder above, which a normal user can't write. The lines now name the folder they
+  were made in, and the log and lock stay in it. The nightly job also waits for a database copy that's still
+  being made rather than make a second one beside it, and `jobs.sh` is now one of each release's files.
+- **System status says how to rerun an off-site backup or the drill on your own server**: `bash deploy/jobs.sh
+  now` and `bash deploy/jobs.sh drill`, rather than the project's own deploy workflow.
 - **Logs keep what matters through a month-end.** Each PDF wrote about 200 lines of the PDF and font libraries'
   own notes to the portal's and worker's logs, so a month-end's reports pushed every earlier line, errors
   included, out of the rolling log files the support package reads. Those libraries now only log their errors.

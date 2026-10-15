@@ -3,7 +3,8 @@
 # as the deploy user (every deploy installs the lines with "schedule"), and the Deploy workflow's backup,
 # restore-drill and status actions run them too. DEPLOY.md, "Backups", "Off-site backups" and "Restore drill".
 #
-#   jobs.sh nightly    a database copy (unless one was made in the last hour), then the off-site copy
+#   jobs.sh nightly    a database copy (unless one was made in the last hour, as the worker's own nightly
+#                      backup usually was), then the off-site copy
 #   jobs.sh now        a database copy now, then the off-site copy
 #   jobs.sh drill      restore the newest off-site copy into a scratch volume and check it opens
 #   jobs.sh restore    put the newest off-site backup in place of the live database (disaster recovery)
@@ -14,14 +15,15 @@
 # RESTIC_PASSWORD, which lives in that file alone. Each step's result is recorded in /data/backup-status.json
 # (python -m officesentry backup-status shows it), and BACKUP_PING_URL, when set, hears about every run.
 set -uo pipefail
-cd "${OFFICESENTRY_DIR:-/opt/officesentry/v2}" || exit 1
+# The folder with docker-compose.yml: the one this script's deploy folder is in, unless OFFICESENTRY_DIR says.
+cd "${OFFICESENTRY_DIR:-$(dirname "${BASH_SOURCE[0]}")/..}" || exit 1
 action=${1:-}
 SCRATCH=officesentry-restore-drill
 # Copies kept off-site: one a day for two weeks, one a week for two months, one a month for a year.
 KEEP=(--keep-daily 14 --keep-weekly 8 --keep-monthly 12)
 
 if [ -n "${JOBS_LOG:-}" ]; then
-  # From cron: append to a log beside the app folder, keeping its last 2,000 lines.
+  # From cron: append to a log in this folder, keeping its last 2,000 lines.
   if [ -f "$JOBS_LOG" ]; then tail -n 2000 "$JOBS_LOG" > "$JOBS_LOG.tmp" && mv "$JOBS_LOG.tmp" "$JOBS_LOG"; fi
   exec >> "$JOBS_LOG" 2>&1
   echo "== $(date -u +%Y-%m-%dT%H:%M:%SZ) $action"
@@ -79,6 +81,16 @@ open_repository() {  # part: makes the repository on the first run
 }
 
 local_copy() {  # force?
+  # Another nightly copy may be on its way (the worker's own, or a crontab line of the server's): let it finish,
+  # rather than make a second one beside it. A copy being made changes its file by the second, so a part file
+  # untouched for 10 minutes is a leftover, not a copy to wait for.
+  local waited=0
+  while [ "${1:-}" != force ] && [ "$waited" -lt 1800 ] && docker compose exec -T web \
+      find /data/backups -maxdepth 1 -name 'officesentry-*.part' -mmin -10 2>/dev/null | grep -q .; do
+    [ "$waited" = 0 ] && echo "Waiting for the database copy being made now."
+    sleep 10
+    waited=$((waited + 10))
+  done
   if [ "${1:-}" != force ] && docker compose exec -T web \
       find /data/backups -maxdepth 1 -name 'officesentry-*.db.gz' -mmin -60 2>/dev/null | grep -q .; then
     echo "A database copy was made in the last hour; the off-site copy takes that one."
@@ -191,14 +203,14 @@ uptime_ping() {
 }
 
 schedule() {
-  local dir=$PWD log
-  log="$(dirname "$PWD")/jobs.log"
+  local dir=$PWD
+  local run="OFFICESENTRY_DIR=$dir JOBS_LOG=$dir/jobs.log bash $dir/deploy/jobs.sh"
   {
     crontab -l 2>/dev/null | grep -v '# officesentry-jobs$'
-    echo "45 3 * * * JOBS_LOG=$log bash $dir/deploy/jobs.sh nightly # officesentry-jobs"
-    echo "30 4 * * 0 JOBS_LOG=$log bash $dir/deploy/jobs.sh drill # officesentry-jobs"
+    echo "45 3 * * * $run nightly # officesentry-jobs"
+    echo "30 4 * * 0 $run drill # officesentry-jobs"
     if [ -n "$(setting UPTIME_PING_URL .env.uptime)" ]; then
-      echo "*/5 * * * * bash $dir/deploy/jobs.sh uptime # officesentry-jobs"
+      echo "*/5 * * * * OFFICESENTRY_DIR=$dir bash $dir/deploy/jobs.sh uptime # officesentry-jobs"
     fi
   } | crontab -
   echo "Server jobs scheduled: backups nightly at 03:45, the restore drill on Sundays at 04:30 (server time)."
@@ -206,7 +218,7 @@ schedule() {
 
 # One backup job at a time: a long nightly copy and the Sunday drill never overlap.
 locked() {
-  exec 9> "$(dirname "$PWD")/jobs.lock"
+  exec 9> jobs.lock || { echo "Can't write $PWD/jobs.lock, so this job didn't run."; exit 1; }
   flock -w 3600 9 || { echo "Another backup job is still running."; exit 1; }
 }
 

@@ -95,6 +95,8 @@ def data_health(tenant, latest: dict) -> tuple[str, str, str]:
         return "bad", "Can't sign in", sign_in[0].removeprefix("Sign-in failed: ")
     if failed:
         names = ", ".join(REGISTRY[k].title for k in failed if k in REGISTRY)
+        if all(store.retry_pending(latest[k]) for k in failed):  # Microsoft was busy: tried again by itself
+            return "warn", f"{len(failed)} failed, trying again", names
         return "bad", f"{len(failed)} failed", names
     if any(r["status"] in ("queued", "running") for r in latest.values()):
         return "accent", "Collecting", "A collection is in progress."
