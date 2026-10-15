@@ -1,6 +1,7 @@
 """The audit log add-on's details: hours lost before a late first read, a stop refused at the MSP's end, a client
 that removed the app being switched on again, approvals not confirmed yet, paused and archived clients, mail flow
-rules that send mail elsewhere, what the report says once the records are deleted, and names ending in s.
+rules that send mail elsewhere, files deleted counted once, what the report says once the records are deleted,
+and names ending in s.
 
 Every Microsoft call is simulated with ``responses``.
 """
@@ -15,9 +16,10 @@ import responses
 
 from officesentry import events, store
 from officesentry.auditlog import addon, feed
+from officesentry.reports import data_reports
 from officesentry.reports.file_activity import KEY
 from officesentry.snapshot import TenantSnapshot
-from tests.auditdata import TENANT, _ex, _params, addon_on, collect, iso, sample
+from tests.auditdata import SITE, TENANT, _ex, _params, _sp, addon_on, collect, iso, sample
 from tests.conftest import login, make_user
 from tests.test_audit_addon_stopping import Microsoft
 
@@ -69,6 +71,38 @@ def test_a_mail_flow_rule_sending_mail_elsewhere_needs_attention(db, vault, two_
     (kept,) = events.activity_between(db, alpha, NOW - timedelta(days=1), NOW)
     assert kept.attention == "A rule forwards mail."
     assert kept.summary == f"{parameter} drop@mailbox.example"
+
+
+def test_a_file_deleted_counts_once_and_emptying_the_bin_isnt_a_mass_delete(db, vault, two_tenants):
+    """One delete may be logged as both FileRecycled and FileDeleted, and the same files go again when the
+    recycle bin is emptied and purged: 100 files deleted are 100, with one mass delete for whoever deleted
+    them and none for emptying the bin."""
+    alpha, _ = two_tenants
+    now = datetime.now(UTC).replace(second=0, microsecond=0)
+    addon_on(db, vault, [alpha], started_at=iso(now - timedelta(hours=4)))
+    hour = (now - timedelta(hours=2)).replace(minute=0, tzinfo=None)
+    records = []
+    for i in range(100):
+        file = {"ObjectId": f"{SITE}/Shared Documents/Invoice {i}.pdf", "SourceFileName": f"Invoice {i}.pdf"}
+        for operation, who, at in (
+            ("FileRecycled", "jo@contoso.com", hour + timedelta(seconds=i)),
+            ("FileDeleted", "jo@contoso.com", hour + timedelta(seconds=i)),
+            ("FileDeletedFirstStageRecycleBin", "admin@contoso.com", hour + timedelta(minutes=30, seconds=i)),
+            ("FileDeletedSecondStageRecycleBin", "admin@contoso.com", hour + timedelta(minutes=40, seconds=i)),
+        ):
+            records.append(_sp(len(records), at, operation, who, **file))
+    batches = {"Audit.SharePoint": [(hour + timedelta(minutes=50), records)]}
+    assert collect(db, alpha, batches, now)[0] == "succeeded"
+    metrics = dict(db.execute("SELECT key, value FROM metrics WHERE tenant_id = ?", (alpha,)).fetchall())
+    assert metrics["audit_activity.files_deleted"] == 100
+
+    report = data_reports.build(db, store.get_tenant(db, alpha), KEY, now)
+    assert next(t.value for t in report.tiles if t.label == "Files deleted") == 100
+    sections = {s.title: s for s in report.sections}
+    mass = [r[2:5] for r in sections["Needs attention"].rows if r[1] == "Mass delete"]
+    assert mass == [["jo@contoso.com", "", "100 files in an hour"]]
+    assert {r[0]: r[1] for r in sections["Who did most"].rows} == {"jo@contoso.com": 100, "admin@contoso.com": 0}
+    assert len(sections["Files"].rows) == 400  # every record is still listed, under its own label
 
 
 # -- Stopping -------------------------------------------------------------------------------------------------

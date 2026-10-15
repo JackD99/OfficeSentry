@@ -97,7 +97,8 @@ give the past through the feed: the report fills from the day the feed started.
   attention** (an admin opening someone else's mailbox, forwarding, inbox and mail flow rules that forward,
   redirect, copy or delete mail,
   anyone links, auditing turned off, mailbox exports, malware, and mass deletes of 100 files or more by
-  one person in an hour), then a table per kind of activity, who did most, and OneDrive sync per person
+  one person in an hour; a file counts once when it's deleted, not again when a recycle bin is emptied),
+  then a table per kind of activity, who did most, and OneDrive sync per person
   and day. Like every detail report it has filters, saved views, PDF, XLSX and CSV, the All clients rollup
   and schedules.
 - **Each person's Timeline** lists what they did to files, sharing and mailboxes, and what someone else did

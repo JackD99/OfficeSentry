@@ -351,15 +351,10 @@ def attention(record: dict, op: Operation) -> str:
 
 # -- The report's headline figures, also stored as metrics for their trends --------------------------------
 
-DELETES = {
-    "filedeleted",
-    "filerecycled",
-    "filedeletedfirststagerecyclebin",
-    "filedeletedsecondstagerecyclebin",
-    "fileversionsalldeleted",
-    "folderdeleted",
-    "folderrecycled",
-}
+# Someone deleting a file or folder. Emptying it from a recycle bin afterwards isn't deleting it again, and
+# clearing a file's version history leaves the file; both stay in the Files table under their own labels.
+DELETES = {"filedeleted", "filerecycled", "folderdeleted", "folderrecycled"}
+SAME_DELETE = 300  # seconds: one delete may be logged as both FileDeleted and FileRecycled
 RULE_CHANGES = {"new-inboxrule", "set-inboxrule", "enable-inboxrule", "updateinboxrules"}
 FIGURES = {  # key: title
     "files_deleted": "Files deleted",
@@ -372,15 +367,28 @@ FIGURES = {  # key: title
 FORWARDING_SET = "Mail forwarding was set on a mailbox."
 
 
+def deletes(activities) -> list:
+    """Each delete in stored records (``events.Activity``) once, oldest first: a second record of the same
+    person deleting the same item within ``SAME_DELETE`` is the same delete."""
+    out, last = [], {}
+    for a in sorted((a for a in activities if a.operation.lower() in DELETES), key=lambda a: a.ts):
+        key = (a.actor.lower(), a.object.lower())
+        if key not in last or a.ts - last[key] > SAME_DELETE:
+            last[key] = a.ts
+            out.append(a)
+    return out
+
+
 def figures(activities) -> dict[str, int]:
-    """The headline figures over stored records (``events.Activity``): mailboxes are counted once each."""
+    """The headline figures over stored records (``events.Activity``): deletes and mailboxes are counted once
+    each."""
+    activities = list(activities)
     out = dict.fromkeys(FIGURES, 0)
+    out["files_deleted"] = len(deletes(activities))
     opened = set()
     for a in activities:
         name = a.operation.lower()
-        if name in DELETES:
-            out["files_deleted"] += 1
-        elif name == "filedownloaded":
+        if name == "filedownloaded":
             out["files_downloaded"] += 1
         elif name == "anonymouslinkcreated":
             out["anyone_links"] += 1

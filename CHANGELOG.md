@@ -46,6 +46,9 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - Once what was collected is deleted, the report no longer says it's kept until retention removes it.
   - A client whose name ends in s reads "Northwind Traders'" on the add-on's page and in its email, not
     "Northwind Traders's".
+  - **Files deleted** counts each file once: not again when the recycle bin is emptied or purged or when one
+    delete is logged twice, and not when only a file's old versions are deleted. Emptying a bin no longer
+    raises a mass delete.
 
 ### Security
 

@@ -88,9 +88,8 @@ def _item(value: str):
 def _mass_deletes(activities) -> list[tuple[int, str, int]]:
     """(start of the hour, who, files deleted) for each person and hour past ``MASS_DELETE``."""
     hours: Counter = Counter()
-    for a in activities:
-        if a.operation.lower() in operations.DELETES:
-            hours[(a.ts - a.ts % 3600, a.actor)] += 1
+    for a in operations.deletes(activities):
+        hours[(a.ts - a.ts % 3600, a.actor)] += 1
     return sorted(((h, who, n) for (h, who), n in hours.items() if n >= MASS_DELETE), reverse=True)
 
 
@@ -193,7 +192,10 @@ def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport)
         group = operations.group(a.operation)
         if group in tables:
             tables[group].add(_rows(a), "medium" if a.attention else None)
-        people[a.actor or "Unknown"][_column(a)] += 1
+        if a.operation.lower() not in operations.DELETES:
+            people[a.actor or "Unknown"][_column(a)] += 1
+    for a in operations.deletes(activities):
+        people[a.actor or "Unknown"]["Deleted"] += 1
 
     sync = Section(
         "OneDrive sync",
@@ -252,8 +254,6 @@ def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport)
 
 def _column(a: events.Activity) -> str:
     name, group = a.operation.lower(), operations.group(a.operation)
-    if name in operations.DELETES:
-        return "Deleted"
     if name == "filedownloaded":
         return "Downloaded"
     if group == "sharing":
