@@ -325,7 +325,7 @@ def check(
 
 
 def _finish_update(conn, row, token: str, home: str | None, actor: str, user_id: int, session, now: datetime):
-    connection = store.get_connection(conn, row["connection_id"]) if row["connection_id"] else None
+    connection = store.get_connection(conn, row["connection_id"], store.MAIN) if row["connection_id"] else None
     if connection is None or not connection["client_id"]:
         _fail(conn, row, "That app connection was removed, or has no client ID, so there's nothing to update.", actor)
         return current(conn, user_id, "update")

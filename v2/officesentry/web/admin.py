@@ -640,8 +640,9 @@ def check_setup():
 @bp.post("/connections/<int:conn_id>/update")
 @needs("settings.manage")
 def update_app(conn_id: int):
-    """Sign in to Microsoft to add a new batch of permissions to this connection's app registration."""
-    connection = store.get_connection(g.db, conn_id)
+    """Sign in to Microsoft to add a new batch of permissions to this connection's app registration. Only the
+    shared read-only app's: the add-on's app asks for its one permission and nothing else."""
+    connection = store.get_connection(g.db, conn_id, store.MAIN)
     if connection is None:
         abort(404)
     if not connection["client_id"]:
@@ -669,7 +670,7 @@ def update_app(conn_id: int):
 @needs("settings.manage")
 def app_updated_by_hand(conn_id: int):
     """The admin added the new permissions to the app registration in the Entra admin centre themselves."""
-    connection = store.get_connection(g.db, conn_id)
+    connection = store.get_connection(g.db, conn_id, store.MAIN)
     if connection is None:
         abort(404)
     permission_batch.mark_app(g.db, conn_id, g.user["username"], "by hand")
