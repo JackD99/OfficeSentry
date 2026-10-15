@@ -1,9 +1,10 @@
 {#- The audit log add-on for one client (web/audit_addon.client): send the link, check, switch on and off. -#}
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, csrf, tenant_header with context %}
+{% from "_macros.html" import icon, ts, csrf, tenant_header, addon_preview with context %}
 {% block title %}Audit log add-on · {{ tenant.name }}{% endblock %}
 {% block content %}
-{{ tenant_header(tenant, 'audit_addon', title='Audit log add-on') }}
+{% set page_title %}Audit log add-on {{ addon_preview() }}{% endset %}
+{{ tenant_header(tenant, 'audit_addon', title=page_title) }}
 {% set sent = row and (row.sent_at or row.approved_at or row.consented_at) %}
 {% set confirmed = row and row.consented_at %}
 {% set started = row and row.started_at and not row.stopped_at %}

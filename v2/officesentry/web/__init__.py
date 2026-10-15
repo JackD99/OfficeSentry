@@ -211,6 +211,7 @@ def create_app(cfg: Config | None = None) -> Flask:
         # Whether the audit log add-on is switched on for this install (``auditlog/addon.py``): until it is,
         # nothing about it shows.
         audit_addon_on=lambda: g.get("db") is not None and addon_switch.enabled(g.db),
+        audit_addon_preview=addon_switch.PREVIEW,
     )
 
     @app.context_processor

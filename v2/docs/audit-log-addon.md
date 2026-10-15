@@ -9,6 +9,11 @@ read. The add-on reads it, for the clients you choose and who approve it.
 It's off until you set it up, and nothing about it shows anywhere (clients' Settings tabs, the onboarding
 tracker, the reports) until then.
 
+**A preview in 2.4.** It's opt-in, it may change between releases, and it leaves preview in a 2.4.x update
+once it has been tried on more clients' audit logs. Until then it's marked *Preview* where you meet it (its
+settings, App connection, a client's add-on page and its report). Like the rest of Office Sentry, it only
+reads.
+
 ## What it is
 
 - **A second app registration**, "Office Sentry audit log add-on", separate from the shared read-only app,

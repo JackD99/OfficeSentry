@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, csrf, ts %}
+{% from "_macros.html" import icon, csrf, ts, addon_preview with context %}
 {% from "_device_code.html" import device_code %}
 {% block title %}App connection · Office Sentry{% endblock %}
 {% block content %}
@@ -233,11 +233,11 @@
 {% for c in connections %}{{ connection_card(c) }}{% endfor %}
 
 {% if addon_connections %}
-<h2 class="section-title" id="audit-addon">Audit log add-on</h2>
+<h2 class="section-title" id="audit-addon">Audit log add-on {{ addon_preview() }}</h2>
 <p class="muted small">The add-on's own app, which each client that wants the add-on approves separately. Its certificate is replaced here like the shared app's; everything else is on <a href="{{ url_for('audit_addon.settings') }}">Audit log add-on</a>.</p>
 {% for c in addon_connections %}{{ connection_card(c) }}{% endfor %}
 {% elif ready and not sign_in %}
-<p class="muted small">Want to know who deleted, downloaded or shared files, or opened someone else's mailbox? The <a href="{{ url_for('audit_addon.settings') }}">audit log add-on</a> reads that from each client's audit log, with a second app that clients approve one by one.</p>
+<p class="muted small">Want to know who deleted, downloaded or shared files, or opened someone else's mailbox? The <a href="{{ url_for('audit_addon.settings') }}">audit log add-on</a> reads that from each client's audit log, with a second app that clients approve one by one. It's a preview in 2.4.0.</p>
 {% endif %}
 
 {% if ready and not sign_in %}

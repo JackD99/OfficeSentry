@@ -17,7 +17,7 @@
 <div class="report-main" id="report" tabindex="-1">
 <div class="toolbar report-title">
   <div>
-    <h2 class="section-title">{{ report.title }}</h2>
+    <h2 class="section-title">{{ report.title }}{% if report.preview and current_user.role != 'client' %} <span class="pill info" title="{{ report.preview }}">Preview</span>{% endif %}</h2>
     <p class="muted small m0">{{ report.description }}</p>
   </div>
   {% if not report.unavailable %}
