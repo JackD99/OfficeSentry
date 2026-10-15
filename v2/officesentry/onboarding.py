@@ -24,6 +24,7 @@ Nothing here writes to any tenant, and nothing calls Partner Center.
 
 from __future__ import annotations
 
+import codecs
 import csv
 import io
 import re
@@ -105,6 +106,10 @@ CHECK_SENT = timedelta(hours=1)  # A sent link nobody has come back from yet...
 SENT_FOR = timedelta(days=30)  # ...for this long (consent can also be given another way, through GDAP say).
 
 
+# The line Windows PowerShell's ConvertTo-Csv and Export-Csv write above the headings.
+TYPE_LINE = re.compile(r"\N{BYTE ORDER MARK}?#TYPE [^\r\n]*(\r\n|\n|\r|$)")
+
+
 def _heading(text: str) -> str:
     return " ".join(re.sub(r"[\s_\-()/]+", " ", text.replace("﻿", "")).lower().split())
 
@@ -152,8 +157,11 @@ class Parsed:
 
 
 def decode(data: bytes) -> str:
-    """An uploaded file's text: UTF-8 (with or without Excel's BOM), else Windows-1252, which is what
-    Excel on Windows saves as "CSV" by default."""
+    """An uploaded file's text: UTF-16 when it starts with UTF-16's byte-order mark (Excel's "Unicode Text",
+    Windows PowerShell's ``ConvertTo-Csv > clients.csv``), else UTF-8 (with or without Excel's BOM), else
+    Windows-1252, which is what Excel on Windows saves as "CSV" by default."""
+    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return data.decode("utf-16", errors="replace")
     try:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -171,13 +179,23 @@ def split_contact(text: str) -> tuple[str, str]:
     return text, ""
 
 
-def _cells(text: str) -> list[list[str]]:
-    sample = text[:4096]
+def _cells(text: str) -> list[tuple[int, list[str]]]:
+    """The rows that hold anything, each with the line of the file it starts on (blank lines count, so the
+    preview's line numbers are the file's). Windows PowerShell's ``#TYPE ...`` line above the headings is
+    left out."""
+    typed = TYPE_LINE.match(text)
+    sample = text[typed.end() if typed else 0 :][:4096]
     try:
         dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
     except csv.Error:
         dialect = csv.excel
-    return [row for row in csv.reader(io.StringIO(text), dialect) if any(c.strip() for c in row)]
+    reader = csv.reader(io.StringIO(text), dialect)
+    rows, line = [], 1
+    for row in reader:
+        if any(c.strip() for c in row) and not (typed and line == 1):
+            rows.append((line, row))
+        line = reader.line_num + 1
+    return rows
 
 
 def parse(conn, text: str, sees: set[int] | None = None, groups_allowed: bool = True) -> Parsed:
@@ -195,7 +213,7 @@ def parse(conn, text: str, sees: set[int] | None = None, groups_allowed: bool = 
         return Parsed(error=f"That doesn't read as a CSV file ({exc}).")
     if not cells:
         return Parsed(error="The file is empty.")
-    header = [HEADINGS.get(_heading(h)) for h in cells[0]]
+    header = [HEADINGS.get(_heading(h)) for h in cells[0][1]]
     if "name" not in header or "tenant" not in header:
         return Parsed(
             error="The first row needs column names, including name and tenant (the tenant ID or a "
@@ -215,14 +233,14 @@ def parse(conn, text: str, sees: set[int] | None = None, groups_allowed: bool = 
     new_groups: dict[str, str] = {}
     seen: dict[str, int] = {}
     rows = []
-    for i, cells_row in enumerate(body, start=2):
+    for line, cells_row in body:
         values: dict[str, str] = {}
         for key, cell in zip(header, cells_row, strict=False):
             if key and key not in values:
                 values[key] = cell.strip()
         name = " ".join(values.get("name", "").split())
         ref = values.get("tenant", "").strip().lower()
-        row = Row(line=i, name=name[:NAME_MAX], tenant_ref=ref)
+        row = Row(line=line, name=name[:NAME_MAX], tenant_ref=ref)
         if not name:
             row.problems.append("No name.")
         elif len(name) > NAME_MAX:
@@ -236,7 +254,7 @@ def parse(conn, text: str, sees: set[int] | None = None, groups_allowed: bool = 
         elif ref in existing:
             row.skip = f"Already in Office Sentry as {existing[ref]}." if existing[ref] else "Already in Office Sentry."
         if ref:
-            seen.setdefault(ref, i)
+            seen.setdefault(ref, line)
 
         cloud = CLOUD_WORDS.get(_heading(values.get("cloud", "")))
         if cloud is None:

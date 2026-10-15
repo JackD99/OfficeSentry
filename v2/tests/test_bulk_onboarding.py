@@ -10,6 +10,7 @@ import pytest
 import responses
 
 from officesentry import onboarding, permission_batch, store, tasks
+from officesentry import roles as office_roles
 from officesentry.entra import PERMISSIONS
 from officesentry.graph import GRAPH_ROOT
 from officesentry.worker import execute_run
@@ -90,6 +91,44 @@ def test_decode_takes_utf8_and_excel_ansi():
     assert onboarding.decode("Café".encode("cp1252")) == "Café"
 
 
+def test_utf16_files_read(db):
+    """Excel's "Unicode Text" (tabs) and Windows PowerShell's ``ConvertTo-Csv > clients.csv`` (with its #TYPE
+    line) save UTF-16 with a byte-order mark; read as Windows-1252, the headings weren't found."""
+    raw = "name,tenant\r\nAcme Ltd,acme.onmicrosoft.com\r\nZoë Café,zoe.onmicrosoft.com\r\n".encode("utf-16")
+    parsed = onboarding.parse(db, onboarding.decode(raw))
+    assert parsed.error is None and [r.name for r in parsed.new] == ["Acme Ltd", "Zoë Café"]
+    unicode_text = "Name\tTenant\r\nAcme Ltd\tacme.onmicrosoft.com\r\n".encode("utf-16-be")
+    parsed = onboarding.parse(db, onboarding.decode(b"\xfe\xff" + unicode_text))
+    assert [(r.name, r.tenant_ref) for r in parsed.new] == [("Acme Ltd", "acme.onmicrosoft.com")]
+    powershell = (
+        '#TYPE System.Management.Automation.PSCustomObject\r\n"Name","Tenant"\r\n"Acme Ltd","acme.onmicrosoft.com"\r\n'
+    ).encode("utf-16")
+    parsed = onboarding.parse(db, onboarding.decode(powershell))
+    assert parsed.error is None and [(r.line, r.name) for r in parsed.new] == [(3, "Acme Ltd")]
+
+
+def test_line_numbers_are_the_files_own(db):
+    """Blank lines (and Excel's ";;;" rows) count, so "Line" and "The same client as line N" point at the file."""
+    text = (
+        "﻿Name;Tenant;Group;Contact\r\n\r\n"
+        "Alpha Ltd;alpha.onmicrosoft.com;healthcare;Ann <ann@alpha.com>\r\n\r\n\r\n"
+        "Beta Ltd;beta.onmicrosoft.com;New Tier;\r\n"
+        "Alpha again;ALPHA.onmicrosoft.com;;\r\n"
+        ";;;\r\n"
+        '"Gamma, Inc";gamma.onmicrosoft.com;"Tier 2 | London";"Gail\r\n<g@gamma.com>"\r\n'
+        "Delta;delta.onmicrosoft.com;;\r\n"
+    )
+    rows = onboarding.parse(db, text).rows
+    assert [(r.line, r.name) for r in rows] == [
+        (3, "Alpha Ltd"),
+        (6, "Beta Ltd"),
+        (7, "Alpha again"),
+        (9, "Gamma, Inc"),  # its contact runs over two lines; it starts on the first
+        (11, "Delta"),
+    ]
+    assert rows[2].problems == ["The same client as line 3."]
+
+
 # -- Importing 50 tenants through the page -------------------------------------------------------
 
 
@@ -150,6 +189,22 @@ def test_import_preview_names_analysts_who_will_see_the_tenants(client, db, conn
     assert "Analysts given the group <strong>Tier 1</strong> will see its new clients: lead." in page
 
 
+def test_import_preview_says_everyone_who_sees_every_client_sees_the_new_ones(app, client, db, connection_id):
+    """Not only admins: a Team leader (whose role covers every client) opens an imported client straight away."""
+    _admin(client, db)
+    office_roles.assign(db, make_user(db, "lead", role="analyst"), office_roles.by_key(db, "team_leader"))
+    one = "name,tenant\nDelta,delta.onmicrosoft.com\n"
+    page = client.post("/admin/onboarding/import", data={"text": one}).get_data(as_text=True)
+    assert '<div class="foot">new client</div>' in page and "Import 1 client<" in page
+    assert "Only admins" not in page
+    assert "Everyone who sees every client (admins, and any role or person given every client)" in page
+    client.post("/admin/onboarding/import", data={"text": one, "confirm": "1"})
+    delta = db.execute("SELECT id FROM tenants WHERE tenant_ref = 'delta.onmicrosoft.com'").fetchone()[0]
+    lead = app.test_client()
+    login(lead, "lead")
+    assert lead.get(f"/tenants/{delta}").status_code == 200
+
+
 def test_import_upload_and_template(client, db, connection_id):
     import io
 
@@ -158,6 +213,10 @@ def test_import_upload_and_template(client, db, connection_id):
     assert template.mimetype == "text/csv"
     ansi = _csv(2).lstrip("\ufeff").replace("Person 0", "Ren\u00e9e").encode("cp1252")  # Excel's "CSV" on Windows
     data = {"file": (io.BytesIO(ansi), "clients.csv")}
+    page = client.post("/admin/onboarding/import", data=data, content_type="multipart/form-data")
+    assert "Import 2 clients" in page.get_data(as_text=True)
+    unicode_text = _csv(2).lstrip("﻿").replace(";", "\t").encode("utf-16")  # Excel's "Unicode Text"
+    data = {"file": (io.BytesIO(unicode_text), "clients.txt")}
     page = client.post("/admin/onboarding/import", data=data, content_type="multipart/form-data")
     assert "Import 2 clients" in page.get_data(as_text=True)
     page = client.post("/admin/onboarding/import", data={"text": "nothing useful"}).get_data(as_text=True)

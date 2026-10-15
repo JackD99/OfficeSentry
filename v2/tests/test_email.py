@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import responses
 
-from officesentry import alerts, delivery, mailer, outbound, store
+from officesentry import alerts, delivery, lifecycle, mailer, outbound, store
 from officesentry import db as db_module
 from officesentry.db import connect, migrate
 from officesentry.reports.export import pdf_available
@@ -780,6 +780,23 @@ def test_global_alert_emails_each_tenant(app, db, two_tenants, vault, cfg):
         "1 new critical or high finding in Alpha Ltd",
         "1 new critical or high finding in Bravo Inc",
     ]
+
+
+@pytest.mark.parametrize("action", ["pause", "archive"])
+def test_no_alert_email_for_a_client_paused_since_its_collection_started(app, db, two_tenants, vault, cfg, action):
+    alpha, _ = two_tenants
+    _smtp_ready(db)
+    aid = db.execute(
+        "INSERT INTO email_alerts (tenant_id, min_severity, created_at) VALUES (NULL, 'high', '2026-10-01T00:00:00Z')"
+    ).lastrowid
+    delivery.set_recipients(db, "alert", aid, [delivery.add_contact(db, None, "", "me@msp.com")])
+    _finding(db, alpha, "admin_mfa", "low", "2026-09-01T00:00:00Z", "old")
+    new = _finding(db, alpha, "admin_mfa", "high", "2026-10-02T00:00:00Z", "new")
+    when_it_started = store.get_tenant(db, alpha)
+    getattr(lifecycle, action)(db, when_it_started, "admin")
+    alerts.after_sync(db, _alerting(app, cfg, vault), when_it_started, {"opened": [new]})
+    assert delivery.after_sync(app, db, vault, when_it_started, [new]) == 0
+    assert sends() == [] and not db.execute("SELECT 1 FROM email_deliveries").fetchone()
 
 
 @responses.activate

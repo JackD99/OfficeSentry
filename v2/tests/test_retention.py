@@ -125,6 +125,25 @@ def test_admin_saves_retention_and_it_is_audited(client, db, cfg):
     assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'retention_updated'").fetchone()[0] == 1
 
 
+def test_the_page_says_what_the_settings_keep(client, db, two_tenants):
+    """How long sign-in detail stays follows the monthly snapshots setting (it said "about 13 months" whatever
+    that was), and the dry run's counts are written with thousands separators."""
+    alpha, _ = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    assert "which is about 12 months for monthly snapshots" in client.get("/admin/retention").get_data(as_text=True)
+    finding(db, alpha, "first-scan", iso(1000))
+    db.executemany(
+        "INSERT INTO findings (tenant_id, rule_key, object_id, severity, subject, detail, first_seen, last_seen,"
+        " resolved_at) VALUES (?, 'a', ?, 'high', 'someone@alpha', '', ?, ?, ?)",
+        [(alpha, f"o{n}", iso(900), iso(900), iso(800)) for n in range(1234)],
+    )
+    client.post("/admin/retention", data={**FORM, "keep_monthly_forever": "1"})
+    page = client.get("/admin/retention").get_data(as_text=True)
+    assert "which is forever for monthly snapshots" in page and "13 months" not in page
+    assert "about 1,234 resolved findings" in page
+
+
 @pytest.mark.parametrize(
     "field,value",
     [

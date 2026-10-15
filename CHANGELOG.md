@@ -29,6 +29,31 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
+- No alert, alert email or webhook goes out about a client that was paused or archived while its collection
+  ran. The check used the client as it was when the collection started.
+- Accepting a risk with a review date of today or earlier is refused with a message saying why, and the date
+  box starts at tomorrow. Before, the risk was accepted and came straight back as due for review.
+- The report design editor keeps a 0 typed in a number box, such as *Affected items per check*, instead of
+  putting the default back, and keeps a number within the box's range.
+- A report design of more than 60 blocks is refused with a message, instead of saving without the blocks past
+  the 60th. The editor says so when you add or duplicate a block in a full design.
+- The design editor's hint under the cover title lists `{quarter}`, which the title and subtitle already took.
+- The offboard page counts the issued reports in the client's Report history that deleting removes, with a
+  link to it, names each user's role as the Users page does, and writes large counts with thousands
+  separators. `delete-tenant` counts the issued reports too.
+- Importing clients from a CSV:
+  - The preview's line numbers are the file's own, also when it has blank lines or a value over several
+    lines.
+  - UTF-16 files are read: Excel's *Unicode Text* and Windows PowerShell's `Export-Csv`, including the `#TYPE`
+    line it puts above the column names.
+  - The preview says rightly who sees the new clients straight away: everyone who sees every client, not
+    only admins.
+  - The preview says "1 new client", not "1 new clients".
+- A client's **Client sign-in** page keeps the approval link once approval is noted, for when the client
+  removes the sign-in app and has to approve it again. It says the approval was noted when someone there
+  first signed in.
+- The **Data retention** page writes counts with thousands separators, and says how long monthly snapshots
+  keep sign-in details at the saved setting, instead of always "about 13 months".
 
 ## [2.3.1] - 2026-10-12
 

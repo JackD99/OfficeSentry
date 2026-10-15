@@ -93,7 +93,9 @@ page. The message to send their people includes the link until the approval is n
 
 Office Sentry notes the approval when someone from that client first signs in with Microsoft, which they can
 only do once it's approved. The thank-you page records nothing, since anyone with the link could open it. The
-approval is shown on the page; it doesn't change who can sign in.
+page shows when the approval was noted; it doesn't change who can sign in. Office Sentry can't tell if the
+client later removes the sign-in app from their tenant (their people are then asked for approval again), so the
+page keeps the **Copy approval link** to send their administrator again.
 
 ## When a client's tenant ID isn't known yet
 

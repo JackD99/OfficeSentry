@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
-from .. import clouds, lifecycle, store, tenant_groups, tenant_health
+from .. import clouds, lifecycle, roles, store, tenant_groups, tenant_health
 from ..db import audit
 from ..discovery import tenant_id_for_domain
 from ..text import plural
@@ -309,6 +309,7 @@ def offboard(tenant_id: int):
         stored=lifecycle.stored(g.db, t["id"]),
         client_users=client_users,
         other_users=others,
+        role_names={u["id"]: roles.role_of(g.db, u).name for u in others},
     )
 
 

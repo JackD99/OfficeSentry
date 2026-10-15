@@ -39,7 +39,8 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
 - **Findings** (`/tenants/<id>/findings`): every finding keeps first seen,
   resolved and reopened dates. Anyone who can accept risks (Second line, Team
   leader and Administrator by default) can accept one with a reason and an
-  optional expiry; accepted risks leave the totals and get their own section.
+  optional review date after today, when it comes back for review; accepted
+  risks leave the totals and get their own section.
 - **Since last month**: new and fixed findings, admin role changes, new,
   disabled and deleted accounts, licences people were given or lost, and
   Conditional Access policies added, switched or edited, compared with the
@@ -433,8 +434,9 @@ the next 90 days) or a blank page.
 A design belongs to the MSP and works for every client: a block with nothing to show for a client (no
 accepted risks, no commentary yet) is left out of that client's report. Each client's **Reports →
 Custom reports** lists every design as a page and a PDF, and a report plan or a client's email schedule
-can send a design (as a PDF) alongside or instead of the monthly review. Text blocks take `{client}`,
-`{month}`, `{quarter}`, `{msp}` and `{date}`. Anyone who can *Design custom reports* makes and edits designs; removing
+can send a design (as a PDF) alongside or instead of the monthly review. Text blocks and the cover's title
+and subtitle take `{client}`, `{month}`, `{quarter}`, `{msp}` and `{date}`, and a design holds up to 60 blocks.
+Anyone who can *Design custom reports* makes and edits designs; removing
 one also needs *Settings*, since it comes out of any plan or schedule that sent it.
 
 Setup notes written for your team (a detail report saying Microsoft is hiding people's names, and how to

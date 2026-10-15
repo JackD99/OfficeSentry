@@ -135,6 +135,7 @@ def stored(conn, tenant_id: int) -> dict[str, int]:
         "alerts": one("SELECT COUNT(*) FROM email_alerts WHERE tenant_id = ?"),
         "contacts": one("SELECT COUNT(*) FROM contacts WHERE tenant_id = ?"),
         "deliveries": one("SELECT COUNT(*) FROM email_deliveries WHERE tenant_id = ?"),
+        "issued": one("SELECT COUNT(*) FROM issued_reports WHERE tenant_id = ?"),  # the Report history's files
         "access": one("SELECT COUNT(*) FROM user_tenants WHERE tenant_id = ?"),
         **{f"history_{k}": n for k, n in events.counts(conn, tenant_id).items()},
     }
