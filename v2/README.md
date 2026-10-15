@@ -117,12 +117,14 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
     for your team.
   - Recipients are contacts: the client's people get the email, your team gets a
     hidden copy. Optional note at the top of the email.
+    New contacts also get the client's report plan emails, so only someone who can open every report the plan sends adds one. <!-- since 2.4.0 -->
   - A cross-client **digest** for your team, worst clients first.
   - A weekly **Coming up** email for your team, with the same list as the
     Coming up page above.
   - **Alert emails** when a scan finds something new and critical (or high), for
     one client or all of them. They come from the same alert event as the
     Teams/Slack alerts below. A client's first scan never emails.
+    They name the findings, so choosing who gets them needs security findings. <!-- since 2.4.0 -->
   - Preview (desktop and phone width), Send now, pause, and a delivery history
     with failures, automatic retries (5 min, 30 min, 2 h) and a Retry button.
   - Sent over SMTP or Microsoft 365 (Graph `sendMail` from a mailbox in your own
