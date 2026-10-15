@@ -242,6 +242,12 @@ SECTIONS = [
                 "exports to Log Analytics.",
             ),
             Doc(
+                "website/pages/how-to/email-domains.md",
+                "how-to/email-domains",
+                blurb="Check SPF, DKIM and DMARC for one domain with PowerShell, what good looks like, and how to "
+                "watch every client's domains.",
+            ),
+            Doc(
                 "website/pages/how-to/audit-log.md",
                 "how-to/audit-log",
                 blurb="Search the Microsoft 365 audit log for files deleted or shared, mail opened by someone else "
