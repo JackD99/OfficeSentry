@@ -63,10 +63,7 @@ overview and DEPLOY.md for running it on a server.
   each. A report area someone can't open on a client stays closed where a
   page shows or sends a report from inside another: schedules only take
   reports and saved views the person opens there (`web/email._needs`), and
-  only someone who opens all of a schedule's reports changes it; a new contact
-  joins the client's report plan emails, so only someone who opens everything
-  the plan emails adds one, by any form (`web/email._plan_sends_more`), and
-  choosing who gets new-finding alerts needs `reports.security`; report
+  only someone who opens all of a schedule's reports changes it; report
   history downloads need `export` and the file's area; designs leave out
   tables the viewer can't open (`designs.Context.opens`); Today
   (`home.today(shows=)`), the dashboard tiles and the Accounts page count only
@@ -792,12 +789,6 @@ reach staff on the web page (with `month_end.review` on that client), never a cl
 PDF. A client's live report shows none of it until the month is approved or sent
 (`report_context(..., approved_only=True)`), and nor does a review attached to any other
 scheduled email of a client whose reports wait for approval (`month_end.needs_approval`).
-After that they show the copy that was approved: `freeze` stores the client's copy the files
-were built from (commentary, recommendations, client-visible notes and what's left out) in
-`report_reviews.approved_copy`, so anything changed later reaches the client only with a new
-version (a re-issue). `changed_since_approval` drives the review screen's notice and the
-queue's "Changed since approval". Months approved before migration 0045, or sent by an
-automatic plan, have no copy and show the month as it is.
 
 The reviewer can leave things out of one client's copy of one month
 (`report_hidden`, migration 0043; `month_end.hidden`, `leave_out`, `put_back`,
