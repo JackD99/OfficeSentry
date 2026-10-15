@@ -1520,6 +1520,45 @@ def _alert_resend(conn, delivery) -> tuple:
     return alert, tenant, alerts.opened_items(conn, tenant["id"], ids, alert["min_severity"])
 
 
+def retry_refused(conn, schedule, delivery, default_tz: str, now: datetime | None = None) -> str | None:
+    """Why Retry on a failed scheduled email would send something it shouldn't, or None. Retry sends the
+    schedule's current period, so a row for an earlier one would send the wrong month; one that went out after
+    this attempt failed (the automatic retry) would go twice; and a month approved in Month-end goes as its
+    approved files, which Send again there sends."""
+    period, _ = schedule_slot(schedule, default_tz, now or datetime.now(UTC))
+    if delivery["period"] and delivery["period"] != period:
+        return (
+            f"This email was for {period_label(delivery['period'])} and the schedule has moved on to "
+            f"{period_label(period)}, so it isn't sent again. Send now sends the current one."
+        )
+    later = conn.execute(
+        "SELECT created_at FROM email_deliveries WHERE schedule_id = ? AND period = ? AND status = 'sent'"
+        " AND id > ? ORDER BY id DESC LIMIT 1",
+        (schedule["id"], period, delivery["id"]),
+    ).fetchone()
+    if later:
+        return f"It went out on {day(later['created_at'])} after this attempt failed, so it isn't sent again."
+    approved = conn.execute(
+        "SELECT 1 FROM issued_reports WHERE tenant_id = ? AND period = ? AND trigger = 'approval' LIMIT 1",
+        (schedule["tenant_id"], period),
+    ).fetchone()
+    if _field(schedule, "plan_id") and approved:
+        return "This month was approved in Month-end reporting; send it again from there, with its approved files"
+    return None
+
+
+def superseded(conn, delivery) -> bool:
+    """Whether a failed scheduled email's period went out after it (so it shows no Retry)."""
+    return bool(
+        delivery["schedule_id"]
+        and delivery["period"]
+        and conn.execute(
+            "SELECT 1 FROM email_deliveries WHERE schedule_id = ? AND period = ? AND status = 'sent' AND id > ?",
+            (delivery["schedule_id"], delivery["period"], delivery["id"]),
+        ).fetchone()
+    )
+
+
 def retry_delivery(app, conn, vault, delivery, user: str) -> str | None:
     """Send a failed email again: the schedule's current content, or the same alert."""
     if delivery["schedule_id"]:
@@ -1528,6 +1567,8 @@ def retry_delivery(app, conn, vault, delivery, user: str) -> str | None:
             return "That schedule has been removed"
         if _field(schedule, "on_approval", 0):
             return "This report goes out when its month-end review is approved; send it from Month-end reporting"
+        if refused := retry_refused(conn, schedule, delivery, _cfg(app).timezone):
+            return refused
         if being_sent(conn, schedule, _cfg(app).timezone):
             return BEING_SENT
         return send_schedule(app, conn, vault, schedule, trigger="retry", user=user)
@@ -1557,7 +1598,23 @@ def _due(conn, s, cfg, now: datetime) -> bool:
         tenant = store.get_tenant(conn, s["tenant_id"])
         if tenant is None or not tenant["enabled"] or tenant["archived_at"]:
             return False
+        if _field(s, "plan_id") and _approving(conn, s["tenant_id"], period):
+            return False  # someone approved the month in Month-end: its approved files go instead
     return True
+
+
+def _approving(conn, tenant_id: int, period: str) -> bool:
+    """Whether the month is being approved, or was, in Month-end reporting (which sends its own files)."""
+    from . import month_end  # imports this module
+
+    return (
+        tasks.pending(conn, month_end.approval_key(tenant_id, period)) is not None
+        or conn.execute(
+            "SELECT 1 FROM issued_reports WHERE tenant_id = ? AND period = ? AND trigger = 'approval' LIMIT 1",
+            (tenant_id, period),
+        ).fetchone()
+        is not None
+    )
 
 
 def send_key(s, period: str) -> str:

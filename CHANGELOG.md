@@ -11,6 +11,16 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
+### Fixed
+
+- **Month-end reporting** never sends a client the same month twice. An automatic plan's month that someone
+  had started reviewing stayed In review after the timer sent it, so approving sent it again; Retry on a
+  failed email sent it again after the automatic retry had already got it through (or sent a later month, or a
+  fresh copy of an approved month instead of its approved files); deleting and re-making a plan forgot the
+  months it had sent; and pausing and resuming or re-timing a schedule could send a month approved early a
+  second time. Approving now also waits while the timer is sending that client's report, and a failed email
+  that went out later has no Retry button.
+
 ## [2.3.1] - 2026-10-12
 
 Fixes for 2.3. Nothing to do before updating: `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are
