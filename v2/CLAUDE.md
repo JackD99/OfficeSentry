@@ -124,13 +124,7 @@ overview and DEPLOY.md for running it on a server.
 2. Write objects with `ctx.objects(kind, [(id, dict)])` and numbers with
    `ctx.metric(key, value)`. Use `ctx.warn()` for a section the tenant's
    licence can't provide (run becomes `partial`), and `ctx.capabilities`
-   (from `tenant_profile`) to skip what it can't have. A collector may carry
-   on past an item Microsoft refuses, but never past a failed sign-in: the
-   Graph and Exchange clients remember one (`sign_in_error`) and the worker
-   fails the run with it (`RunContext.sign_in_failure`), so a run that read
-   nothing never passes its checks. One that reads mailbox by mailbox keeps
-   the previous run's rows for those it couldn't read
-   (`MailboxWindow.keep_unread`), so one timeout doesn't mark a finding fixed.
+   (from `tenant_profile`) to skip what it can't have.
 3. Import it in `collectors/__init__.py`.
 4. Test it in `tests/test_collectors.py` with recorded Graph responses.
 5. List every new Graph path or Exchange cmdlet in `endpoints.py` (version,
