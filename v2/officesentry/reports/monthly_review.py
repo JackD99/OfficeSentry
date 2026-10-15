@@ -129,6 +129,10 @@ class Report:
     @property
     def months_chart(self) -> str:
         """Found and fixed by month, once there are two months with data; "" before."""
+        return self.months_columns()
+
+    def months_columns(self, height: int = 170) -> str:
+        """``months_chart`` drawn ``height`` high (the two-page summary draws it lower, to stay two pages)."""
         known = [m for m in self.months if m.found is not None]
         if len(known) < 2:
             return ""
@@ -139,6 +143,7 @@ class Report:
             [(m.month, m.found, m.fixed) for m in shown],
             label=f"Findings found and fixed each month since {known[0].month:%B %Y}",
             series=("Found", "Fixed"),
+            height=height,
         )
 
     @property

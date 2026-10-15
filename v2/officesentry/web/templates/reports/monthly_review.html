@@ -11,6 +11,8 @@
 {%- set tl_actions = me.actions if me else [] -%}
 {#- appendix false (the "summary only" report): the two summary pages without the detail after them. -#}
 {%- set with_appendix = appendix if appendix is defined and appendix is not none else true -%}
+{#- The summary on its own is the two-page executive summary: the cover is a band on page one, not a page. -#}
+{%- set compact_cover = not with_appendix -%}
 {%- set open_actions = tl_actions|rejectattr('status', 'equalto', 'done')|list -%}
 {%- set done_actions = tl_actions|selectattr('status', 'equalto', 'done')|list -%}
 {%- set auto_actions = summary.next_steps(report, anchors=with_appendix) -%}
@@ -47,15 +49,19 @@
   {{ ui.meta('Period covered', since ~ ' to ' ~ report.generated_at.day ~ ' ' ~ report.generated_at.strftime('%B %Y')) }}
   {{ ui.meta('Microsoft 365 tenant', report.tenant.tenant_ref) }}
 {% endblock %}
-{% block cover_status %}{{ ui.verdict(es.verdict) }}
+{#- The account manager's words for the month. Under the verdict on a compact cover; on a full cover, whose
+    page has a fixed height and the contents list to fit, they open the page after it. -#}
+{%- macro commentary() -%}
 {%- if me and me.commentary %}
 <div class="tl-commentary"><div class="tl-label">From {{ brand.display_name }}</div>{% for p in me.commentary.split('\n\n') if p.strip() %}<p>{{ p.strip() }}</p>{% endfor %}</div>
-{%- endif %}{% endblock %}
+{%- endif %}
+{%- endmacro -%}
+{% block cover_status %}{{ ui.verdict(es.verdict) }}{% if compact_cover %}{{ commentary() }}{% endif %}{% endblock %}
 {% block contents %}
+  {% if with_appendix %}
   <li class="toc-group">Summary</li>
   {% if glance %}<li><a href="#summary">At a glance</a></li>{% endif %}
   {% if this_month %}<li><a href="#month">{{ 'This month, and what we recommend next' if next_on else 'This month' }}</a></li>{% endif %}
-  {% if with_appendix %}
   <li class="toc-group">Appendix: the detail</li>
   {% if 'part:changes' not in off %}<li><a href="#changes">What changed since {{ since }}</a></li>{% endif %}
   {% if urgent %}<li><a href="#fix-first">Fix first</a></li>{% endif %}
@@ -73,6 +79,7 @@
 <div class="callout warn staff-note">{{ off|length|plural('thing') }} {{ 'is' if off|length == 1 else 'are' }} left out of {{ report.tenant.name }}'s copy this month, so this page doesn't show {{ 'it' if off|length == 1 else 'them' }} either.
   {% if review_href is defined and review_href %}<a href="{{ review_href }}#left-out">Change what's left out</a>{% endif %}</div>
 {% endif %}
+{% if not compact_cover %}{{ commentary() }}{% endif %}
 {% if glance %}
 <section id="summary" class="exec">
   <h2>At a glance</h2>
@@ -104,9 +111,10 @@
 {% endif %}
 
 {% if this_month %}
-<section class="{{ 'page-break ' if glance }}exec" id="month">
+{#- The full report starts This month on a page of its own; the summary lets it follow on, so it's two pages. -#}
+<section class="{{ 'page-break ' if glance and with_appendix }}exec" id="month">
   <h2>This month</h2>
-  {% set chart = report.months_chart %}
+  {% set chart = report.months_chart if with_appendix else report.months_columns(height=120) %}
   {% if chart_on %}
   {%- set shown = report.months|selectattr('found', 'ne', none)|list -%}
   <div class="chart-card keep month-chart">
@@ -320,6 +328,13 @@
   {%- set fresh = [] %}{% for f in report.freshness if not f.stale %}{% set _ = fresh.append((f.title, f.finished_at)) %}{% endfor %}
   {{ ui.collected(fresh) }}</p>
   {% if not with_appendix %}<p>This is the summary of the monthly review. Ask {{ brand.display_name }} for the full report, with every check, change and licence in detail.</p>{% endif %}
-  {% if stale %}<p><span class="stale">Out of date:</span> {% for f in stale %}{{ f.title }} ({{ ('last collected ' ~ f.finished_at|day) if f.finished_at else 'not collected yet' }}){{ ', ' if not loop.last else '.' }}{% endfor %} Figures that rely on these may not reflect the latest settings.</p>{% endif %}
+  {% if stale|length > 3 %}
+  {#- Many at once (collection paused, or the app's access removed): one line, not a list of every source. -#}
+  {%- set dated = stale|selectattr('finished_at')|map(attribute='finished_at')|list -%}
+  {%- set never = stale|rejectattr('finished_at')|map(attribute='title')|list -%}
+  <p><span class="stale">Out of date:</span>
+  {%- if dated %} {{ dated|length|plural('data source') }} last collected {% if dated|min|day == dated|max|day %}{{ dated|max|day }}{% else %}between {{ dated|min|day }} and {{ dated|max|day }}{% endif %}{% endif %}
+  {%- if never %}{{ ',' if dated }} {% if never|length > 3 %}{{ never|length|plural('data source') }}{% else %}{{ never|join(', ') }}{% endif %} not collected yet{% endif %}. Figures that rely on these may not reflect the latest settings.</p>
+  {% elif stale %}<p><span class="stale">Out of date:</span> {% for f in stale %}{{ f.title }} ({{ ('last collected ' ~ f.finished_at|day) if f.finished_at else 'not collected yet' }}){{ ', ' if not loop.last else '.' }}{% endfor %} Figures that rely on these may not reflect the latest settings.</p>{% endif %}
 </footer>
 {% endblock %}
