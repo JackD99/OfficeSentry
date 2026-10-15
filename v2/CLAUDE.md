@@ -665,7 +665,8 @@ their kind with `@tasks.handler(kind)` (add its module to
 `worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`),
 `send_schedule` (`delivery.py`), `consent_check` (`onboarding.py`), `erase` (`lifecycle.py`),
 `audit_check` and `audit_stop` (`auditlog/addon.py`), `backup` (`nightly_backup.py`: the worker's own nightly
-database backup, `cfg.backup_cron`, which leaves a night to a copy something else made there in the last day)
+database backup, `cfg.backup_cron`, which leaves a night to a copy the `backup` command made in the last day,
+and catches up if no newer one comes, `nightly_backup.LATE`)
 and `precompute` (`reports/precomputed.py`, below other work). Queue with `tasks.enqueue(conn, kind,
 key=..., payload=...)`: at most one task per `key` is queued or running, so
 use a key that names the thing done once ("approve:<tenant>:<period>").

@@ -392,9 +392,11 @@ The worker backs the database up by itself every night at 03:30 (in
 `OFFICESENTRY_TIMEZONE`): the same copy as the command below, into
 `/data/backups`, keeping the last 7. `OFFICESENTRY_BACKUP_CRON` in `.env`
 changes when (cron, as for collections, or `off`) and `OFFICESENTRY_BACKUP_KEEP`
-how many it keeps. If something else already makes a nightly copy there (the
-[off-site job](#off-site-backups), or a scheduled task of your own), the worker
-leaves the night to it, so there's still one copy a night.
+how many it keeps. If something else already runs the `backup` command every
+night (the crontab line below, the [off-site job](#off-site-backups), or a
+scheduled task of your own), the worker leaves the night to it, wherever that
+copy goes, so there's still one copy a night. If that copy stops coming, the
+worker makes one an hour after it was due.
 <!-- /since -->
 
 To save a safe copy of the database while it's running:
@@ -465,7 +467,7 @@ isn't alerted on.
 secrets and mail passwords. Docker keeps it in a volume of its own,
 `officesentry-keys` (`/keys/secrets.json`), so the data volume and every
 backup made from it hold no key: someone who gets a backup can't read the
-certificates in it. An install from before October 2026 kept it in the data
+certificates in it. An install from before 2.1.0 kept it in the data
 volume; the portal moves it to `/keys` the first time it starts on this
 version and logs **Moved the key file**.
 
@@ -624,7 +626,7 @@ client asks for their data to be erased.
    folder when you have it; a file restored without it says so, and the history
    then starts again from what Microsoft still keeps (30 days). Older,
    uncompressed `.db` backups restore the same way.
-   Versions of Office Sentry from before October 2026 can't read `.db.gz`
+   Versions of Office Sentry from before 2.2.0 can't read `.db.gz`
    files: unpack one first with `gunzip -k <file>` and restore the `.db`.
 
    It checks that the file is a sound Office Sentry database, saves the

@@ -20,7 +20,7 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ### Database upgrade
 
-Yes, applied on start as usual, after a copy of the database is made: migration 45 adds two columns to each
+Yes, applied on start as usual, after a copy of the database is made: migration 46 adds two columns to each
 collection run, saying when a failed run is tried again by itself and which failure a run tries again for.
 
 ### Added
@@ -35,8 +35,9 @@ collection run, saying when a failed run is tried again by itself and which fail
 - **Every install backs itself up every night.** The worker now makes the nightly database copy itself, at
   03:30 in Office Sentry's timezone, into `/data/backups`, keeping 7, so an install nobody added a crontab
   line to has backups too. `OFFICESENTRY_BACKUP_CRON` changes when (or `off`) and `OFFICESENTRY_BACKUP_KEEP` how
-  many. A server that already makes a nightly copy there (the off-site job, the cloud-init file, the
-  Kubernetes CronJob, a NAS task) keeps doing so, and the worker leaves those nights to it.
+  many. A server that already runs the `backup` command every night (the off-site job, the crontab line in
+  DEPLOY.md, the cloud-init file, the Kubernetes CronJob, a NAS task) keeps doing so, wherever it writes, and
+  the worker leaves those nights to it, stepping in if that job stops.
 
 ### Fixed
 

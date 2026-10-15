@@ -451,15 +451,62 @@ def test_the_worker_backs_up_every_night_by_itself(cfg, db, two_tenants, monkeyp
 def test_the_worker_leaves_the_night_to_a_server_that_backs_up_itself(cfg, db, two_tenants, monkeypatch):
     from datetime import UTC, datetime, timedelta
 
+    from officesentry import nightly_backup, tasks
+
+    stamps = iter(f"20261015-0330{n:02}" for n in range(60))  # a name each, however fast they're made
+    monkeypatch.setattr(backups, "_stamp", lambda: next(stamps))
     monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))
     cfg.backup_cron = "30 3 * * *"
     night = datetime.now(UTC).replace(hour=3, minute=31, second=0, microsecond=0)
-    main(["backup", "--keep", "14"])  # deploy/jobs.sh, a crontab line, the Kubernetes CronJob...
-    made = next((cfg.data_dir / "backups").glob("officesentry-*.db.gz"))
-    os.utime(made, (0, (night - timedelta(hours=23, minutes=45)).timestamp()))  # 03:45 the night before
+    elsewhere = cfg.data_dir.parent / "off-volume"
+
+    def server_backup(at, *args):  # deploy/jobs.sh, a crontab line, the Kubernetes CronJob...
+        main(["backup", *args])
+        newest = backups.newest_backup(elsewhere if "--dir" in args else cfg.data_dir / "backups")
+        os.utime(newest, (0, at.timestamp()))
+        backups.record_status(cfg.data_dir, "local", True, file=newest, now=at)
+
+    # A copy in a folder off the data volume counts, from what the backup command recorded.
+    server_backup(night - timedelta(hours=23, minutes=45), "--dir", str(elsewhere), "--keep", "14")
     assert _tick(cfg, db, night) == []
-    os.utime(made, (0, (night - timedelta(days=2)).timestamp()))  # the server's job stopped: the worker steps in
-    assert len(_tick(cfg, db, night + timedelta(days=1))) == 1
+    server_backup(night + timedelta(minutes=15), "--dir", str(elsewhere), "--keep", "14")
+    assert _tick(cfg, db, night + timedelta(hours=25)) == []  # it came, so nothing to catch up
+    # So does one in the backups folder, even when the status file says nothing about it.
+    server_backup(night + timedelta(days=1, minutes=14), "--keep", "14")
+    (cfg.data_dir / backups.STATUS_FILE).unlink()
+    assert _tick(cfg, db, night + timedelta(days=2)) == []
+    # The server's job stopped: an hour after it would have run, the worker makes the copy, then every night.
+    late = night + timedelta(days=1, minutes=14) + nightly_backup.LATE
+    assert _tick(cfg, db, late - timedelta(minutes=1)) == []
+    assert _tick(cfg, db, late) == [f"backup:late:{night + timedelta(days=1, minutes=14):%Y-%m-%dT%H:%M:%SZ}"]
+    assert tasks.drain(None, db, None, cfg) == 1
+    assert len(_tick(cfg, db, night + timedelta(days=3))) == 1
+
+
+def test_a_copy_made_once_by_hand_never_leaves_a_gap(cfg, db, two_tenants, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from officesentry import system_health, tasks
+
+    stamps = iter(f"20261015-0330{n:02}" for n in range(60))
+    monkeypatch.setattr(backups, "_stamp", lambda: next(stamps))
+    monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))
+    cfg.backup_cron = "30 3 * * *"
+    night = datetime.now(UTC).replace(hour=3, minute=31, second=0, microsecond=0)
+    assert len(_tick(cfg, db, night)) == 1
+    tasks.drain(None, db, None, cfg)
+    by_hand = night + timedelta(hours=11)  # before an update, say
+    main(["backup"])
+    backups.record_status(
+        cfg.data_dir, "local", True, file=backups.newest_backup(cfg.data_dir / "backups"), now=by_hand
+    )
+    os.utime(backups.newest_backup(cfg.data_dir / "backups"), (0, by_hand.timestamp()))
+    assert _tick(cfg, db, night + timedelta(days=1)) == []  # it stands in for tonight's...
+    assert len(_tick(cfg, db, by_hand + timedelta(hours=25))) == 1  # ...until it's 25 hours old
+    tasks.drain(None, db, None, cfg)
+    now = by_hand + timedelta(hours=25, minutes=2)
+    assert system_health.check_backup(db, cfg, now).status == "ok"
+    assert len(_tick(cfg, db, night + timedelta(days=2))) == 1  # then back to every night
 
 
 def test_the_nightly_backup_can_be_turned_off_and_says_what_went_wrong(cfg, db, monkeypatch):
