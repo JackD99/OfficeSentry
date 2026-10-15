@@ -127,7 +127,7 @@ database, and backed up and restored with it.
 - **Everywhere:** the switch on **Settings → App connection → Audit log add-on** hides the add-on
   everywhere: its report, its pages, people's Timelines, and scheduled emails (a schedule that sends its
   report, or a saved view of it, sends the rest without them). It can't be switched off while any client's
-  feed is on; switch those off first.
+  feed is on or being started; switch those off first.
 
 ## When something goes wrong
 

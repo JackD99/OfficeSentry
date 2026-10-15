@@ -77,9 +77,11 @@ def enabled(conn) -> bool:
 
 
 def on_count(conn) -> int:
-    """Clients whose feed is on."""
+    """Clients whose feed is on, or being started (approved and asked for): either may have something on at
+    Microsoft that only switching the client off stops."""
     return conn.execute(
-        "SELECT COUNT(*) FROM audit_feeds WHERE started_at IS NOT NULL AND stopped_at IS NULL"
+        "SELECT COUNT(*) FROM audit_feeds WHERE stopped_at IS NULL"
+        " AND (started_at IS NOT NULL OR (consented_at IS NOT NULL AND wanted_at IS NOT NULL))"
     ).fetchone()[0]
 
 

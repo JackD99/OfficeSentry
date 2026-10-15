@@ -16,8 +16,9 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - **Audit log add-on:** switching it off for a client, or deleting the client, stops whatever of the client's
   feed may still be on at Microsoft, including a start that worked for SharePoint and not Exchange, and when
   Microsoft says the feed is off for one kind of record, the other is stopped too, so no feed is left on that
-  nobody reads. **Also delete the events collected** is no longer lost when an earlier stop is still waiting to
-  be sent, and switching a client on again waits for that stop.
+  nobody reads. The add-on can't be switched off for the install while a client's feed is still being
+  started. **Also delete the events collected** is no longer lost when an earlier stop is still waiting to be
+  sent, and switching a client on again waits for that stop.
 - **Audit log add-on switched off for the install:** people's Timelines no longer list its records, and
   schedules made while it was on no longer email its **Files and mailbox access** report or saved views of it.
 

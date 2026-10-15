@@ -90,6 +90,21 @@ def test_a_half_started_feed_is_stopped_when_switched_off(app, client, db, vault
     assert json.loads(row["content_types"]) == dict.fromkeys(feed.CONTENT_TYPES, "disabled")
 
 
+def test_the_addon_stays_on_for_the_install_while_a_feed_is_being_started(app, client, db, vault, cfg, two_tenants):
+    """Switched off for the install, nothing would retry the start or stop what it started, and the client's
+    page is hidden: so a client being started counts as on, like one whose feed is."""
+    alpha, _ = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    _half_started(app, client, db, vault, cfg, alpha)
+
+    with pytest.raises(addon.AddonError, match="on for 1 client"):
+        addon.switch(db, False, "admin")
+    addon.switch_off(db, store.get_tenant(db, alpha), "admin")
+    addon.switch(db, False, "admin")
+    assert not addon.enabled(db)
+
+
 def test_deleting_a_client_whose_feed_half_started_stops_it(app, client, db, vault, cfg, two_tenants):
     alpha, _ = two_tenants
     make_user(db, "admin")
