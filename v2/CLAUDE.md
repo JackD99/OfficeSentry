@@ -610,12 +610,7 @@ daily pass (`worker._daily`: retention, every dashboard row, the precompute task
 housekeeping pass (say "database is locked") is logged, rolled back and
 retried the next minute; it never ends the worker. A collector thread that finds the database locked when
 it records a finished run tries again for a few minutes (`_while_locked`) rather than leave the run to be
-failed as "worker stopped" once its lease runs out. A run that fails for a reason waiting fixes
-(`worker.passing`: Microsoft busy, throttling or out of reach, the database locked; or its worker stopped,
-`expire_run_leases`) gets a `retry_at` (`store.plan_retry`, `RETRY_DELAYS`), and housekeeping queues it
-again as a run whose `retry_of` is the first failure (`store.queue_retries`), unless something newer of that
-data source was queued or the client is paused. `alerts.after_run` waits for the last try, and pages show
-such a failure as being tried again (`store.retry_pending`, the `retrying` filter), not as failed. `db.transaction` (and
+failed as "worker stopped" once its lease runs out. `db.transaction` (and
 `store.atomic`) begin with `BEGIN IMMEDIATE`, so a write that reads first waits
 for other writers instead of failing at once; pass `immediate=False` only for
 a read. The portal's connections wait `web.WEB_BUSY_TIMEOUT_MS` (5 seconds) for
@@ -664,10 +659,7 @@ claim tasks (highest priority first) and run the function registered for
 their kind with `@tasks.handler(kind)` (add its module to
 `worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`),
 `send_schedule` (`delivery.py`), `consent_check` (`onboarding.py`), `erase` (`lifecycle.py`),
-`audit_check` and `audit_stop` (`auditlog/addon.py`), `backup` (`nightly_backup.py`: the worker's own nightly
-database backup, `cfg.backup_cron`, which leaves a night to a copy the `backup` command made in the last day,
-and catches up if no newer one comes, `nightly_backup.LATE`)
-and `precompute` (`reports/precomputed.py`, below other work). Queue with `tasks.enqueue(conn, kind,
+`audit_check` and `audit_stop` (`auditlog/addon.py`) and `precompute` (`reports/precomputed.py`, below other work). Queue with `tasks.enqueue(conn, kind,
 key=..., payload=...)`: at most one task per `key` is queued or running, so
 use a key that names the thing done once ("approve:<tenant>:<period>").
 Claimed runs and tasks carry a lease (`store.LEASE`) that the heartbeat
