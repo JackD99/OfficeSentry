@@ -143,11 +143,14 @@ together ran every test.
   the label `refresh-baselines` to the pull request: a workflow retakes the
   screenshots in the pinned browser and redraws the PDF pages (from your
   branch merged with main, as the checks compare them), commits what
-  changed to the branch, takes the label off and starts the checks again.
-  It only works for branches of this repository, never main or a fork. From
-  a fork, retake them with `--update` as `v2/tests/browser/README.md` and
-  `v2/tests/nightly/README.md` say, and commit them. Look at the new images
-  in the pull request before merging.
+  changed to the branch, takes the label off and compares the new images
+  again. GitHub holds the pull request's checks for that commit until
+  someone with write access approves them ("Approve workflows to run" on
+  the pull request), so approve them or push once more before it can
+  merge. It only works for branches of this repository, never main or a
+  fork. From a fork, retake them with `--update` as
+  `v2/tests/browser/README.md` and `v2/tests/nightly/README.md` say, and
+  commit them. Look at the new images in the pull request before merging.
 - Mock Microsoft Graph at the HTTP layer with `responses`, never by
   replacing the client class. `tests/seed.py` answers every list a page at
   a time with a next link, as Microsoft does, so a collector that reads one

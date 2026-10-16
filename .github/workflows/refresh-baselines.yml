@@ -81,7 +81,7 @@ jobs:
       contents: write  # commits the new baselines to the pull request's branch
       pull-requests: write  # takes the label off
       issues: write  # (a pull request's labels are an issue's)
-      actions: write  # starts the checks on the new commit
+      actions: write  # starts the ui and nightly checks on the new commit
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         # The pull request merged with main, as nightly.yml compares it (the merge from when the label went
