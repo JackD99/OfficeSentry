@@ -31,8 +31,7 @@ from ..reports import (
 )
 from ..reports.docx_writer import MIMETYPE as DOCX
 from .access import can, needs, tenant_or_404
-from .printing import pdf_response
-from .reports import XLSX
+from .printing import MIMETYPES, pdf_response
 
 bp = Blueprint("evidence", __name__)
 
@@ -136,7 +135,7 @@ def scheme_xlsx(tenant_id: int, scheme: str):
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{scheme}.xlsx")
     return Response(
         scheme_export.to_xlsx(r, brand=branding.load(g.db)),
-        mimetype=XLSX,
+        mimetype=MIMETYPES["xlsx"],
         headers={"Content-Disposition": f'attachment; filename="{_name(t, scheme, "xlsx")}"'},
     )
 
