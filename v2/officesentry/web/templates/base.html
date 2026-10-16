@@ -1,12 +1,14 @@
 {% from "_macros.html" import icon, csrf %}
 <!doctype html>
-<html lang="en">
+{#- The person's own light or dark and colour theme (Account, Appearance; web/appearance.py). -#}
+<html lang="en"{% if look.theme %} data-theme="{{ look.theme }}"{% endif %}{% if look.accent %} data-accent="{{ look.accent }}"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% filter page_title %}{% block title %}Office Sentry{% endblock %}{% endfilter %}</title>
   <link rel="icon" href="{{ url_for('branding.logo', v=brand.version) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='themes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   {% if not brand.is_default %}<link rel="stylesheet" href="{{ url_for('branding.brand_css', v=brand.version) }}">{% endif %}
   {#- The menu folded to its icons stays folded (app.js), set before the page draws so it doesn't jump. -#}

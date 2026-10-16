@@ -232,6 +232,11 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   Office Sentry" stays small in the footer), the support contact clients see,
   and an optional note printed at the end of every report. The name is also
   the email sender's name unless Email delivery sets one.
+<!-- since 2.4.0 -->
+- **Appearance** (each person's Account page): light, dark or the same as the device, and for staff a colour
+  for the menu and buttons (bottle green, navy, claret, graphite or plum). Only that person's screen changes;
+  client reports, PDFs and emails keep the MSP's branding.
+<!-- /since -->
 - **Data retention** (*Settings → Data retention*, `/admin/retention`): every
   collection is kept as a snapshot, so reports can show history and changes.
   By default the last collection of each of the last 30 days and of each of

@@ -17,14 +17,26 @@ import hmac
 import time
 from datetime import UTC, datetime, timedelta
 
-from flask import Blueprint, current_app, flash, g, make_response, redirect, render_template, request, session, url_for
+from flask import (
+    Blueprint,
+    abort,
+    current_app,
+    flash,
+    g,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .. import home, passwords, sso, throttle, totp
 from ..config import clear_setup_token, setup_token
 from ..db import audit, audit_counted, transaction, utcnow
 from ..text import plural
-from . import sessions
+from . import appearance, sessions
 from .access import login_required, safe_next
 from .home import home_url, open_to
 
@@ -543,7 +555,27 @@ def account():
         home_choice=home.home_of(g.user),
         has_password=sso.has_password(g.user),
         microsoft=sso.enabled(sso.settings(g.db)) and g.user["role"] != "client",
+        modes=appearance.MODES,
+        mode_choice=appearance.mode_of(g.user),
+        themes=appearance.THEMES if g.user["role"] != "client" else {},
+        theme_choice=appearance.theme_of(g.user),
     )
+
+
+@bp.post("/account/appearance")
+@login_required
+def choose_appearance():
+    """This person's light or dark, and for staff their colour theme. Only their own screen changes."""
+    mode = request.form.get("theme", "")
+    accent = request.form.get("accent", appearance.theme_of(g.user))
+    if mode not in appearance.MODES or accent not in appearance.THEMES:
+        abort(400)
+    if g.user["role"] == "client":
+        accent = appearance.DEFAULT_THEME
+    with transaction(g.db):
+        g.db.execute("UPDATE users SET theme = ?, accent = ? WHERE id = ?", (mode, accent, g.user["id"]))
+    flash("Saved. Only your own screen changes; client reports keep your branding.", "success")
+    return redirect(url_for("auth.account") + "#appearance")
 
 
 @bp.route("/account/password", methods=["GET", "POST"])

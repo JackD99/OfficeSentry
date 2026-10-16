@@ -17,9 +17,10 @@
     print_view (web/printing.py) is the browser-made PDF: the page as it
     prints, opening the print window, for servers without WeasyPrint.
     preview (an editor's or reviewer's preview pane) leaves the toolbar out;
-    paper draws the page light, as the PDF is, whatever the viewer's theme. -#}
+    paper draws the page light, as the PDF is, whatever the viewer's theme. Otherwise the page is light or
+    dark as the viewer chose under Account, Appearance; a colour theme never reaches a client report. -#}
 <!doctype html>
-<html lang="en"{% if pdf or print_view or (paper is defined and paper) %} data-theme="light"{% endif %}>
+<html lang="en"{% if pdf or print_view or (paper is defined and paper) %} data-theme="light"{% elif look is defined and look.theme %} data-theme="{{ look.theme }}"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
