@@ -38,7 +38,7 @@ from email.utils import formataddr, parseaddr
 import requests
 
 from . import clouds, outbound
-from .text import nouns
+from .text import nouns, one_line
 
 EMAIL_RE = re.compile(r"^[^@\s,;<>]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$")
 MAX_RECIPIENTS = 20
@@ -97,6 +97,11 @@ class Email:
     attachments: list[tuple[str, str, bytes]] = field(default_factory=list)  # (filename, mimetype, data)
     # Images shown in the HTML (the MSP's logo): (content id, mimetype, data), referenced as src="cid:<id>".
     inline: list[tuple[str, str, bytes]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        # A header can't hold a line break, and a client named with one before names were kept on one line
+        # would otherwise stop every email about them.
+        self.subject = one_line(self.subject)
 
     def html_for_browser(self) -> str:
         """The HTML with inline images as data: URIs, for previewing in a browser (which can't resolve cid:)."""

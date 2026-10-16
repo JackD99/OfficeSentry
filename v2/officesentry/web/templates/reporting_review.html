@@ -213,7 +213,9 @@
       {% if editable and task and task.status == 'failed' %}
       <div class="callout bad">{{ icon('alert') }}<div><strong>The last approval didn't go out.</strong><div class="small">{{ task.error }}</div></div></div>
       {% endif %}
-      {% if editable %}
+      {% if blocked %}
+      <div class="callout warn">{{ icon('alert') }}<div><strong>There's nothing to send yet.</strong> <span class="small">{{ blocked }}</span></div></div>
+      {% elif editable %}
       {% if nobody %}
       <div class="callout warn">{{ icon('alert') }}<div><strong>Nobody to email.</strong> <span class="small">{{ tenant.name }} has no contacts on this plan. Approving keeps the report in the client's report history; it's emailed when you add a contact and send it.</span>
         <div class="callout-actions"><a class="btn sm" href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}#contacts">Add a contact</a></div></div></div>
@@ -257,7 +259,7 @@
 </div>
 {#- Phones: the right-hand column comes after every note form, so the main action also sits in a bar
     that stays on screen. It submits the same form as the Approve card. -#}
-{% if plan and admin and editable and not approving %}
+{% if plan and admin and editable and not approving and not blocked %}
 <div class="approve-bar">
   <span class="small">{{ states[state] }} · <a href="#approve">Details</a></span>
   <button class="primary" form="approve-form">{{ icon('send') }} {{ 'Approve and send' if emailed else 'Approve' if nobody else 'Approve and publish' }}</button>

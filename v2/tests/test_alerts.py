@@ -366,6 +366,34 @@ def test_run_worker_alerts_when_a_collection_starts_failing(cfg, db, vault, two_
 
 
 @responses.activate
+def test_a_failure_tried_again_alerts_only_once_every_try_failed(db, vault, alerting, two_tenants):
+    alpha, _ = two_tenants
+    configure(db, vault, fmt="generic", recovery=True)
+    responses.post(HOOK)
+    add_run(db, alpha, "succeeded")
+    first = add_run(db, alpha, "failed", error="Graph 503 serviceNotAvailable: busy")
+    store.plan_retry(db, first)
+    assert alerts.after_run(db, alerting, first, "failed") is None  # it's tried again by itself first
+    # Microsoft answered the retry: nobody heard of the failure, so nobody hears it's working again.
+    ok = add_run(db, alpha, "succeeded")
+    db.execute("UPDATE runs SET retry_of = ? WHERE id = ?", (first, ok))
+    assert alerts.after_run(db, alerting, ok, "succeeded") is None
+    # The next night every try fails: the last one alerts, compared with the run before them.
+    tries = []
+    for n in range(3):
+        tries.append(add_run(db, alpha, "failed", error="Graph 503 serviceNotAvailable: busy"))
+        db.execute("UPDATE runs SET retry_of = ? WHERE id = ? AND id != ?", (tries[0], tries[-1], tries[0]))
+        assert bool(store.plan_retry(db, tries[-1])) is (n < 2)
+        assert alerts.after_run(db, alerting, tries[-1], "failed") is (True if n == 2 else None)
+    assert [posted(responses, i)["run_id"] for i in range(len(responses.calls))] == [tries[-1]]
+    # Someone pressed Refresh while a failure was waiting to be tried again: still no alert either way.
+    add_run(db, alpha, "succeeded")
+    waiting = add_run(db, alpha, "failed", error="Graph 503 serviceNotAvailable: busy")
+    store.plan_retry(db, waiting)
+    assert alerts.after_run(db, alerting, add_run(db, alpha, "succeeded"), "succeeded") is None
+
+
+@responses.activate
 def test_partial_counts_as_working(db, vault, alerting, two_tenants):
     alpha, _ = two_tenants
     configure(db, vault)

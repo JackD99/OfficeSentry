@@ -17,6 +17,33 @@ Yes, applied on start as usual, after a copy of the database is made: migration 
 each approved month-end report's commentary, recommendations and notes as the client was given them. Months
 approved before the update show the month as it is now, as before, until they're issued again.
 
+### Added
+
+- **The sign-in page says who to ask.** Under the sign-in card, "Trouble signing in? Contact Harbour IT at
+  help@... or 0161 ...", from the Branding page's support details, else the contact line the reports carry.
+
+### Changed
+
+- **A client's home page leads with where they stand**: the month's verdict, the account manager's note once
+  the month is approved, and buttons for the monthly review, its PDF and the two-page summary. Under it, the
+  MSP's own "What we recommend next" with each one's status and target, else what needs attention, led by
+  what was found ("1 admin without MFA") rather than the check's goal.
+- **The report email carries what the attached review does**: the verdict, the account manager's note ("From
+  Harbour IT") and their recommendations (else the top failing checks), in the HTML and the plain text.
+- **The verdict names the most urgent item** under it ("Most urgent: 1 admin without MFA"), on the review's
+  cover, report designs, the client's home page and the email.
+- **The two-page summary is two pages.** The summary PDF's cover is a band on page one, without a contents
+  list, so it's two pages with the account manager's note and recommendations, not three or four.
+- **A quarterly review compares with the start of the quarter.** A design with the quarter's blocks says
+  "Compared with 1 August", and its summary, key figures and What changed run from then, not from four weeks
+  ago.
+- **Check advice reads right to the client too.** "Review each app with the client", "the client's data" and
+  "Waiting for the client to approve" no longer reach a client's report, and admin MFA's advice no longer says
+  "each listed admin" where nothing is listed.
+- Charts of findings found and fixed name the first month and each January in full ("May 2026"), admin
+  activity in What changed gives dates in words ("6 Oct 2026"), and a quarterly review's Coming up shows
+  "Now" for what needs attention now.
+
 ### Fixed
 
 - [v2/DEPLOY.md](v2/DEPLOY.md), *Running on Windows without Docker*: updating no longer deletes the virtual
@@ -47,6 +74,13 @@ approved before the update show the month as it is now, as before, until they're
   which reached the file's name, or for year 0000, which broke the download off.
 - The **Activity log** download says in its last row when it holds only the newest 100,000 rows, and the
   log's user filter finds someone whatever case their name is typed in.
+- **A client's home page showed checks the month-end reviewer had left out of their copy.** It's now built
+  from the client's copy of the month, as their report, PDFs and email are.
+- **The email and the home page counted affected accounts as checks** ("46 checks need attention (1 critical,
+  30 high, 69 medium, 63 low findings)" beside a report saying 14 high). They count checks, as the report does.
+- In PDFs, the found-and-fixed chart's "Fixed" key was cut off at the right edge.
+- A full review whose month has commentary no longer runs its cover's contents list under the footer: the
+  account manager's note opens the page after the cover.
 
 ### Security
 
@@ -65,9 +99,6 @@ approved before the update show the month as it is now, as before, until they're
   deleting the newest one took its id, and with it the deleted client's rows in the **Activity log**, its
   name and domain included, for anyone granted the new client. Rows from before a client was added no longer
   show as its own, so an id already reused this way stops showing the old client's history too.
-
-### Security
-
 - **After approval, the client keeps the approved month-end report until a new version is issued.** Commentary,
   recommendations and client-visible notes changed after a month was approved used to show on the client's live
   report straight away. The client now sees what was approved (the same as their PDF), the review screen says the

@@ -26,6 +26,7 @@
 {# The one status that matters for a schedule, as a pill. #}
 {% macro schedule_status(s) -%}
 {% if not s.enabled %}<span class="pill">Paused</span>
+{% elif s.client_off %}<span class="pill" title="Nothing is sent while the client is {{ s.client_off }}">Client {{ s.client_off }}</span>
 {% elif s.on_approval %}<span class="pill info" title="Sent from Month-end once approved">Sends on approval</span>
 {% elif not s.recipients %}<span class="pill warn">No recipients</span>
 {% elif s.last_status == 'failed' %}<span class="pill bad">Last send failed</span>
@@ -51,8 +52,9 @@
       {% set security = can('reports.security', s.tenant_id) %}
       {% if security %}<a class="btn sm ghost" href="{{ url_for('email.preview_schedule', schedule_id=s.id) }}">{{ icon('eye') }} Preview</a>{% endif %}
       {% if s.on_approval %}<a class="btn sm ghost" href="{{ url_for('reporting.index') }}">{{ icon('check') }} Review</a>
-      {% else %}<form method="post" action="{{ url_for('email.send_now', schedule_id=s.id) }}" data-busy="Sending…">{{ csrf() }}<button class="sm ghost">{{ icon('send') }} Send now</button></form>{% endif %}
-      {% if security %}<a class="btn sm ghost" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>{% endif %}
+      {% elif not s.client_off %}<form method="post" action="{{ url_for('email.send_now', schedule_id=s.id) }}" data-busy="Sending…">{{ csrf() }}<button class="sm ghost">{{ icon('send') }} Send now</button></form>{% endif %}
+      {% if s.plan_id %}{% if can('settings.manage') %}<a class="btn sm ghost" href="{{ url_for('reporting.edit_plan', plan_id=s.plan_id) }}">{{ icon('edit') }} Edit plan</a>{% endif %}
+      {% elif security %}<a class="btn sm ghost" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>{% endif %}
     </div>
     {% endif %}
   </div>
@@ -60,7 +62,7 @@
 {%- endmacro %}
 
 {% set KINDS = {'report': 'Report', 'digest': 'Digest', 'alert': 'Alert', 'test': 'Test'} %}
-{% macro deliveries_table(rows, staff=True, origin='tenant') -%}
+{% macro deliveries_table(rows, staff=True, origin='tenant', stale=()) -%}
 <table class="stack-sm deliveries">
   <thead><tr><th>Email</th><th>To</th><th>Result</th><th>When</th>{% if staff %}<th></th>{% endif %}</tr></thead>
   <tbody>
@@ -72,7 +74,7 @@
     <td data-label="To" class="wrap small">{{ d.recipients }}{% if staff and d.bcc %}<span class="sub">Hidden copy: {{ d.bcc }}</span>{% endif %}</td>
     <td data-label="Result" class="wrap">{% if d.status == 'sent' %}<span class="pill ok">Sent</span>{% else %}<span class="pill bad">Failed</span>{% if staff and d.error %}<span class="sub bad-text">{{ d.error }}</span>{% endif %}{% endif %}</td>
     <td data-label="When" class="nowrap">{{ ts(d.created_at) }}</td>
-    {% if staff %}<td class="num">{% if d.status == 'failed' and d.kind != 'test' %}
+    {% if staff %}<td class="num">{% if d.status == 'failed' and d.kind != 'test' and d.id not in stale %}
       <form method="post" action="{{ url_for('email.retry', delivery_id=d.id) }}" data-busy="Sending…">{{ csrf() }}<input type="hidden" name="from" value="{{ origin }}"><button class="sm">{{ icon('refresh') }} Retry</button></form>
     {% endif %}</td>{% endif %}
   </tr>

@@ -55,5 +55,5 @@ the date it will fill at the current rate.
   so it shows up in the client's monthly review.
 
 [Open SharePoint storage in the demo](https://demo.officesentry.co.uk/across/sharepoint-storage) ·
-[Example PDF (19 pages)](../../../examples/sharepoint-storage.pdf) ·
+[Example PDF](../../../examples/sharepoint-storage.pdf) ·
 [Install Office Sentry](../../../README.md#quick-start)

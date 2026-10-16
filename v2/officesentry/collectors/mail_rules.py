@@ -68,12 +68,14 @@ class InboxRules(Collector):
         targets = window.mailboxes
 
         rows, failed, denied, no_mailbox = [], 0, 0, 0
+        unread: set[str] = set()
         exchange_ok = True  # until Exchange refuses the app, then no more folder names this run
         for t in targets:
             try:
                 rules = ctx.paged(ctx.graph.get_all(f"/users/{t['id']}/mailFolders/inbox/messageRules"))
             except PermissionMissing:
                 denied += 1
+                unread.add(t["id"])
                 continue
             except GraphError as exc:
                 # Without a mailbox snapshot (no Global Reader in Exchange) every licensed account is tried,
@@ -83,6 +85,7 @@ class InboxRules(Collector):
                     no_mailbox += 1
                 else:
                     failed += 1
+                    unread.add(t["id"])
                 continue
             folders = {}
             if exchange_ok and any((r.get("actions") or {}).get("moveToFolder") for r in rules):
@@ -114,7 +117,11 @@ class InboxRules(Collector):
                 "consent and any Exchange application access policy",
             )
         if denied or failed:
-            ctx.warn(f"Could not read inbox rules for {denied + failed} of {plural(len(targets), 'mailbox')}")
+            kept = window.keep_unread(ctx, unread)
+            ctx.warn(
+                f"Could not read inbox rules for {denied + failed} of {plural(len(targets), 'mailbox')}"
+                + mailbox_window.kept_note(kept)
+            )
         if no_mailbox:
             ctx.log(f"{plural(no_mailbox, 'account')} had no Exchange Online mailbox to read")
         rows += window.carried

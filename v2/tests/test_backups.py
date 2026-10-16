@@ -412,3 +412,132 @@ def test_a_locked_database_is_not_mistaken_for_a_damaged_one(env, db, two_tenant
     with pytest.raises(SystemExit, match="Not restored: The current database couldn't be copied first"):
         main(["restore", str(saved), "--force"])
     assert env.db_path.exists() and not list((env.data_dir / "backups").glob("pre-restore-*"))
+
+
+# -- The worker's nightly backup (nightly_backup.py) -----------------------------------------------
+
+
+def _tick(cfg, db, now):
+    from officesentry import nightly_backup, schedule
+
+    nightly_backup._queue(schedule.TickContext(app=None, conn=db, vault=None, cfg=cfg, now=now))
+    return [t["key"] for t in db.execute("SELECT key FROM tasks WHERE kind = 'backup' AND status = 'queued'")]
+
+
+def test_the_worker_backs_up_every_night_by_itself(cfg, db, two_tenants, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from officesentry import system_health, tasks
+
+    stamps = iter(f"20261015-0330{n:02}" for n in range(60))  # a name each, however fast they're made
+    monkeypatch.setattr(backups, "_stamp", lambda: next(stamps))
+    cfg.backup_cron, cfg.backup_keep = "30 3 * * *", 2
+    night = datetime.now(UTC).replace(hour=3, minute=31, second=0, microsecond=0)
+    assert _tick(cfg, db, night) == [f"backup:{night:%Y-%m-%d}T03:30:00Z"]
+    assert _tick(cfg, db, night + timedelta(minutes=1)) == [f"backup:{night:%Y-%m-%d}T03:30:00Z"]  # once a night
+    assert tasks.drain(None, db, None, cfg) == 1
+    saved = list((cfg.data_dir / "backups").glob("officesentry-*.db.gz"))
+    assert len(saved) == 1 and _tenants(saved[0]) == ["Alpha Ltd", "Bravo Inc"]
+    assert backups.read_status(cfg.data_dir)["local"]["ok"] is True
+    assert system_health.check_backup(db, cfg, datetime.now(UTC)).status == "ok"
+    # Its own copy from last night doesn't stop tonight's, and it keeps cfg.backup_keep of them.
+    for n in range(1, 4):
+        os.utime(sorted(saved[0].parent.glob("officesentry-*.db.gz"))[-1], (0, (night - timedelta(days=1)).timestamp()))
+        assert len(_tick(cfg, db, night + timedelta(days=n))) == 1
+        tasks.drain(None, db, None, cfg)
+    assert len(list(saved[0].parent.glob("officesentry-*.db.gz"))) == 2
+
+
+def test_the_worker_leaves_the_night_to_a_server_that_backs_up_itself(cfg, db, two_tenants, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from officesentry import nightly_backup, tasks
+
+    stamps = iter(f"20261015-0330{n:02}" for n in range(60))  # a name each, however fast they're made
+    monkeypatch.setattr(backups, "_stamp", lambda: next(stamps))
+    monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))
+    cfg.backup_cron = "30 3 * * *"
+    night = datetime.now(UTC).replace(hour=3, minute=31, second=0, microsecond=0)
+    elsewhere = cfg.data_dir.parent / "off-volume"
+
+    def server_backup(at, *args):  # deploy/jobs.sh, a crontab line, the Kubernetes CronJob...
+        main(["backup", *args])
+        newest = backups.newest_backup(elsewhere if "--dir" in args else cfg.data_dir / "backups")
+        os.utime(newest, (0, at.timestamp()))
+        backups.record_status(cfg.data_dir, "local", True, file=newest, now=at)
+
+    # A copy in a folder off the data volume counts, from what the backup command recorded.
+    server_backup(night - timedelta(hours=23, minutes=45), "--dir", str(elsewhere), "--keep", "14")
+    assert _tick(cfg, db, night) == []
+    server_backup(night + timedelta(minutes=15), "--dir", str(elsewhere), "--keep", "14")
+    assert _tick(cfg, db, night + timedelta(hours=25)) == []  # it came, so nothing to catch up
+    # So does one in the backups folder, even when the status file says nothing about it.
+    server_backup(night + timedelta(days=1, minutes=14), "--keep", "14")
+    (cfg.data_dir / backups.STATUS_FILE).unlink()
+    assert _tick(cfg, db, night + timedelta(days=2)) == []
+    # The server's job stopped: an hour after it would have run, the worker makes the copy, then every night.
+    late = night + timedelta(days=1, minutes=14) + nightly_backup.LATE
+    assert _tick(cfg, db, late - timedelta(minutes=1)) == []
+    assert _tick(cfg, db, late) == [f"backup:late:{night + timedelta(days=1, minutes=14):%Y-%m-%dT%H:%M:%SZ}"]
+    assert tasks.drain(None, db, None, cfg) == 1
+    assert len(_tick(cfg, db, night + timedelta(days=3))) == 1
+
+
+def test_a_copy_made_once_by_hand_never_leaves_a_gap(cfg, db, two_tenants, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from officesentry import nightly_backup, system_health, tasks
+
+    stamps = iter(f"20261015-0330{n:02}" for n in range(60))
+    monkeypatch.setattr(backups, "_stamp", lambda: next(stamps))
+    monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))
+    cfg.backup_cron = "30 3 * * *"
+    night = datetime.now(UTC).replace(hour=3, minute=31, second=0, microsecond=0)
+    assert len(_tick(cfg, db, night)) == 1
+    tasks.drain(None, db, None, cfg)
+    by_hand = night + timedelta(hours=11)  # before an update, say
+    main(["backup"])
+    backups.record_status(
+        cfg.data_dir, "local", True, file=backups.newest_backup(cfg.data_dir / "backups"), now=by_hand
+    )
+    os.utime(backups.newest_backup(cfg.data_dir / "backups"), (0, by_hand.timestamp()))
+    assert _tick(cfg, db, night + timedelta(days=1)) == []  # it stands in for tonight's...
+    assert len(_tick(cfg, db, by_hand + timedelta(hours=25))) == 1  # ...until it's 25 hours old
+    tasks.drain(None, db, None, cfg)
+    # The task records its copy at the time it really ran, so System status is asked at that time too.
+    local = backups.read_status(cfg.data_dir)["local"]
+    assert local["ok"] and local["detail"].startswith(nightly_backup._setting(db, nightly_backup.MADE))
+    caught_up = datetime.fromisoformat(local["last_success"].replace("Z", "+00:00"))
+    assert system_health.check_backup(db, cfg, caught_up + timedelta(minutes=2)).status == "ok"
+    assert len(_tick(cfg, db, night + timedelta(days=2))) == 1  # then back to every night
+
+
+def test_the_nightly_backup_can_be_turned_off_and_says_what_went_wrong(cfg, db, monkeypatch):
+    from datetime import UTC, datetime
+
+    from officesentry import system_health, tasks
+    from officesentry.config import load_config
+
+    monkeypatch.setenv("OFFICESENTRY_BACKUP_CRON", "off")
+    assert load_config(data_dir=cfg.data_dir).backup_cron == ""
+    for name, value in (("BACKUP_CRON", "every night"), ("BACKUP_KEEP", "0")):
+        monkeypatch.setenv(f"OFFICESENTRY_{name}", value)
+        with pytest.raises(ValueError, match=f"OFFICESENTRY_{name}"):
+            load_config(data_dir=cfg.data_dir)
+        monkeypatch.delenv(f"OFFICESENTRY_{name}")
+    assert _tick(cfg, db, datetime.now(UTC)) == []  # off (cfg.backup_cron is "" here)
+    assert "OFFICESENTRY_BACKUP_CRON=off" in system_health.check_backup(db, cfg, datetime.now(UTC)).fix
+
+    cfg.backup_cron = "30 3 * * *"
+    assert "every night at 03:30 (UTC)" in system_health.check_backup(db, cfg, datetime.now(UTC)).fix
+
+    def full(*a, **k):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(backups, "backup", full)
+    assert len(_tick(cfg, db, datetime.now(UTC))) == 1
+    tasks.drain(None, db, None, cfg)
+    task = db.execute("SELECT status, error FROM tasks WHERE kind = 'backup'").fetchone()
+    assert (task["status"], task["error"]) == ("failed", "No backup made: No space left on device.")
+    check = system_health.check_backup(db, cfg, datetime.now(UTC))
+    assert check.summary == "The last backup failed" and check.fix.startswith("No backup made: No space left")

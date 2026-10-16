@@ -16,7 +16,7 @@ import responses
 
 from officesentry import permissions, roles, sso, store
 from officesentry.web import sso as sso_web
-from tests.conftest import PASSWORD, login, make_user
+from tests.conftest import PASSWORD, forged, login, make_user
 from tests.test_client_sign_in import (
     ALPHA,
     BO,
@@ -303,7 +303,7 @@ def test_every_page_client_sign_in_added_shows_a_microsoft_client_nothing_of_ano
         assert resp.status_code == 200 and "another organisation" in text
         assert not [w for w in BRAVO_WORDS if w in text]
     assert [tuple(r) for r in db.execute("SELECT id, sign_in_approved_at FROM tenants ORDER BY id")] == tenants
-    resp = client.get(f"/login/microsoft/callback?admin_consent=True&tenant={BRAVO}&state={state[:-2]}xx")
+    resp = client.get(f"/login/microsoft/callback?admin_consent=True&tenant={BRAVO}&state={forged(state)}")
     assert resp.status_code == 302 and signed_in_as(client) == "jo@alpha.example"
 
 

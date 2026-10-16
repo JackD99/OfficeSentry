@@ -19,6 +19,11 @@ OFFICESENTRY_INSECURE_COOKIES=1 python -m officesentry web   # http://127.0.0.1:
 python -m officesentry worker                                 # second terminal
 ```
 
+On a new data folder the portal prints a one-time link for creating the
+first admin (`python -m officesentry setup-link` prints it again). To work
+with fictional clients instead of an empty portal, load the demo data as the
+[developer guide](DEVELOPING.md#run-it-locally) shows.
+
 Use a virtual environment as above: on Debian or Ubuntu, installing into the
 system Python fails on the apt-installed `blinker` (if you must, add
 `--ignore-installed blinker`).
@@ -97,10 +102,12 @@ with [ShellCheck](https://www.shellcheck.net) at its strictest level:
 `shellcheck --severity=style <file>` (`tests/test_deploy_hardening.py` runs it
 too when it's installed).
 
-CI runs the same on Python 3.11, 3.12 and 3.13 for every pull request, with
-a Docker image build, a dependency audit (`pip-audit`) and a subset on
-Windows. Changes that only touch Markdown, `docs/`, `examples/` or
-`website/` skip the tests, and the **CI passed** check sums it all up. The
+CI runs the same on Python 3.12 for every pull request, with a Docker image
+build, a dependency audit (`pip-audit`) and a subset on Windows, and on 3.11
+and 3.13 too once it's merged (and on a pull request that changes the
+dependencies or the CI workflow). Changes that only touch Markdown, `docs/`,
+`examples/` or `website/` skip the tests, and the **CI passed** check sums it
+all up. The
 Python 3.12 run measures coverage and fails under 90%;
 `pytest -n auto --cov=officesentry` shows it locally. To finish in minutes,
 each Python's tests run in parts on separate machines at once (four for
@@ -136,8 +143,10 @@ together ran every test.
   screenshots in the pinned browser and redraws the PDF pages (from your
   branch merged with main, as the checks compare them), commits what
   changed to the branch, takes the label off and starts the checks again.
-  It only works for branches of this repository, never main or a fork. Look
-  at the new images in the pull request before merging.
+  It only works for branches of this repository, never main or a fork. From
+  a fork, retake them with `--update` as `v2/tests/browser/README.md` and
+  `v2/tests/nightly/README.md` say, and commit them. Look at the new images
+  in the pull request before merging.
 - Mock Microsoft Graph at the HTTP layer with `responses`, never by
   replacing the client class. `tests/seed.py` answers every list a page at
   a time with a next link, as Microsoft does, so a collector that reads one
@@ -158,6 +167,23 @@ together ran every test.
   client's IDs; a new POST route goes in its `FORMS` (the form the route
   accepts) so the walk sends a form the route would act on, not an empty
   one.
+
+<!-- since 2.4.0 -->
+- A collection run that fails for a reason waiting fixes (`worker.passing`:
+  Microsoft busy, throttling or out of reach, the database locked; or a
+  worker that stopped mid-run, `store.expire_run_leases`) gets a `retry_at`
+  (`store.plan_retry`, `RETRY_DELAYS`). Housekeeping queues it again as a
+  run whose `retry_of` is the first failure (`store.queue_retries`), unless
+  something newer of that data source was queued or the client is paused.
+  `alerts.after_run` waits for the last try, and pages show such a failure
+  as being tried again (`store.retry_pending`, the `retrying` filter). A new
+  kind of failure that passes by itself goes in `worker.passing`.
+- The worker's nightly database backup is the `backup` task
+  (`nightly_backup.py`, at `cfg.backup_cron`). It leaves a night to a copy
+  the `backup` command made in the last 25 hours, wherever it wrote (the
+  command's record in `backup-status.json`, or the backups folder), and
+  makes one itself if no newer copy comes `nightly_backup.LATE` after it.
+<!-- /since -->
 
 ## Signing off your commits
 
@@ -183,10 +209,11 @@ The same gates apply to every change, whoever wrote it:
 - Every change is a pull request against `main`; nothing is pushed to `main`
   directly.
 - CI runs `ruff check` and `ruff format --check`, ShellCheck over the shell
-  scripts, the full test suite on Python 3.11, 3.12 and 3.13 (with a 90%
-  floor on line and branch coverage), a Windows subset, a Docker build and
-  `pip-audit` over every lock file on every pull request, and a pull request
-  isn't merged until it's green. The pull request template's checklist
+  scripts, the full test suite on Python 3.12 (with a 90% floor on line and
+  branch coverage), a Windows subset, a Docker build and `pip-audit` over
+  every lock file on every pull request, and a pull request isn't merged
+  until it's green. Every commit on `main` is tested on Python 3.11 and 3.13
+  as well, and a release needs that run to have passed. The pull request template's checklist
   covers migrations, new permissions, the access gate and read-only access.
 - Tests simulate Microsoft Graph and Exchange at the HTTP level, and
   `tests/test_live_fixture.py` replays responses recorded from a real

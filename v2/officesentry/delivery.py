@@ -39,6 +39,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 from . import alerts, issued, mailer, schedule, store, tasks, tenant_groups, upcoming
 from .checks import RULES
 from .db import utcnow
+from .formatting import money
 from .mailer import Email, MailError
 from .reports import (
     branding,
@@ -403,6 +404,23 @@ def initial_period(frequency: str, day_of_week: int, day_of_month: int, hour: in
     return slot(frequency, day_of_week, day_of_month, hour, tz, now)[0]
 
 
+def skip_missed(conn, tenant_id: int, default_tz: str, now: datetime | None = None) -> None:
+    """A client resumed after a pause: its report emails count their latest send time as done, as resuming one
+    schedule does, so what came due while it was paused isn't emailed the moment it's back. A month-end
+    month can still be approved and sent from Month-end. Never moves a schedule back."""
+    now = now or datetime.now(UTC)
+    rows = conn.execute("SELECT * FROM email_schedules WHERE tenant_id = ? AND kind = 'report'", (tenant_id,))
+    for s in rows.fetchall():
+        fresh = initial_period(
+            s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"], schedule_tz(s, default_tz), now
+        )
+        if not period_done(s["last_period"], fresh):
+            conn.execute(
+                "UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
+                (fresh, s["id"]),
+            )
+
+
 def next_send(s, default_tz: str, now: datetime | None = None) -> datetime | None:
     """When the schedule will next send, in its own timezone. None when paused."""
     if not s["enabled"]:
@@ -677,6 +695,12 @@ def build_report_email(
     failing = review.failing
     stale = any(f.stale for f in review.freshness)
     verdict = summary.monthly(review).verdict
+    # The account manager's words for the month, and their own recommendations, lead as they do in the PDF.
+    me = context["month_end"]
+    commentary = [p.strip() for p in (me["commentary"] or "").split("\n\n") if p.strip()]
+    planned = [a for a in me["actions"] if a["status"] != "done"]
+    # Severities by check, as the attached report counts them (not the accounts each one affects).
+    by_check = {s: sum(1 for r in failing if r.severity == s) for s in summary.SEVERITIES}
     subject = (
         fill_placeholders(_field(schedule, "subject", "") or "", tenant["name"], label).strip()
         or f"{tenant['name']} security report · {label}"
@@ -693,6 +717,10 @@ def build_report_email(
         label=label,
         failing=failing[:6],
         more=max(0, len(failing) - 6),
+        by_check=by_check,
+        commentary=commentary,
+        planned=planned[:6],
+        more_planned=max(0, len(planned) - 6),
         files=files,
         stale=stale,
         message=message,
@@ -705,18 +733,31 @@ def build_report_email(
     if message:
         lines += [message, ""]
     # The answer first, as the HTML has it.
-    lines += [f"{verdict.label}: {verdict.headline}", ""]
+    lines += [f"{verdict.label}: {verdict.headline}"] + ([verdict.detail] if verdict.detail else []) + [""]
+    if commentary:
+        lines += [f"From {msp}:"] + [f"{p}" for p in commentary] + [""]
     if stale:
-        lines += ["Some of this tenant's data is more than 36 hours old, so a few figures may be out of date.", ""]
+        lines += [
+            "Some of your organisation's data is more than 36 hours old, so a few figures may be out of date.",
+            "",
+        ]
     for k in review.kpis:
         if k.value is None:
             continue
-        value = f"{review.currency} {k.value:,.2f}" if k.unit == "currency" else f"{k.value:g}{k.unit}"
-        change = f" ({k.delta:+g} in 4 weeks)" if k.delta else ""
+        value = money(k.value, review.currency, 2) if k.unit == "currency" else f"{k.value:g}{k.unit}"
+        change = f" ({k.delta:+g}{' pts' if k.unit == '%' else ''} in 4 weeks)" if k.delta else ""
         lines.append(f"  {k.label}: {value}{change}")
-    lines += ["", f"Needs attention: {plural(len(failing), 'check')}"]
-    for r in failing[:6]:
-        lines.append(f"  [{(r.severity or 'info').upper()}] {r.summary.rstrip('.')}. {r.action}.")
+    if planned:
+        lines += ["", "What we recommend next:"]
+        for a in planned[:6]:
+            target = f" (target: {a['target_label']})" if a["target_label"] else ""
+            detail = f" {a['detail'].rstrip('.')}." if a["detail"] else ""
+            lines.append(f"  - {a['title'].rstrip('.')}.{detail} {a['status_label']}{target}.")
+    breakdown = ", ".join(f"{n} {s}" for s, n in by_check.items() if n)
+    lines += ["", f"Needs attention: {plural(len(failing), 'check')}" + (f" ({breakdown})" if breakdown else "")]
+    if not planned:
+        for r in failing[:6]:
+            lines.append(f"  [{(r.severity or 'info').upper()}] {r.summary.rstrip('.')}. {r.action}.")
     if review.new_count or review.resolved:
         lines.append(f"New: {review.new_count} · Fixed: {len(review.resolved)}")
     if files:
@@ -1225,6 +1266,24 @@ def _send(
     return error
 
 
+def client_off(tenant) -> str | None:
+    """ "archived" or "paused" for a client nothing is collected for or emailed to, else None."""
+    if tenant is None:
+        return None
+    if tenant["archived_at"]:
+        return "archived"
+    return None if tenant["enabled"] else "paused"
+
+
+def not_sending_to(tenant) -> str | None:
+    """Why nothing is emailed to the client (by its timer or by hand), or None."""
+    if (off := client_off(tenant)) is None:
+        return None
+    return (
+        f"{tenant['name']} is {off}, so nothing is sent to it. {'Restore' if off == 'archived' else 'Resume'} it first."
+    )
+
+
 def send_schedule(
     app, conn, vault, schedule, *, trigger: str = "manual", user: str | None = None, now: datetime | None = None
 ) -> str | None:
@@ -1237,6 +1296,8 @@ def send_schedule(
     tenant = None
     if schedule["kind"] == "report":
         tenant = store.get_tenant(conn, schedule["tenant_id"])
+        if refused := not_sending_to(tenant):  # Send now and Retry: the timer skips these already
+            return refused
 
         def build():
             if nothing_collected(conn, tenant["id"]):  # a report with no data would tell the client nothing true
@@ -1520,6 +1581,45 @@ def _alert_resend(conn, delivery) -> tuple:
     return alert, tenant, alerts.opened_items(conn, tenant["id"], ids, alert["min_severity"])
 
 
+def retry_refused(conn, schedule, delivery, default_tz: str, now: datetime | None = None) -> str | None:
+    """Why Retry on a failed scheduled email would send something it shouldn't, or None. Retry sends the
+    schedule's current period, so a row for an earlier one would send the wrong month; one that went out after
+    this attempt failed (the automatic retry) would go twice; and a month approved in Month-end goes as its
+    approved files, which Send again there sends."""
+    period, _ = schedule_slot(schedule, default_tz, now or datetime.now(UTC))
+    if delivery["period"] and delivery["period"] != period:
+        return (
+            f"This email was for {period_label(delivery['period'])} and the schedule has moved on to "
+            f"{period_label(period)}, so it isn't sent again. Send now sends the current one."
+        )
+    later = conn.execute(
+        "SELECT created_at FROM email_deliveries WHERE schedule_id = ? AND period = ? AND status = 'sent'"
+        " AND id > ? ORDER BY id DESC LIMIT 1",
+        (schedule["id"], period, delivery["id"]),
+    ).fetchone()
+    if later:
+        return f"It went out on {day(later['created_at'])} after this attempt failed, so it isn't sent again."
+    approved = conn.execute(
+        "SELECT 1 FROM issued_reports WHERE tenant_id = ? AND period = ? AND trigger = 'approval' LIMIT 1",
+        (schedule["tenant_id"], period),
+    ).fetchone()
+    if _field(schedule, "plan_id") and approved:
+        return "This month was approved in Month-end reporting; send it again from there, with its approved files"
+    return None
+
+
+def superseded(conn, delivery) -> bool:
+    """Whether a failed scheduled email's period went out after it (so it shows no Retry)."""
+    return bool(
+        delivery["schedule_id"]
+        and delivery["period"]
+        and conn.execute(
+            "SELECT 1 FROM email_deliveries WHERE schedule_id = ? AND period = ? AND status = 'sent' AND id > ?",
+            (delivery["schedule_id"], delivery["period"], delivery["id"]),
+        ).fetchone()
+    )
+
+
 def retry_delivery(app, conn, vault, delivery, user: str) -> str | None:
     """Send a failed email again: the schedule's current content, or the same alert."""
     if delivery["schedule_id"]:
@@ -1528,6 +1628,8 @@ def retry_delivery(app, conn, vault, delivery, user: str) -> str | None:
             return "That schedule has been removed"
         if _field(schedule, "on_approval", 0):
             return "This report goes out when its month-end review is approved; send it from Month-end reporting"
+        if refused := retry_refused(conn, schedule, delivery, _cfg(app).timezone):
+            return refused
         if being_sent(conn, schedule, _cfg(app).timezone):
             return BEING_SENT
         return send_schedule(app, conn, vault, schedule, trigger="retry", user=user)
@@ -1557,7 +1659,23 @@ def _due(conn, s, cfg, now: datetime) -> bool:
         tenant = store.get_tenant(conn, s["tenant_id"])
         if tenant is None or not tenant["enabled"] or tenant["archived_at"]:
             return False
+        if _field(s, "plan_id") and _approving(conn, s["tenant_id"], period):
+            return False  # someone approved the month in Month-end: its approved files go instead
     return True
+
+
+def _approving(conn, tenant_id: int, period: str) -> bool:
+    """Whether the month is being approved, or was, in Month-end reporting (which sends its own files)."""
+    from . import month_end  # imports this module
+
+    return (
+        tasks.pending(conn, month_end.approval_key(tenant_id, period)) is not None
+        or conn.execute(
+            "SELECT 1 FROM issued_reports WHERE tenant_id = ? AND period = ? AND trigger = 'approval' LIMIT 1",
+            (tenant_id, period),
+        ).fetchone()
+        is not None
+    )
 
 
 def send_key(s, period: str) -> str:

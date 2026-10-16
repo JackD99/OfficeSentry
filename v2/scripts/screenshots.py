@@ -308,13 +308,13 @@ EXAMPLES = {
         "/tenants/{t}/report.pdf",
         "The Monthly Security & Licensing Review for one client, as sent to them.",
     ),
-    "cyber-essentials-evidence.pdf": (
-        "/tenants/{t}/evidence/cyber-essentials.pdf",
-        "One client judged against Cyber Essentials: each control's verdict, the fixes and the answers for the form.",
-    ),
     "monthly-review-summary.pdf": (
         "/tenants/{t}/report.pdf?appendix=0",
         "The monthly review's two summary pages on their own, without the appendix.",
+    ),
+    "cyber-essentials-evidence.pdf": (
+        "/tenants/{t}/evidence/cyber-essentials.pdf",
+        "One client judged against Cyber Essentials: each control's verdict, the fixes and the answers for the form.",
     ),
     "quarterly-review.pdf": (
         "/tenants/{t}/designs/1.pdf",
@@ -329,7 +329,7 @@ EXAMPLES = {
         "/tenants/{t}/data/sharepoint-storage.pdf",
         "A client nearly out of SharePoint space: where it went, when it fills up, what to clean up.",
     ),
-    "mfa-coverage.pdf": ("/tenants/{t}/data/mfa.pdf", "Who has MFA registered and who is enforced to use it."),
+    "mfa-coverage.pdf": ("/tenants/{t}/data/mfa.pdf", "Who has MFA registered, and who is required to use it."),
     "mailbox-permissions.pdf": (
         "/tenants/{t}/data/mailbox-permissions.pdf",
         "Full access, send as and send on behalf, with leavers and outsiders flagged.",
@@ -352,7 +352,7 @@ EXAMPLES = {
     ),
     "passwords-and-sign-in-methods.pdf": (
         "/tenants/{t}/data/auth-methods.pdf",
-        "How people sign in, how strong that is, and admins without passkeys.",
+        "How people sign in, how strong that is, and admins without a phishing-resistant method.",
     ),
     "licences-and-subscriptions.pdf": (
         "/tenants/{t}/data/subscriptions.pdf",
