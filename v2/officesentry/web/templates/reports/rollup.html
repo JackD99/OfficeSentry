@@ -14,7 +14,7 @@
 {% elif c.kind == 'pct' %}{{ '%g'|format(v) }}%
 {% elif c.kind == 'num' %}{{ '%g'|format(v) }}
 {% else %}{{ v }}{% endif %}
-{% set d = row.deltas.get(c.key) %}{% if d %} <span class="{{ 'better' if (d > 0) == (c.better == 'up') else 'worse' }} small">{{ '%+g'|format(d) }}</span>{% endif %}
+{% set d = row.deltas.get(c.key) %}{% if d %} <span class="{{ 'muted' if not c.better else ('better' if (d > 0) == (c.better == 'up') else 'worse') }} small">{{ '%+g'|format(d) }}</span>{% endif %}
 {%- endmacro %}
 
 {% block doc_title %}{{ rollup.title }}{% endblock %}
