@@ -61,7 +61,7 @@
           <div class="title">{{ r.summary|trim('.') }}</div>
           <div class="desc">{{ r.action }}.</div>
         </div>
-        <span class="pill" title="Accounts or items affected">{{ r.findings|length }}</span>
+        <span class="count-badge" title="Accounts or items affected">{{ r.findings|length }}</span>
       </li>
       {% endfor %}
     </ul>
