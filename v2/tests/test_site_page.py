@@ -165,7 +165,7 @@ def test_report_cells_link_to_the_site_page(db, two_tenants):
     report = data_reports.build(db, tenant, "sharepoint")
     every = next(s for s in report.sections if s.title == "All sites")
     cells = {str(r[0]): r[0] for r in every.rows}
-    finance = cells[sd.FINANCE]
+    finance = cells["Finance"]  # named as the site's page is
     assert finance.page_href == f"/tenants/{alpha}/sites/{FINANCE}"
     assert finance.safe_href == sd.FINANCE  # PDFs and spreadsheets keep the address
     storage = data_reports.build(db, tenant, "sharepoint-storage")
