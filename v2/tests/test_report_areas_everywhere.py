@@ -363,7 +363,7 @@ def test_home_pages_count_only_what_the_person_sees(client, db, two_tenants):
     role_user(db, "fl", "first_line", tenants=[bravo])
     _switch(client, "fl")
     today = client.get("/today").data.decode()
-    assert _tile(today, "New critical and high") == "0" and "Failing:" not in today
+    assert _tile(today, "New critical and high") == "0" and 'data-kind="finding"' not in today
 
 
 @pytest.mark.parametrize("how", HOW)
