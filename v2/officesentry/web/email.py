@@ -180,6 +180,7 @@ def tenant_emails(tenant_id: int):
     deliveries = g.db.execute(
         f"SELECT * FROM email_deliveries WHERE tenant_id = ?{kinds} ORDER BY id DESC LIMIT 25", (t["id"],)
     ).fetchall()
+    stale = _superseded(deliveries) if staff else set()
     if not staff:
         deliveries = [c for c in (_client_copy(d, contacts) for d in deliveries) if c]
     alert = _decorate_alert(g.db.execute("SELECT * FROM email_alerts WHERE tenant_id = ?", (t["id"],)).fetchone())
@@ -193,6 +194,7 @@ def tenant_emails(tenant_id: int):
         schedules=schedules,
         last=last,
         deliveries=deliveries,
+        stale=stale,
         alert=alert,
         contacts=contacts,
         adds_contacts=staff and not _plan_sends_more(t["id"]),
@@ -205,6 +207,11 @@ def tenant_emails(tenant_id: int):
             (t["id"], _days_ago(30)),
         ).fetchone()[0],
     )
+
+
+def _superseded(deliveries) -> set[int]:
+    """Failed emails whose period went out after them: Retry would send it twice, so they show none."""
+    return {d["id"] for d in deliveries if d["status"] == "failed" and delivery.superseded(g.db, d)}
 
 
 def _client_copy(d, contacts) -> dict | None:
@@ -489,7 +496,7 @@ def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: 
             if any(existing[k] != values[k] for k in timing):
                 g.db.execute(
                     "UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
-                    (fresh_period, schedule_id),
+                    (_not_back(existing["last_period"], fresh_period), schedule_id),
                 )
             action = "email_schedule_updated"
         delivery.set_recipients(g.db, "schedule", schedule_id, ids)
@@ -617,6 +624,12 @@ def _on_plan(s):
     return _back(s["tenant_id"])
 
 
+def _not_back(last: str | None, fresh: str) -> str:
+    """The period a resumed or re-timed schedule counts as done: the current one, unless a later one is done
+    already (a month approved and sent early), which the timer would otherwise send again."""
+    return last if delivery.period_done(last, fresh) else fresh
+
+
 @bp.post("/schedules/<int:schedule_id>/toggle")
 @needs("emails.manage")
 def toggle_schedule(schedule_id: int):
@@ -631,7 +644,7 @@ def toggle_schedule(schedule_id: int):
             )
             g.db.execute(
                 "UPDATE email_schedules SET enabled = 1, last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
-                (period, s["id"]),
+                (_not_back(s["last_period"], period), s["id"]),
             )
         else:
             g.db.execute("UPDATE email_schedules SET enabled = 0 WHERE id = ?", (s["id"],))
@@ -960,6 +973,7 @@ def overview():
         coming_up=coming_up,
         view_emails=view_emails,
         deliveries=deliveries,
+        stale=_superseded(deliveries),
         tenants=tenants,
         failing=failing,
         last=_last_errors([s["id"] for s in failing]),
