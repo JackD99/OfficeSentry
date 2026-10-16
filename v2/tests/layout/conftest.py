@@ -124,6 +124,12 @@ RESOLVERS = {
     "run_id": lambda site, browser, page, tenant: site.query(
         "SELECT id FROM runs WHERE tenant_id = ? ORDER BY id DESC LIMIT 1", tenant
     ),
+    # The open finding with the longest account name and detail, so the sheet is tried at its widest.
+    "finding_id": lambda site, browser, page, tenant: site.query(
+        "SELECT id FROM findings WHERE tenant_id = ? AND resolved_at IS NULL"
+        " ORDER BY length(subject) + length(detail) DESC, id LIMIT 1",
+        tenant,
+    ),
     "schedule_id": lambda site, browser, page, tenant: site.query(
         "SELECT id FROM email_schedules WHERE tenant_id = ? ORDER BY id LIMIT 1", tenant
     ),

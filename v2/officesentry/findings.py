@@ -79,10 +79,15 @@ def sync(conn, tenant, now: datetime | None = None) -> dict:
                     )
                     stats["reopened"] += int(reopened)
                     if reopened:
+                        # A problem that came back is a fresh one: nobody holds it and it isn't snoozed. The
+                        # note stays, since why it wasn't fixed is still worth knowing.
+                        _clear(conn, row["id"], hand=True)
                         opened.append(row["id"])
             for key, row in existing.items():
                 if key not in current and key not in r.keep and row["resolved_at"] is None:
                     conn.execute("UPDATE findings SET resolved_at = ? WHERE id = ?", (ts, row["id"]))
+                    # It keeps its holder, so what each person closed can be counted; a snooze is over.
+                    _clear(conn, row["id"], hand=False)
                     stats["resolved"] += 1
     return {**stats, "opened": opened}
 
@@ -138,3 +143,68 @@ def unaccept(conn, finding_id: int) -> None:
         " accepted_until = NULL WHERE id = ?",
         (finding_id,),
     )
+
+
+# -- Acting on a finding (migration 0048) -------------------------------------------------------------
+#
+# What the team does with a finding, kept on its row in Office Sentry's own database and never written to a
+# client's tenant: a staff note, who on the team holds it, and a snooze that keeps it out of Today for a
+# while. None of it reaches a client's reports, PDFs, emails or pages.
+
+NOTE_LENGTH = 2000
+
+
+def _clear(conn, finding_id: int, hand: bool) -> None:
+    columns = "snoozed_until = NULL, snoozed_by = NULL, snoozed_at = NULL"
+    if hand:
+        columns += ", handed_to = NULL, handed_by = NULL, handed_at = NULL"
+    conn.execute(f"UPDATE findings SET {columns} WHERE id = ?", (finding_id,))
+
+
+def note(conn, finding_id: int, text: str | None, by: str) -> None:
+    """Keep a staff note on the finding, replacing the last one. Empty text removes it."""
+    text = (text or "").strip()[:NOTE_LENGTH]
+    if text:
+        conn.execute(
+            "UPDATE findings SET note = ?, note_by = ?, note_at = ? WHERE id = ?",
+            (text, by, datetime.now(UTC).strftime(ISO), finding_id),
+        )
+    else:
+        conn.execute("UPDATE findings SET note = NULL, note_by = NULL, note_at = NULL WHERE id = ?", (finding_id,))
+
+
+def hand(conn, finding_id: int, to_user_id: int | None, by: str) -> None:
+    """Hand the finding to a colleague (an enabled staff account), or to nobody. Whether that colleague may
+    see the client is the caller's check (``web/finding.holders``): this only refuses what no caller could
+    mean, a client account or a disabled or unknown one."""
+    if to_user_id is None:
+        _clear(conn, finding_id, hand=True)
+        return
+    row = conn.execute(
+        "SELECT 1 FROM users WHERE id = ? AND role <> 'client' AND disabled = 0", (to_user_id,)
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"not an enabled staff account: {to_user_id}")
+    conn.execute(
+        "UPDATE findings SET handed_to = ?, handed_by = ?, handed_at = ? WHERE id = ?",
+        (to_user_id, by, datetime.now(UTC).strftime(ISO), finding_id),
+    )
+
+
+def snooze(conn, finding_id: int, until: str | None, by: str) -> None:
+    """Keep the finding out of Today until ``until`` (an ISO timestamp in UTC), or end a snooze (None)."""
+    if until is None:
+        conn.execute(
+            "UPDATE findings SET snoozed_until = NULL, snoozed_by = NULL, snoozed_at = NULL WHERE id = ?",
+            (finding_id,),
+        )
+        return
+    conn.execute(
+        "UPDATE findings SET snoozed_until = ?, snoozed_by = ?, snoozed_at = ? WHERE id = ?",
+        (until, by, datetime.now(UTC).strftime(ISO), finding_id),
+    )
+
+
+def is_snoozed(row, now: datetime | None = None) -> bool:
+    until = row["snoozed_until"]
+    return bool(until) and until > (now or datetime.now(UTC)).strftime(ISO)

@@ -34,6 +34,7 @@ from . import (
     email,
     evidence,
     filters,
+    finding,
     group_pages,
     groups,
     history,
@@ -382,6 +383,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(admin.bp)
     app.register_blueprint(role_pages.bp)
     app.register_blueprint(reports.bp)
+    app.register_blueprint(finding.bp)
     app.register_blueprint(projects.bp)
     app.register_blueprint(email.bp)
     app.register_blueprint(alerts.bp)

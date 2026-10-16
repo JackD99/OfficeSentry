@@ -231,6 +231,20 @@ changed. Site addresses in reports and on group pages open it.
   </tr>
 </table>
 
+<!-- since 2.5.0 -->
+### Acting on a finding
+
+Open any row of a client's Findings tab and the finding's sheet opens beside the table: the evidence behind it
+(for an account, the facts from its page), its history (first seen, came back, accepted and by whom), where else
+the same check fails across your clients, the fix as numbered steps, and the text to act on it. **Copy for a
+ticket** puts a ready-made ticket on the clipboard, **Email the contact** opens a prefilled email to the client's
+contact in your own mail app (Office Sentry sends nothing itself), and **Accept risk** is there too. The team can
+keep a note on a finding and hand it to a colleague who sees that client; notes and hand-offs stay inside the
+team and never reach a client's reports or emails. Nothing is ever written to the client's tenant.
+
+![A finding's sheet beside the Findings table: evidence, history, where else it fails, the fix and the ticket text](docs/screenshots/finding-sheet.png)
+<!-- /since -->
+
 ### Across all clients, and what changed
 
 The **Clients** page puts every client side by side, worst first. **All clients** compares any report across every
