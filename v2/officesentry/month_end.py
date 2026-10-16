@@ -438,7 +438,7 @@ def _review_facts(conn, tenant, now: datetime, stored: Rows | None) -> ReviewFac
             tenant,
             fingerprint,
             {
-                "verdict": [verdict.tone, verdict.label, verdict.headline],
+                "verdict": [verdict.tone, verdict.label, verdict.headline, verdict.detail],
                 "oldest": facts.oldest,
                 "not_run": facts.not_run,
                 "missing": list(facts.missing),

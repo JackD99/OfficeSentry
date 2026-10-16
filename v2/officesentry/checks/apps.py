@@ -113,7 +113,7 @@ def app_risks(snap: TenantSnapshot) -> list[dict] | None:
     "risky_app_permissions",
     "Third-party apps hold only the access they need",
     "Apps",
-    "Review each app with the client. Remove apps nobody recognises (Enterprise applications > Delete), "
+    "Review each app with the people who use it. Remove apps nobody recognises (Enterprise applications > Delete), "
     "and for the rest confirm the vendor and that it still needs mailbox or file access.",
 )
 def risky_app_permissions(snap: TenantSnapshot, now: datetime):
