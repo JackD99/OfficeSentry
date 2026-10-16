@@ -157,6 +157,11 @@ Rules:
   `--bad` and ask before they act.
 - **Icons**: one set, drawn on a 24px grid with round ends, in `_macros.html` (`icon()`). They sit beside a
   word, never alone without a label or a tooltip.
+- **The mark**: the shield with its tick, white on the bottle-green gradient (`--logo-from` to `--logo-to`),
+  in the menu, the browser tab (`v2/officesentry/web/static/favicon.svg`, also the sign-in page's logo when
+  the MSP has none) and the website (`website/assets/`: `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`
+  and the link preview `social-card.png`). Change them together. An MSP's own logo replaces it in the portal,
+  never on the website.
 
 ## Checking a change
 
