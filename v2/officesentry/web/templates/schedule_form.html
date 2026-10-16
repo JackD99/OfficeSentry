@@ -60,7 +60,7 @@
         <option value="">Every client</option>
         {% for gr in groups %}<option value="{{ gr.id }}"{% if s.group_id == gr.id %} selected{% endif %}>{{ gr.category ~ ': ' if gr.category }}{{ gr.name }} ({{ gr.tenants|plural('client') }})</option>{% endfor %}
       </select>
-      <span class="hint">Each view stacks these clients' rows under a Client column, like the All clients report.</span></label>
+      <span class="hint">Each view stacks these clients' rows under a Client column, like Every row on the Clients page.</span></label>
     {% endif %}
     <div class="label-sm">Your saved views <span class="muted">· PDF and XLSX have the tables the view shapes; CSV is one file per table</span></div>
     {{ view_choices(view_options) }}

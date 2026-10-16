@@ -5,7 +5,7 @@
 {% from "_across.html" import across_head with context %}
 {% from "_report_table.html" import report_table with context %}
 {% set report = data.report %}
-{% block title %}{{ report.title }} · Every row · All clients · Office Sentry{% endblock %}
+{% block title %}{{ report.title }} · Every row · Clients · Office Sentry{% endblock %}
 {% macro saved_views() -%}
 {% set current = saved|selectattr('query', 'equalto', view_query)|first if view_query else none %}
 <details class="menu" id="views-menu">
