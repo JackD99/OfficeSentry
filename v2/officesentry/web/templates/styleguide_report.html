@@ -35,8 +35,8 @@
 <section id="figures" class="keep">
   <h2>Key figures <span class="count">ui.kpi, ui.figure, ui.breakdown, sparkline</span></h2>
   <div class="kpis">
-    {{ ui.kpi('Secure Score', '33%', '<b>+2%</b> <span class="vs">vs last month</span>', 'better', meter_value=33, spark=[29, 30, 30, 31, 31, 33], spark_label='Secure Score since 12 Jul 2026: from 29% to 33%') }}
-    {{ ui.kpi('Licence waste a month', '£164', '<b>+£12</b> <span class="vs">vs last month</span>', 'worse') }}
+    {{ ui.kpi('Secure Score', '33%', '↑ 2 pts <span class="vs">since 14 September</span>', 'better', meter_value=33, spark=[29, 30, 30, 31, 31, 33], spark_label='Secure Score since 12 Jul 2026: from 29% to 33%') }}
+    {{ ui.kpi('Licence waste a month', '£164', '↑ £12 <span class="vs">since 14 September</span>', 'worse') }}
     {{ ui.kpi('Users with MFA', none, note='Needs the Authentication methods report') }}
   </div>
   {{ ui.breakdown('Open findings by severity', [('Critical', 1, 'critical'), ('High', 10, 'high'), ('Medium', 12, 'medium'), ('Low', 3, 'low'), ('Passing', 28, 'ok')]) }}

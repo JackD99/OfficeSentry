@@ -4,6 +4,8 @@ the report does, and leads with the answer and the MSP's own words."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from markupsafe import escape
 
 from officesentry import delivery, month_end, store
@@ -130,3 +132,29 @@ def test_the_sign_in_page_says_who_to_ask(client, db):
     db.execute("DELETE FROM settings WHERE key IN ('brand_support_email', 'brand_support_phone')")
     _brand(db, contact="0161 496 0000")
     assert "Trouble signing in? Contact Harbour IT (0161 496 0000)." in _text(client.get("/login"))
+
+
+def test_changes_in_a_percentage_are_in_points_wherever_a_client_reads_them(app, client, db, two_tenants, monkeypatch):
+    """Secure Score from 35% to 42% is 7 points, as on the Overview: in What changed and its PDF, and in the digest."""
+    from officesentry.reports import export
+
+    alpha, _ = two_tenants
+    old = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute(
+        "INSERT INTO metrics (run_id, tenant_id, key, value, captured_at) VALUES (NULL, ?, ?, ?, ?)",
+        (alpha, "secure_score.pct", 35.0, old),
+    )
+    seed_tenant(db, alpha)  # now 42%
+    make_user(db, "admin")
+    login(client, "admin")
+    page = _text(client.get(f"/tenants/{alpha}/changes"))
+    assert "42%" in page and "+7 pts</span>" in page and "+7</span>" not in page
+    html = []
+    monkeypatch.setattr(export, "to_pdf", lambda page, base: html.append(page) or b"%PDF-1.7")
+    client.get(f"/tenants/{alpha}/changes.pdf")
+    assert "+7 pts</span>" in html[0] and "+7</span>" not in html[0]
+
+    digest = delivery.build_digest_email(
+        app, db, _row(db, "email_schedules", _schedule(db, None, [], kind="digest")), []
+    )
+    assert "+7 pts</span>" in digest.email.html and "+7</span>" not in digest.email.html

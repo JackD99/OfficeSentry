@@ -97,9 +97,11 @@ def test_the_lock_files_pin_every_dependency_with_hashes():
     image, dev = _pins("requirements.txt"), _pins("requirements-dev.txt")
     project = tomllib.loads((V2 / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     for requirement in project["dependencies"] + project["optional-dependencies"]["pdf"]:
-        if "win32'" in requirement and "!=" not in requirement:
-            continue  # Windows only; the image and CI are Linux
         name = re.match(r"[A-Za-z0-9_.-]+", requirement)[0].lower()
+        if "win32'" in requirement and "!=" not in requirement:
+            # Windows only: not in the image, but CI's Windows job installs from the dev lock.
+            assert name in dev, f"{name} is missing from requirements-dev.txt: add it to the dev extra"
+            continue
         assert name in image, f"{name} is missing from requirements.txt: refresh the lock (CONTRIBUTING.md)"
     # CI tests the versions the image ships.
     assert {k: v for k, v in dev.items() if k in image} == image

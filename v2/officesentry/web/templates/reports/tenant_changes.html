@@ -41,7 +41,7 @@
     <tr><td>{{ f.label }}</td>
       <td class="num">{% if f.before is not none %}{{ '%g'|format(f.before) }}{{ f.unit }}{% else %}–{% endif %}</td>
       <td class="num">{{ '%g'|format(f.after) }}{{ f.unit }}</td>
-      <td class="num">{% if f.delta %}<span class="{{ f.trend }}">{{ '%+g'|format(f.delta) }}</span>{% else %}–{% endif %}</td></tr>
+      <td class="num">{% if f.delta %}<span class="{{ f.trend }}">{{ '%+g'|format(f.delta) }}{{ ' pts' if f.unit == '%' }}</span>{% else %}–{% endif %}</td></tr>
     {% endfor %}</tbody>
   </table></div>
 </section>
