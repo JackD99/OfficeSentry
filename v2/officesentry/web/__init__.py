@@ -25,6 +25,7 @@ from . import (
     activity,
     admin,
     alerts,
+    appearance,
     auth,
     branding,
     client_access,
@@ -251,6 +252,8 @@ def create_app(cfg: Config | None = None) -> Flask:
         return {
             "current_user": user,
             "current_role": a.role if a else None,
+            # Light or dark and the colour theme this person chose (Account, Appearance): base.html's <html>.
+            "look": appearance.look(user),
             "csp_nonce": g.get("csp_nonce", ""),
             "worker_down": worker_down,
             "expiring_certificates": certificates,

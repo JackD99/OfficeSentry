@@ -103,6 +103,32 @@
 </section>
 {% endif %}
 
+<section class="card" id="appearance">
+  <h2>Appearance</h2>
+  <p class="muted">How Office Sentry looks on your screen. Nobody else's changes{% if themes %}, and client reports, PDFs and emails keep your company's branding{% endif %}.</p>
+  <form method="post" action="{{ url_for('auth.choose_appearance') }}">{{ csrf() }}
+    <div{% if themes %} class="grid-2"{% endif %}>
+    <fieldset class="choices">
+      <legend>Light or dark</legend>
+    {% for key, (label, about) in modes.items() %}
+      <label class="choice"><input type="radio" name="theme" value="{{ key }}"{% if key == mode_choice %} checked{% endif %}>
+        <span><span class="choice-title">{{ label }}</span>{% if about %}<span class="hint">{{ about }}</span>{% endif %}</span></label>
+    {% endfor %}
+    </fieldset>
+    {% if themes %}
+    <fieldset class="choices">
+      <legend>Colour</legend>
+    {% for key, label in themes.items() %}
+      <label class="choice"><input type="radio" name="accent" value="{{ key }}"{% if key == theme_choice %} checked{% endif %}>
+        <span class="choice-title"><span class="swatch" data-accent="{{ key }}" aria-hidden="true"></span>{{ label }}</span></label>
+    {% endfor %}
+    </fieldset>
+    {% endif %}
+    </div>
+    <div class="form-actions"><button class="primary">Save</button></div>
+  </form>
+</section>
+
 <section class="card flush">
   <div class="card-head"><h2>Where you're signed in</h2>
     {% if sessions|length > 1 %}

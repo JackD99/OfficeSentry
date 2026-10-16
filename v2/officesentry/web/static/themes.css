@@ -1,0 +1,99 @@
+/* Colour themes a member of staff picks for their own screen (Account, Appearance; web/appearance.py).
+   A theme changes only the Accent and Sidebar groups of tokens.css: paper, ink, status and severity stay,
+   so findings read the same in every theme. Loaded by base.html only, never by report.css, so client
+   reports, PDFs and emails keep the MSP's branding.
+
+   <html data-accent="..."> picks a theme for the page, and any element with data-accent shows that theme's
+   colours inside it (the swatches on the Account page). Each theme is three blocks: light, dark when the
+   device is dark, and dark when the person chose Dark. Every one meets the contrast rules in tokens.css,
+   and green is tokens.css's own values (tests/test_appearance.py checks both). */
+
+/* -- Bottle green (the default) ------------------------------------------------------------------------ */
+[data-accent="green"] {
+  --accent: #1d5c4b; --accent-hover: #154638; --accent-soft: #e5efea; --accent-text: #ffffff;
+  --sidebar: #12302a; --sidebar-text: #cfdcd5; --sidebar-muted: #93aaa0; --sidebar-active: #1c4238;
+  --sidebar-strong: #ffffff; --sidebar-line: #224a3f; --sidebar-marker: #9fd8bf;
+  --logo-from: #2f7d66; --logo-to: #1d5c4b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-accent="green"], :root:not([data-theme="light"]) [data-accent="green"] {
+    --accent: #79c9aa; --accent-hover: #9edbc3; --accent-soft: #16302a; --accent-text: #0e1412;
+    --sidebar: #0a1613; --sidebar-active: #15302a; --sidebar-line: #18332c;
+  }
+}
+:root[data-theme="dark"][data-accent="green"], :root[data-theme="dark"] [data-accent="green"] {
+  --accent: #79c9aa; --accent-hover: #9edbc3; --accent-soft: #16302a; --accent-text: #0e1412;
+  --sidebar: #0a1613; --sidebar-active: #15302a; --sidebar-line: #18332c;
+}
+
+/* -- Navy ----------------------------------------------------------------------------------------------- */
+[data-accent="navy"] {
+  --accent: #1f4b8f; --accent-hover: #173a70; --accent-soft: #e7edf7; --accent-text: #ffffff;
+  --sidebar: #14233d; --sidebar-text: #d0dae9; --sidebar-muted: #97a8c3; --sidebar-active: #1f3456;
+  --sidebar-strong: #ffffff; --sidebar-line: #253b5f; --sidebar-marker: #a8c4ee;
+  --logo-from: #3366b3; --logo-to: #1f4b8f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-accent="navy"], :root:not([data-theme="light"]) [data-accent="navy"] {
+    --accent: #93b6ee; --accent-hover: #b6cdf4; --accent-soft: #17233a; --accent-text: #0e1412;
+    --sidebar: #0a1220; --sidebar-active: #172741; --sidebar-line: #1b2b45;
+  }
+}
+:root[data-theme="dark"][data-accent="navy"], :root[data-theme="dark"] [data-accent="navy"] {
+  --accent: #93b6ee; --accent-hover: #b6cdf4; --accent-soft: #17233a; --accent-text: #0e1412;
+  --sidebar: #0a1220; --sidebar-active: #172741; --sidebar-line: #1b2b45;
+}
+
+/* -- Claret --------------------------------------------------------------------------------------------- */
+[data-accent="claret"] {
+  --accent: #8c2a3e; --accent-hover: #6e1f30; --accent-soft: #f7e9ec; --accent-text: #ffffff;
+  --sidebar: #341620; --sidebar-text: #ecd6db; --sidebar-muted: #c39ca5; --sidebar-active: #4b2130;
+  --sidebar-strong: #ffffff; --sidebar-line: #542535; --sidebar-marker: #f2b0bf;
+  --logo-from: #b03e55; --logo-to: #8c2a3e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-accent="claret"], :root:not([data-theme="light"]) [data-accent="claret"] {
+    --accent: #ee9fb0; --accent-hover: #f5c1cc; --accent-soft: #371a22; --accent-text: #0e1412;
+    --sidebar: #1c0b10; --sidebar-active: #33161f; --sidebar-line: #3a1a24;
+  }
+}
+:root[data-theme="dark"][data-accent="claret"], :root[data-theme="dark"] [data-accent="claret"] {
+  --accent: #ee9fb0; --accent-hover: #f5c1cc; --accent-soft: #371a22; --accent-text: #0e1412;
+  --sidebar: #1c0b10; --sidebar-active: #33161f; --sidebar-line: #3a1a24;
+}
+
+/* -- Graphite ------------------------------------------------------------------------------------------- */
+[data-accent="graphite"] {
+  --accent: #3d4b58; --accent-hover: #2c3742; --accent-soft: #eaeef1; --accent-text: #ffffff;
+  --sidebar: #20272d; --sidebar-text: #d5dbe0; --sidebar-muted: #9ba6af; --sidebar-active: #2f3941;
+  --sidebar-strong: #ffffff; --sidebar-line: #36414a; --sidebar-marker: #bccad6;
+  --logo-from: #5a6b7c; --logo-to: #3d4b58;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-accent="graphite"], :root:not([data-theme="light"]) [data-accent="graphite"] {
+    --accent: #adbccb; --accent-hover: #c9d4de; --accent-soft: #1f272e; --accent-text: #0e1412;
+    --sidebar: #0f1316; --sidebar-active: #20282e; --sidebar-line: #252d34;
+  }
+}
+:root[data-theme="dark"][data-accent="graphite"], :root[data-theme="dark"] [data-accent="graphite"] {
+  --accent: #adbccb; --accent-hover: #c9d4de; --accent-soft: #1f272e; --accent-text: #0e1412;
+  --sidebar: #0f1316; --sidebar-active: #20282e; --sidebar-line: #252d34;
+}
+
+/* -- Plum ----------------------------------------------------------------------------------------------- */
+[data-accent="plum"] {
+  --accent: #6b3d7e; --accent-hover: #542f63; --accent-soft: #f2eaf5; --accent-text: #ffffff;
+  --sidebar: #2b1934; --sidebar-text: #e4d6ea; --sidebar-muted: #b69fc1; --sidebar-active: #3e254b;
+  --sidebar-strong: #ffffff; --sidebar-line: #462a54; --sidebar-marker: #dab7ea;
+  --logo-from: #8c57a3; --logo-to: #6b3d7e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-accent="plum"], :root:not([data-theme="light"]) [data-accent="plum"] {
+    --accent: #d2abe3; --accent-hover: #e3c8ee; --accent-soft: #2b1d34; --accent-text: #0e1412;
+    --sidebar: #150c1a; --sidebar-active: #2c1b35; --sidebar-line: #321f3b;
+  }
+}
+:root[data-theme="dark"][data-accent="plum"], :root[data-theme="dark"] [data-accent="plum"] {
+  --accent: #d2abe3; --accent-hover: #e3c8ee; --accent-soft: #2b1d34; --accent-text: #0e1412;
+  --sidebar: #150c1a; --sidebar-active: #2c1b35; --sidebar-line: #321f3b;
+}
