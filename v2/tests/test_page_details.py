@@ -44,7 +44,7 @@ def test_month_end_arrows_name_their_months(client, db, two_tenants):
     assert 'aria-label="Next month, February 2026">February &rarr;</a>' in page
     # Named arrows widen the buttons, so they wrap under the title rather than squeeze it onto two lines.
     assert '<div class="page-head month-head">' in page
-    css = (Path(__file__).parents[1] / "officesentry/web/static/app.css").read_text()
+    css = (Path(__file__).parents[1] / "officesentry/web/static/app.css").read_text(encoding="utf-8")
     assert ".page-head.month-head > :first-child:not(:only-child) { flex-basis: auto; }" in css
 
 
