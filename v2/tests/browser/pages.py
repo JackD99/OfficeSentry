@@ -53,7 +53,7 @@ PAGES = [
     Page("manage-tenant", "/tenants/{t}/manage"),
     Page("onboarding", "/tenants/{o}"),
     Page("reports-library", "/reports"),
-    Page("all-tenants", "/across/review"),
+    Page("all-tenants", "/across/mfa"),
     Page("checks-matrix", "/across/checks"),
     Page("what-changed", "/changes"),
     Page("projects", "/projects"),

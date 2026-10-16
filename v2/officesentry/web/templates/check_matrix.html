@@ -21,7 +21,7 @@
 {%- else %}<span class="muted" title="{{ c.summary }}"><span class="chk unavailable"></span> Not checked</span>{% endif %}
 {%- endmacro %}
 {% block content %}
-{{ across_head('checks', main) }}
+{{ across_head('checks', main, count=matrix.rows|length) }}
 
 {% if not matrix.rows %}
 <div class="card empty">

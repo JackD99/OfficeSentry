@@ -154,7 +154,9 @@ def _whole(value):
 # -- Monthly review ----------------------------------------------------------------
 
 
-def review_rollup(conn, tenants, now: datetime, cached: bool = False) -> Rollup:
+def review_rollup(conn, tenants, now: datetime, cached: bool = False, built: dict | None = None) -> Rollup:
+    """Every tenant's monthly review figures. ``built`` (tenant id -> ``rollup_row``) reuses rows the page
+    has already built for its headline figures, so each tenant is read once."""
     columns = [
         Column("open", "Open findings", "sev", hint="Critical, high, medium and low"),
         Column("new", "New in 4 weeks"),
@@ -169,7 +171,7 @@ def review_rollup(conn, tenants, now: datetime, cached: bool = False) -> Rollup:
     rows = []
     for t in tenants:
         try:
-            data = rollup_row(conn, t, now, cached=cached)
+            data = built[t["id"]] if built and t["id"] in built else rollup_row(conn, t, now, cached=cached)
         except Exception as exc:  # one broken tenant mustn't blank the rollup
             logging.getLogger(__name__).exception("Review rollup failed for tenant %s", t["id"])
             rows.append(RollupRow(dict(t), note=f"Couldn't be built: {type(exc).__name__}"))
@@ -194,7 +196,6 @@ def review_rollup(conn, tenants, now: datetime, cached: bool = False) -> Rollup:
         rows,
         now,
         currency=setting(conn, "currency", "GBP"),
-        tenant_link="review",
         footnote="Changes are over the last 4 weeks. Licence waste counts licences that are unassigned "
         "or held by disabled or inactive users, priced under Licence prices.",
     )

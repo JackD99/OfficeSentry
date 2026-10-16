@@ -142,8 +142,12 @@ def test_rollup_pages_and_downloads(client, db, vault, two_tenants):
     auditdata.everywhere(db, vault)  # the add-on's report too
     make_user(db, "admin")
     login(client, "admin")
+    # The monthly review across every client is the Clients page itself; its old address goes there.
+    assert client.get("/across/review").headers["Location"] == "/"
+    assert client.get("/across").headers["Location"] == "/"
+    assert client.get("/across?key=review").headers["Location"] == "/"
     for key, _title in rollups.available():
-        page = client.get(f"/across/{key}")
+        page = client.get("/" if key == "review" else f"/across/{key}")
         assert page.status_code == 200, key
         assert "Alpha Ltd" in page.get_data(as_text=True)
         # Only the insurance evidence matrix (a column per control) says it scrolls on a laptop by design.
@@ -175,10 +179,10 @@ def test_all_clients_picks_reports_from_the_all_reports_menu(client, db, vault, 
     auditdata.everywhere(db, vault)  # the add-on's report too
     make_user(db, "admin")
     login(client, "admin")
-    page = client.get("/across/review").get_data(as_text=True)
+    page = client.get("/").get_data(as_text=True)
     picker = _picker(page)
-    hrefs = re.findall(r'href="(/across/[^"]+)"', picker)
-    assert hrefs[:3] == ["/across/review", "/across/evidence", "/across/checks"]
+    hrefs = re.findall(r'href="(/|/across/[^"]+)"', picker)  # the summaries, Checks and every report
+    assert hrefs[:3] == ["/", "/across/evidence", "/across/checks"]
     assert set(hrefs[3:]) == {f"/across/{key}" for key in data_reports.REPORTS}
     assert len(hrefs) == len(data_reports.REPORTS) + 3
     assert re.findall(r'aria-current="page">([^<]+)<', picker) == ["Monthly review"]
@@ -187,7 +191,7 @@ def test_all_clients_picks_reports_from_the_all_reports_menu(client, db, vault, 
     assert client.get("/across?key=checks").headers["Location"].endswith("/across/checks")
 
     rows = _picker(client.get("/across/mfa/rows", follow_redirects=True).get_data(as_text=True))
-    assert 'href="/across/inbox-rules/rows"' in rows and 'href="/across/review"' in rows
+    assert 'href="/across/inbox-rules/rows"' in rows and 'href="/"' in rows
     assert re.findall(r'aria-current="page">([^<]+)<', rows) == ["MFA coverage"]
     assert '<span class="report-area">Identity and access</span>' in rows
 
@@ -197,7 +201,9 @@ def test_all_clients_picker_lists_only_what_the_role_may_open(client, db, two_te
     role_user(db, "desk", "first_line", tenants=[alpha])  # reports on people, email and devices only
     login(client, "desk")
     picker = _picker(client.get("/across/mfa").get_data(as_text=True))
-    assert "Summaries" not in picker and "/across/checks" not in picker and "/across/review" not in picker
+    # The Clients page (the monthly review for every client) is theirs; the other summaries aren't.
+    assert re.findall(r'href="(/[^"]*)"', picker)[0] == "/" and "Summaries" in picker
+    assert "/across/checks" not in picker and "/across/evidence" not in picker
     assert "/across/mailboxes" in picker and "/across/sharepoint-storage" not in picker
     assert "/across/checks" not in client.get("/across?key=checks").headers["Location"]
 
@@ -206,7 +212,7 @@ def test_rollups_only_show_granted_tenants(client, db, two_tenants):
     alpha, bravo = two_tenants
     make_user(db, "analyst", role="analyst", tenants=[alpha])
     login(client, "analyst")
-    page = client.get("/across/review").get_data(as_text=True)
+    page = client.get("/").get_data(as_text=True)
     assert "Alpha Ltd" in page and "Bravo Inc" not in page
     assert b"Bravo" not in client.get("/across/apps.csv").data
     assert b"Bravo" not in client.get("/changes.csv").data
@@ -219,7 +225,7 @@ def test_clients_get_their_own_downloads_but_no_cross_tenant_pages(client, db, t
     seed_tenant(db, alpha)
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")
-    assert client.get("/across/review").status_code == 403
+    assert client.get("/across/mfa").status_code == 403
     assert client.get("/changes").status_code == 403
     assert client.get(f"/tenants/{alpha}/changes").status_code == 200
     for url in (

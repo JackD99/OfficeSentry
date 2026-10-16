@@ -39,7 +39,7 @@ NOT_PAGES = {
     "sso.callback": "Microsoft comes back here",
     "tenants.consent_callback": "Microsoft comes back here",
     "home.index": "redirects to the person's home page",
-    "across.index": "redirects to the first All clients report",
+    "across.index": "redirects to the Clients page, or the report its key names",
     "reporting.index": "redirects to this month's queue",
     "across.rows": "opened through across.rows_index, which shows a report's first table",
 }
@@ -92,8 +92,9 @@ def _routes() -> tuple[list, dict[str, list[str]], list[str]]:
     with tempfile.TemporaryDirectory() as tmp:
         app = create_app(load_config(data_dir=Path(tmp) / "data", secure_cookies=False, require_mfa="off"))
         rules = sorted((r for r in app.url_map.iter_rules() if "GET" in r.methods), key=lambda r: r.rule)
-    # All clients has the monthly review and insurance evidence besides every detail report.
-    keys = {"across.rollup": [k for k, _ in rollups.available()]}
+    # The Clients page (the monthly review for every client) is "/"; the other summary and every detail report
+    # have a page of their own.
+    keys = {"across.rollup": [k for k, _ in rollups.available() if k != "review"]}
     return rules, keys | {"": sorted(data_reports.REPORTS)}, sorted(schemes.SCHEMES)
 
 

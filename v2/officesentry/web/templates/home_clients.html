@@ -49,7 +49,11 @@
 </div>
 
 <div class="card flush">
-  <div class="card-head toolbar"><h2>{{ group_scope.group.name if group_scope and group_scope.group else 'Every client' }} <span class="count-badge">{{ data.rows|length }}</span></h2>
+  <div class="card-head toolbar">
+    <div>
+      <h2>{{ group_scope.group.name if group_scope and group_scope.group else 'By client' }} <span class="count-badge">{{ data.rows|length }}</span></h2>
+      <p class="muted small m0">Licence waste, the next renewal, this month's report and projects, most waste first.</p>
+    </div>
     {% if data.rows|length > 5 %}<input class="search sm" type="search" data-filter="client-table" placeholder="Filter clients…" aria-label="Filter clients">{% endif %}</div>
   <div class="scroll-x">
   <table class="stack-sm sortable" id="client-table">
@@ -76,6 +80,6 @@
   </table>
   </div>
 </div>
-<p class="footnote">Most licence waste first. The Clients page has findings and data health for each client.</p>
+<p class="footnote">For findings, Secure Score, MFA and data health by client, see the <a href="{{ url_for('tenants.dashboard') }}">Clients page</a>.</p>
 {% endif %}
 {% endblock %}
