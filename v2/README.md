@@ -454,6 +454,7 @@ Each report is listed under its area in the report menu, in menu order.
   their BitLocker recovery key saved there (never the key itself), and
   every Entra ID device record by last activity. Tenants without Intune
   still get the Entra records and Windows versions.
+  Also which computers back up their local admin password with Windows LAPS (never the password), with its own check. <!-- since 2.4.0 -->
 - *Intune policies*: which platforms have enrolled devices but no
   compliance policy, what each compliance policy requires, configuration
   profiles and Windows update rings (deferrals, restart deadline, paused),
@@ -475,6 +476,7 @@ Each report is listed under its area in the report menu, in menu order.
   controls whose points changed in the last 30 days, and where the points
   are: each control's points now against the most possible, with its user
   impact and effort.
+- *Security alerts*: Microsoft Defender's open incidents and alerts, most severe first, with who is dealing with each and the accounts and devices each names, then the alerts resolved in the last 30 days and what they turned out to be. A check fails while a high or medium alert is open. Never the email, file or command behind an alert. <!-- since 2.4.0 -->
 - *Licences and subscriptions*: for renewals and fixing licence problems.
   Every product with licences purchased, in a grace period, suspended,
   assigned and available, and its monthly cost at your prices; every
@@ -531,6 +533,7 @@ Each report is listed under its area in the report menu, in menu order.
   Federation changes, new app credentials, role grants and Conditional Access
   policies deleted or switched off are listed first, then every change and
   who made them.
+- *Service health*: whether each Microsoft 365 service is working for the client, Microsoft's open outages and advisories and those resolved in the last 30 days, and the message centre's upcoming changes, those with a date to act by first (flagged when due within 30 days), then major changes. <!-- since 2.4.0 -->
 
 ### Checks
 

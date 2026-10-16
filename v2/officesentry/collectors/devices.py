@@ -1,14 +1,16 @@
-"""Devices: Entra ID device records for every tenant, Intune managed devices where licensed, and which
-devices have a BitLocker recovery key saved in Entra ID (never the key itself).
+"""Devices: Entra ID device records for every tenant, Intune managed devices where licensed, which devices
+have a BitLocker recovery key saved in Entra ID (never the key itself), and which back up a local admin password
+with Windows LAPS (never the password).
 
-The recovery key list needs BitLockerKey.ReadBasic.All, added in Office Sentry 2.2 (``permission_batch``):
-until the client approves it, it's skipped and stored as waiting, so the run doesn't fail."""
+The recovery key list needs BitLockerKey.ReadBasic.All, added in Office Sentry 2.2, and the LAPS list
+DeviceLocalCredential.ReadBasic.All, added in 2.4 (``permission_batch``): until the client approves one, its
+part is skipped and stored as waiting, so the run doesn't fail."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ..devices import BITLOCKER, NO_SYNC_DAYS, STALE_DAYS, days_since, is_computer, windows_support
+from ..devices import BITLOCKER, LAPS, NO_SYNC_DAYS, STALE_DAYS, days_since, is_computer, windows_support
 from ..graph import GraphError, LicenseRequired, PermissionMissing
 from .base import Collector, RunContext, register
 from .connection import awaiting
@@ -25,6 +27,10 @@ MANAGED_FIELDS = (
 # The list never carries the key itself: Microsoft returns a key only from one key's own GET with
 # ``$select=key``, which Office Sentry never makes.
 RECOVERY_KEYS = "/informationProtection/bitlocker/recoveryKeys"
+# Windows LAPS backups. Only these fields: the password itself comes back only with $select=credentials, which
+# needs DeviceLocalCredential.Read.All, a permission Office Sentry never asks for.
+LAPS_BACKUPS = "/directory/deviceLocalCredentials"
+LAPS_FIELDS = "id,deviceName,lastBackupDateTime,refreshDateTime"
 # volumeType: Microsoft's documentation shows the number ("1"), the enum name is operatingSystemVolume.
 OS_VOLUME = ("1", "operatingSystemVolume")
 
@@ -51,16 +57,18 @@ class Devices(Collector):
     key = "devices"
     title = "Devices"
     description = (
-        "Devices registered or joined to Entra ID, which have a BitLocker recovery key saved, and Intune "
-        "compliance, encryption and check-in for managed devices (needs Intune)."
+        "Devices registered or joined to Entra ID, which have a BitLocker recovery key saved and which back up "
+        "a local admin password with Windows LAPS, and Intune compliance, encryption and check-in for managed "
+        "devices (needs Intune)."
     )
-    permissions = ("Directory.Read.All", "DeviceManagementManagedDevices.Read.All", BITLOCKER)
+    permissions = ("Directory.Read.All", "DeviceManagementManagedDevices.Read.All", BITLOCKER, LAPS)
 
     def collect(self, ctx: RunContext) -> None:
         now = datetime.now(UTC)
         entra = ctx.paged(ctx.graph.get_all("/devices", params={"$select": ENTRA_FIELDS, "$top": "999"}))
         ctx.objects("entra_device", [(d["id"], {k: d.get(k) for k in ENTRA_FIELDS.split(",")}) for d in entra])
         self._recovery_keys(ctx)
+        self._laps(ctx)
         ctx.metric("devices.entra_total", len(entra))
         ctx.metric(
             "devices.entra_stale",
@@ -116,6 +124,34 @@ class Devices(Collector):
             saved = recovery_keys(keys)
             ctx.objects("recovery_key", list(saved.items()))
             ctx.metric("devices.recovery_keys_saved", len(saved))
+
+    @staticmethod
+    def _laps(ctx: RunContext) -> None:
+        """Which devices back up a local admin password with Windows LAPS, stored with the state of the read
+        ("read", "waiting" for the client to approve the permission, or "failed"), as for recovery keys."""
+        state, backups = "read", []
+        if awaiting(ctx, LAPS):
+            state = "waiting"
+            ctx.log(f"Waiting for the client to approve {LAPS}; Windows LAPS backups are skipped")
+        else:
+            try:
+                backups = ctx.paged(ctx.graph.get_all(LAPS_BACKUPS, params={"$select": LAPS_FIELDS}))
+            except PermissionMissing as exc:  # a new permission (BATCH_OF), so a refusal means not approved yet
+                state = "waiting"
+                ctx.log(f"Windows LAPS backups skipped: {LAPS} isn't approved yet ({exc.message})")
+            except GraphError as exc:
+                state = "failed"
+                ctx.warn(f"Windows LAPS backups weren't readable: {exc.message}")
+        ctx.objects("laps_status", [("status", {"state": state})])
+        if state == "read":
+            # The id is the device's Entra device ID (deviceId), not its object ID.
+            kept = {
+                b["id"].lower(): {k: b.get(k) for k in ("deviceName", "lastBackupDateTime", "refreshDateTime")}
+                for b in backups
+                if isinstance(b.get("id"), str)
+            }
+            ctx.objects("laps_backup", list(kept.items()))
+            ctx.metric("devices.laps_backed_up", len(kept))
 
     @staticmethod
     def _managed(ctx: RunContext) -> list[dict] | None:
