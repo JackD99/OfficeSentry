@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, csrf %}
+{% from "_macros.html" import icon, csrf, page_link with context %}
 {% block title %}{{ design.name }} · Report designs{% endblock %}
 {% block content %}
-<div class="crumbs"><a href="{{ url_for('reporting.index') }}">Month-end</a><span>/</span><a href="{{ url_for('designs.index') }}">Report designs</a><span>/</span><span>{{ design.name }}</span></div>
+<div class="crumbs">{{ page_link(url_for('reporting.index'), 'Month-end') }}<span>/</span><a href="{{ url_for('designs.index') }}">Report designs</a><span>/</span><span>{{ design.name }}</span></div>
 
 <div class="designer" id="designer" data-save="{{ url_for('designs.save', design_id=design.id) }}" data-preview="{{ url_for('designs.preview', design_id=design.id) }}">
   {{ csrf() }}

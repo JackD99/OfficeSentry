@@ -56,7 +56,7 @@
 
     <section class="card">
       <div class="card-head"><h2>Open findings</h2>
-        {% if profile.findings %}<a class="small" href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}">All findings</a>{% endif %}</div>
+        {% if profile.findings and can_open('reports.tenant_findings', tenant_id=tenant.id) %}<a class="small" href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}">All findings</a>{% endif %}</div>
       {% if profile.findings %}
       <ul class="list compact">
         {% for f in profile.findings %}

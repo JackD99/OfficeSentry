@@ -37,10 +37,11 @@ to Office Sentry's "GET only" rule, and both are in `tests/test_no_writes.py`'s 
 | Call | When Office Sentry sends it | What it does |
 |---|---|---|
 | `POST .../activity/feed/subscriptions/start` | Once per kind of record (SharePoint and OneDrive, Exchange) for a client you asked for, after Office Sentry has confirmed the client approved the add-on | Asks Microsoft to make the client's new audit records available to the add-on's app |
-| `POST .../activity/feed/subscriptions/stop` | The same two, when you switch the add-on off for a client or delete the client | Asks Microsoft to stop |
+| `POST .../activity/feed/subscriptions/stop` | For each kind of record that may still be on (a start that worked for one kind and not the other counts), when you switch the add-on off for a client or delete the client, or when Microsoft says the client's feed is off for one kind (the other is stopped too) | Asks Microsoft to stop |
 
 Neither touches a user, mailbox, file, group, policy or setting, and the audit log itself carries on as
-before. A nightly collection never sends either. Both are in Office Sentry's activity log
+before. A nightly collection never sends either: when it finds part of a feed off, a task sends the stop
+for the rest afterwards. Both are in Office Sentry's activity log
 (`audit_feed_started`, `audit_feed_stopped`), and in the client's own logs at Microsoft.
 
 ## 1. Create the add-on's app
@@ -100,13 +101,15 @@ Office Sentry checks for the approval by signing in as the add-on:
 - Straight away when you press **Check now** on the client's page.
 
 A link that isn't marked as sent, and that nobody has come back through, isn't checked. Once an approval is
-confirmed, a feed that Microsoft wouldn't start is tried again every 20 minutes for 7 days.
+confirmed, a feed that Microsoft wouldn't start is tried again every 20 minutes for 7 days. A paused client
+isn't signed in to, and its feed isn't started, until it's resumed.
 
 The **Audit log** column of the onboarding tracker
 ([Onboarding a client](onboarding-a-client.md#onboarding-many-clients)) says whether each client's audit log is
-recording at all, and under it where the client has got with the add-on (Not asked, Sent, Approved, On, Off). If the audit log is off, the add-on has nothing to read, so have the client
-turn it on in Microsoft Purview first. The check *The Microsoft 365 audit log is on*
-([check catalogue](checks.md)) fails for every client whose audit log is off.
+recording at all, and under it where the client has got with the add-on (Not asked, Sent, Approved, On, Off;
+*Approved, confirming* while Office Sentry hasn't signed in to confirm it yet). If the audit log is off, the
+add-on has nothing to read, so have the client turn it on in Microsoft Purview first. The check *The Microsoft
+365 audit log is on* ([check catalogue](checks.md)) fails for every client whose audit log is off.
 
 Microsoft can take up to 12 hours after the feed starts to make the first records available, and doesn't
 give the past through the feed: the report fills from the day the feed started.
@@ -114,11 +117,14 @@ give the past through the feed: the report fills from the day the feed started.
 ## 3. What you get
 
 - **Files and mailbox access**, a detail report under *Files and Teams*, only for clients the add-on was asked
-  for. It leads with figures for the last 30 days (files deleted and downloaded, anyone links created,
+  for (its link marked as sent, or switched on; a client whose admin approved unasked gets it once you switch
+  it on). It leads with figures for the last 30 days (files deleted and downloaded, anyone links created,
   mailboxes opened by someone else, inbox rules changed, forwarding set) with their trends, then **Needs
-  attention** (an admin opening someone else's mailbox, forwarding, rules that forward or delete mail,
+  attention** (an admin opening someone else's mailbox, forwarding, inbox and mail flow rules that forward,
+  redirect, copy or delete mail,
   anyone links, auditing turned off, mailbox exports, malware, and mass deletes of 100 files or more by
-  one person in an hour), then a table per kind of activity, who did most, and OneDrive sync per person
+  one person in an hour; a file counts once when it's deleted, not again when a recycle bin is emptied),
+  then a table per kind of activity, who did most, and OneDrive sync per person
   and day. Like every detail report it has filters, saved views, PDF, XLSX and CSV, the All clients rollup
   and schedules.
 - **Each person's Timeline** lists what they did to files, sharing and mailboxes, and what someone else did
@@ -126,8 +132,8 @@ give the past through the feed: the report fills from the day the feed started.
 - **The client's Activity history page** says how many records are kept and where the add-on is up to.
 
 The records are read every night, with the rest of the client's collection. Microsoft keeps them in the
-feed for 7 days; if a client isn't collected for longer than that, the report says which hours couldn't be
-read.
+feed for 7 days; if a client isn't collected for longer than that, or its first collection comes more than 7
+days after the feed started, the report says which hours couldn't be read.
 
 ## 4. How long it's kept
 
@@ -138,14 +144,26 @@ database, and backed up and restored with it.
 ## 5. Switching it off
 
 - **For one client:** **Settings → Audit log add-on → Switch off** on the client. Nothing more is
-  collected; Office Sentry sends the two stop calls. What was collected stays until retention removes it,
-  unless you tick **Also delete the events collected**. **Switch on again** starts it again without asking
-  the client, as long as they haven't removed the app.
+  collected; Office Sentry sends the stop calls, for whatever of the feed may be on, even if starting it
+  only half worked. What was collected stays until retention removes it, unless you tick **Also delete the
+  events collected**. **Switch on again** starts it again without asking the client, as long as they haven't
+  removed the app; while the stop calls are still being sent, the page says so and switching on waits. If
+  Microsoft refuses a stop at your end (the add-on app's certificate, an outage), the page says why and
+  Office Sentry sends it again every hour for a week.
 - **By the client:** removing "Office Sentry audit log add-on" from *Enterprise applications* in their
-  tenant. Office Sentry notices at the next collection and shows the client as Off with the reason.
-- **Deleting a client** stops its feed and deletes what was collected with everything else.
+  tenant. Office Sentry notices at the next collection and shows the client as Off with the reason. Their
+  approval went with the app, so switching it on again needs the link sent and approved again.
+- **At Microsoft:** if someone in the client's tenant turns the feed off for one kind of record, the next
+  collection shows the client as Off with the reason, and Office Sentry stops the other kind too, so nothing
+  is left on that nobody reads.
+- **Deleting a client** stops whatever of its feed may be on, and deletes what was collected with everything
+  else.
 - **Everywhere:** the switch on **Settings → App connection → Audit log add-on** hides the add-on
-  everywhere. It can't be switched off while any client's feed is on; switch those off first.
+  everywhere: its report, its pages, people's Timelines, report designs (a design that has its table leaves
+  it out), and scheduled emails and month-end plans (a schedule that sends its report, or a saved view of
+  it, sends the rest without them). It can't be switched off while any client's
+  feed is on or being started, archived clients included (the page names them and lists them); switch those
+  off first.
 
 ## When something goes wrong
 

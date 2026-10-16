@@ -6,8 +6,8 @@ Only collected for clients the add-on is on for (``addon.active``); for everyone
 run reads only GETs, signed in as the add-on's own app:
 
 1. The feed's subscriptions. A content type that's off at Microsoft (the client's admin turned it off) marks
-   the client Off, and so does a client that removed the add-on app (``addon.removed``). Neither is started
-   again without an admin.
+   the client Off and queues a task that stops the rest of the feed (``addon.check_running``); a client that
+   removed the add-on app (``addon.removed``) is marked Off too. Neither is started again without an admin.
 2. Per content type, the batches Microsoft made available since the last run, newest first, six hours at a
    time, from the cursor the sign-in and directory audit logs use (``event_cursors``, source
    ``activity:<content type>``). Each batch is downloaded, the records ``auditlog/operations.py`` keeps are
@@ -94,11 +94,17 @@ class _Run:
         self.kept += added.rows
         self.new += added.new
 
-    def content_type(self, client: feed.FeedClient, content_type: str, now: int, floor: int) -> events.Coverage:
-        """Read one content type's batches from where the last run stopped."""
+    def content_type(
+        self, client: feed.FeedClient, content_type: str, now: int, floor: int, started: int
+    ) -> events.Coverage:
+        """Read one content type's batches from where the last run stopped. On the first read, what the feed
+        made available since it ``started`` that Microsoft no longer lists is lost, not merely not there."""
         conn, tenant_id = self.ctx.conn, self.ctx.tenant["id"]
         cov = events.coverage(conn, tenant_id, f"activity:{content_type}")
+        first = cov.read_to is None
         events.extend(cov, now, floor, overlap=OVERLAP)
+        if first and cov.since is not None and started < cov.since:
+            cov.lost = [*cov.lost, [started, cov.since]][: events.MAX_LOST]
         events.save_coverage(conn, tenant_id, cov)
         while cov.gaps:
             if self.batches >= BATCH_BUDGET:
@@ -159,7 +165,7 @@ class AuditActivity(Collector):
         except feed.FeedError as exc:
             if not addon.removed(exc):
                 raise
-            addon.mark_off(conn, tenant["id"], addon.REMOVED)
+            addon.mark_removed(conn, tenant["id"])
             ctx.warn(addon.REMOVED)
             return
         if not addon.check_running(conn, tenant, subscriptions).ok:
@@ -176,11 +182,11 @@ class AuditActivity(Collector):
         covered: dict[str, events.Coverage] = {}
         try:
             for content_type in feed.CONTENT_TYPES:
-                covered[content_type] = run.content_type(ctx.feed, content_type, end, floor)
+                covered[content_type] = run.content_type(ctx.feed, content_type, end, floor, int(started.timestamp()))
         except feed.FeedError as exc:
             if not addon.removed(exc):
                 raise
-            addon.mark_off(conn, tenant["id"], addon.REMOVED)
+            addon.mark_removed(conn, tenant["id"])
             ctx.warn(addon.REMOVED)
             return
         ctx.log(

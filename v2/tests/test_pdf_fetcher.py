@@ -62,3 +62,18 @@ def test_fetcher_serves_static_files_and_data_uris():
     )
     pdf = export.to_pdf(html, export.STATIC_DIR.as_uri() + "/")
     assert _embeds_a_file(pdf)  # the data: attachment is allowed
+
+
+def test_bundled_fonts_are_unpacked_once():
+    """WeasyPrint gets the bundled WOFF2 fonts already unpacked, once per process, rather than unpacking
+    every face for every PDF (most of a short PDF's time)."""
+    font = (export.STATIC_DIR / "fonts" / "SourceSans3-Regular.woff2").as_uri()
+    assert export._font(font)[:4] in (b"\x00\x01\x00\x00", b"OTTO")  # plain OpenType
+    assert export._font((export.STATIC_DIR / "report.css").as_uri()) is None
+    export._unpacked_font.cache_clear()
+    html = f'<link rel="stylesheet" href="{(export.STATIC_DIR / "report.css").as_uri()}"><h1>Report</h1><p>Text</p>'
+    export.to_pdf(html, export.STATIC_DIR.as_uri() + "/")
+    unpacked = export._unpacked_font.cache_info().currsize
+    assert export.to_pdf(html, export.STATIC_DIR.as_uri() + "/").startswith(b"%PDF")
+    info = export._unpacked_font.cache_info()
+    assert unpacked > 0 and info.currsize == unpacked and info.hits >= unpacked

@@ -37,7 +37,7 @@
     {%- if k.value is none -%}{% set value = none %}
     {%- elif k.unit == 'currency' -%}{% set value = k.value|money(d.currency, 2) %}
     {%- else -%}{% set value = '%g'|format(k.value) ~ k.unit %}{%- endif -%}
-    {%- set trend = 'flat' if k.better == 'none' else k.trend -%}
+    {%- set trend = k.trend -%}
     {%- if k.delta -%}
       {%- set amount = (k.delta|abs)|money(d.currency, 2) if k.unit == 'currency' else ('%g'|format(k.delta|abs) ~ (' pts' if k.unit == '%' else '')) -%}
       {%- set delta_text = ('↑ ' if k.delta > 0 else '↓ ') ~ amount ~ ' <span class="vs">since ' ~ d.since ~ '</span>' -%}

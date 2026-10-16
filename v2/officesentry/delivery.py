@@ -189,13 +189,16 @@ def _slug(name: str) -> str:
 
 def attachment_plan(tenant, keys: list[str], include_xlsx: bool, conn=None) -> list[tuple[str, str]]:
     """(report key, filename) for every file a bundle attaches, in order. Builds nothing. A report design
-    (``design:<id>``) is a PDF, so it needs WeasyPrint and ``conn`` to be known."""
+    (``design:<id>``) is a PDF, so it needs WeasyPrint and ``conn`` to be known. With ``conn``, a report that
+    isn't there for the tenant (``data_reports.hidden()``: an add-on's report while the add-on is off, or isn't
+    on for it) is left out, as a schedule made before it was hidden still names it."""
     slug = _slug(tenant["name"])
     pdf = export.pdf_available()
     known = catalog_map(conn)
+    hide = data_reports.hidden(conn, tenant) if conn is not None else frozenset()
     out = []
     for key in keys:
-        if key not in known:
+        if key not in known or (key.startswith("data:") and key[5:] in hide):
             continue
         if key in ("review", "evidence"):
             stem = "security-review" if key == "review" else "security-evidence"
@@ -264,6 +267,13 @@ def schedule_views(conn, schedule_id: int | None) -> list[ScheduledView]:
             "SELECT * FROM email_schedule_views WHERE schedule_id = ? ORDER BY position, id", (schedule_id,)
         )
     ]
+
+
+def tenant_views(conn, schedule_id: int | None, tenant) -> list[ScheduledView]:
+    """The schedule's saved views that ``tenant`` has: a view of a report that isn't there for it
+    (``data_reports.hidden()``) isn't sent."""
+    hide = data_reports.hidden(conn, tenant)
+    return [v for v in schedule_views(conn, schedule_id) if v.report_key not in hide]
 
 
 def set_schedule_views(conn, schedule_id: int, chosen: list[ScheduledView]) -> None:
@@ -688,7 +698,7 @@ def build_report_email(
     review = monthly_review.leave_out(monthly_review.build(conn, tenant, now), context["month_end"]["hidden"])
     known = catalog_map(conn)
     plan = attachment_plan(tenant, keys, bool(schedule["include_xlsx"]), conn)
-    chosen = schedule_views(conn, schedule["id"])
+    chosen = tenant_views(conn, schedule["id"], tenant)
     files = [(known[k].title, name) for k, name in plan] + [
         (v.title, name) for v, name in view_attachments(tenant["name"], chosen)
     ]
@@ -1083,7 +1093,10 @@ def views_data(conn, chosen: list[ScheduledView], group_id: int | None, now: dat
     for v in chosen:
         if not can_schedule_view(v.report_key, across=True):
             continue
-        rows = rollups.all_rows(conn, tenants, v.report_key, now, label=label)
+        shown = [t for t in tenants if v.report_key not in data_reports.hidden(conn, t)]  # as the page has them
+        if not shown:
+            continue  # an add-on's report while the add-on is off
+        rows = rollups.all_rows(conn, shown, v.report_key, now, label=label)
         report = views.apply(rows.report, v.view())
         touched = set(view_tables(v))
         slugs = views.table_slugs(report)
@@ -1482,7 +1495,7 @@ def _archive(conn, schedule, tenant, email: Email, *, period: str, trigger: str,
         }
         plan |= {
             name: (f"view:{v.report_key}", v.title)
-            for v, name in view_attachments(tenant["name"], schedule_views(conn, schedule["id"]))
+            for v, name in view_attachments(tenant["name"], tenant_views(conn, schedule["id"], tenant))
         }
         files = [
             issued.IssuedFile(*plan.get(filename, ("", filename)), filename, content_type, data)

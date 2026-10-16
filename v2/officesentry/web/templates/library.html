@@ -74,7 +74,7 @@
     <div class="lib-grid">
       {% for t in tenants %}
       <article class="lib-card" data-name="{{ (t.name ~ ' ' ~ t.tenant_ref ~ ' tenant client')|lower }}"><a class="lib-main" href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">
-        <span class="title">{{ t.name }}{{ icon('arrow', 'go') }}</span><span class="desc mono">{{ t.tenant_ref }}</span></a></article>
+        <span class="title">{{ t.name }}{{ icon('arrow', 'go') }}</span><span class="desc">{{ t.tenant_ref }}</span></a></article>
       {% endfor %}
     </div>
   </section>

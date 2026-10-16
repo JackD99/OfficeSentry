@@ -145,8 +145,8 @@
     if (box) edges(box);
   }, true);
   window.addEventListener('resize', function () { wide(document); });
-  // The page first draws in a fallback font (font-display: swap) and Inter's text is a little wider, so a
-  // table that fitted then may not now: measure again once the fonts are in.
+  // The page first draws in a fallback font (font-display: swap) and the bundled fonts set text a little
+  // differently, so a table that fitted then may not now: measure again once the fonts are in.
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { wide(document); });
 
   function init(root) { sortable(root); rowSearch(root); reportSearch(root); autosubmit(root); foldOnPhones(root); wide(root); }
@@ -169,10 +169,10 @@
     all.querySelector('span').textContent = folded ? 'Expand all' : 'Collapse all';
   });
 
-  /* The All reports menu: its search box takes the typing as it opens. */
+  /* The All reports menu and the client switcher: their search box takes the typing as they open. */
   document.addEventListener('toggle', function (e) {
     var d = e.target;
-    if (d.id === 'report-switch' && d.open) { var f = d.querySelector('input[type=search]'); if (f) f.focus(); }
+    if ((d.id === 'report-switch' || d.id === 'client-switch') && d.open) { var f = d.querySelector('input[type=search]'); if (f) f.focus(); }
   }, true);
   /* Menus (<details class="menu">) close on Escape or a click outside. */
   document.addEventListener('click', function (e) {

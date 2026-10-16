@@ -25,6 +25,7 @@ from ..reports import (
 from ..reports.monthly_review import SUMMARY_STEM, build, leave_out, setting
 from . import as_of
 from .access import (
+    by_report,
     can,
     is_staff,
     login_required,
@@ -274,16 +275,19 @@ def data_index(tenant_id: int):
         if not groups:
             abort(403)
         key = groups[0].reports[0][0]
-    return redirect(url_for("reports.data_report", tenant_id=t["id"], key=key))
+    # A past day (?on=) stays when switching reports; the report checks it.
+    return redirect(
+        url_for("reports.data_report", tenant_id=t["id"], key=key, on=request.args.get("on", "")[:10] or None)
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>")
-@needs()
+@needs(also=by_report)
 def data_report(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
     if not exists(key, t["id"]):
         abort(404)
-    require(report_capability(key), tenant_id=t["id"])
+    require(*by_report(key), tenant_id=t["id"])
     groups = report_groups(t["id"])
     active = next(gr for gr in groups if any(k == key for k, _, _ in gr.reports))
     day = as_of.day(g.db, t["id"], request.args.get("on"))
@@ -317,12 +321,12 @@ def _viewed(report):
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>.pdf")
-@needs("export")
+@needs("export", also=by_report)
 def data_report_pdf(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
     if not exists(key, t["id"]):
         abort(404)
-    require(report_capability(key), tenant_id=t["id"])
+    require(*by_report(key), tenant_id=t["id"])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.pdf")
     slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
     day = as_of.day(g.db, t["id"], request.args.get("on"))
@@ -333,12 +337,12 @@ def data_report_pdf(tenant_id: int, key: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>.xlsx")
-@needs("export")
+@needs("export", also=by_report)
 def data_report_xlsx(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
     if not exists(key, t["id"]):
         abort(404)
-    require(report_capability(key), tenant_id=t["id"])
+    require(*by_report(key), tenant_id=t["id"])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.xlsx")
     slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
     day = as_of.day(g.db, t["id"], request.args.get("on"))

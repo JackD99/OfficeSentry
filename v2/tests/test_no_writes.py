@@ -36,8 +36,9 @@ ALLOWED = {
     "device sign-in that allows it",
     "auditlog/feed.py": "the audit log add-on's start and stop of a client's Management Activity feed, which only "
     "tells Microsoft whether to make the client's audit records available to the add-on's app: once per content "
-    "type, after a client an admin asked for has approved, or when the add-on is switched off for a client or the "
-    "client is deleted. Never from a collection, and nothing in the client's tenant changes",
+    "type, after a client an admin asked for has approved, or when the add-on is switched off for a client, the "
+    "client is deleted or Microsoft says part of its feed is off. Never from a collection, and nothing in the "
+    "client's tenant changes",
     "alerts.py": "posts alerts to the MSP's own Teams, Slack or webhook URL, never to Microsoft",
     "sso.py": "sign-in with Microsoft for staff and clients' people: the OpenID Connect token request, creating "
     "the sign-in app in the MSP's own tenant from the setup wizard, and letting that same app accept other "

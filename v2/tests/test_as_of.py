@@ -9,7 +9,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from openpyxl import load_workbook
 
-from officesentry import changes, state_history, store
+from officesentry import changes, retention, state_history, store
 from officesentry.reports import data_reports, month_changes
 from officesentry.snapshot import TenantSnapshot
 from officesentry.web import as_of
@@ -171,8 +171,15 @@ def test_a_report_shows_the_tenant_as_it_was_on_a_chosen_day(admin, then_and_now
     assert f"guests.pdf?on={day(30)}" in page and f"guests.xlsx?on={day(30)}" in page
     assert f"on={day(30)}&amp;section=1" in page or f"section=1&amp;on={day(30)}" in page
 
-    csv = admin.get(f"/tenants/{then_and_now}/data/guests.csv?section=2&on={day(30)}").get_data(as_text=True)
-    assert "gwen@then.example" in csv and "gwen@now.example" not in csv
+    # So does the report picker, on laptops and phones.
+    assert f'href="/tenants/{then_and_now}/data/mfa?on={day(30)}"' in page
+    assert f'<input type="hidden" name="on" value="{day(30)}">' in page
+    picked = admin.get(f"/tenants/{then_and_now}/data?key=mfa&on={day(30)}")
+    assert picked.headers["Location"].endswith(f"/tenants/{then_and_now}/data/mfa?on={day(30)}")
+
+    csv = admin.get(f"/tenants/{then_and_now}/data/guests.csv?section=2&on={day(30)}")
+    assert "gwen@then.example" in csv.get_data(as_text=True) and "gwen@now.example" not in csv.get_data(as_text=True)
+    assert f"-{day(30)}.csv" in csv.headers["Content-Disposition"]
     xlsx = admin.get(f"{url}.xlsx?on={day(30)}")
     assert xlsx.status_code == 200 and f"-{day(30)}.xlsx" in xlsx.headers["Content-Disposition"]
 
@@ -275,6 +282,42 @@ def test_legacy_sign_ins_retention_removed_are_said_to_be_gone_not_compared(db, 
     assert "Legacy sign-ins from that day is no longer held" in then.notice
     legacy = next(r for r in month_changes.build(db, tenant, 30).reports if r.key == "legacy-auth")
     assert legacy.count == 0 and "Legacy sign-ins from the start of the period is no longer held" in legacy.note
+
+
+def test_the_first_day_with_data_moves_on_when_the_daily_history_is_pruned(db, then_and_now):
+    # A data source with nothing in it (no inbox rules, say) has nothing for pruning to remove.
+    tenant = store.get_tenant(db, then_and_now)
+    old = [
+        r[0] for r in db.execute("SELECT id FROM runs WHERE collector = 'inbox_rules' AND finished_at < ?", (day(30),))
+    ]
+    marks = ",".join("?" * len(old))
+    db.execute(f"UPDATE runs SET object_count = 0 WHERE id IN ({marks})", old)
+    db.execute(f"UPDATE state_runs SET objects = 0 WHERE run_id IN ({marks})", old)
+    assert as_of.earliest(db, then_and_now) == TODAY - timedelta(days=60)
+    assert retention.prune_state(db, 1)  # Daily history: 1 month
+    assert as_of.earliest(db, then_and_now) == TODAY
+    assert "starts on" in as_of.day(db, then_and_now, day(45)).note
+    # A day the daily history no longer holds says so, rather than blaming the snapshots' retention.
+    gone = data_reports.build(db, tenant, "all-users", as_of=as_of.end_of(TODAY - timedelta(days=45))).unavailable
+    assert gone.startswith("Users and ") and gone.endswith(
+        " from that day are no longer held: the daily history doesn't go back that far."
+    )
+    assert "retention policy" not in gone
+
+
+def test_admin_activity_on_a_day_before_the_activity_history_starts(db, then_and_now):
+    # That day's snapshot has the changes; the activity history only has what came after it started.
+    tenant = store.get_tenant(db, then_and_now)
+    then = as_of.end_of(TODAY - timedelta(days=45))
+    held = TenantSnapshot(db, tenant, as_of=then).objects("admin_activity", "admin_event")
+    assert held
+    db.execute(
+        "UPDATE event_cursors SET since_at = ? WHERE tenant_id = ? AND source = 'audits'",
+        (NOW.strftime("%Y-%m-%dT%H:%M:%SZ"), then_and_now),
+    )
+    report = data_reports.build(db, tenant, "admin-activity", as_of=then)
+    every = next(s for s in report.sections if s.title == "All admin changes")
+    assert len(every.rows) == len(held)
 
 
 def test_end_of_a_day_is_its_last_second():

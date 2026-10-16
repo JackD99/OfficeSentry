@@ -77,8 +77,10 @@ pip-compile --generate-hashes --allow-unsafe --strip-extras --extra pdf --extra 
 
 Add `--upgrade-package <name>` to move one package, or `--upgrade` for all.
 CI fails (`pip check`, `tests/test_release.py`) when a lock no longer
-matches `pyproject.toml`. The Windows tier installs from `pyproject.toml`
-directly, since the locks are made for Linux.
+matches `pyproject.toml`. CI's Windows tier installs from
+`requirements-dev.txt` too: since the locks are made on Linux, the `dev`
+extra lists what only Windows installs (waitress, tzdata and colorama)
+without its marker, so the lock keeps it.
 
 The updater's two helper images, Docker's command line and cosign
 (`COMPOSE_IMAGE` and `COSIGN_IMAGE` in `v2/officesentry/updater.py`), are
@@ -131,6 +133,7 @@ together ran every test.
   and the example reports with `python scripts/screenshots.py` (from `v2/`;
   needs `pip install playwright pillow`, a Chromium for Playwright and
   `pdftoppm`) and look at them before committing.
+- [DESIGN.md](DESIGN.md) describes the look: colour, type, shape and how components use them. <!-- since 2.4.0 -->
 - Styles use the tokens in `v2/officesentry/web/static/tokens.css`; `/styleguide`
   in a running portal shows them and every shared component. Pull requests
   that touch templates or CSS also run the browser tests (screenshots against

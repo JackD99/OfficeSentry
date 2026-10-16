@@ -48,6 +48,7 @@ def test_a_run_microsoft_was_too_busy_for_is_tried_twice_more_then_left(db, two_
     assert store.queue_retries(db, now + timedelta(minutes=21)) == 1
     assert store.queue_retries(db, now + timedelta(minutes=22)) == 0  # queued once
     second, _ = _collect(db, _raises(BUSY))
+    later = datetime.now(UTC)
     # The retry is the same night's run, behind anyone waiting on a page.
     assert (second["retry_of"], second["trigger"], second["scheduled_for"]) == (
         first["id"],
@@ -55,7 +56,8 @@ def test_a_run_microsoft_was_too_busy_for_is_tried_twice_more_then_left(db, two_
         first["scheduled_for"],
     )
     assert second["priority"] == store.PRIORITY_NIGHTLY
-    assert timedelta(hours=1, minutes=59) < _when(second) - now <= timedelta(hours=2)
+    # Two hours from when it failed, which was after `now` (to the second, so maybe the next whole one).
+    assert now + timedelta(hours=1, minutes=59) < _when(second) <= later + timedelta(hours=2)
 
     assert store.queue_retries(db, now + timedelta(hours=3)) == 1
     third, _ = _collect(db, _raises(BUSY))
@@ -119,7 +121,7 @@ def test_a_run_the_worker_stopped_during_is_tried_again(app, db, vault, cfg, two
     slot = schedule.iso(schedule.previous_fire(cfg.collect_cron, cfg.timezone, due))
     store.enqueue_run(db, alpha, "users", trigger="schedule", scheduled_for=slot)
     store.claim_next_run(db)
-    assert store.expire_run_leases(db, now + store.LEASE + timedelta(seconds=1)) == 1  # an update restarted it
+    assert store.expire_run_leases(db, datetime.now(UTC) + store.LEASE + timedelta(seconds=1)) == 1
     run = db.execute("SELECT * FROM runs").fetchone()
     assert run["error"] == store.WORKER_STOPPED and store.retry_pending(run) and _when(run) <= due
     # The worker's housekeeping queues it once it's due.

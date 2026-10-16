@@ -2122,7 +2122,7 @@ def logo_png(name: str, accent: str) -> bytes | None:
         from PIL import Image, ImageDraw, ImageFont
     except ImportError:
         return None
-    font = V2 / "officesentry" / "web" / "static" / "fonts" / "Inter-Bold.ttf"
+    font = V2 / "officesentry" / "web" / "static" / "fonts" / "SourceSans3-Bold.woff2"
     img = Image.new("RGBA", (720, 180), (255, 255, 255, 0))
     draw = ImageDraw.Draw(img)
     rgb = tuple(int(accent[i : i + 2], 16) for i in (1, 3, 5))

@@ -233,7 +233,8 @@ this page changes.
   some audit records carry.
 - **Two requests that aren't reads.** Microsoft's audit log feed needs one to
   start and one to stop: Office Sentry sends *start* once you've approved the
-  add-on, and *stop* when your MSP switches it off. They tell Microsoft whether
+  add-on, and *stop* when your MSP switches it off, or when part of the feed is
+  turned off in your tenant (it then stops the rest). They tell Microsoft whether
   to make your new audit records available to the add-on; neither changes
   anything in your tenant.
 
