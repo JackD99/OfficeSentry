@@ -820,6 +820,10 @@ td.tenant-col { min-width: 190px; max-width: 20em; } /* a long client name wraps
 .picker-list .report-group li a { display: block; padding: 4px var(--space-2); border-radius: var(--radius-sm); color: var(--text-2); font-size: var(--fs-sm); font-weight: 400; line-height: 1.35; }
 .picker-list .report-group li a:hover { background: var(--sunken); color: var(--text); text-decoration: none; }
 .picker-list .report-group li a[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
+/* The menu's Custom reports group: a line to make one, and a saved view with its report under it. */
+.picker-list .report-group li a.picker-new { display: flex; align-items: center; gap: var(--space-1); color: var(--accent); font-weight: 500; }
+.picker-list .report-group li a.picker-new .icon { width: 13px; height: 13px; flex: none; }
+.picker-list .picker-sub { display: block; color: var(--faint); font-size: var(--fs-2xs); line-height: 1.3; }
 .report-menu .no-match { margin: var(--space-2) var(--space-2) 0; color: var(--muted); font-size: var(--fs-sm); }
 .skip-picker { position: absolute; left: -9999px; }
 .skip-picker:focus { position: static; display: block; margin-bottom: var(--space-2); padding: var(--space-1-5) var(--space-2-5); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-menu); font-weight: 600; }
@@ -1099,6 +1103,15 @@ main[aria-busy="true"] .table-card, main[aria-busy="true"] .tiles { opacity: .7;
 .lib-across { display: inline-flex; align-items: center; gap: var(--space-1-5); margin: 0 var(--space-4) var(--space-3); align-self: flex-start; font-size: var(--fs-sm); font-weight: 500; color: var(--muted); }
 .lib-across:hover { color: var(--accent); text-decoration: none; }
 .lib-across .icon { width: 14px; height: 14px; }
+/* Custom reports and the person's saved views, at the top of the Reports page */
+.lib-area h2 .lib-new { margin-left: auto; font-variant-caps: normal; letter-spacing: 0; }
+.lib-area h2 .meta { font-variant-caps: normal; letter-spacing: 0; font-weight: 400; font-size: var(--fs-sm); color: var(--muted); }
+.lib-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); margin: 0 var(--space-4) var(--space-3); font-size: var(--fs-sm); }
+.lib-foot a { display: inline-flex; align-items: center; gap: var(--space-1-5); font-weight: 500; color: var(--muted); }
+.lib-foot a:hover { color: var(--accent); text-decoration: none; }
+.lib-foot .icon { width: 14px; height: 14px; }
+.lib-custom .empty.compact p { max-width: 70ch; }
+.lib-views .opts .n { color: var(--muted); }
 .saved-views .card-head h2 { font-size: var(--fs-md); }
 .saved-views .card-head h2 .icon { color: var(--muted); }
 .saved-views .opt .n { color: var(--muted); }
@@ -1456,16 +1469,32 @@ dd.sg-row { margin-bottom: 0; }
 .home-switch { margin: 0; }
 .make-home { align-self: center; }
 .make-home button.link { font-size: var(--fs-sm); }
-.today-list { list-style: none; margin: 0; padding: 0; }
-.today-client { display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: var(--space-2) var(--space-5); padding: var(--space-3-5) var(--space-5); border-top: 1px solid var(--border); }
-.today-client:first-child { border-top: 0; }
-.today-name { display: flex; align-items: baseline; gap: var(--space-2); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
-.today-name .dot { flex: none; }
-.today-reasons { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
-.today-reasons a { font-weight: 500; }
-.today-reasons .pill { margin-left: var(--space-1); vertical-align: 1px; }
+/* Today's ledger: one line per thing, the time it happened in a narrow column, then its key (the severity
+   or status square and word), the client and what happened, with a quieter second line. Lines seen before
+   sit under a ruled divider in the faint ink. */
+.ledger { list-style: none; margin: 0; padding: 0; }
+.ledger-line { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: var(--space-1) var(--space-4); padding: var(--space-3) var(--space-5); border-top: 1px solid var(--border); align-items: baseline; }
+.ledger > .ledger-line:first-child { border-top: 0; }
+.ledger-card .card-head + .ledger > .ledger-line:first-child { border-top: 1px solid var(--border); }
+.ledger .when { color: var(--muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ledger .what { display: grid; gap: 3px; min-width: 0; }
+.ledger .line { display: flex; gap: var(--space-2-5); align-items: baseline; flex-wrap: wrap; overflow-wrap: anywhere; }
+.ledger .line .sevtext { flex: none; min-width: 96px; }
+.ledger .line .client { font-weight: 600; color: var(--text); }
+.ledger .line .client:hover { color: var(--accent); }
+.ledger .line .what-link { font-weight: 500; }
+.ledger .detail { color: var(--muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.ledger-line.seen :is(.when, .line, .line a, .detail, .sevtext) { color: var(--faint); }
+.ledger-quiet { margin: 0; padding: var(--space-4) var(--space-5); color: var(--muted); }
+/* Status words in the severity shape (Failed, Retrying, Due today, Fixed): the status colours, never a severity's. */
+.sevtext:is(.bad, .now) { color: var(--bad); } .sevtext.warn { color: var(--warn); } .sevtext.ok { color: var(--ok); }
+.divider { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); color: var(--muted); font-size: var(--fs-sm); font-weight: 600; font-variant-caps: all-small-caps; letter-spacing: .05em; background: var(--surface-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.divider::before, .divider::after { content: ""; flex: 1; border-top: 1px dashed var(--border-strong); }
+.divider > span { flex: none; max-width: 100%; text-align: center; }
+.divider-when { font-variant-caps: normal; letter-spacing: 0; font-weight: 400; }
 @media (max-width: 640px) {
-  .today-client { grid-template-columns: 1fr; padding: var(--space-3) var(--space-4); }
+  .ledger-line { grid-template-columns: minmax(0, 1fr); gap: 2px; padding: var(--space-3) var(--space-4); }
+  .divider { padding-left: var(--space-4); padding-right: var(--space-4); }
   .page-head .actions .home-switch { order: -1; }
 }
 

@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from officesentry.reports import data_reports
+from officesentry.reports import data_reports, designs
 from tests import auditdata
 from tests import sharepoint_data as sd
 from tests.conftest import login, make_user
@@ -116,7 +116,53 @@ def test_report_picker_links_every_report(client, db, vault, seeded):
     assert client.get(f"/tenants/{alpha}/data?key=review").headers["Location"].endswith(f"/tenants/{alpha}/report")
     assert client.get(f"/tenants/{alpha}/data?key=designs").headers["Location"].endswith(f"/tenants/{alpha}/designs")
     page = client.get(f"/tenants/{alpha}/designs").get_data(as_text=True)
-    assert re.findall(r'aria-current="page">([^<]+)<', _picker(page)) == ["Custom reports"]
+    picker = _picker(page)
+    assert re.findall(r'aria-current="page">([^<]+)<', picker) == ["Custom reports"]
+    assert "Custom reports" in picker and 'href="/reporting/designs"' in picker  # the group, and making one
+    assert "Your views" not in picker  # nothing saved yet
+
+
+def test_report_picker_lists_custom_reports_and_saved_views(client, db, seeded):
+    """The MSP's custom reports and the person's saved views join the menu, and the phone select's keys for
+    them open the same pages."""
+    alpha = seeded
+    make_user(db, "admin")
+    login(client, "admin")
+    did = designs.create(db, "Board pack", "admin", designs.STARTERS["executive"][2], "For the board")
+    client.post(
+        "/reports/mailboxes/views",
+        data={"name": "Leaving us", "query": "f=forwarding/outside-the-organisation:Yes", "tenant_id": alpha},
+    )
+    vid = db.execute("SELECT id FROM saved_views").fetchone()[0]
+    view_href = f"/tenants/{alpha}/data/mailboxes?f=forwarding%2Foutside-the-organisation%3AYes"
+    picker = _picker(client.get(f"/tenants/{alpha}/data/inbox-rules").get_data(as_text=True))
+    assert f'href="/tenants/{alpha}/designs/{did}" title="For the board"' in picker
+    assert f'href="{view_href}"' in picker and "Leaving us" in picker and "Your views" in picker
+    assert ">All custom reports<" in picker and "New custom report</a>" in picker
+    page = client.get(f"/tenants/{alpha}/designs/{did}").get_data(as_text=True)
+    assert f'<option value="design:{did}" selected>Board pack</option>' not in page  # a report page, no picker
+    page = client.get(f"/tenants/{alpha}/data/inbox-rules").get_data(as_text=True)
+    assert f'<option value="design:{did}">Board pack</option>' in page
+    assert f'<option value="view:{vid}">Leaving us · Mail forwarding</option>' in page
+    assert (
+        client.get(f"/tenants/{alpha}/data?key=design:{did}")
+        .headers["Location"]
+        .endswith(f"/tenants/{alpha}/designs/{did}")
+    )
+    assert client.get(f"/tenants/{alpha}/data?key=view:{vid}").headers["Location"].endswith(view_href)
+    assert client.get(f"/tenants/{alpha}/data?key=design:999").status_code == 404
+    assert client.get(f"/tenants/{alpha}/data?key=view:999").status_code == 404
+    # Another person's view isn't theirs to open, and a client account sees no custom reports.
+    make_user(db, "other", role="analyst", all_tenants=True)
+    client.post("/logout")
+    login(client, "other")
+    assert client.get(f"/tenants/{alpha}/data?key=view:{vid}").status_code == 404
+    client.post("/logout")
+    make_user(db, "client", role="client", tenants=[alpha])
+    login(client, "client")
+    page = client.get(f"/tenants/{alpha}/data/inbox-rules").get_data(as_text=True)
+    assert "Custom reports" not in page and "Board pack" not in page
+    assert client.get(f"/tenants/{alpha}/data?key=design:{did}").status_code == 404
 
 
 def test_tenant_header_pins_its_tab_bar(client, db, seeded):

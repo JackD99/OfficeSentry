@@ -158,7 +158,7 @@ database, and backed up and restored with it.
 - **Deleting a client** stops whatever of its feed may be on, and deletes what was collected with everything
   else.
 - **Everywhere:** the switch on **Settings → App connection → Audit log add-on** hides the add-on
-  everywhere: its report, its pages, people's Timelines, report designs (a design that has its table leaves
+  everywhere: its report, its pages, people's Timelines, custom reports (one that has its table leaves
   it out), and scheduled emails and month-end plans (a schedule that sends its report, or a saved view of
   it, sends the rest without them). It can't be switched off while any client's
   feed is on or being started, archived clients included (the page names them and lists them); switch those
