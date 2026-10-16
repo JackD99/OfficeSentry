@@ -287,7 +287,8 @@ def site_access(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
         ["Site", "Who", "How", "Can", "Outside the organisation"],
         intro="What each site grants and to whom: the Microsoft 365 group's owners and members, what the "
         "default document library gives to site groups, groups and people, and guests given access on "
-        "the site.",
+        "the site. Full control, Edit and View are the owner, member and visitor access Microsoft reports; "
+        "the Site permissions report shows SharePoint's own permission levels (Full Control, Edit, Read).",
         empty="Nothing to show.",
         group="Site",
         filter_columns=("How",),
