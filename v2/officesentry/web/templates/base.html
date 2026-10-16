@@ -93,7 +93,8 @@
 {%- endmacro %}
 {% macro flashes() -%}
 {% with messages = get_flashed_messages(with_categories=true) %}
-{% for category, message in messages %}<div class="flash {{ category }}" role="status">{{ message }}</div>{% endfor %}
+{#- An icon as well as the colour says which kind of message it is. -#}
+{% for category, message in messages %}<div class="flash {{ category }}" role="status">{{ icon({'success': 'check', 'error': 'alert', 'warning': 'alert'}.get(category, 'info')) }}<span>{{ message }}</span></div>{% endfor %}
 {% endwith %}
 {%- endmacro %}
 {#- The MSP's logo, or the shield and its name (Office Sentry until branding is set up). -#}

@@ -1,3 +1,4 @@
+import faulthandler
 import importlib
 import json
 import os
@@ -73,6 +74,25 @@ def pytest_runtest_setup(item):
             if name in sys.modules:
                 importlib.reload(sys.modules[name])
         _data_dated["on"] = today
+    _stacks_before_own_timeout(item)
+
+
+def _stacks_before_own_timeout(item) -> None:
+    """pyproject.toml's faulthandler_timeout dumps every thread's stack ten seconds before the usual timeout.
+    A test with a longer timeout of its own (@pytest.mark.timeout(600)) has its dump ten seconds before that
+    one instead. Dumped while the test is still busy, a thread's stack can change as it's read and end the
+    worker ("node down: Not properly terminated"), as the link crawl did past 110 seconds under coverage."""
+    marker = item.get_closest_marker("timeout")
+    own = (marker.args[0] if marker.args else marker.kwargs.get("timeout")) if marker else None
+    usual = float(item.config.getini("faulthandler_timeout") or 0)
+    if not own or not usual or float(own) <= usual + 10:
+        return
+    from _pytest import faulthandler as plugin  # where pytest's own dump goes
+
+    if (key := getattr(plugin, "fault_handler_stderr_fd_key", None)) is not None and key in item.config.stash:
+        faulthandler.dump_traceback_later(float(own) - 10, file=item.config.stash[key])
+    else:
+        faulthandler.cancel_dump_traceback_later()
 
 
 def pytest_ignore_collect(collection_path, config):

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, ts, csrf %}
-{% from "_email.html" import people, schedule_item, deliveries_table, contact_checks, next_tile, busy_script with context %}
+{% from "_email.html" import people, schedule_item, deliveries_table, contact_checks, next_tile with context %}
 {% from "_coverage.html" import coverage_card with context %}
 {% block title %}Email reports · Office Sentry{% endblock %}
 {% block content %}
@@ -121,7 +121,7 @@
     <ul class="list compact contacts">
       {% for c in team %}
       <li><div class="grow"><div class="title">{{ c.name or c.email }}</div>{% if c.name %}<div class="desc">{{ c.email }}</div>{% endif %}</div>
-        {% if admin %}<form method="post" action="{{ url_for('email.delete_contact', contact_id=c.id) }}" data-confirm="Remove {{ c.name or c.email }} from every email?">{{ csrf() }}<input type="hidden" name="from" value="overview"><button class="sm ghost">Remove</button></form>{% endif %}</li>
+        {% if admin %}<form method="post" action="{{ url_for('email.delete_contact', contact_id=c.id) }}" data-confirm="Remove {{ c.name or c.email }} from every email?" data-danger>{{ csrf() }}<input type="hidden" name="from" value="overview"><button class="sm ghost">Remove</button></form>{% endif %}</li>
       {% endfor %}
     </ul>
     {% else %}<p class="muted small">People at your MSP who should get digests and alerts, or a hidden copy of client emails.</p>{% endif %}
@@ -139,4 +139,3 @@
 </div>
 </div>
 {% endblock %}
-{% block scripts %}{{ busy_script() }}{% endblock %}

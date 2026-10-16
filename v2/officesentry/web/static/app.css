@@ -202,6 +202,7 @@ input.price { max-width: 130px; margin: 0 0 0 auto; text-align: right; }
 .flash.success { border-color: color-mix(in srgb, var(--ok) 35%, transparent); background: var(--ok-soft); color: var(--ok); }
 .flash.error { border-color: color-mix(in srgb, var(--bad) 35%, transparent); background: var(--bad-soft); color: var(--bad); }
 .flash.warning { border-color: color-mix(in srgb, var(--warn) 35%, transparent); background: var(--warn-soft); color: var(--warn); }
+.flash > .icon { flex: none; width: 18px; height: 18px; margin-top: 1px; }
 .callout { border-radius: var(--radius-sm); padding: var(--space-3) var(--space-3-5); background: var(--info-soft); color: var(--text-2); margin-bottom: var(--space-4); }
 .callout.warn { background: var(--warn-soft); }
 .callout.bad { background: var(--bad-soft); }
@@ -333,7 +334,20 @@ a.preparing { cursor: progress; opacity: .7; }
 .pdf-status.done::before { content: "\2713"; border: 0; animation: none; width: auto; height: auto; line-height: 1; }
 .pdf-status[hidden] { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .pdf-status::before { animation-duration: 2.4s; } }
+
+/* -- Forms (app.js): a pressed button shows it's working; a risky one asks first, in this dialog ---------- */
+button[aria-busy="true"], input[aria-busy="true"] { cursor: progress; pointer-events: none; opacity: .75; }
+button[aria-busy="true"] > svg.icon { display: none; }
+button[aria-busy="true"]::before { content: ""; flex: none; width: 13px; height: 13px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
+.confirm-dialog { width: min(440px, calc(100vw - 2 * var(--space-4))); padding: var(--space-5) var(--space-5) var(--space-4); border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); box-shadow: var(--shadow-menu); }
+.confirm-dialog::backdrop { background: color-mix(in srgb, var(--sidebar) 45%, transparent); }
+.confirm-dialog h2 { margin: 0; font-size: var(--fs-lg); line-height: 1.35; }
+.confirm-dialog p { margin: var(--space-2) 0 0; color: var(--text-2); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-5); }
+@media (max-width: 640px) {
+  .confirm-actions { flex-direction: column-reverse; }
+}
+@media (prefers-reduced-motion: reduce) { .pdf-status::before, button[aria-busy="true"]::before { animation-duration: 2.4s; } }
 
 /* -- Responsive -------------------------------------------------------------- */
 @media (max-width: 960px) {

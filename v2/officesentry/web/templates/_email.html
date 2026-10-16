@@ -93,18 +93,3 @@
 </div>
 {% else %}<p class="muted small m0">{{ empty_text }}</p>{% endif %}
 {%- endmacro %}
-
-{# Makes long-running POST buttons say what they're doing, so nobody double-clicks. #}
-{% macro busy_script() -%}
-<script nonce="{{ csp_nonce }}">
-document.querySelectorAll('form[data-busy]').forEach(function (f) {
-  f.addEventListener('submit', function () {
-    var b = f.querySelector('button');
-    if (b) { b.disabled = true; b.textContent = f.dataset.busy; }
-  });
-});
-document.querySelectorAll('form[data-confirm]').forEach(function (f) {
-  f.addEventListener('submit', function (e) { if (!confirm(f.dataset.confirm)) e.preventDefault(); });
-});
-</script>
-{%- endmacro %}
