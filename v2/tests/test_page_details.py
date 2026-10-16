@@ -4,6 +4,7 @@ apps a client deletes when they leave."""
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from officesentry.db import audit
 from tests.auditdata import addon_on
@@ -41,6 +42,10 @@ def test_month_end_arrows_name_their_months(client, db, two_tenants):
     page = client.get("/reporting/2026-01").get_data(as_text=True)
     assert 'aria-label="Previous month, December 2025">&larr; December</a>' in page
     assert 'aria-label="Next month, February 2026">February &rarr;</a>' in page
+    # Named arrows widen the buttons, so they wrap under the title rather than squeeze it onto two lines.
+    assert '<div class="page-head month-head">' in page
+    css = (Path(__file__).parents[1] / "officesentry/web/static/app.css").read_text()
+    assert ".page-head.month-head > :first-child:not(:only-child) { flex-basis: auto; }" in css
 
 
 def test_the_activity_log_reads_in_words_and_names_only_clients_you_see(client, db, two_tenants):
