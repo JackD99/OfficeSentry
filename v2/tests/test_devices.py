@@ -250,11 +250,20 @@ def test_devices_report(db, two_tenants):
         "Entra ID device records",
     ]
     systems = {row[0]: row for row in sections["Operating systems"].rows}
-    assert systems["Windows 10"][1:] == [1, "Ended"]
+    # The advice sits once per release here, not in every device's Problems cell.
+    assert systems["Windows 10"][1:] == [
+        1,
+        "Ended",
+        "Stopped getting security updates on 14 Oct 2025. Extended Security Updates or LTSC can cover it; "
+        "otherwise upgrade.",
+    ]
+    assert all(row[3] == "" for row in systems.values() if row[2] in ("Supported", ""))  # nothing to say
     attention = sections["Needs attention"]
     assert [row[0] for row in attention.rows] == ["LAPTOP-BOB"]
     assert attention.flags == ["high"]
-    assert "Not encrypted" in attention.rows[0][3] and "No check-in for 45 days" in attention.rows[0][3]
+    problems = attention.rows[0][3]
+    assert isinstance(problems, data_reports.Many)  # a list cell: short items, each offered by the filter
+    assert problems.parts == ("Not compliant", "Not encrypted", "Windows 10 past support", "No check-in for 45 days")
     records = sections["Entra ID device records"]
     assert records.rows[0][0] == "OLD-PC" and records.flags[0] == "low"  # least recently seen first
     assert dict(zip(records.columns, records.rows[-1], strict=True))["Join type"] == "Entra registered"
