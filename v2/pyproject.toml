@@ -25,7 +25,12 @@ dependencies = [
 [project.optional-dependencies]
 # PDF export. Needs Pango (the Docker image installs it).
 pdf = ["weasyprint>=63"]
-dev = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.6", "pytest-timeout>=2.3", "responses>=0.25", "ruff>=0.6", "weasyprint>=63"]
+# The test tools, then what only Windows installs (waitress, tzdata, and colorama for pytest and click), here
+# without their markers so requirements-dev.txt, made on Linux, has them for CI's Windows job.
+dev = [
+    "pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.6", "pytest-timeout>=2.3", "responses>=0.25", "ruff>=0.6", "weasyprint>=63",
+    "waitress>=3.0.2", "tzdata>=2024.1", "colorama>=0.4",
+]
 
 [build-system]
 requires = ["setuptools>=77"]
