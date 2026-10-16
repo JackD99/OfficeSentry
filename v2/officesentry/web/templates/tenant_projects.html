@@ -4,7 +4,7 @@
 {% from "_projects.html" import reason, status_pill, status_form with context %}
 {% block title %}Projects · {{ tenant.name }}{% endblock %}
 {% block content %}
-{{ tenant_header(tenant, 'projects', title='Recommended projects') }}
+{{ tenant_header(tenant, 'projects', title='Recommended projects', back=('Findings', url_for('reports.tenant_findings', tenant_id=tenant.id))) }}
 {% set open = recs|rejectattr('status', 'equalto', 'declined')|list %}
 <div class="toolbar">
   <p class="muted small intro-line">{% if recs or quick %}<strong>{{ open|length|plural('project') }} worth proposing{% if quick %}, and {{ quick|length|plural('quick fix', 'quick fixes') }} to just do{% endif %}.</strong>
