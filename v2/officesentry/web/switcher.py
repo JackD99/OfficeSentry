@@ -1,10 +1,12 @@
 """The client switcher beside a client's name (``_macros.tenant_header``): the page being read, for each
 other client the signed-in person sees, narrowed to the group they chose (``groups.scoped_tenants``).
 
-Those tenants are already the ones where the page's own capabilities hold (``access.visible_tenants`` reads
-what the view declared), so every link opens. A page about one of a client's objects has no counterpart on
-another client, so it opens that kind's list instead; a report another client doesn't have (an add-on's)
-opens the Reports tab."""
+Those tenants are the ones where the page's declared capabilities hold (``access.visible_tenants`` reads
+what the view declared). A page about one of a client's objects has no counterpart on another client, so it
+opens that kind's list instead; a report another client doesn't have (an add-on's) opens the Reports tab, as
+does one this person can't read on that client (``access.can_open``: a capability taken away there) when they
+read any report there, and any other page that doesn't open there opens the client's overview, so every link
+opens."""
 
 from __future__ import annotations
 
@@ -13,8 +15,9 @@ from dataclasses import dataclass
 from flask import current_app, g, request, url_for
 
 from ..reports import registry
-from .access import is_staff
+from .access import can_open, is_staff
 from .groups import scoped_tenants
+from .reports import report_groups
 
 # An account, mailbox, group, site or emailed report is one client's own: the switcher opens its list.
 LISTS = {
@@ -64,7 +67,8 @@ def choices(tenant_id: int) -> list[Choice]:
             out.append(Choice(t["name"], request.path, True))
             continue
         here, extra = endpoint, kept
-        if report is not None and report.shown is not None and not report.shown(g.db, t):
-            here, extra = "reports.data_index", {}
+        missing = report is not None and report.shown is not None and not report.shown(g.db, t)
+        if missing or not can_open(here, tenant_id=t["id"], **extra):
+            here, extra = "reports.data_index" if report is not None and report_groups(t["id"]) else FALLBACK, {}
         out.append(Choice(t["name"], url_for(here, tenant_id=t["id"], **extra), False))
     return out

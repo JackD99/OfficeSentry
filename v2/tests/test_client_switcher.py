@@ -8,11 +8,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from officesentry import store, tenant_groups
+from officesentry import roles, store, tenant_groups
 from officesentry.reports.file_activity import KEY as ADDON_REPORT
 from tests.auditdata import addon_on, collect, iso, sample
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
+from tests.test_limited_roles import _limited
 
 
 @pytest.fixture
@@ -73,6 +74,28 @@ def test_a_report_another_client_hasnt_got_opens_its_reports(client, db, vault, 
     login(client, "admin")
     links = _switch(client.get(f"/tenants/{alpha}/data/{ADDON_REPORT}").get_data(as_text=True))
     assert links["Bravo Inc"] == f"/tenants/{bravo}/data"
+
+
+def test_a_report_taken_away_on_another_client_opens_its_reports(client, db, three):
+    alpha, bravo, _ = three
+    _limited(db, "rev", ["reports.email", "reports.identity"], tenants=[alpha, bravo])
+    user = db.execute("SELECT * FROM users WHERE username = 'rev'").fetchone()
+    roles.set_overrides(db, "test", user, [roles.Override("reports.email", bravo, False)])
+    login(client, "rev")
+    links = _switch(client.get(f"/tenants/{alpha}/data/mailboxes").get_data(as_text=True))
+    assert links["Bravo Inc"] == f"/tenants/{bravo}/data"
+    assert client.get(links["Bravo Inc"], follow_redirects=True).status_code == 200  # the first they read
+    # A report they still read there opens as before.
+    assert _switch(client.get(f"/tenants/{alpha}/data/mfa").get_data(as_text=True))["Bravo Inc"] == (
+        f"/tenants/{bravo}/data/mfa"
+    )
+    # With no report left to read there, the client's overview.
+    taken = [roles.Override("reports.email", bravo, False), roles.Override("reports.identity", bravo, False)]
+    roles.set_overrides(db, "test", user, taken)
+    login(client, "rev")  # a change to someone's access signs them out
+    links = _switch(client.get(f"/tenants/{alpha}/data/mailboxes").get_data(as_text=True))
+    assert links["Bravo Inc"] == f"/tenants/{bravo}"
+    assert client.get(links["Bravo Inc"]).status_code == 200
 
 
 def test_it_lists_only_clients_the_person_sees(client, db, three):
