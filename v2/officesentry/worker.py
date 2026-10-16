@@ -23,6 +23,7 @@ import threading
 import time
 import traceback
 from datetime import UTC, datetime, timedelta
+from functools import partial
 
 import requests
 
@@ -52,6 +53,7 @@ from .db import connect, migrate, prune_audit, utcnow
 from .exchange import ExchangeClient, ExchangeError
 from .graph import GraphClient, GraphError, LicenseRequired, PermissionMissing
 from .reports import monthly_review, precomputed
+from .sharepoint_api import SharePointError
 from .text import plural
 
 log = logging.getLogger(__name__)
@@ -59,6 +61,30 @@ log = logging.getLogger(__name__)
 
 class NotConnected(Exception):
     pass
+
+
+# Microsoft's answers that waiting fixes, once the client's own retries of the request have run out: too many
+# requests, a server error or outage, or no answer at all (status 0: the network, or the sign-in service).
+PASSING_STATUSES = {0, 429, 500, 502, 503, 504}
+
+
+def passing(exc: BaseException) -> bool:
+    """Whether a run that failed with ``exc`` may work if tried again later, with nobody changing anything
+    (``store.plan_retry``). A permission, a licence, a sign-in Microsoft refused or a bug needs someone first."""
+    if isinstance(exc, GraphError | ExchangeError | FeedError | SharePointError):
+        return exc.status in PASSING_STATUSES
+    if isinstance(exc, sqlite3.OperationalError):  # the database stayed locked past the busy timeout
+        return any(word in str(exc) for word in ("locked", "busy"))
+    return False
+
+
+def _failed(conn, run_id: int, error: str, exc: BaseException) -> None:
+    """Record the failure, and plan the run's retry when waiting may fix it."""
+    with store.atomic(conn):
+        store.finish_run(conn, run_id, "failed", error)
+        when = store.plan_retry(conn, run_id) if passing(exc) else None
+        if when:
+            store.log_event(conn, run_id, "info", f"Trying again by itself at {when[11:16]} UTC")
 
 
 _local = threading.local()
@@ -243,6 +269,8 @@ def _run_collector(
             ctx.warn(why)  # Microsoft doesn't offer it in this national cloud: partial, not failed
         else:
             collector_cls().collect(ctx)
+            if failure := ctx.sign_in_failure():
+                raise failure  # what it read isn't the tenant's data: keep the last good run
             ctx.note_exchange_cuts()
     except (
         NotConnected,
@@ -252,19 +280,22 @@ def _run_collector(
         GraphError,
         ExchangeError,
         FeedError,
+        SharePointError,
         addon.AddonError,
     ) as exc:
+        _rollback(conn)  # whatever the collector left half-written isn't wanted, and mustn't hold the next write
         store.log_event(conn, run_id, "error", str(exc))
         # Sign-in failures get the plain explanation; the raw message stays in the run log.
         problem = explain(getattr(exc, "message", ""), getattr(exc, "code", ""))
         error = f"Sign-in failed: {problem}" if problem else str(exc)
         log.error("Run failed: %s", error.splitlines()[0][:300] if error else type(exc).__name__)
-        store.finish_run(conn, run_id, "failed", error)
+        _while_locked(conn, partial(_failed, conn, run_id, error, exc))
         return "failed"
     except Exception as exc:  # a collector bug must not kill the worker
+        _rollback(conn)
         store.log_event(conn, run_id, "error", traceback.format_exc())
         log.exception("Run failed on a bug (%s)", type(exc).__name__)
-        store.finish_run(conn, run_id, "failed", f"{type(exc).__name__}: {exc}")
+        _while_locked(conn, partial(_failed, conn, run_id, f"{type(exc).__name__}: {exc}", exc))
         return "failed"
 
     status = "partial" if ctx.warnings else "succeeded"
@@ -528,6 +559,7 @@ JOB_MODULES = (
     "officesentry.lifecycle",
     "officesentry.updates",
     "officesentry.auditlog.jobs",
+    "officesentry.nightly_backup",
 )
 TASK_MODULES = (
     "officesentry.delivery",
@@ -536,6 +568,7 @@ TASK_MODULES = (
     "officesentry.onboarding",
     "officesentry.lifecycle",
     "officesentry.auditlog.addon",
+    "officesentry.nightly_backup",
 )
 TASK_THREADS = 2  # rendering is CPU-bound: two let one client's approval pass a long run of others
 
@@ -552,6 +585,8 @@ def housekeeping(app, conn, vault, cfg: Config, now: datetime | None = None) -> 
     queued = schedule_tick(conn, cfg, now)
     if queued:
         log.info("Queued %s", plural(queued, "scheduled run"))
+    if retries := store.queue_retries(conn, now):
+        log.info("Queued %s of runs that failed for a passing reason", plural(retries, "retry", "retries"))
     schedule.run_periodic(schedule.TickContext(app=app, conn=conn, vault=vault, cfg=cfg, now=now))
 
 
