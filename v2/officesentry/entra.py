@@ -66,6 +66,13 @@ GRAPH_PERMISSIONS: dict[str, str] = {
     "BitLockerKey.ReadBasic.All": "Whether a device's BitLocker recovery key is saved (never the key)",
     "DeviceManagementConfiguration.Read.All": "Intune configuration and compliance policies",
     "DeviceManagementApps.Read.All": "Intune app protection policies and managed apps",
+    # Added in 2.4 (permission_batch.BATCHES)
+    "DeviceLocalCredential.ReadBasic.All": "Whether a computer's local admin password is backed up (never the "
+    "password)",
+    "SecurityAlert.Read.All": "Microsoft Defender alerts",
+    "SecurityIncident.Read.All": "Microsoft Defender incidents",
+    "ServiceHealth.Read.All": "Microsoft 365 service health: outages and advisories",
+    "ServiceMessage.Read.All": "Microsoft 365 message centre: upcoming changes",
 }
 
 # Exchange Online admin API (read-only cmdlets only; see exchange.py). Each
@@ -124,12 +131,20 @@ def admin_consent_url(client_id: str, tenant_ref: str, redirect_uri: str, state:
     return f"{clouds.get(cloud).login}/{tenant_ref}/adminconsent?{query}"
 
 
+# Permissions some national cloud doesn't offer (``clouds.Cloud.no_permissions``): an app registered there asks
+# for everything else rather than failing.
+NOT_EVERYWHERE = frozenset(p for c in clouds.CLOUDS.values() for p in c.no_permissions)
+
+
 def _resource(sp: dict, app_id: str, wanted: dict[str, str]) -> dict:
     roles = {r["value"]: r["id"] for r in sp.get("appRoles", []) if "Application" in r.get("allowedMemberTypes", [])}
-    missing = sorted(set(wanted) - set(roles))
+    missing = sorted(set(wanted) - set(roles) - NOT_EVERYWHERE)
     if missing:
         raise ValueError(f"{app_id} does not offer these permissions: {', '.join(missing)}")
-    return {"resourceAppId": app_id, "resourceAccess": [{"id": roles[name], "type": "Role"} for name in sorted(wanted)]}
+    return {
+        "resourceAppId": app_id,
+        "resourceAccess": [{"id": roles[name], "type": "Role"} for name in sorted(wanted) if name in roles],
+    }
 
 
 def required_resource_access(

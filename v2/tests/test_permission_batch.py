@@ -1,5 +1,5 @@
-"""The 2.2 permission batch: new read-only permissions released together, what waits for them, the What's new
-page and its PDF, and updating the MSP's app registration.
+"""The permission batches (2.2 and 2.4): new read-only permissions released together, what waits for them, the
+What's new page and its PDF, and updating the MSP's app registration.
 
 Microsoft is simulated at the HTTP level: Graph for the connection collector (``tests.seed``) and for the app
 registration in the MSP's own tenant, and the sign-in service for the update wizard.
@@ -28,6 +28,7 @@ from tests.conftest import login, make_user
 from tests.seed import exchange_factory, mock_tenant
 
 BATCH = permission_batch.CURRENT
+FIRST = permission_batch.BATCHES[0]
 GRAPH = "https://graph.microsoft.com/v1.0"
 LOGIN = "https://login.microsoftonline.com"
 CLIENT_ID = "11111111-2222-3333-4444-555555555555"  # conftest's app connection
@@ -63,9 +64,9 @@ def _admin(client, db):
 # -- The batch itself ---------------------------------------------------------------------------------
 
 
-def test_the_batch_holds_the_nine_permissions_other_work_asked_for():
-    assert BATCH.release == "2.2"
-    assert set(BATCH.permissions) == {
+def test_the_batches_hold_the_permissions_other_work_asked_for():
+    assert [b.release for b in permission_batch.BATCHES] == ["2.2", "2.4"] and BATCH.release == "2.4"
+    assert set(FIRST.permissions) == {
         "Channel.ReadBasic.All",
         "ChannelMember.Read.All",
         "TeamsAppInstallation.ReadForTeam.All",
@@ -76,7 +77,14 @@ def test_the_batch_holds_the_nine_permissions_other_work_asked_for():
         "DeviceManagementApps.Read.All",
         "SharePoint Sites.Read.All",
     }
-    for p in BATCH.permissions:  # each is asked for, explained to the client and says what it adds
+    assert set(BATCH.permissions) == {
+        "DeviceLocalCredential.ReadBasic.All",
+        "SecurityAlert.Read.All",
+        "SecurityIncident.Read.All",
+        "ServiceHealth.Read.All",
+        "ServiceMessage.Read.All",
+    }
+    for p in permission_batch.BATCH_OF:  # each is asked for, explained to the client and says what it adds
         assert p in PERMISSIONS and onboarding.CLIENT_WORDS[p] and permission_batch.ADDS[p]
     assert set(permission_batch.ADDS) == set(permission_batch.BATCH_OF)
     # Nothing that writes: every name is a read permission.
@@ -103,12 +111,12 @@ def test_a_client_that_hasnt_approved_the_batch_stays_healthy_and_says_what_wait
     run = store.latest_run(db, alpha, "connection")
     assert not run["error"]
     logged = " ".join(r["message"] for r in db.execute("SELECT message FROM run_events WHERE run_id = ?", (run["id"],)))
-    assert "Waiting for the client to approve 9 new permissions" in logged
+    assert "Waiting for the client to approve 5 new permissions" in logged
 
     health = tenant_health.assess(db, store.get_tenant(db, alpha))
     perms = health.check("permissions")
     assert perms.state == "todo" and perms.action == "whats_new" and not perms.problem
-    assert "9 new permissions from Office Sentry 2.2" in perms.summary
+    assert "5 new permissions from Office Sentry 2.4" in perms.summary
     assert health.waiting == list(BATCH.permissions) and health.missing == []
     assert next(s for s in health.steps if s.key == "permissions").done  # still onboarded
 
@@ -179,15 +187,16 @@ def test_tracker_follows_the_batch_from_ask_to_approved(app, client, db, two_ten
 
 def test_whats_new_page_and_pdf(client, db, two_tenants):
     alpha, _ = two_tenants
-    _check(db, alpha, missing=("Channel.ReadBasic.All", "SharePoint Sites.Read.All"))
+    # One from 2.4 and one from 2.2: a client that didn't approve the last batch is asked for it with this one.
+    _check(db, alpha, missing=("ServiceHealth.Read.All", "SharePoint Sites.Read.All"))
     _admin(client, db)
     page = client.get(f"/admin/onboarding/{alpha}").get_data(as_text=True)
     assert "What's new for Alpha Ltd" in page and "New permissions to approve" in page
-    assert "Office Sentry 2.2 asks for 2 new read-only permissions" in page
-    assert "Channel.ReadBasic.All" in page and "Office 365 SharePoint Online" in page
+    assert "Office Sentry 2.4 asks for 2 new read-only permissions" in page
+    assert "ServiceHealth.Read.All" in page and "Office 365 SharePoint Online" in page
     assert "First, update your app." in page and "Copy message" not in page  # nothing to send yet
 
-    db.execute("UPDATE app_connections SET permissions_release = '2.2'")
+    db.execute("UPDATE app_connections SET permissions_release = '2.4'")
     page = client.get(f"/admin/onboarding/{alpha}").get_data(as_text=True)
     assert "First, update your app." not in page and "Copy message" in page
     assert "New read-only reports for Alpha Ltd: one approval needed" in page
@@ -205,7 +214,47 @@ def test_whats_new_page_and_pdf(client, db, two_tenants):
 
     if not export.pdf_available():
         text = pdf.get_data(as_text=True)
-        assert "New read-only permissions to approve" in text and "Channel.ReadBasic.All" in text
+        assert "New read-only permissions to approve" in text and "ServiceHealth.Read.All" in text
+
+
+def test_a_client_behind_on_two_batches_is_asked_for_both(client, db, two_tenants):
+    alpha, _ = two_tenants
+    _check(db, alpha, missing=("BitLockerKey.ReadBasic.All", "SecurityAlert.Read.All", "ServiceHealth.Read.All"))
+    health = tenant_health.assess(db, store.get_tenant(db, alpha))
+    assert "3 new permissions from Office Sentry 2.2 and 2.4" in health.check("permissions").summary
+    assert permission_batch.releases(["ServiceHealth.Read.All"]) == "2.4"
+    items = permission_batch.items(onboarding.CLIENT_WORDS, only=health.waiting)
+    assert [i.permission for i in items] == [
+        "BitLockerKey.ReadBasic.All",
+        "SecurityAlert.Read.All",
+        "ServiceHealth.Read.All",
+    ]
+    assert all(i.reads and i.adds for i in items)
+    _admin(client, db)
+    page = client.get(f"/admin/onboarding/{alpha}").get_data(as_text=True)
+    assert "Office Sentry 2.4 asks for 3 new read-only permissions" in page
+    assert "BitLockerKey.ReadBasic.All" in page and "ServiceHealth.Read.All" in page
+    assert "DeviceLocalCredential.ReadBasic.All" not in page  # approved already
+    text = permission_batch.waiting_text("Alpha Ltd", ["BitLockerKey.ReadBasic.All", "SecurityAlert.Read.All"])
+    assert "added in Office Sentry 2.2 and 2.4" in text
+
+
+def test_a_cloud_without_defender_isnt_asked_for_it(db, two_tenants):
+    """Microsoft 365 operated by 21Vianet has no Defender alerts or incidents in Graph: the app there doesn't
+    ask for them, so the connection check doesn't count them as waiting."""
+    from officesentry.entra import required_resource_access
+
+    alpha, _ = two_tenants
+    db.execute("UPDATE tenants SET cloud = 'china' WHERE id = ?", (alpha,))
+    _, result = _check(db, alpha, missing=("SecurityAlert.Read.All", "SecurityIncident.Read.All"))
+    assert permission_batch.waiting(result) == [] and permission_batch.missing_original(result) == []
+    assert tenant_health.assess(db, store.get_tenant(db, alpha)).check("permissions").state == "ok"
+    offered = [n for n in GRAPH_PERMISSIONS if n not in ("SecurityAlert.Read.All", "SecurityIncident.Read.All")]
+    sp = {"appRoles": [{"id": f"id-{n}", "value": n, "allowedMemberTypes": ["Application"]} for n in offered]}
+    asked = {a["id"] for a in required_resource_access(sp)[0]["resourceAccess"]}
+    assert asked == {f"id-{n}" for n in offered}
+    with pytest.raises(ValueError, match="BitLockerKey"):  # anything else missing is still an error
+        required_resource_access({"appRoles": [r for r in sp["appRoles"] if "BitLocker" not in r["value"]]})
 
 
 def test_the_app_is_ready_once_a_client_has_granted_the_whole_batch(db, two_tenants, connection_id):
@@ -301,7 +350,7 @@ def test_update_wizard_signs_in_updates_and_marks_the_connection(client, db, con
     make_user(db, "admin")
     login(client, "admin")
     page = client.get("/admin/connections").get_data(as_text=True)
-    assert "Update this app for Office Sentry 2.2" in page and "New in 2.2" in page
+    assert "Update this app for Office Sentry 2.4" in page and "New in 2.4" in page
 
     responses.post(
         f"{LOGIN}/organizations/oauth2/v2.0/devicecode",
@@ -327,10 +376,10 @@ def test_update_wizard_signs_in_updates_and_marks_the_connection(client, db, con
         client.post("/admin/connections/setup/check", headers={"Accept": "application/json"}).get_json()["status"]
         == "done"
     )
-    assert store.get_connection(db, connection_id)["permissions_release"] == "2.2"
+    assert store.get_connection(db, connection_id)["permissions_release"] == "2.4"
     assert not any(c.request.method == "POST" and c.request.url.startswith(GRAPH) for c in responses.calls)
     page = client.get("/admin/connections").get_data(as_text=True)
-    assert "now asks for every permission" in page and "Update this app for Office Sentry 2.2" not in page
+    assert "now asks for every permission" in page and "Update this app for Office Sentry 2.4" not in page
     actions = [r["action"] for r in db.execute("SELECT action FROM audit_log ORDER BY id")]
     assert "connection_permissions_updated" in actions and "app_updated" in actions
 
@@ -364,7 +413,7 @@ def test_added_by_hand(client, db, connection_id):
     make_user(db, "admin")
     login(client, "admin")
     client.post(f"/admin/connections/{connection_id}/updated-by-hand")
-    assert store.get_connection(db, connection_id)["permissions_release"] == "2.2"
+    assert store.get_connection(db, connection_id)["permissions_release"] == "2.4"
 
 
 def test_an_app_made_by_hand_from_the_steps_is_not_asked_to_update(client, db, vault):
@@ -393,4 +442,4 @@ def test_a_new_app_asks_for_the_latest_batch(db, vault):
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr("officesentry.entra.create_app_registration", lambda *a, **k: {"appId": CLIENT_ID})
         made, _ = app_setup.register_app(db, vault, TOKEN, "https://x/consent/callback")
-    assert made == conn_id and store.get_connection(db, conn_id)["permissions_release"] == "2.2"
+    assert made == conn_id and store.get_connection(db, conn_id)["permissions_release"] == "2.4"

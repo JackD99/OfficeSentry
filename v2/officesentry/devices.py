@@ -13,6 +13,7 @@ from datetime import UTC, date, datetime
 STALE_DAYS = 90  # an Entra device not seen for this long is probably gone
 NO_SYNC_DAYS = 30  # an Intune device that hasn't checked in for this long isn't getting policy
 BITLOCKER = "BitLockerKey.ReadBasic.All"  # lists which devices have a recovery key saved (added in 2.2)
+LAPS = "DeviceLocalCredential.ReadBasic.All"  # lists which devices back up a local admin password (added in 2.4)
 
 
 @dataclass(frozen=True)
@@ -164,6 +165,34 @@ def bitlocker_state(snap) -> str | None:
     rows = snap.objects("devices", "bitlocker_status")
     found = rows[0].get("state") if rows and isinstance(rows[0], dict) else None
     return found if isinstance(found, str) else None
+
+
+def laps_state(snap) -> str | None:
+    """How the latest Devices run read Windows LAPS backups: "read", "waiting" (the client hasn't approved
+    DeviceLocalCredential.ReadBasic.All yet) or "failed"; None from a run before Office Sentry read them."""
+    rows = snap.objects("devices", "laps_status")
+    found = rows[0].get("state") if rows and isinstance(rows[0], dict) else None
+    return found if isinstance(found, str) else None
+
+
+def laps_backups(snap) -> dict[str, dict]:
+    """Local admin passwords backed up in Entra ID by Windows LAPS, by lower-cased Entra device ID: when the
+    password was last backed up (``lastBackupDateTime``) and when it's next changed (``refreshDateTime``).
+    Never the password: the list doesn't carry it."""
+    out = {}
+    for r in snap.objects("devices", "laps_backup") or []:
+        if isinstance(r, dict) and isinstance(r.get("_id"), str):
+            out[r["_id"].lower()] = r
+    return out
+
+
+def laps_backup(device: dict, backups: dict[str, dict]) -> dict | None:
+    """An Entra device's Windows LAPS backup, by its Entra device ID, else by name (Microsoft lists both)."""
+    found = backups.get((device.get("deviceId") or "").lower())
+    if found is None and device.get("displayName"):
+        name = device["displayName"].lower()
+        found = next((b for b in backups.values() if (b.get("deviceName") or "").lower() == name), None)
+    return found
 
 
 def recovery_keys(snap) -> dict[str, dict]:

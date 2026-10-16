@@ -24,6 +24,8 @@ from . import (  # noqa: F401
     mailbox_trend,
     mobile_devices,
     risky_users,
+    security_alerts,
+    service_health,
     sharepoint,
     sharepoint_storage,
     sign_in_reports,
