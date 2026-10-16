@@ -1528,13 +1528,26 @@ def _device_issues(
     ):
         add(*((HYBRID_NO_RECOVERY_KEY, "low") if join == devices.HYBRID else (NO_RECOVERY_KEY, "medium")))
     if devices.is_windows(d):
+        # Short, so a value filter offers each problem; the advice is in the Operating systems table.
         support = devices.windows_support(d.get("osVersion"), now.date())
-        if support.status in ("ended", "pro_ended", "ending"):
-            add(support.detail.rstrip("."), {"ended": "high", "pro_ended": "medium", "ending": "low"}[support.status])
+        if support.status == "ended":
+            add(f"{support.release} past support", "high")
+        elif support.status == "pro_ended":
+            add(f"{support.release} past support (Home and Pro)", "medium")
+        elif support.status == "ending":
+            add(f"{support.release} support ends {support.end:%b %Y}", "low")
     days = devices.days_since(d.get("lastSyncDateTime"), now)
     if days is not None and days > devices.NO_SYNC_DAYS:
         add(f"No check-in for {days} days", "low")
     return issues, flag
+
+
+def _support_advice(support: devices.OsSupport) -> str:
+    """What a Windows release's support state means, without the release's name (the row already has it)."""
+    if support.status not in ("ended", "pro_ended", "ending"):
+        return ""
+    text = support.detail.removeprefix(support.release).lstrip(": ")
+    return text[:1].upper() + text[1:]
 
 
 def _seen(value: str | None, now: datetime) -> str:
@@ -1578,16 +1591,18 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
         ]
         version_key = "operatingSystemVersion"
     counts: dict[tuple[str, str], int] = {}
+    advice: dict[tuple[str, str], str] = {}
     for d in population:
         if devices.is_windows(d):
             support = devices.windows_support(d.get(version_key), now.date())
             key = (support.release, support.status)
+            advice[key] = _support_advice(support)
         else:
             key = (d.get("operatingSystem") or "Unknown", "")
         counts[key] = counts.get(key, 0) + 1
     systems = Section(
         "Operating systems",
-        ["Operating system", "Devices", "Security updates"],
+        ["Operating system", "Devices", "Security updates", "What it means"],
         intro=(
             "Devices enrolled in Intune."
             if managed
@@ -1597,7 +1612,7 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
     )
     flags = {"ended": "high", "pro_ended": "medium", "ending": "low"}
     for (name, state), n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0][0])):
-        systems.add([name, n, SUPPORT.get(state, "")], flags.get(state))
+        systems.add([name, n, SUPPORT.get(state, ""), advice.get((name, state), "")], flags.get(state))
     sections = [systems]
     past_support = (
         sum(n for (_name, state), n in counts.items() if state == "ended"),
@@ -1632,10 +1647,8 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
         joins = {(e.get("deviceId") or "").lower(): e.get("trustType") for e in entra if e.get("deviceId")}
         for d in sorted(managed, key=lambda d: (d.get("deviceName") or "").lower()):
             issues, flag = _device_issues(d, now, keys, joins)
-            if issues:
-                attention.add(
-                    [d.get("deviceName"), d.get("userPrincipalName"), devices.os_label(d), "; ".join(issues)], flag
-                )
+            if issues:  # a list cell: the page shows each problem on its own, and a filter offers each
+                attention.add([d.get("deviceName"), d.get("userPrincipalName"), devices.os_label(d), issues], flag)
             every.add(
                 [
                     d.get("deviceName"),
