@@ -57,6 +57,8 @@
 {% endif %}
 {% else %}
 {% set sec = can('reports.security') %}
+{#- The report picked, then its figures and its table, as on Every row and Checks. -#}
+{{ across_bar(key, main, 'tenants' if rollup.tenant_link == 'data' else '') }}
 {% if review %}
 {#- The answer first: how the clients stand, counted over the ones whose figures this person opens. -#}
 <div class="tiles">
@@ -81,8 +83,6 @@
     <div class="foot">{% if rollup.without_data %}the reason is under each client's name{% else %}every client has data{% endif %}</div></div>
 </div>
 {% endif %}
-
-{{ across_bar(key, main, 'tenants' if rollup.tenant_link == 'data' else '') }}
 
 {#- The monthly review column: each client's review to open or download, for someone who reads findings. -#}
 {% set reviews = review and sec %}
