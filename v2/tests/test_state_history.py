@@ -14,7 +14,7 @@ from officesentry.__main__ import main
 from officesentry.certs import generate_certificate
 from officesentry.config import load_config
 from officesentry.crypto import Vault
-from officesentry.db import connect, migrate
+from officesentry.db import connect, migrate, utcnow
 from officesentry.reports import data_reports, month_changes, rollups, user_profile
 from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
@@ -398,7 +398,12 @@ def test_the_upgrade_adds_empty_tables_and_changes_no_rows(cfg, monkeypatch):
     conn = connect(cfg.db_path)
     migrate(conn)
     tid = store.create_tenant(conn, "Old", "old.onmicrosoft.com", None)
-    rid = store.enqueue_run(conn, tid, "users")
+    # As the older release queued it: store's own code may use columns later migrations add.
+    rid = conn.execute(
+        "INSERT INTO runs (tenant_id, collector, status, trigger, created_at)"
+        " VALUES (?, 'users', 'queued', 'manual', ?)",
+        (tid, utcnow()),
+    ).lastrowid
     store.add_objects(conn, rid, "user", [("a", person("Ann"))])
     store.finish_run(conn, rid, "succeeded")
     rows = conn.execute("SELECT * FROM objects").fetchall()

@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 import responses
 
-from officesentry import delivery, lifecycle, store, system_health, tasks, tenant_health
+from officesentry import delivery, lifecycle, mailer, store, system_health, tasks, tenant_health
 from officesentry.graph import GraphClient
 from officesentry.worker import execute_run, schedule_tick
 from tests import graphdata as gd
@@ -220,10 +220,10 @@ def test_paused_and_archived_tenants_are_not_collected(db, cfg, two_tenants):
     )
     assert store.claim_next_run(db) is None
 
-    lifecycle.resume(db, store.get_tenant(db, alpha), "admin")
+    lifecycle.resume(db, store.get_tenant(db, alpha), "admin", "UTC")
     assert store.claim_next_run(db)["tenant_id"] == alpha
     with pytest.raises(ValueError):
-        lifecycle.resume(db, store.get_tenant(db, bravo), "admin")  # restore first
+        lifecycle.resume(db, store.get_tenant(db, bravo), "admin", "UTC")  # restore first
     lifecycle.restore(db, store.get_tenant(db, bravo), "admin")
     t = store.get_tenant(db, bravo)
     assert t["archived_at"] is None and not t["enabled"]  # restored, still paused
@@ -655,3 +655,23 @@ def test_health_reads_stored_state_only(db, two_tenants):
         tenant_health.assess(db, store.get_tenant(db, alpha))
         assert not rsps.calls
     assert json.dumps(tenant_health.counts(tenant_health.assess(db, store.get_tenant(db, alpha))), default=str)
+
+
+def test_client_names_stay_on_one_line(client, db, two_tenants, connection_id):
+    """A client's name goes into email subjects, which can't hold a line break: the forms and the import keep it
+    on one line, and an email about a client named with one before this still sends."""
+    alpha, _ = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    form = {"tenant_ref": "alpha.onmicrosoft.com", "connection_id": connection_id}
+    client.post(f"/tenants/{alpha}/edit", data=form | {"name": "Alpha\r\nGroup\t\x00Ltd"})
+    assert store.get_tenant(db, alpha)["name"] == "Alpha Group Ltd"
+    form = {"tenant_ref": "charlie.onmicrosoft.com", "connection_id": connection_id}
+    client.post("/tenants/new", data=form | {"name": "Charlie\nLtd\u2028"})
+    client.post(
+        "/admin/onboarding/import", data={"text": 'name,tenant\n"Delta\r\nLtd",delta.onmicrosoft.com\n', "confirm": "1"}
+    )
+    names = dict(db.execute("SELECT tenant_ref, name FROM tenants").fetchall())
+    assert names["charlie.onmicrosoft.com"] == "Charlie Ltd" and names["delta.onmicrosoft.com"] == "Delta Ltd"
+    email = mailer.Email(to=["it@alpha.example"], subject="Report for Alpha\r\nBcc: x@example.com", text="")
+    assert mailer.to_mime(email, "msp@example.com")["Subject"] == "Report for Alpha Bcc: x@example.com"

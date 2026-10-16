@@ -40,6 +40,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import __version__, logs, system_health
+from .auditlog import addon
 from .config import ENV_PREFIX, Config
 from .db import latest_version, migration_files, schema_version, stored_app_version
 
@@ -76,8 +77,9 @@ PLAIN_SETTINGS = (
     "updates.checked_at",
     "updates.check_error",
     "updates.audited_job",
+    "audit_addon",
 )
-PLAIN_SETTING_PREFIXES = ("retention.", "state_history.", "system_alert.")
+PLAIN_SETTING_PREFIXES = ("retention.", "state_history.", "system_alert.", "backup.")
 
 
 # -- Redaction -----------------------------------------------------------------------------------------------
@@ -335,7 +337,8 @@ def build(
     part(
         "clients.json",
         "Clients",
-        "Each client as a number: cloud, state, consent, and the last run of each data source",
+        "Each client as a number: cloud, state, consent, the last run of each data source, and where it has got with"
+        " the audit log add-on",
         lambda: _clients(conn, redact, include_identifiers),
         lambda d: f"{len(d)} clients",
     )
@@ -355,7 +358,8 @@ def build(
     part(
         "connections.json",
         "App connections",
-        "Each app connection's cloud and certificate dates (never the certificate or its key)",
+        "Each app connection's kind (the shared app or the audit log add-on's), cloud and certificate dates (never"
+        " the certificate or its key)",
         lambda: _connections(conn, include_identifiers),
     )
     part(
@@ -567,11 +571,26 @@ def _clients(conn, redact: Redactor, include_identifiers: bool) -> list[dict]:
             ),
             "users_with_access": _count(conn, "SELECT COUNT(*) FROM user_tenants WHERE tenant_id = ?", (t["id"],)),
         }
+        if feed := _tolerant(conn, "SELECT * FROM audit_feeds WHERE tenant_id = ?", (t["id"],)):
+            entry["audit_addon"] = _audit_feed(feed[0], redact)
         if include_identifiers:
             entry["name"] = t["name"]
             entry["tenant_ref"] = t["tenant_ref"]
         out.append(entry)
     return out
+
+
+def _audit_feed(row, redact: Redactor) -> dict:
+    """Where a client has got with the audit log add-on, without who sent or switched it."""
+    state = addon.state(row)
+    return {
+        "state": state.key,
+        "detail": redact(state.detail),
+        "connection_id": row["connection_id"],
+        "content_types": row["content_types"],
+        **{f: row[f] for f in ("sent_at", "wanted_at", "approved_at", "consented_at", "checked_at")},
+        **{f: row[f] for f in ("started_at", "stopped_at", "created_at")},
+    }
 
 
 def _capabilities(tenant) -> dict | None:
@@ -730,6 +749,7 @@ def _connections(conn, include_identifiers: bool) -> list[dict]:
         keys = c.keys()
         entry = {
             "id": c["id"],
+            "kind": c["kind"] if "kind" in keys else "main",
             "cloud": c["cloud"] if "cloud" in keys else "commercial",
             "has_client_id": bool(c["client_id"]),
             "certificate_not_after": c["not_after"],
@@ -831,7 +851,7 @@ PARTS = [
     ("Configuration", "every OFFICESENTRY_* setting, secrets shown as set or not set"),
     ("Health checks", "the System status checks, their results and suggested fixes"),
     ("Database", "tables with row counts, applied migrations, settings by name"),
-    ("Clients", "each client as a number: cloud, state, consent, last run of each data source"),
+    ("Clients", "each client as a number: cloud, state, consent, last run of each data source, audit log add-on"),
     ("Recent failures", f"failed runs and background tasks of the last {FAILURE_DAYS} days, with their error text"),
     ("Worker and queue", "the worker's last heartbeat, what's queued and running"),
     ("App connections", "each connection's cloud and certificate dates, never the certificate or key"),

@@ -601,6 +601,37 @@ def apps(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             flag,
         )
     report.sections = [third, regs]
+    statuses = [row[-1] for row in regs.rows]
+    expiring, expired = statuses.count("Expiring soon"), statuses.count("All expired")
+    report.tiles = [
+        Tile(
+            "Third-party apps",
+            len(risks),
+            f"{sum(bool(a['app_permissions']) for a in risks)} with application permissions",
+            rows=Rows(third.title),
+        ),
+        Tile(
+            "Apps to review",
+            third.flagged,
+            "Powerful permissions, or an unverified publisher",
+            ("bad" if "high" in third.flags else "warn") if third.flagged else "ok",
+            Rows(third.title, flagged=True),
+        ),
+        Tile(
+            "Credentials expiring",
+            expiring,
+            "Within 30 days: renew them or the app stops working",
+            "warn" if expiring else "ok",
+            Rows(regs.title, {"Status": "Expiring soon"}),
+        ),
+        Tile(
+            "Every credential expired",
+            expired,
+            "Integrations that have stopped, or apps nobody uses",
+            "warn" if expired else None,
+            Rows(regs.title, {"Status": "All expired"}),
+        ),
+    ]
 
 
 def _ts(iso: str) -> float:
@@ -652,7 +683,7 @@ def admin_activity(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
             covered = (
                 "the last 12 months"
                 if span >= adminactivity.HISTORY_DAYS
-                else f"the {span} days since {start:%d %b %Y}, when Office Sentry started keeping this "
+                else f"the {span} days since {start.day} {start:%b %Y}, when Office Sentry started keeping this "
                 "tenant's audit log"
             )
     events = sorted(events, key=lambda e: e.get("time") or "", reverse=True)
@@ -661,9 +692,9 @@ def admin_activity(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
         "Changes to review",
         ["When (UTC)", "Change", "By", "Target", "Detail", "Why it matters"],
         compare=False,
-        intro=f"Changes in {covered} that are worth confirming with the client: domain sign-in "
-        "(federation) changes, new app secrets and certificates, admin roles granted, and "
-        "Conditional Access policies deleted or switched off. Failed attempts are left out.",
+        intro="Domain sign-in (federation) changes, new app secrets and certificates, admin roles granted, and "
+        f"Conditional Access policies deleted or switched off, in {covered}. Each is worth confirming with the "
+        "client. Failed attempts are left out.",
         empty="No change in the window needs a second look.",
     )
     every = Section(
@@ -717,6 +748,35 @@ def admin_activity(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
         who.add([name, {"user": "User", "app": "App"}.get(a["type"], ""), a["count"], _when(a["last"])])
     report.sections = [review, every, who]
 
+    # Headline figures cover the last 30 days, whatever the tables cover, so clients compare side by side.
+    recent = [e for e in events if _in_last_30_days(e.get("time"), now)]
+    worth = [adminactivity.review(e) for e in recent]
+    worth = [f[0] for f in worth if f]
+    kept = adminactivity.covered_days(window)
+    month = f"Last {kept} days, all the audit log keeps" if kept < 30 and history is None else "Last 30 days"
+    report.tiles = [
+        Tile(
+            "Changes to review",
+            len(worth),
+            month,
+            ("bad" if {"critical", "high"} & set(worth) else "warn") if worth else "ok",
+            Rows(review.title, age=("When (UTC)", "lt30")),
+        ),
+        Tile("Admin changes", len(recent), month, rows=Rows(every.title, age=("When (UTC)", "lt30"))),
+        Tile(
+            "People and apps making changes",
+            len({e.get("actor") or "Unknown" for e in recent}),
+            month,
+            rows=Rows(who.title, age=("Last change (UTC)", "lt30")),
+        ),
+    ]
+
+
+def _in_last_30_days(iso: str | None, now: datetime) -> bool:
+    """The same days as the tables' "In the last 30 days" filter, so a figure counts the rows it links to."""
+    when = devices.parse_ts(iso)
+    return when is not None and 0 <= (now.date() - when.date()).days <= 30
+
 
 # -- Conditional Access coverage -------------------------------------------------------
 
@@ -755,9 +815,12 @@ def conditional_access(snap: TenantSnapshot, now: datetime, report: DataReport) 
         empty="No Conditional Access policies."
         + (" The tenant has no Entra ID P1." if snap.capabilities.get("entra_p1") is False else ""),
     )
+    states = {"On": 0, "Report-only": 0, "Off": 0}
     for p in sorted(policies, key=lambda p: (order.get(p.get("state"), 3), (p.get("displayName") or "").lower())):
         row = coverage.describe(p, d, snap.capabilities)
         state = f"{row.state}, but never applies (needs Entra ID P2)" if row.warning else row.state
+        if state in states:
+            states[state] += 1
         pol.add(
             [
                 row.name,
@@ -801,6 +864,40 @@ def conditional_access(snap: TenantSnapshot, now: datetime, report: DataReport) 
             flag,
         )
     report.sections.append(accounts)
+    admins = accounts.flags.count("high")
+    legacy = sum(not (c.legacy_blocked or sd) for c in cov)
+    report.tiles = [
+        Tile(
+            "Policies on",
+            states["On"],
+            f"{states['Report-only']} report-only, {states['Off']} off",
+            rows=Rows(pol.title, {"State": "On"}),
+        ),
+        Tile(
+            "MFA not required",
+            accounts.flagged,
+            "Members no enforced policy asks for MFA in every app"
+            + (f", including {plural(admins, 'admin')}" if admins else ""),
+            ("bad" if admins else "warn") if accounts.flagged else "ok",
+            Rows(accounts.title, flagged=True),
+        ),
+        Tile(
+            "Legacy sign-in allowed",
+            legacy,
+            "Enabled accounts no enforced policy blocks legacy sign-in for",
+            "warn" if legacy else "ok",
+            Rows(accounts.title, {"Legacy sign-in blocked": "No"}),
+        ),
+        Tile(
+            "Security Defaults",
+            "On" if sd else "Off",
+            "MFA for everyone, without Conditional Access"
+            if sd
+            else ("Conditional Access applies instead" if states["On"] else "And no Conditional Access policy is on"),
+            None if sd or states["On"] else "bad",
+            Rows("Security Defaults") if sd else None,
+        ),
+    ]
 
 
 # -- Guests and sharing -----------------------------------------------------------
@@ -811,6 +908,19 @@ INVITES = {
     "adminsAndGuestInviters": "Admins and Guest Inviters",
     "adminsGuestInvitersAndAllMembers": "Admins and members",
     "everyone": "Everyone, including guests",
+}
+# The same, short enough for a headline figure.
+INVITES_SHORT = {
+    "none": "Nobody",
+    "adminsAndGuestInviters": "Admins",
+    "adminsGuestInvitersAndAllMembers": "Members",
+    "everyone": "Everyone",
+}
+SHARING_SHORT = {
+    "disabled": "Organisation only",
+    "existingExternalUserSharingOnly": "Existing guests",
+    "externalUserSharingOnly": "Guests",
+    "externalUserAndGuestSharing": "Anyone",
 }
 
 
@@ -859,8 +969,10 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             settings.add(["Sharing limited to domains", sharepoint.get("sharingAllowedDomainList") or []])
         elif mode == "blockList":
             settings.add(["Sharing blocked for domains", sharepoint.get("sharingBlockedDomainList") or []])
-        settings.add(["Guests can reshare", sharepoint.get("isResharingByExternalUsersEnabled")])
+        reshare = sharepoint.get("isResharingByExternalUsersEnabled")
+        settings.add(["Guests can reshare", "Not reported" if reshare is None else reshare])
     sections = [settings]
+    report.tiles = []
     if users is not None:
         activity = any(u.get("signInActivityAvailable") for u in users)
         guest = Section(
@@ -888,6 +1000,42 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                 "low" if stale or pending else None,
             )
         sections.append(guest)
+        report.tiles += [
+            Tile("Guests", len(rows), rows=Rows(guest.title), trend=metric_trend(snap, "users.guests", now)),
+            Tile(
+                "Guests to review",
+                guest.flags.count("low"),
+                "No sign-in for 90 days, or invitation not accepted"
+                if activity
+                else "Invitation not accepted (sign-in dates need Entra ID P1)",
+                "warn" if "low" in guest.flags else "ok",
+                Rows(guest.title, {"Flag": "low"}),
+            ),
+        ]
+    if policy:
+        invites = policy.get("allowInvitesFrom")
+        report.tiles.append(
+            Tile(
+                "Who can invite guests",
+                INVITES_SHORT.get(invites, invites or "Not reported"),
+                INVITES.get(invites, ""),
+                "warn" if invites == "everyone" else None,
+                Rows(settings.title, {"Setting": "Who can invite guests"}),
+            )
+        )
+    if sharepoint:
+        level = sharepoint.get("sharingCapability")
+        report.tiles.append(
+            Tile(
+                "File sharing",
+                SHARING_SHORT.get(level, level or "Not reported"),
+                f"Most open for any site: {SHARING_LEVELS[level].lower()}"
+                if level in SHARING_LEVELS
+                else "The most any SharePoint or OneDrive site may allow",
+                "warn" if level == "externalUserAndGuestSharing" else None,
+                Rows(settings.title, {"Setting": "SharePoint and OneDrive sharing"}),
+            )
+        )
     report.sections = sections
 
 
@@ -944,7 +1092,7 @@ def tenant_settings(snap: TenantSnapshot, now: datetime, report: DataReport) -> 
     add("Users can sign up for trials and free subscriptions", "allowedToSignUpEmailBasedSubscriptions", False, "low")
     add("Users can create security groups", "allowedToCreateSecurityGroups", False)
     add("Users can look up other users in the directory", "allowedToReadOtherUsers", True)
-    add("Self-service password reset allowed", "allowedToUseSSPR", True)
+    add("Admins can reset their own password (self-service)", "allowedToUseSSPR", True)
     add("Legacy MSOnline PowerShell blocked", "blockMsolPowerShell", True)
 
     consent = Section(
@@ -966,6 +1114,32 @@ def tenant_settings(snap: TenantSnapshot, now: datetime, report: DataReport) -> 
             days = workflow.get("requestDurationInDays")
             consent.add(["Requests expire after", f"{days} days" if days else "Not set", "30 days (the default)"])
     report.sections = [settings, consent]
+    changes = sum(f is not None for f in settings.flags)
+    report.tiles = [
+        Tile(
+            "Not as recommended",
+            changes,
+            f"Of {plural(len(settings.rows), 'setting')}",
+            ("bad" if "medium" in settings.flags else "warn") if changes else "ok",
+            Rows(settings.title, {"Flag": ["medium", "low"]}),
+        ),
+        Tile(
+            "Guest directory access",
+            {"member": "Same as members", "limited": "Limited", "restricted": "Most restrictive"}.get(
+                level, "Unrecognised" if guest_role else "Not reported"
+            ),
+            "What guests can see of users and groups",
+            "bad" if level == "member" else None,
+            Rows(settings.title, {"Setting": "Guest access to the directory"}),
+        ),
+        Tile(
+            "Admin consent requests",
+            ("On" if workflow.get("isEnabled") else "Off") if workflow else "Not reported",
+            "Users can ask an admin to approve an app",
+            "warn" if consent.flags and consent.flags[0] else None,
+            Rows(consent.title),
+        ),
+    ]
 
 
 # -- Email domains --------------------------------------------------------------------
@@ -1035,6 +1209,38 @@ def domains(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             ]
         )
     report.sections = [overview, records]
+    weak = ["Missing", "Weak", "Fail"]
+    spoofable = sum(row[3] in weak for row in overview.rows)
+    no_dkim = sum(row[4] in weak for row in overview.rows)
+    report.tiles = [
+        Tile(
+            "Domains",
+            len(healths),
+            f"{sum(h.sends_mail for h in healths)} receive mail",
+            rows=Rows(overview.title),
+        ),
+        Tile(
+            "Domains to fix",
+            overview.flagged,
+            "SPF, DMARC or DKIM missing or weak",
+            ("bad" if {"critical", "high"} & set(overview.flags) else "warn") if overview.flagged else "ok",
+            Rows(overview.title, flagged=True),
+        ),
+        Tile(
+            "DMARC not enforced",
+            spoofable,
+            "Spoofed mail from these is still delivered",
+            "bad" if spoofable else "ok",
+            Rows(overview.title, {"DMARC": weak}),
+        ),
+        Tile(
+            "DKIM not signing",
+            no_dkim,
+            "Mail sent from Microsoft 365 isn't signed for these",
+            "warn" if no_dkim else "ok",
+            Rows(overview.title, {"DKIM": weak}),
+        ),
+    ]
 
 
 # -- Groups and Teams --------------------------------------------------------------------
@@ -1162,6 +1368,40 @@ def group_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
             outside.rows.append([plural(g["guestCount"] - len(g.get("guests") or []), "more guest"), name, kind])
     for row, flag in sorted(needs, key=lambda n: (FLAG_ORDER[n[1]], n[0][0].lower())):
         attention.add(row, flag)
+    ownerless = sum(f in ("medium", "low") for f in attention.flags)
+    single = attention.flags.count("info")
+    with_guests = [g for g in checked if g.get("guestCount")]
+    report.tiles = [
+        Tile(
+            "Teams and groups",
+            len(groups),
+            f"{plural(sum(bool(g.get('isTeam')) for g in groups), 'team')}",
+            rows=Rows(every.title),
+            trend=metric_trend(snap, "groups.m365", now),
+        ),
+        Tile(
+            "Without an owner",
+            ownerless,
+            "Nobody to approve members and guests or renew them",
+            ("bad" if "medium" in attention.flags else "warn") if ownerless else "ok",
+            Rows(attention.title, {"Flag": ["medium", "low"]}),
+            metric_trend(snap, "groups.ownerless", now),
+        ),
+        Tile(
+            "Only one owner",
+            single,
+            "Ownerless once that person leaves",
+            "warn" if single else None,
+            Rows(attention.title, {"Problem": "Single owner"}),
+        ),
+        Tile(
+            "With guests",
+            len(with_guests),
+            plural(sum(g["guestCount"] for g in with_guests), "guest membership"),
+            rows=Rows(outside.title),
+            trend=metric_trend(snap, "groups.with_guests", now),
+        ),
+    ]
     outside.rows.sort(key=lambda r: (r[0].lower(), r[1].lower()))
     outside.flags = [None] * len(outside.rows)
 
@@ -1212,7 +1452,7 @@ COMPLIANCE = {
     "unknown": "Unknown",
     "configManager": "Config Manager",
 }
-JOIN_TYPES = {"AzureAd": "Entra joined", "ServerAd": "Hybrid joined", "Workplace": "Registered (personal)"}
+JOIN_TYPES = {"AzureAd": "Entra joined", "ServerAd": "Hybrid joined", "Workplace": "Entra registered"}
 SUPPORT = {
     "supported": "Supported",
     "ending": "Ending soon",
@@ -1322,6 +1562,10 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
     for (name, state), n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0][0])):
         systems.add([name, n, SUPPORT.get(state, "")], flags.get(state))
     sections = [systems]
+    past_support = (
+        sum(n for (_name, state), n in counts.items() if state == "ended"),
+        sum(n for (_name, state), n in counts.items() if state == "pro_ended"),
+    )
 
     if intune:
         attention = Section(
@@ -1383,14 +1627,16 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
 
     records = Section(
         "Entra ID device records",
-        ["Device", "Operating system", "Join type", "In Intune", "Last seen", "Registered", "Enabled"],
-        intro="Every device known to Entra ID, least recently seen first. "
-        + ("" if intune else "The tenant has no Intune, so these are the only device data."),
+        ["Device", "Operating system", "Join type", "Managed by MDM", "Last seen", "Registered", "Enabled"],
+        intro="Every device known to Entra ID, least recently seen first."
+        + ("" if intune else " The tenant has no Intune, so these are the only device data."),
         empty="No devices are registered in Entra ID.",
     )
+    unseen = 0
     for d in sorted(entra, key=lambda d: d.get("approximateLastSignInDateTime") or ""):
         days = devices.days_since(d.get("approximateLastSignInDateTime"), now)
         stale = d.get("accountEnabled") and days is not None and days > devices.STALE_DAYS
+        unseen += bool(stale)
         records.add(
             [
                 d.get("displayName"),
@@ -1405,6 +1651,99 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
         )
     sections.append(records)
     report.sections = sections
+    report.tiles = _device_tiles(snap, now, managed if intune else None, entra, len(population), past_support)
+    if key_state == "read":
+        missing = next(s for s in sections if s.title == RECOVERY_KEYS).flagged
+        report.tiles.append(
+            Tile(
+                "No recovery key",
+                missing,
+                "Encrypted computers with no BitLocker key in Entra ID",
+                "warn" if missing else "ok",
+                Rows(RECOVERY_KEYS, flagged=True),
+            )
+        )
+    if not intune:
+        report.tiles.append(
+            Tile(
+                f"Not seen for {devices.STALE_DAYS} days",
+                unseen,
+                "Enabled records, probably gone",
+                "warn" if unseen else None,
+                Rows("Entra ID device records", {"Enabled": "Yes"}, age=("Last seen", f"gt{devices.STALE_DAYS}")),
+            )
+        )
+
+
+def _device_tiles(
+    snap: TenantSnapshot,
+    now: datetime,
+    managed: list[dict] | None,
+    entra: list[dict],
+    seen: int,
+    past_support: tuple[int, int],
+) -> list[Tile]:
+    """The Devices report's headline figures: Intune's view of managed devices when the tenant has Intune,
+    otherwise what Entra ID's records say."""
+    # A release past its Home and Pro end is still supported as Enterprise (E3 and E5 upgrade Pro to it), and
+    # Office Sentry can't tell the edition, so those are only mentioned.
+    ended, pro_ended = past_support
+    ended = Tile(
+        "Windows past support",
+        ended,
+        f"And {pro_ended} more if Home or Pro" if pro_ended else "No more security updates",
+        "bad" if ended else ("warn" if pro_ended else "ok"),
+        Rows("Operating systems", {"Security updates": SUPPORT["ended"]}),
+    )
+    if managed is None:
+        return [
+            Tile(
+                "Devices in Entra ID",
+                len(entra),
+                f"{seen} seen in the last {devices.STALE_DAYS} days",
+                rows=Rows("Entra ID device records"),
+                trend=metric_trend(snap, "devices.entra_total", now),
+            ),
+            ended,
+        ]
+    computers = [d for d in managed if devices.is_computer(d)]
+    noncompliant = sum(d.get("complianceState") == "noncompliant" for d in managed)
+    unencrypted = sum(d.get("isEncrypted") is False for d in computers)
+    silent = sum((devices.days_since(d.get("lastSyncDateTime"), now) or 0) > devices.NO_SYNC_DAYS for d in managed)
+    compliant = sum(d.get("complianceState") == "compliant" for d in managed)
+    return [
+        Tile(
+            "Managed devices",
+            len(managed),
+            f"{compliant} compliant",
+            rows=Rows("Managed devices"),
+            trend=metric_trend(snap, "devices.managed", now),
+        ),
+        Tile(
+            "Not compliant",
+            noncompliant,
+            f"Of {plural(len(managed), 'managed device')}",
+            "bad" if noncompliant else "ok",
+            Rows("Managed devices", {"Compliance": COMPLIANCE["noncompliant"]}),
+            metric_trend(snap, "devices.noncompliant", now),
+        ),
+        Tile(
+            "Not encrypted",
+            unencrypted,
+            f"Of {plural(len(computers), 'computer')}",
+            "bad" if unencrypted else "ok",
+            Rows("Managed devices", {"Encrypted": "No"}),
+            metric_trend(snap, "devices.unencrypted_computers", now),
+        ),
+        ended,
+        Tile(
+            "Not checking in",
+            silent,
+            f"Not for {devices.NO_SYNC_DAYS} days, so no policy or updates",
+            "warn" if silent else None,
+            Rows("Managed devices", age=("Last check-in", f"gt{devices.NO_SYNC_DAYS}")),
+        ),
+    ]
 
 
 RECOVERY_KEYS = "BitLocker recovery keys"
@@ -1458,7 +1797,14 @@ def _by_flag(section: Section) -> tuple[list, list]:
 
 def _synced_at(value: str | None, now: datetime) -> str:
     hours = hybrid.hours_since(value, now)
-    return "Never" if hours is None else f"{value[:16].replace('T', ' ')} UTC ({hybrid.age(hours)})"
+    return "Never" if hours is None else f"{value[:16].replace('T', ' ')} ({hybrid.age(hours)})"
+
+
+def _sync_word(problem: tuple[str, str] | None, last: str | None) -> str:
+    """A sync in a word, for the Value column, so a sync that keeps running isn't a change every month."""
+    if not last:
+        return "No record"
+    return {None: "Running", "critical": "Stopped", "high": "Late", "medium": "Stopped"}[problem and problem[0]]
 
 
 @report(
@@ -1479,36 +1825,33 @@ def hybrid_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
     users = snap.objects("users", "user")
     enabled = bool(status.get("enabled"))
 
-    sync = Section("Sync status", ["Setting", "Value"])
+    sync = Section("Sync status", ["Setting", "Value", "Last run (UTC)"])
     if not enabled and status.get("onPremisesSyncEnabled") is False:
         sync.intro = (
             "Cloud-only tenant: directory sync was turned off, so accounts that came from on-premises "
             "Active Directory are now managed in Microsoft 365."
         )
-        sync.add(["Directory sync", "Turned off"])
+        sync.add(["Directory sync", "Turned off", ""])
     elif not enabled:
         sync.intro = (
             "Cloud-only tenant: accounts are created and managed in Microsoft 365, not synced from an "
             "on-premises Active Directory."
         )
-        sync.add(["Directory sync", "Never turned on"])
+        sync.add(["Directory sync", "Never turned on", ""])
     else:
         sync.intro = (
             "Accounts are synced from on-premises Active Directory, normally every 30 minutes by Entra Connect."
         )
-        sync.add(["Directory sync", "On"])
-        problem = hybrid.sync_problem(status, now)
-        sync.add(["Last directory sync", _synced_at(status.get("lastSyncDateTime"), now)], problem and problem[0])
+        sync.add(["Directory sync", "On", ""])
+        problem, last = hybrid.sync_problem(status, now), status.get("lastSyncDateTime")
+        sync.add(["Directory sync runs", _sync_word(problem, last), _synced_at(last, now)], problem and problem[0])
         if status.get("passwordSyncChecked"):
-            problem = hybrid.password_sync_problem(status, now)
-            sync.add(
-                ["Last password hash sync", _synced_at(status.get("lastPasswordSyncDateTime"), now)],
-                problem and problem[0],
-            )
+            problem, last = hybrid.password_sync_problem(status, now), status.get("lastPasswordSyncDateTime")
+            sync.add(["Password hash sync", _sync_word(problem, last), _synced_at(last, now)], problem and problem[0])
         else:
-            sync.add(["Last password hash sync", "Couldn't be read"])
+            sync.add(["Password hash sync", "Couldn't be read", ""])
     federated = hybrid.federated_domains(snap)
-    sync.add(["Federated domains", federated or "None"])
+    sync.add(["Federated domains", federated or "None", ""])
 
     domains = Section(
         "Domains",
@@ -1561,6 +1904,46 @@ def hybrid_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
             source.add([label, synced, len(group) - synced, len(group)])
     sections.append(source)
     report.sections = sections
+    report.tiles = [_sync_tile(status, now, enabled)]
+    if users is not None:
+        synced = sum(bool(u.get("onPremisesSyncEnabled")) for u in users)
+        report.tiles.append(
+            Tile("Synced accounts", synced, f"Of {plural(len(users), 'account')}", rows=Rows(source.title))
+        )
+    admin_rows = next((s for s in sections if s.title == "Synced admin accounts"), None)
+    if admin_rows is not None:
+        report.tiles.append(
+            Tile(
+                "Synced admins",
+                len(admin_rows.rows),
+                "Taking over AD takes over these",
+                ("bad" if "high" in admin_rows.flags else "warn") if admin_rows.rows else "ok",
+                Rows(admin_rows.title),
+            )
+        )
+    report.tiles.append(
+        Tile(
+            "Federated domains",
+            len(federated),
+            "Sign in through another identity provider" if federated else "Every domain signs in with Entra ID",
+            rows=Rows(domains.title, {"Sign-in": "Federated"}),
+        )
+    )
+
+
+def _sync_tile(status: dict, now: datetime, enabled: bool) -> Tile:
+    """Directory sync in a word: Off, Running, Late, Stopped or No record, with when it last ran."""
+    if not enabled:
+        return Tile("Directory sync", "Off", "Cloud-only accounts", rows=Rows("Sync status"))
+    last = status.get("lastSyncDateTime")
+    problem, hours = hybrid.sync_problem(status, now), hybrid.hours_since(last, now)
+    return Tile(
+        "Directory sync",
+        _sync_word(problem, last),
+        f"Last sync {hybrid.age(hours)}" if hours is not None else "Entra ID has no record of a sync",
+        "bad" if problem else "ok",
+        Rows("Sync status"),
+    )
 
 
 # -- Registry ----------------------------------------------------------------------------

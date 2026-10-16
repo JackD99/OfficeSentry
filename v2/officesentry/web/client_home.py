@@ -1,26 +1,31 @@
-"""The home page for client users: their latest report first, then what's still open, then who to contact.
+"""The home page for client users: where they stand first (the verdict and their MSP's note), then what to do
+next, then the figures, their other reports and who to contact.
 
-Built from the same monthly review the report page shows (``monthly_review.build``),
-so a client never sees anything here that their report doesn't already say.
+Built from the client's copy of this month's review, as the report page shows it (``reports.tenant_report``):
+less what the month-end reviewer left out, and with the MSP's commentary and recommendations once the month is
+approved. So a client never sees anything here that their report doesn't already say.
 """
 
 from __future__ import annotations
 
 from flask import g, render_template
 
+from ..reports import summary
 from ..reports.data_reports import grouped, hidden
-from ..reports.monthly_review import build
+from ..reports.monthly_review import build, leave_out
+from .reporting import report_extras
 
 MAX_RECOMMENDATIONS = 8
+# The MSP's recommendations by status: the pill's tone ("Waiting on you" is the client's to do).
+ACTION_TONES = {"planned": "info", "in_progress": "accent", "waiting": "warn"}
 
 
-def _recommendations(report) -> list[dict]:
-    """Failing checks, worst first, then accepted risks: what the MSP is working on with the client."""
+def _from_checks(report) -> list[dict]:
+    """Failing checks, worst first, then accepted risks: what was found and what to do about it."""
     recs = [
         {
-            "title": r.title,
+            "title": r.summary.rstrip("."),
             "action": r.action,
-            "summary": r.summary,
             "severity": r.severity or "info",
             "status": "New" if any(getattr(f, "new", False) for f in r.findings) else "Open",
             "tone": "bad" if r.severity in ("critical", "high") else "warn",
@@ -33,7 +38,6 @@ def _recommendations(report) -> list[dict]:
             accepted[r.key] = {
                 "title": r.title,
                 "action": "",
-                "summary": r.summary,
                 "severity": "",
                 "status": "Accepted risk",
                 "tone": "info",
@@ -41,14 +45,37 @@ def _recommendations(report) -> list[dict]:
     return recs + list(accepted.values())
 
 
+def _from_msp(actions: list) -> list[dict]:
+    """The MSP's own recommendations for the month (``month_end.report_context``) that aren't done yet."""
+    return [
+        {
+            "title": a["title"],
+            "action": a["detail"] or "",
+            "severity": "",
+            "status": a["status_label"],
+            "tone": ACTION_TONES.get(a["status"], "info"),
+            "target": a["target_label"],
+        }
+        for a in actions
+        if a["status"] != "done"
+    ]
+
+
 def _row(tenant) -> dict:
-    report = build(g.db, tenant)
+    extras = report_extras(tenant, page=True)
+    me = extras["month_end"]
+    report = leave_out(build(g.db, tenant), me["hidden"])
     collected = [f.finished_at for f in report.freshness if f.finished_at]
-    recs = _recommendations(report)
+    planned = _from_msp(me["actions"])
+    recs = planned or _from_checks(report)
     return {
         "tenant": report.tenant,
+        "verdict": summary.monthly(report).verdict,
+        "commentary": [p.strip() for p in (me["commentary"] or "").split("\n\n") if p.strip()],
+        "from_msp": bool(planned),
         "kpis": {k.key: k for k in report.kpis},
-        "counts": report.counts,
+        # By check, as the report counts them: "46 checks, 15 critical or high", not the accounts they affect.
+        "counts": {s: sum(1 for r in report.failing if r.severity == s) for s in summary.SEVERITIES},
         "failing": len(report.failing),
         "resolved": len(report.resolved),
         "stale_data": any(f.stale for f in report.freshness),

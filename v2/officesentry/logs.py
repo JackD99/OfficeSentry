@@ -30,6 +30,11 @@ DATE_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 LOG_BYTES = 2 * 1024 * 1024
 LOG_FILES = 3  # the current file and two before it
 PROCESSES = ("web", "worker")
+# Libraries that log every step of their own work, and the level kept from each. Making one PDF logged about
+# 200 lines (27 KB): WeasyPrint's progress and every CSS property it doesn't use for print, and fontTools'
+# font subsetting. A month-end of PDFs filled the rolling files with nothing else, so the errors that matter
+# had rotated out before anyone asked for the support package.
+QUIET = {"weasyprint": logging.ERROR, "fontTools": logging.WARNING}
 # The first two fields of a line, as FORMAT writes them: when, and how bad.
 LINE = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ) (\w+) ")
 # extra={IN_FILE: "..."}: what the log files say instead of the message, which only standard error shows
@@ -148,6 +153,8 @@ def setup(data_dir: Path | None, process: str) -> None:
         logging.basicConfig(level=logging.INFO)
     if root.level == logging.NOTSET or root.level > logging.INFO:
         root.setLevel(logging.INFO)
+    for name, level in QUIET.items():
+        logging.getLogger(name).setLevel(level)
     for handler in root.handlers:
         _decorate(handler)
     if old := _installed.pop(process, None):

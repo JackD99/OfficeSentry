@@ -17,7 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from . import tenant_health, upcoming
+from . import store, tenant_health, upcoming
 from .collectors import REGISTRY
 from .rules import RULES
 from .text import plural
@@ -190,6 +190,14 @@ def _collection(conn, tenant: dict, now: datetime) -> Reason | None:
         )
     if failed:
         names = [REGISTRY[k].title for k in failed if k in REGISTRY]
+        if all(store.retry_pending(latest[k], now) for k in failed):  # Microsoft was busy: tried again by itself
+            return Reason(
+                "collection",
+                "warn",
+                f"{plural(len(failed), 'collection')} failed and will be tried again",
+                ", ".join(names),
+                target="collection",
+            )
         return Reason(
             "collection", "bad", f"{plural(len(failed), 'collection')} failed", ", ".join(names), target="collection"
         )

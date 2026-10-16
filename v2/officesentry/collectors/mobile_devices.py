@@ -146,6 +146,7 @@ class MobileDevices(Collector):
             ctx, MobileDevices.key, "mobile_device_sync", owners, lambda o: o["_id"], "mobile device sync times"
         )
         found, failed, gone = [], 0, set()
+        unread: set[str] = set()
         for owner in window.mailboxes:
             try:
                 stats = ctx.exchange.invoke("Get-MobileDeviceStatistics", {"Mailbox": owner["ident"]})
@@ -156,13 +157,18 @@ class MobileDevices(Collector):
                     gone.add(owner["_id"])
                 else:
                     failed += 1
+                    unread.add(owner["_id"])
                 continue
             for s in stats:
                 row = {f: s.get(f) for f in SYNC_FIELDS}
                 row.update({"mailboxId": owner["_id"], "identity": s.get("Identity")})
                 found.append((_device_id(s), row))
         if failed:
-            ctx.warn(f"Could not read when devices last synced for {plural(failed, 'mailbox')}")
+            kept = window.keep_unread(ctx, unread)
+            ctx.warn(
+                f"Could not read when devices last synced for {plural(failed, 'mailbox')}"
+                + mailbox_window.kept_note(kept)
+            )
         found += window.carried
         ctx.objects("mobile_device_sync", found)
         window.save(ctx)

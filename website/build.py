@@ -241,6 +241,18 @@ SECTIONS = [
                 blurb="Entra ID keeps sign-in and audit logs for 30 days. Ways to keep them longer, from PowerShell "
                 "exports to Log Analytics.",
             ),
+            Doc(
+                "website/pages/how-to/email-domains.md",
+                "how-to/email-domains",
+                blurb="Check SPF, DKIM and DMARC for one domain with PowerShell, what good looks like, and how to "
+                "watch every client's domains.",
+            ),
+            Doc(
+                "website/pages/how-to/audit-log.md",
+                "how-to/audit-log",
+                blurb="Search the Microsoft 365 audit log for files deleted or shared, mail opened by someone else "
+                "and new inbox rules, and keep it for every client.",
+            ),
         ],
     ),
     (
@@ -324,9 +336,32 @@ WHATS_NEW = [
                 "href": "/docs/audit-log-addon/",
                 "link": "The audit log add-on",
             },
+            {
+                "icon": "review",
+                "title": "Clients read one story",
+                "text": "Their home page, the report email and the PDFs all show the month you approved, lead with "
+                "the verdict and name the most urgent gap, and the two-page summary fits on two pages.",
+                "href": "/docs/reference/#month-end-reporting",
+                "link": "Month-end reporting",
+            },
+            {
+                "icon": "shield",
+                "title": "Looks after itself",
+                "text": "Every install backs its database up every night with no crontab line, and a collection "
+                "that failed because Microsoft was busy tries again by itself.",
+                "href": "/docs/install/#backups",
+                "link": "Backups",
+            },
         ],
         "also": [  # smaller changes, a few words each
             "a check that each client's Microsoft 365 audit log is switched on",
+            "a client whose sign-in breaks keeps its last good data, and its findings aren't marked fixed",
+            "a month-end report changed after approval reaches the client only as a new version",
+            "month-end never sends a client the same month twice",
+            "only staff who can open every report in a client's plan can add people to it",
+            "the Update button installs only releases tagged on main",
+            "Updates lists every release since yours, however far behind, and never says Up to date before it "
+            "has checked",
         ],
     },
     {

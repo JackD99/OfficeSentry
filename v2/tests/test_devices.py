@@ -228,7 +228,7 @@ def test_devices_report(db, two_tenants):
     assert "Not encrypted" in attention.rows[0][3] and "No check-in for 45 days" in attention.rows[0][3]
     records = sections["Entra ID device records"]
     assert records.rows[0][0] == "OLD-PC" and records.flags[0] == "low"  # least recently seen first
-    assert dict(zip(records.columns, records.rows[-1], strict=True))["Join type"] == "Registered (personal)"
+    assert dict(zip(records.columns, records.rows[-1], strict=True))["Join type"] == "Entra registered"
 
 
 def test_devices_report_without_data(db, two_tenants):
