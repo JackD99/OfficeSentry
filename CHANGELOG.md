@@ -9,6 +9,10 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
+## [2.5.0] - Unreleased
+
+In progress. What changed is listed here when 2.5.0 is released.
+
 ## [2.4.1] - 2026-10-16
 
 ### Action required
@@ -1682,6 +1686,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
+[2.5.0]: https://github.com/JackD99/OfficeSentry/compare/v2.4.1...HEAD
 [2.4.1]: https://github.com/JackD99/OfficeSentry/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/JackD99/OfficeSentry/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/JackD99/OfficeSentry/compare/v2.3.0...v2.3.1
