@@ -46,12 +46,15 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   settings, and lists your saved views.
 - **Clients** (`/`): every client you look after in one sortable, filterable
   table, worst first, with the monthly review's figures, each client's data
-  health and its review as a PDF. <!-- since 2.5.0 --> Its *All reports* menu
-  swaps the table to any other report for every client (`/across/<report>`):
-  the insurance evidence pack and every detail report (its headline figures as
-  the columns), limited to the clients you can see. New detail reports appear
-  automatically, and `/across/review` opens the Clients page. **Every row**
-  (`/across/<report>/rows/<table>`) stacks every client's rows of one table of
+  health and its review as a PDF.
+  <!-- since 2.5.0 -->
+  Its *All reports* menu swaps the table to any other report for every client
+  (`/across/<report>`): the insurance evidence pack and every detail report
+  (its headline figures as the columns), limited to the clients you can see.
+  New detail reports appear automatically, and `/across/review` opens the
+  Clients page.
+  <!-- /since -->
+  **Every row** (`/across/<report>/rows/<table>`) stacks every client's rows of one table of
   a detail report under a Client column, with the same filters, sorting, saved
   views and PDF, XLSX and CSV downloads (up to 10,000 rows a table; it says when
   it stops there). **Checks** (`/across/checks`) is every check for every client
