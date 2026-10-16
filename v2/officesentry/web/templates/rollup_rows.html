@@ -3,36 +3,9 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, downloads, csrf %}
 {% from "_across.html" import across_head with context %}
-{% from "_report_table.html" import report_table with context %}
+{% from "_report_table.html" import report_table, saved_views with context %}
 {% set report = data.report %}
 {% block title %}{{ report.title }} · Every row · All clients · Office Sentry{% endblock %}
-{% macro saved_views() -%}
-{% set current = saved|selectattr('query', 'equalto', view_query)|first if view_query else none %}
-<details class="menu" id="views-menu">
-  <summary class="btn sm{{ ' on' if view_query }}" title="Save the filters, columns and sort you use often">{{ icon('eye') }} {{ current.name if current else ('Custom view' if view_query else 'Views') }}</summary>
-  <div class="menu-panel right">
-    <div class="menu-head"><strong>Saved views</strong>{% if view_query %}<a href="{{ request.path }}" data-view>Reset</a>{% endif %}</div>
-    {% for v in saved %}
-    <div class="view-row{{ ' on' if current and current.id == v.id }}">
-      <a href="{{ request.path }}?{{ v.query }}" data-view>{{ v.name }}</a>
-      <form method="post" action="{{ url_for('views.delete', view_id=v.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="next" value="{{ request.full_path }}"><button class="link faint" title="Delete this view" aria-label="Delete {{ v.name }}">×</button></form>
-    </div>
-    {% else %}
-    <p class="muted small m0">None yet. Filter, sort or hide columns, then save the view here. It opens on this page and on each client's own report.</p>
-    {% endfor %}
-    {% if current and can('settings.manage') %}
-    <a class="menu-link small" href="{{ url_for('email.new_views', view=current.id) }}">{{ icon('send') }} Email this view to your team</a>
-    {% endif %}
-    {% if view_query and not current %}
-    <form method="post" action="{{ url_for('across.save_rows_view', key=key, table=table) }}" class="save-view">{{ csrf() }}
-      <input type="hidden" name="query" value="{{ view_query }}">
-      <label class="small">Save this view as <input name="name" maxlength="80" required placeholder="e.g. Forwarding outside"></label>
-      <button class="sm primary">Save view</button>
-    </form>
-    {% endif %}
-  </div>
-</details>
-{%- endmacro %}
 {% block content %}
 {{ across_head(key, main, 'rows') }}
 
@@ -43,7 +16,10 @@
   </div>
   {% if tv %}
   <div class="toolbar-actions">
-    {{ saved_views() }}
+    {#- The same Views menu as a client's report: the views are per report, so one saved here opens there too. -#}
+    {{ saved_views(saved, view_query, key, save_action=url_for('across.save_rows_view', key=key, table=table),
+                   email=('email.new_views', {}) if can('settings.manage') else false, email_label='Email this view to your team',
+                   empty_note="None yet. Filter, sort or hide columns, then save the view here. It opens on this page and on each client's own report.") }}
     {% set q = ('?' ~ view_query) if view_query else '' %}
     {{ downloads([('PDF', url_for('across.rows_pdf', key=key, table=table) ~ q, 'The rows and columns shown, as a PDF'),
                   ('XLSX', url_for('across.rows_download', key=key, table=table, ext='xlsx') ~ q, 'The rows and columns shown, as a spreadsheet'),

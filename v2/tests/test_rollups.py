@@ -126,14 +126,18 @@ def test_new_detail_reports_get_a_rollup_automatically(db, two_tenants, monkeypa
         s = Section("Widgets", ["Widget", "State"])
         s.add(["w1", "ok"])
         s.add(["w2", "bad"], "high")
-        report.sections = [s, Section("Settings", ["Setting", "Value"], rows=[["x", "y"]], flags=[None])]
+        faults = Section("Faults", ["Widget", "Fault"])
+        faults.add(["w2", "loose"], "medium")  # the same widget again: one thing to review, not two
+        faults.add(["w3", "scuffed"], "low")  # low isn't for review
+        report.sections = [s, faults, Section("Settings", ["Setting", "Value"], rows=[["x", "y"]], flags=[None])]
 
     monkeypatch.setitem(data_reports.REPORTS, "widgets", ("Widgets", "Test", (), builder))
     assert ("widgets", "Widgets") in rollups.available()
     r = rollups.build(db, db.execute("SELECT * FROM tenants").fetchall(), "widgets")
-    assert [c.label for c in r.columns] == ["To review", "Widgets"]  # settings tables aren't counted
+    assert [c.label for c in r.columns] == ["To review", "Widgets", "Faults"]  # settings tables aren't counted
+    assert r.columns[0].hint == "Accounts, mailboxes or items flagged critical, high or medium, each once"
     row = next(row for row in r.rows if row.tenant["id"] == alpha)
-    assert row.values == {"_flagged": 1, "c:Widgets": 2}
+    assert row.values == {"_flagged": 1, "c:Widgets": 2, "c:Faults": 2}
 
 
 def test_rollup_pages_and_downloads(client, db, vault, two_tenants):
