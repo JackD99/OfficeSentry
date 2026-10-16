@@ -10,8 +10,8 @@ from html import unescape
 
 from openpyxl import load_workbook
 
-from officesentry import text
-from officesentry.reports import data_reports, library, rollups, views
+from officesentry import roles, text
+from officesentry.reports import data_reports, designs, library, rollups, views
 from officesentry.reports.data_reports import DataReport, Many, Rows, Section
 from tests import auditdata
 from tests.conftest import login, make_user
@@ -373,6 +373,42 @@ def test_library_lists_every_report_by_area_and_use(client, db, vault, two_tenan
     assert 'href="/across/inactive"' in page  # the same report across every tenant
     for use in library.USES:  # every use names reports that exist
         assert all(k in data_reports.REPORTS or k in dict((s[0], s) for s in library.SUMMARIES) for k in use.reports)
+
+
+def test_library_lists_custom_reports_and_saved_views(client, db, two_tenants):
+    """Custom reports and the person's saved views sit at the top of the Reports page, for one client or
+    across all of them (a custom report then opens on the first client; a view on Every row)."""
+    alpha, bravo = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    page = client.get("/reports").get_data(as_text=True)
+    assert "New custom report" in page and 'href="/reporting/designs"' in page and "Your views" not in page
+    did = designs.create(db, "Board pack", "admin", designs.STARTERS["executive"][2], "For the board")
+    client.post(
+        "/reports/mailboxes/views",
+        data={"name": "Leaving us", "query": "f=forwarding/outside-the-organisation:Yes", "tenant_id": alpha},
+    )
+    query = "f=forwarding%2Foutside-the-organisation%3AYes"
+    page = client.get("/reports").get_data(as_text=True)
+    assert f'href="/tenants/{alpha}/designs/{did}"' in page and "For the board" in page and "Not sent yet" in page
+    assert f'href="/reporting/designs/{did}?tenant={alpha}"' in page  # Edit
+    assert f'href="/across/mailboxes/rows?{query}"' in page and "Leaving us" in page
+    page = client.get(f"/reports?tenant={bravo}").get_data(as_text=True)
+    assert f'href="/tenants/{bravo}/designs/{did}"' in page
+    assert f'href="/tenants/{bravo}/data/mailboxes?{query}"' in page
+    assert "Board pack" not in client.get(f"/reports?tenant={bravo}&use=offboarding").get_data(as_text=True)
+    # Someone who can't make one (an auditor) still finds the ones there are; a client account sees none.
+    uid = make_user(db, "auditor", role="analyst", all_tenants=True)
+    db.execute("UPDATE users SET role_id = ? WHERE id = ?", (roles.by_key(db, "auditor").id, uid))
+    client.post("/logout")
+    login(client, "auditor")
+    page = client.get("/reports").get_data(as_text=True)
+    assert "Board pack" in page and "New custom report" not in page and f"/reporting/designs/{did}" not in page
+    client.post("/logout")
+    make_user(db, "client", role="client", tenants=[alpha])
+    login(client, "client")
+    page = client.get("/reports").get_data(as_text=True)
+    assert "Board pack" not in page and "Custom reports" not in page and "/reporting/designs" not in page
 
 
 def test_library_for_a_client_shows_only_their_tenant(client, db, two_tenants):

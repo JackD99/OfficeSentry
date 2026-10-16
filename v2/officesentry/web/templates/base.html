@@ -60,8 +60,8 @@
   {% endif %}
   {#- Clients: every client page, and the Clients page's own pages, which compare one report across clients
       (across.rollup, Every row and Checks). -#}
-  {{ nav_link('tenants.dashboard', 'Clients', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'tenant_admin.manage', 'tenant_admin.offboard', 'projects.tenant', 'across.rollup', 'across.rows_index', 'across.rows', 'across.checks')) }}
-  {{ nav_link('reports.overview', 'Reports', 'library') }}
+  {{ nav_link('tenants.dashboard', 'Clients', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'designs.tenant_designs', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'tenant_admin.manage', 'tenant_admin.offboard', 'projects.tenant', 'across.rollup', 'across.rows_index', 'across.rows', 'across.checks')) }}
+  {{ nav_link('reports.overview', 'Reports', 'library', ('designs.index', 'designs.edit')) }}
   {% if across and can('reports.changes') %}{{ nav_link('across.changes', 'What changed', 'clock') }}{% endif %}
   {% if across and can('reports.tenant') %}{{ nav_link('upcoming.index', 'Coming up', 'calendar') }}{% endif %}
   {% if can('emails.view') %}{{ nav_link('email.overview', 'Email reports', 'send', ('email.overview', 'email.new_digest', 'email.new_upcoming')) }}{% endif %}
