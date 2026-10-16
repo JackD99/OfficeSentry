@@ -141,7 +141,7 @@ def site_owners(snap: TenantSnapshot, now: datetime):
     if sites and not known:
         return _unavailable(
             "No site's owners could be counted: the owners of sites with no Microsoft 365 group are in "
-            "SharePoint groups, which need the client to approve the SharePoint permission"
+            "SharePoint groups, which can't be read until the SharePoint permission is approved"
         )
     if findings:
         none = sum(1 for f in findings if f.severity == "high")
@@ -173,7 +173,7 @@ def site_guest_full_control(snap: TenantSnapshot, now: datetime):
         return _unavailable(
             "The tenant has no SharePoint licence"
             if status.get("reason") == "no_sharepoint"
-            else "Waiting for the client to approve the SharePoint permission"
+            else "Waiting for the SharePoint permission to be approved"
             if status.get("reason") == "consent"
             else "Office Sentry can't read this tenant's SharePoint permissions yet"
         )

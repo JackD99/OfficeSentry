@@ -209,6 +209,50 @@ def test_every_seeded_headline_link_opens_a_table(client, db, two_tenants):
     assert linked >= 40
 
 
+# Figures that count rows, so each opens exactly the rows it counted. (Others name a setting, or count something
+# their table sums, like devices per Windows release.)
+COUNTS_ROWS = {
+    "admin-activity": ("Changes to review", "Admin changes", "People and apps making changes"),
+    "apps": ("Third-party apps", "Apps to review", "Credentials expiring", "Every credential expired"),
+    "conditional-access": ("Policies on", "MFA not required", "Legacy sign-in allowed"),
+    "guests": ("Guests", "Guests to review"),
+    "tenant-settings": ("Not as recommended",),
+    "domains": ("Domains", "Domains to fix", "DMARC not enforced", "DKIM not signing"),
+    "groups": ("Teams and groups", "Without an owner", "Only one owner"),
+    "devices": ("Managed devices", "Not compliant", "Not encrypted", "Not checking in"),
+    "hybrid": ("Federated domains",),
+}
+
+
+def test_headline_figures_count_the_rows_they_open(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    tenant = db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone()
+    for key, labels in COUNTS_ROWS.items():
+        report = data_reports.build(db, tenant, key)
+        tiles = {t.label: t for t in report.tiles}
+        assert set(labels) <= set(tiles), (key, list(tiles))
+        for label in labels:
+            view, _anchor = views.rows_view(report, tiles[label].rows)
+            section = next(s for s in report.sections if s.title == tiles[label].rows.table)
+            table = views.table_slugs(report)[report.sections.index(section)]
+            shown = views._matching_rows(section, table, view, report.generated_at.date())
+            assert len(shown) == tiles[label].value, (key, label)
+
+
+def test_every_report_has_headline_figures(db, two_tenants):
+    """All clients compares a report's headline figures, so a report without them only counts table rows."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    tenant = db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone()
+    missing = []
+    for key in data_reports.REPORTS:
+        report = data_reports.build(db, tenant, key)
+        if not report.unavailable and not report.tiles and not report.highlights:
+            missing.append(key)
+    assert not missing
+
+
 def test_report_page_filters_hides_and_downloads_the_same_rows(client, db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)

@@ -43,7 +43,8 @@
     {% for key in keys %}{% set c = collectors[key] %}{% set r = latest.get(key) %}
     <tr>
       <td><span class="strong">{{ c.title }}</span><span class="sub">{{ c.description }}</span>
-        {% if r and r.error %}<span class="sub {{ 'warn-text' if r.status == 'partial' else 'bad-text' }}">{{ r.error|run_error }}</span>{% endif %}</td>
+        {% if r and r.error %}<span class="sub {{ 'warn-text' if r.status == 'partial' else 'bad-text' }}">{{ r.error|run_error }}</span>{% endif %}
+        {% if r|retrying %}<span class="sub">{{ r|retrying }}</span>{% endif %}</td>
       <td data-label="Status">{% if r %}<a href="{{ url_for('tenants.run', run_id=r.id) }}">{{ status(r.status) }}</a>{% else %}{{ status(None) }}{% endif %}</td>
       <td data-label="Last collected" class="nowrap">{{ ts(r.finished_at if r else None) }}</td>
       <td class="num"><form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="collector" value="{{ key }}"><button class="sm ghost" title="{{ not_connected or 'Refresh ' ~ c.title }}"{% if not_connected %} disabled{% endif %}>{{ icon('refresh') }} Refresh</button></form></td>
@@ -74,7 +75,7 @@
     {% for r in runs %}
     <tr><td><a href="{{ url_for('tenants.run', run_id=r.id) }}">{{ collectors[r.collector].title if r.collector in collectors else r.collector }}</a></td>
       <td data-label="Status">{{ status(r.status) }}</td>
-      <td data-label="Started by">{{ r.requested_by or ('Schedule' if r.trigger == 'schedule' else r.trigger|capitalize) }}</td>
+      <td data-label="Started by">{{ r.requested_by or ('Tried again' if r.retry_of else 'Schedule' if r.trigger == 'schedule' else r.trigger|capitalize) }}</td>
       <td data-label="When" class="nowrap">{{ ts(r.created_at) }}</td>
       <td data-label="Items" class="num">{{ r.object_count if r.object_count is not none else '' }}</td></tr>
     {% endfor %}

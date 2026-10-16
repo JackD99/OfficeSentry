@@ -3,13 +3,16 @@
 
 import io
 import json
+import re
 from datetime import UTC, datetime
 
 import pytest
+import requests
 import responses
 from openpyxl import load_workbook
 
 from officesentry import clouds, endpoints, msauth, store
+from officesentry.certs import generate_certificate
 from officesentry.checks.sharepoint import site_guest_full_control
 from officesentry.collectors import site_permissions as sp
 from officesentry.graph import GraphClient
@@ -114,6 +117,26 @@ def test_beside_signs_in_to_the_site_host_as_the_same_app():
     assert client.host == HOST and asked == [HOST] and client.telemetry is graph.telemetry
     assert beside(graph, "https://evil.com") is None  # never asks for a token for another host
     assert beside(GraphClient(lambda: "g"), HOST) is None  # a client from a secret can't sign in to SharePoint
+
+
+def test_beside_tells_a_sign_in_that_cant_reach_microsoft_from_a_refused_one():
+    """Not reaching Microsoft's sign-in service is a network failure, tried again later, not the client still to
+    approve the SharePoint permission. Either way no request goes to SharePoint without a token."""
+
+    def signing_in(code):
+        def provider():
+            raise msauth.TokenError(code, "no")
+
+        return GraphClient(lambda: "g", resource_tokens=lambda host: provider)
+
+    with responses.RequestsMock() as rsps:
+        with pytest.raises(SharePointError) as raised:
+            beside(signing_in("network_error"), HOST).get(HOST, "/web")
+        assert raised.value.status == 0 and not isinstance(raised.value, SharePointAccessDenied)
+        with pytest.raises(SharePointAccessDenied) as refused:
+            beside(signing_in("invalid_client"), HOST).get(HOST, "/web")
+        assert refused.value.status == 401
+        assert not rsps.calls
 
 
 def test_catalogue_names_each_rest_call():
@@ -272,6 +295,35 @@ def test_refusals_after_another_failure_still_mean_waiting(db, two_tenants):
     assert run["status"] == "succeeded"
     assert _status(db, alpha)["reason"] == "consent"
     assert "Waiting for the client to approve" in _report(db, alpha).unavailable
+
+
+def test_a_sign_in_that_cant_reach_microsoft_fails_the_run_to_try_again(db, two_tenants):
+    """The SharePoint sign-in can't reach Microsoft (the request to the token endpoint fails): that isn't the
+    client still to approve the permission. The run fails as a network failure, keeps the last report, and is
+    tried again by itself."""
+    alpha, _ = two_tenants
+    cert = generate_certificate("sharepoint")
+
+    def factory(tenant, connection):
+        def resource_tokens(host):
+            return msauth.certificate_token_provider(tenant["tenant_ref"], "app", cert.key_pem, cert.thumbprint, host)
+
+        return GraphClient(lambda: "t", sleep=lambda s: None, resource_tokens=resource_tokens)
+
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        mock_tenant(rsps)
+        login = re.compile(re.escape(clouds.get(None).login) + r"/.*")
+        rsps.get(login, body=requests.ConnectionError("Network is unreachable"))
+        rsps.post(login, body=requests.ConnectionError("Network is unreachable"))
+        store.enqueue_run(db, alpha, "site_permissions")
+        assert execute_run(db, store.claim_next_run(db), factory) == "failed"
+        assert any(clouds.get(None).login in c.request.url for c in rsps.calls)
+        assert not any("/_api/" in c.request.url for c in rsps.calls)
+    run = store.latest_run(db, alpha, "site_permissions", successful=False)
+    assert run["status"] == "failed" and "Couldn't reach Microsoft's sign-in service" in run["error"]
+    assert run["retry_at"] and store.retry_pending(run, datetime.now(UTC))
+    assert _snap(db, alpha).objects("site_permissions", "permissions_status") is None  # never "consent"
+    assert "approve" not in (_report(db, alpha).unavailable or "")
 
 
 def test_no_site_read_is_unavailable_never_a_pass(db, two_tenants):

@@ -121,10 +121,13 @@ class Context:
         brand=None,
         month_end: dict | None = None,
         opens: Callable[[str], bool] | None = None,
+        by_quarter: bool = False,
     ):
         self.conn = conn
         self.tenant = tenant
         self.now = now or datetime.now(UTC)
+        # A quarterly review compares with the start of its quarter, not four weeks ago (``QUARTER_BLOCKS``).
+        self.by_quarter = by_quarter
         self.brand = brand
         self.month_end = month_end or {}  # month_end.report_context(...)["month_end"], client-safe
         # What the month-end reviewer left out of this client's copy (checks, figures, blocks, setup notes).
@@ -140,7 +143,9 @@ class Context:
     @property
     def review(self) -> monthly_review.Report:
         if self._review is None:
-            self._review = monthly_review.leave_out(monthly_review.build(self.conn, self.tenant, self.now), self.hidden)
+            since = quarterly.start(self.now) if self.by_quarter else None
+            built = monthly_review.build(self.conn, self.tenant, self.now, since=since)
+            self._review = monthly_review.leave_out(built, self.hidden)
         return self._review
 
     @property
@@ -359,6 +364,10 @@ def b_evidence(ctx: Context, s: dict) -> dict:
     return {"answers": answers, "more": max(0, len(pack.answers) - len(answers))}
 
 
+# A design with any of these is a quarterly review: its figures and changes are since the quarter began.
+QUARTER_BLOCKS = ("quarter_trend", "quarter_fixed")
+
+
 def b_quarter_trend(ctx: Context, s: dict) -> dict:
     q = ctx.quarter
     if all(m.found is None and m.score is None for m in q.months):
@@ -369,7 +378,7 @@ def b_quarter_trend(ctx: Context, s: dict) -> dict:
 def b_quarter_fixed(ctx: Context, s: dict) -> dict:
     q = ctx.quarter
     if not q.fixed:
-        return {"empty": f"Nothing was fixed between {q.label}."}
+        return {"empty": f"Nothing was fixed from {q.label}."}
     limit = int(s.get("max") or 10)
     return {
         "quarter": q,
@@ -434,7 +443,8 @@ def b_contact(ctx: Context, s: dict) -> dict:
 
 def b_about(ctx: Context, s: dict) -> dict:
     fresh = [(f.title, f.finished_at) for f in ctx.review.freshness if not f.stale]
-    return {"fresh": fresh, "stale": [f for f in ctx.review.freshness if f.stale]}
+    stale = [f for f in ctx.review.freshness if f.stale]
+    return {"fresh": fresh, "stale": stale, "quarter_since": ctx.since if ctx.by_quarter else ""}
 
 
 WIDGETS: dict[str, Widget] = {
@@ -748,8 +758,10 @@ WIDGETS: dict[str, Widget] = {
 GROUPS = ("Summary", "Checks", "Licences and data", "Text and layout")
 
 
-def palette() -> list[dict]:
-    """The widgets for the editor, by group, with their fields as plain data."""
+def palette(hide: frozenset[str] = frozenset()) -> list[dict]:
+    """The widgets for the editor, by group, with their fields as plain data. Reports in ``hide``
+    (``data_reports.hidden()``: an add-on's while it's off) aren't offered, though a design that has one keeps
+    it (the table says it isn't there)."""
     out = []
     for group in GROUPS:
         items = []
@@ -765,7 +777,7 @@ def palette() -> list[dict]:
                     "min": f.min,
                     "max": f.max,
                     "help": f.help,
-                    "options": [list(o) for o in f.choices()],
+                    "options": [list(o) for o in f.choices() if not (f.options is _report_options and o[0] in hide)],
                 }
                 for f in w.fields
             ]
@@ -916,17 +928,27 @@ def save(conn, design_id: int, document: dict, name: str | None = None, descript
     return doc
 
 
-def remove(conn, design_id: int) -> None:
-    """Remove the design, and its key from every plan and schedule that sent it."""
+def remove(conn, design_id: int) -> list[str]:
+    """Remove the design, and its key from every plan and schedule that sent it. Returns the names of the
+    plans it was the only report on: they have nothing to send until someone chooses another."""
     key = key_of(design_id)
+    emptied = []
     for table in ("report_plans", "email_schedules"):
-        for row in conn.execute(f"SELECT id, reports FROM {table} WHERE reports LIKE ?", (f'%"{key}"%',)):
+        for row in conn.execute(f"SELECT * FROM {table} WHERE reports LIKE ?", (f'%"{key}"%',)).fetchall():
             try:
                 keys = [k for k in json.loads(row["reports"] or "[]") if k != key]
             except ValueError:
                 continue
             conn.execute(f"UPDATE {table} SET reports = ? WHERE id = ?", (json.dumps(keys), row["id"]))
+            if table == "report_plans" and not keys:
+                emptied.append(row["name"])
+    # What reviewers left out of it goes too: SQLite gives the next design this id again, and the items would
+    # leave its blocks out of those clients' copies.
+    conn.execute(
+        "DELETE FROM report_hidden WHERE item LIKE ? OR item = ?", (block_item(design_id, "%"), f"notes:{design_id}")
+    )
     conn.execute("DELETE FROM report_designs WHERE id = ?", (design_id,))
+    return emptied
 
 
 def usage(conn) -> dict[int, int]:
@@ -1082,7 +1104,8 @@ def context(
     preview), where the PDF itself always is one. ``opens`` leaves out tables of detail reports the person
     viewing can't open (``Context.opens``)."""
     doc = document(row)
-    ctx = Context(conn, tenant, now, brand=brand, month_end=month_end, opens=opens)
+    by_quarter = any(b["kind"] in QUARTER_BLOCKS for b in doc["blocks"])
+    ctx = Context(conn, tenant, now, brand=brand, month_end=month_end, opens=opens, by_quarter=by_quarter)
     rows = render(ctx, doc, row["id"])
     settings = doc["settings"]
     return {

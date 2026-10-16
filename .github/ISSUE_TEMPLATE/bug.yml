@@ -14,7 +14,8 @@ body:
         [private vulnerability reporting](https://github.com/JackD99/OfficeSentry/security/advisories/new).
 
         Setup errors such as AADSTS50011 or "the background worker isn't running" are often covered in
-        [Troubleshooting](https://github.com/JackD99/OfficeSentry/blob/main/v2/docs/troubleshooting.md).
+        [Troubleshooting](https://github.com/JackD99/OfficeSentry/blob/main/v2/docs/troubleshooting.md). Fixes
+        only go into the newest release, so if *Settings → Updates* offers one, update and try again first.
   - type: textarea
     id: what
     attributes:
@@ -35,9 +36,11 @@ body:
     attributes:
       label: Version
       description: >-
-        The version at the foot of the portal's menu, or in `/health` (`2.3.1`). If you run your own build of a
+        The version at the foot of the portal's menu, or in `/health`. If you run your own build of a
         branch, add its commit (`git rev-parse --short HEAD`).
-      placeholder: 2.3.1
+      placeholder: 2.x.y
+    validations:
+      required: true
   - type: dropdown
     id: install
     attributes:
@@ -50,18 +53,22 @@ body:
         - Windows without Docker
         - Linux without Docker
         - Development (python -m officesentry web)
+    validations:
+      required: true
   - type: textarea
     id: support_package
     attributes:
       label: Support package
       description: |
-        Attach the support package: the zip from **Settings → Support** in the portal (or
-        `python -m officesentry support-package` from the shell if the portal won't open). It holds the versions, health, settings and
-        recent log of your install, and it contains no secrets or client names unless you ticked
-        *Include client identifiers*, so it's safe to attach here. Drag the file into this box. It answers most
-        of the questions we would otherwise ask. If your version doesn't have it yet, say so and fill in the
-        fields below instead.
-      placeholder: Drag the support-package zip here, or write "not available in my version".
+        Attach the support package: the zip from **Settings → Support** in the portal. If the portal won't open,
+        make it on the server, in the folder with `docker-compose.yml`:
+        `docker compose run --rm -T web python -m officesentry support-package --out - > support.zip`
+        (without Docker: `python -m officesentry support-package`).
+        It holds the versions, health, settings and recent log of your install, with secrets and client names
+        taken out, so it's safe to attach here. Leave *Include client identifiers* unticked for a public issue.
+        Drag the file into this box. It answers most of the questions we would otherwise ask
+        ([what's in it](https://github.com/JackD99/OfficeSentry/blob/main/v2/docs/getting-help.md#whats-in-it-and-what-isnt)).
+      placeholder: Drag the support-package zip here.
   - type: input
     id: error_reference
     attributes:

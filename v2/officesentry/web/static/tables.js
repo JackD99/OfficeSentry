@@ -169,10 +169,10 @@
     all.querySelector('span').textContent = folded ? 'Expand all' : 'Collapse all';
   });
 
-  /* The All reports menu: its search box takes the typing as it opens. */
+  /* The All reports menu and the client switcher: their search box takes the typing as they open. */
   document.addEventListener('toggle', function (e) {
     var d = e.target;
-    if (d.id === 'report-switch' && d.open) { var f = d.querySelector('input[type=search]'); if (f) f.focus(); }
+    if ((d.id === 'report-switch' || d.id === 'client-switch') && d.open) { var f = d.querySelector('input[type=search]'); if (f) f.focus(); }
   }, true);
   /* Menus (<details class="menu">) close on Escape or a click outside. */
   document.addEventListener('click', function (e) {

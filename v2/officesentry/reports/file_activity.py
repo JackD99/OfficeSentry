@@ -69,10 +69,8 @@ TABLES = {  # operations.GROUPS key: (table title, columns, intro)
 
 
 def _shown(conn, tenant) -> bool:
-    """While the add-on is on, for a client it was asked for (and so may hold its history)."""
-    if not addon.enabled(conn):
-        return False
-    return tenant is None or addon.row_for(conn, tenant["id"]) is not None
+    """While the add-on is on, for a client it was asked for (``addon.shown``)."""
+    return addon.enabled(conn) if tenant is None else addon.shown(conn, tenant["id"])
 
 
 def _when(ts: int) -> str:
@@ -93,9 +91,8 @@ def _item(a: events.Activity, cloud: clouds.Cloud):
 def _mass_deletes(activities) -> list[tuple[int, str, int]]:
     """(start of the hour, who, files deleted) for each person and hour past ``MASS_DELETE``."""
     hours: Counter = Counter()
-    for a in activities:
-        if a.operation.lower() in operations.DELETES:
-            hours[(a.ts - a.ts % 3600, a.actor)] += 1
+    for a in operations.deletes(activities):
+        hours[(a.ts - a.ts % 3600, a.actor)] += 1
     return sorted(((h, who, n) for (h, who), n in hours.items() if n >= MASS_DELETE), reverse=True)
 
 
@@ -128,12 +125,12 @@ def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport)
     conn, tenant = snap.conn, snap.tenant
     cloud = clouds.of(tenant)
     row = addon.row_for(conn, tenant["id"])
-    if row is None:
+    if not _shown(conn, tenant):  # wherever it's built from: a design's table, a rollup, a saved view
         report.unavailable = "The audit log add-on isn't on for this client."
         return
     feed = (snap.objects("audit_activity", "audit_feed") or [None])[0]
     if feed is None and not row["started_at"]:
-        report.unavailable = f"The audit log add-on isn't on for this client yet. {addon.state(row).detail}"
+        report.unavailable = "The audit log add-on isn't on for this client yet."  # clients read it too
         return
     if feed is None:
         report.unavailable = (
@@ -141,10 +138,11 @@ def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport)
             "feed is started to make the first records available; it's read every night."
         )
         return
-    if row["stopped_at"]:
-        report.notice = (
-            f"The audit log add-on is off for this client: {row['stop_reason'] or 'switched off'} What was collected "
-            "before stays until retention removes it."
+    if row["stopped_at"]:  # why is on the add-on's page: the reason names the team, and clients read this
+        report.notice = "The audit log add-on is off for this client. " + (
+            "What was collected before stays until retention removes it."
+            if events.counts(conn, tenant["id"]).get("activity")
+            else "Nothing it collected is kept."
         )
 
     end = devices.parse_ts(snap.as_of) or now
@@ -198,7 +196,10 @@ def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport)
         group = operations.group(a.operation)
         if group in tables:
             tables[group].add(_rows(a, cloud), "medium" if a.attention else None)
-        people[a.actor or "Unknown"][_column(a)] += 1
+        if a.operation.lower() not in operations.DELETES:
+            people[a.actor or "Unknown"][_column(a)] += 1
+    for a in operations.deletes(activities):
+        people[a.actor or "Unknown"]["Deleted"] += 1
 
     sync = Section(
         "OneDrive sync",
@@ -257,8 +258,6 @@ def files_and_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport)
 
 def _column(a: events.Activity) -> str:
     name, group = a.operation.lower(), operations.group(a.operation)
-    if name in operations.DELETES:
-        return "Deleted"
     if name == "filedownloaded":
         return "Downloaded"
     if group == "sharing":

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, csrf %}
+{% from "_macros.html" import icon, ts, csrf, page_link with context %}
 {% from "_progress.html" import progress_script with context %}
 {% set TONES = {'critical': 'bad', 'high': 'warn', 'medium': 'info', 'ok': 'ok'} %}
 {% set STATE_PILLS = {'draft': '', 'in_review': 'info', 'approved': 'accent', 'sent': 'ok'} %}
@@ -42,8 +42,8 @@
       {% if plan %}On “{{ plan.name }}”{% if nobody %} · nobody to email yet{% elif not emailed %} · approving publishes to the portal only{% endif %}{% else %}Not on a report plan{% endif %}
       {% if review and review.approved_by %} · approved by {{ review.approved_by }} {{ ts(review.approved_at) }}{% endif %}</div></div>
   <div class="row-actions">
-    <a class="btn" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">{{ icon('eye') }} See the report</a>
-    <a class="btn" href="{{ url_for('reports.tenant_report_pdf', tenant_id=tenant.id) }}">{{ icon('download') }} PDF</a>
+    {% if can_open('reports.tenant_report', tenant_id=tenant.id) %}<a class="btn" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">{{ icon('eye') }} See the report</a>{% endif %}
+    {% if can_open('reports.tenant_report_pdf', tenant_id=tenant.id) %}<a class="btn" href="{{ url_for('reports.tenant_report_pdf', tenant_id=tenant.id) }}">{{ icon('download') }} PDF</a>{% endif %}
   </div>
 </div>
 
@@ -117,7 +117,7 @@
     <div class="action-row suggestions">
       <div class="label-sm">Quick fixes <span class="faint">· smaller jobs to just do</span></div>
       <ul class="suggest-list">{% for s in quick[:8] %}{{ suggestion(s) }}{% endfor %}</ul>
-      {% if quick|length > 8 %}<p class="small muted m0">And {{ quick|length - 8 }} more on <a href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}#quick-fixes">Recommended projects</a>.</p>{% endif %}
+      {% if quick|length > 8 %}<p class="small muted m0">And {{ quick|length - 8 }} more on {{ page_link(url_for('projects.tenant', tenant_id=tenant.id) ~ '#quick-fixes', 'Recommended projects') }}.</p>{% endif %}
     </div>
     {% endif %}
   </section>
@@ -138,7 +138,7 @@
           {% if c.notes %}{{ box('notes:' ~ c.design, 'Setup notes for your team', 'like "sign in as a Global Admin"') }}{% endif %}
         {% endif %}
       </fieldset>
-      {% if c.design and not c.notes %}<p class="small muted m0">Setup notes for your team, like "sign in as a Global Admin", are left out of this design for every client. <a href="{{ url_for('designs.edit', design_id=c.design) }}">Change that in the design</a>.</p>{% endif %}
+      {% if c.design and not c.notes %}<p class="small muted m0">Setup notes for your team, like "sign in as a Global Admin", are left out of this design for every client.{% if can_open('designs.edit', design_id=c.design) %} <a href="{{ url_for('designs.edit', design_id=c.design) }}">Change that in the design</a>.{% endif %}</p>{% endif %}
       <button class="sm" data-save>Save</button>
     </form>
     {% endfor %}
@@ -213,10 +213,12 @@
       {% if editable and task and task.status == 'failed' %}
       <div class="callout bad">{{ icon('alert') }}<div><strong>The last approval didn't go out.</strong><div class="small">{{ task.error }}</div></div></div>
       {% endif %}
-      {% if editable %}
+      {% if blocked %}
+      <div class="callout warn">{{ icon('alert') }}<div><strong>There's nothing to send yet.</strong> <span class="small">{{ blocked }}</span></div></div>
+      {% elif editable %}
       {% if nobody %}
       <div class="callout warn">{{ icon('alert') }}<div><strong>Nobody to email.</strong> <span class="small">{{ tenant.name }} has no contacts on this plan. Approving keeps the report in the client's report history; it's emailed when you add a contact and send it.</span>
-        <div class="callout-actions"><a class="btn sm" href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}#contacts">Add a contact</a></div></div></div>
+        {% if can_open('email.tenant_emails', tenant_id=tenant.id) %}<div class="callout-actions"><a class="btn sm" href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}#contacts">Add a contact</a></div>{% endif %}</div></div>
       {% endif %}
       <p class="small muted">The report is frozen as it is now, with your commentary, recommendations and client-visible notes, and {{ 'emailed to the client' if emailed else 'kept in the client\'s report history' if nobody else 'published to the client\'s report history' }}.</p>
       <form method="post" action="{{ url_for('reporting.approve', period=period, tenant_id=tenant.id) }}" data-busy="Approving…" id="approve-form">{{ csrf() }}<button class="primary">{{ icon('send') }} {{ 'Approve and send' if emailed else 'Approve' if nobody else 'Approve and publish' }}</button></form>
@@ -234,7 +236,7 @@
     {% endif %}
     {% if frozen %}
     <div class="label-sm">Issued files</div>
-    <ul class="list compact">{% for f in frozen %}<li><a href="{{ url_for('email.issued_report', tenant_id=tenant.id, report_id=f.id) }}">{{ icon('download') }} {{ f.title }} ({{ f.filename.rsplit('.', 1)[-1]|upper }})</a>
+    <ul class="list compact">{% for f in frozen %}<li>{% if can_open('email.issued_report', tenant_id=tenant.id, report_id=f.id) %}<a href="{{ url_for('email.issued_report', tenant_id=tenant.id, report_id=f.id) }}">{{ icon('download') }} {{ f.title }} ({{ f.filename.rsplit('.', 1)[-1]|upper }})</a>{% else %}{{ f.title }} ({{ f.filename.rsplit('.', 1)[-1]|upper }}){% endif %}
       <span class="sub">Version {{ f.version }}{% if f.reason %} · {{ f.reason }}{% endif %}</span></li>{% endfor %}</ul>
     {% endif %}
   </section>
@@ -257,7 +259,7 @@
 </div>
 {#- Phones: the right-hand column comes after every note form, so the main action also sits in a bar
     that stays on screen. It submits the same form as the Approve card. -#}
-{% if plan and admin and editable and not approving %}
+{% if plan and admin and editable and not approving and not blocked %}
 <div class="approve-bar">
   <span class="small">{{ states[state] }} · <a href="#approve">Details</a></span>
   <button class="primary" form="approve-form">{{ icon('send') }} {{ 'Approve and send' if emailed else 'Approve' if nobody else 'Approve and publish' }}</button>

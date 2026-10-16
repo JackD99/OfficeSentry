@@ -207,6 +207,8 @@ class SitePermissions(Collector):
                     refusals += 1
                     ctx.log(f"SharePoint refused access to {site['webUrl']}: {exc.message}", "warning")
                 except SharePointError as exc:
+                    if exc.status == 0 and not stored:  # SharePoint out of reach before any site was read
+                        raise
                     unreadable += 1
                     ctx.log(f"Couldn't read the permissions of {site['webUrl']}: {exc.message}", "warning")
             if refusals and not stored and not approved:  # the first site failed another way, the rest refused

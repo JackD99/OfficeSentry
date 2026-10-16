@@ -39,6 +39,11 @@ def plural(n: int, noun: str, many: str | None = None) -> str:
     return f"{n} {nouns(n, noun, many)}"
 
 
+def counted(n: int, noun: str, many: str | None = None) -> str:
+    """``plural`` for counts that run into thousands: ``counted(12500, "sign-in")`` is "12,500 sign-ins"."""
+    return f"{n:,} {nouns(n, noun, many)}"
+
+
 def verb(n: int, one: str, many: str) -> str:
     """The verb that agrees with ``n``: ``verb(n, "is", "are")``."""
     return one if n == 1 else many
@@ -79,6 +84,12 @@ def duration(seconds: float) -> str:
         if seconds < below:
             return plural(seconds // size, unit)
     return plural(seconds // 86400, "day")
+
+
+def one_line(text: str) -> str:
+    """A name someone typed or imported, on one line: line breaks, tabs and runs of spaces become one space and
+    other control characters go. A client's name goes into email subjects, which can't hold a line break."""
+    return " ".join("".join(c for c in text if c.isspace() or unicodedata.category(c) != "Cc").split())
 
 
 def fold(text: str) -> str:

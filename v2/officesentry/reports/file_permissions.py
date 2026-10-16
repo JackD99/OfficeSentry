@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 
 from ..devices import parse_ts
 from ..snapshot import TenantSnapshot
+from ..text import nouns
 from .data_reports import Chart, DataReport, Rows, Section, Tile, _date, metric_trend
 from .registry import report
 from .sharepoint import DENIED_TEXT, _item_cell, _location
@@ -155,8 +156,8 @@ def file_permissions(snap: TenantSnapshot, now: datetime, report: DataReport) ->
     full = status.get("full_scans")
     incremental = (status.get("scanned_drives") or 0) - (full or 0) if full is not None else 0
     report.footnote = (
-        f"{len(items):,} files and folders with permissions of their own, from {scanned:,} "
-        f"files and folders read in {status.get('drives') or 0} libraries and OneDrives"
+        f"{len(items):,} {nouns(len(items), 'file or folder')} with permissions of their own, from {scanned:,} "
+        f"{nouns(scanned, 'file or folder')} read in {status.get('drives') or 0} libraries and OneDrives"
         + (
             f" ({incremental} asked for changes only since the last scan, with {status.get('kept') or 0:,} "
             "unchanged items kept)"

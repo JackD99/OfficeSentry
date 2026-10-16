@@ -13,20 +13,26 @@
   <script nonce="{{ csp_nonce }}">try { if (localStorage.getItem('menu') === 'folded') document.documentElement.classList.add('menu-folded'); } catch (e) {}</script>
 </head>
 <body{% if not brand.is_default %} class="branded"{% endif %}>
-{#- Admin settings: one sidebar entry, and this row of links on top of each settings page.
-    (endpoint, label, other endpoints that belong to the page) -#}
-{#- (endpoint, label, other endpoints that belong to the page, the capability that opens it; '' means any staff role) -#}
-{% set ALL_SETTINGS = [('tenant_admin.clients', 'Client settings', ['onboarding.index', 'onboarding.import_tenants', 'onboarding.send'], ''),
-                   ('groups.index', 'Client groups', ['groups.edit'], 'clients.manage'),
-                   ('admin.connections', 'App connection', ['audit_addon.settings'], 'settings.manage'),
-                   ('reports.prices', 'Licence prices', [], 'settings.manage'), ('email.settings', 'Email delivery', [], 'settings.manage'),
-                   ('alerts.settings', 'Alerts', [], 'settings.manage'), ('branding.settings', 'Branding', [], 'settings.manage'),
-                   ('retention.settings', 'Data retention', [], 'settings.manage'), ('admin.users', 'Users', ['admin.edit_user', 'roles.index', 'roles.edit'], 'users.manage'),
-                   ('sso.settings_page', 'Microsoft sign-in', [], 'settings.manage'),
-                   ('activity.index', 'Activity log', [], 'activity_log.read'), ('system.status', 'System status', [], 'system.manage'),
-                   ('support.index', 'Support', [], 'system.manage'), ('updates.index', 'Updates', [], 'system.update')] %}
+{#- Admin settings: one sidebar entry, and on each settings page a row of its four areas with the open
+    area's pages under it, as a client's tabs have. Each page is (endpoint, label, other endpoints that
+    belong to the page, the capability that opens it; '' means any staff role). -#}
+{% set SETTINGS_GROUPS = [
+  ('Clients', [('tenant_admin.clients', 'Client settings', ['onboarding.index', 'onboarding.import_tenants', 'onboarding.send'], ''),
+               ('groups.index', 'Client groups', ['groups.edit'], 'clients.manage'),
+               ('admin.connections', 'App connection', ['audit_addon.settings'], 'settings.manage')]),
+  ('Reports and email', [('branding.settings', 'Branding', [], 'settings.manage'), ('reports.prices', 'Licence prices', [], 'settings.manage'),
+                         ('email.settings', 'Email delivery', [], 'settings.manage'), ('alerts.settings', 'Alerts', [], 'settings.manage')]),
+  ('Team', [('admin.users', 'Users', ['admin.edit_user', 'roles.index', 'roles.edit'], 'users.manage'),
+            ('sso.settings_page', 'Microsoft sign-in', [], 'settings.manage'), ('activity.index', 'Activity log', [], 'activity_log.read')]),
+  ('System', [('system.status', 'System status', [], 'system.manage'), ('retention.settings', 'Data retention', [], 'settings.manage'),
+              ('updates.index', 'Updates', [], 'system.update'), ('support.index', 'Support', [], 'system.manage')]),
+] %}
 {% set SETTINGS = [] %}
-{% for entry in ALL_SETTINGS %}{% if current_user and (not entry[3] or can(entry[3])) and (entry[0] != 'groups.index' or manages_groups()) %}{% set _ = SETTINGS.append(entry) %}{% endif %}{% endfor %}
+{% set SETTINGS_AREAS = [] %}
+{% for area, entries in SETTINGS_GROUPS %}{% set shown = [] %}
+  {%- for entry in entries %}{% if current_user and (not entry[3] or can(entry[3])) and (entry[0] != 'groups.index' or manages_groups()) %}{% set _ = shown.append(entry) %}{% set _ = SETTINGS.append(entry) %}{% endif %}{% endfor %}
+  {%- if shown %}{% set _ = SETTINGS_AREAS.append((area, shown)) %}{% endif %}
+{%- endfor %}
 {% set SETTINGS_ENDPOINTS = SETTINGS|map(attribute=0)|list + SETTINGS|map(attribute=2)|sum(start=[]) %}
 {#- The Settings entry shows once there's a settings page beyond the client list. -#}
 {% set SHOW_SETTINGS = current_user and current_user.role != 'client' and SETTINGS|length > 1 %}
@@ -45,7 +51,7 @@
   {% if across %}
   <form method="get" action="{{ url_for('search.index') }}" class="nav-search" role="search">
     <label>{{ icon('search') }}<span class="sr-only">Search all clients</span>
-      <input type="search" name="q" placeholder="Search all clients" autocomplete="off" maxlength="200"{% if request.endpoint == 'search.index' %} value="{{ request.args.get('q', '') }}"{% endif %}></label>
+      <input type="search" name="q" placeholder="Search all clients" autocomplete="off" maxlength="200" aria-keyshortcuts="/ Control+K Meta+K"{% if request.endpoint == 'search.index' %} value="{{ request.args.get('q', '') }}"{% endif %}></label>
   </form>
   <a class="nav-search-link" href="{{ url_for('search.index') }}">{{ icon('search') }}<span>Search all clients</span></a>
   {{ nav_link('home.index', 'Home', 'home', ('home.today', 'home.clients')) }}
@@ -61,7 +67,7 @@
   {% endif %}
   {% if SHOW_SETTINGS %}
   {% set ep = request.endpoint or '' %}
-  <a href="{{ url_for(SETTINGS[1][0]) }}"{% if ep in SETTINGS_ENDPOINTS %} class="active" aria-current="page"{% endif %}>{{ icon('settings') }}<span>Settings</span></a>
+  <a href="{{ url_for(SETTINGS[0][0]) }}"{% if ep in SETTINGS_ENDPOINTS %} class="active" aria-current="page"{% endif %}>{{ icon('settings') }}<span>Settings</span></a>
   {% endif %}
 </nav>
 {%- endmacro %}
@@ -129,7 +135,17 @@
         {{ e.consequence }}</span>{% if e.kind == 'mail' %}<a class="btn sm" href="{{ url_for('email.settings') }}">Renew it</a>{% elif e.kind == 'sign_in' %}<a class="btn sm" href="{{ url_for('sso.settings_page') }}">{{ 'Finish replacing it' if e.replacing else 'Replace it' }}</a>{% elif e.replacing %}<a class="btn sm" href="{{ url_for('admin.connections') }}#conn-{{ e.id }}">Finish replacing it</a>{% else %}<a class="btn sm" href="{{ url_for('admin.connections') }}#conn-{{ e.id }}">Replace it</a>{% endif %}</div>{% endfor %}
       {% if SHOW_SETTINGS and request.endpoint in SETTINGS_ENDPOINTS %}
       <nav class="settings-nav" aria-label="Settings">
-        {% for endpoint, label, more, cap in SETTINGS %}<a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint or request.endpoint in more %} class="active" aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+        {%- set here = namespace(pages=[]) %}
+        <div class="tabs">
+          {%- for area, entries in SETTINGS_AREAS %}{% set open = namespace(on=false) %}
+          {%- for endpoint, label, more, cap in entries %}{% if request.endpoint == endpoint or request.endpoint in more %}{% set open.on = true %}{% endif %}{% endfor %}
+          {%- set open = open.on %}{% if open %}{% set here.pages = entries %}{% endif %}
+          <a href="{{ url_for(entries[0][0]) }}"{% if open %} class="active" aria-current="{{ 'page' if entries|length == 1 else 'true' }}"{% endif %}>{{ area }}</a>
+          {%- endfor %}
+        </div>
+        {% if here.pages|length > 1 %}<div class="tab-pages">
+          {%- for endpoint, label, more, cap in here.pages %}<a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint or request.endpoint in more %} class="active" aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+        </div>{% endif %}
       </nav>
       {% endif %}
       {{ flashes() }}

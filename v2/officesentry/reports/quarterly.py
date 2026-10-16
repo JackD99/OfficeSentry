@@ -19,6 +19,7 @@ from .monthly_review import (
     Report,
     _baseline_end,
     _month_starts,
+    _value_on_or_before,
     fixed_groups,
     found_and_fixed,
 )
@@ -59,6 +60,9 @@ class Quarter:
     spend: list[SpendLine] = field(default_factory=list)  # paid licences, dearest first
     currency: str = "GBP"
     upcoming: list[upcoming.Item] = field(default_factory=list)  # the next 90 days, soonest first
+    # Secure Score as the quarter began (the last stored before its first day), which the review's key figures
+    # compare with too; None when nothing was stored before.
+    score_start: float | None = None
 
     @property
     def label(self) -> str:
@@ -67,6 +71,8 @@ class Quarter:
 
     @property
     def score_from(self) -> float | None:
+        if self.score_start is not None:
+            return self.score_start
         known = [m.score for m in self.months if m.score is not None]
         return known[0] if len(known) > 1 else None
 
@@ -105,6 +111,12 @@ def label(start: date, end: date) -> str:
     return f"{start:%B} to {end:%B %Y}"
 
 
+def start(now: datetime) -> datetime:
+    """Midnight (UTC) on the first day of the quarter's first month: what a quarterly review compares with."""
+    first = _month_starts(now, MONTHS)[0]
+    return datetime(first.year, first.month, 1, tzinfo=UTC)
+
+
 def quarter_label(now: datetime) -> str:
     """The ``{quarter}`` placeholder: the three months ending this one."""
     return label(_month_starts(now, MONTHS)[0], now.date())
@@ -132,7 +144,7 @@ def build(conn, tenant, review: Report, now: datetime | None = None) -> Quarter:
     """The tenant's quarter, from stored data and the monthly review already built for it."""
     now = now or datetime.now(UTC)
     starts = _month_starts(now, MONTHS)
-    since = datetime(starts[0].year, starts[0].month, 1, tzinfo=UTC).strftime(ISO)
+    since = start(now).strftime(ISO)
     snap = TenantSnapshot(conn, tenant)
     if snap.runs:
         counts = found_and_fixed(conn, tenant["id"], now, _baseline_end(conn, tenant["id"], now), MONTHS)
@@ -156,4 +168,5 @@ def build(conn, tenant, review: Report, now: datetime | None = None) -> Quarter:
         spend=_spend(review.licences.lines),
         currency=review.currency,
         upcoming=[i for i in coming if i.window != upcoming.NO_DATE],
+        score_start=_value_on_or_before(snap.history(SCORE_KEY), start(now)),
     )

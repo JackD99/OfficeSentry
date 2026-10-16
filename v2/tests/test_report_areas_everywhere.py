@@ -373,11 +373,11 @@ def test_a_client_home_leaves_out_areas_taken_away(client, db, vault, alpha, two
     uid = _client_account(db, vault, "it@alpha.example", alpha, bravo, how)
     _switch(client, "it@alpha.example", how)
     page = client.get("/").data.decode()
-    assert "<h2>Recommendations</h2>" in page and "Bravo Inc" not in page
+    assert 'class="card client-recs"' in page and "Bravo Inc" not in page
     _deny(db, uid, "reports.security", alpha)  # which signs them out
     _switch(client, "it@alpha.example", how)
     page = client.get("/").data.decode()
-    assert "<h2>Recommendations</h2>" not in page and "Checks needing attention" not in page
+    assert 'class="card client-recs"' not in page and "Checks needing attention" not in page
     assert f"/tenants/{alpha}/findings" not in page and "Users with MFA" in page and "Bravo Inc" not in page
     assert client.get(f"/tenants/{bravo}/findings").status_code == 404
 

@@ -8,7 +8,7 @@
   var root = document.getElementById('designer');
   if (!root) return;
   var data = JSON.parse(document.getElementById('designer-data').textContent);
-  var doc = data.doc, widgets = {};
+  var doc = data.doc, widgets = {}, MAX_BLOCKS = data.max_blocks;
   data.palette.forEach(function (g) { g.widgets.forEach(function (w) { widgets[w.key] = w; }); });
   var icons = {};
   var iconTemplate = document.getElementById('designer-icons');
@@ -34,6 +34,13 @@
     var s = {};
     w.fields.forEach(function (f) { s[f.key] = Array.isArray(f.default) ? f.default.slice() : f.default; });
     return s;
+  }
+  // A number box's value within its field's range. 0 is kept (several fields say what 0 does); only an empty
+  // or unreadable box falls back to the default.
+  function inRange(f, text) {
+    var n = parseInt(text, 10);
+    if (isNaN(n)) n = f.default == null ? f.min : f.default;
+    return Math.max(f.min, Math.min(f.max, n));
   }
   function summary(b) {
     var w = widgets[b.kind], parts = [];
@@ -142,6 +149,10 @@
       });
     } else if (f.type === 'select') {
       input = el('select');
+      if (v && !f.options.some(function (o) { return String(o[0]) === String(v); })) {
+        // A choice the editor no longer offers (an add-on's report while it's off) stays chosen until changed.
+        var kept = el('option', '', 'Not available'); kept.value = v; kept.selected = true; input.appendChild(kept);
+      }
       f.options.forEach(function (o) { var op = el('option', '', o[1]); op.value = o[0]; if (String(o[0]) === String(v)) op.selected = true; input.appendChild(op); });
     } else if (f.type === 'textarea') {
       input = el('textarea'); input.rows = 5; input.value = v || '';
@@ -153,9 +164,11 @@
       input.id = id;
       input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', function () {
         remember(input.tagName === 'SELECT' ? null : id);
-        b.settings[f.key] = f.type === 'number' ? Math.max(f.min, Math.min(f.max, parseInt(input.value, 10) || f.default || f.min)) : input.value;
+        b.settings[f.key] = f.type === 'number' ? inRange(f, input.value) : input.value;
         changed(b.id, false);
       });
+      // Leaving a number box shows what was kept (a number past its range is saved as the nearest end).
+      if (f.type === 'number') input.addEventListener('change', function () { input.value = b.settings[f.key]; });
       wrap.appendChild(input);
     }
     if (f.help) wrap.appendChild(el('span', 'hint', f.help));
@@ -198,6 +211,7 @@
       actions.appendChild(widthBtn);
     }
     actions.appendChild(iconButton('copy', 'Duplicate', 'Duplicate' + name, function () {
+      if (full()) return;
       remember();
       var copy = JSON.parse(JSON.stringify(b)); copy.id = uid(); doc.blocks.splice(i + 1, 0, copy); selected = copy.id; changed(copy.id, true);
     }));
@@ -224,7 +238,8 @@
     list.innerHTML = '';
     doc.blocks.forEach(function (b, i) { if (widgets[b.kind]) list.appendChild(card(b, i)); });
     empty.hidden = doc.blocks.length > 0;
-    countEl.textContent = doc.blocks.length ? doc.blocks.length + (doc.blocks.length === 1 ? ' block' : ' blocks') : '';
+    countEl.textContent = doc.blocks.length ? doc.blocks.length + (doc.blocks.length === 1 ? ' block' : ' blocks') +
+      (doc.blocks.length >= MAX_BLOCKS ? ', the most a design holds' : '') : '';
     coverSub();
     markPreview();
   }
@@ -248,8 +263,14 @@
     doc.blocks.splice(to, 0, b);
     changed(b.id, true);
   }
+  // A design holds MAX_BLOCKS blocks (designs.MAX_BLOCKS): another is refused with a word, never dropped later.
+  function full() {
+    if (doc.blocks.length < MAX_BLOCKS) return false;
+    say('A design holds ' + MAX_BLOCKS + ' blocks at most. Remove one to add another.', 'failed');
+    return true;
+  }
   function add(kind, at) {
-    var w = widgets[kind]; if (!w) return;
+    var w = widgets[kind]; if (!w || full()) return;
     remember();
     var b = { id: uid(), kind: kind, width: 'full', settings: defaults(w) };
     if (at === undefined) { var s = blockAt(selected); at = s === -1 ? doc.blocks.length : s + 1; }
@@ -282,15 +303,22 @@
     fetch(root.dataset.save, { method: 'POST', credentials: 'same-origin', body: JSON.stringify(body),
                                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
                                           'X-CSRFToken': token ? token.value : '' } })
-      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (r) {
+        if (r.ok) return r.json();
+        // A save the portal refuses (its answer says why) isn't tried again; anything else is.
+        return r.json().catch(function () { return {}; }).then(function (answer) {
+          var e = new Error(r.status); e.refused = answer.error; throw e;
+        });
+      })
       .then(function () {
         saving = false;
         if (dirty) { save(); return; }
         say(notice || 'Saved');
         reloadPreview();
       })
-      .catch(function () {
+      .catch(function (e) {
         saving = false;
+        if (e && e.refused) { say(e.refused, 'failed'); return; }
         say("Couldn't save. Trying again…", 'failed');
         saveTimer = setTimeout(save, 4000);
       });

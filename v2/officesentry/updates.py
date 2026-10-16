@@ -58,7 +58,10 @@ ERROR_KEY = "updates.check_error"
 AUDITED_KEY = "updates.audited_job"
 CHECK_EVERY = timedelta(hours=24)
 RETRY_EVERY = timedelta(hours=1)
-KEEP_RELEASES = 15
+KEEP_RELEASES = 15  # kept when the install isn't that far behind; every newer release is kept when it is
+PER_PAGE = 100  # GitHub's most
+PAGES = 5  # of the release list read at most: 500 releases
+CUT_KEY = "updates.cut"  # "1": GitHub had more newer releases than were read
 SECTION_CHARS = 12_000
 TIMEOUT = 10
 
@@ -118,8 +121,8 @@ class Release:
     @property
     def asks(self) -> bool:
         """The notes' Action required section asks something of people. Every release fills it in, saying
-        "None" when there's nothing to do (CONTRIBUTING.md, "Releases")."""
-        text = self.action.strip().lower()
+        "None" when there's nothing to do (CONTRIBUTING.md, "Releases"), in bold or italics or not."""
+        text = _plain(self.action)
         return bool(text) and not re.match(r"none\b", text)  # "Nonetheless, ..." still asks
 
     @property
@@ -137,8 +140,13 @@ class Release:
     @property
     def upgrades_database(self) -> bool:
         """The notes' Database upgrade section says yes (it starts "No" when there's none)."""
-        text = self.database.strip().lower()
+        text = _plain(self.database)
         return bool(text) and not re.match(r"(no|none)\b", text)  # "Note: ..." is still an upgrade
+
+
+def _plain(text: str) -> str:
+    """A section's text in lower case, without bold or italics ("**None.**", "_None_")."""
+    return re.sub(r"[*_]+", " ", text).strip().lower()
 
 
 def _cap(text: str) -> str:
@@ -148,15 +156,18 @@ def _cap(text: str) -> str:
 
 def parse_notes(body: str) -> tuple[str, dict[str, str]]:
     """A release's notes (its CHANGELOG.md section) as the opening summary and the sections people must read
-    before updating; the rest (Added, Changed, Fixed) stays on GitHub."""
+    before updating; the rest (Added, Changed, Fixed) stays on GitHub. A heading below a section's own level
+    ("#### Docker" under "### Action required") is part of that section."""
     summary_lines: list[str] = []
     sections: dict[str, list[str]] = {}
     current: list[str] | None = summary_lines
+    level = 0  # of the heading the current section started with
     for line in (body or "").replace("\r\n", "\n").split("\n"):
-        heading = re.match(r"#{2,4}\s+(.*?)\s*$", line)
-        if heading:
-            key = SECTIONS.get(heading[1].strip().lower())
+        heading = re.match(r"(#{2,6})\s+(.*?)\s*$", line)
+        if heading and not (current is not None and current is not summary_lines and len(heading[1]) > level):
+            key = SECTIONS.get(heading[2].rstrip(":").strip().lower())  # "Action Required:" too
             current = sections.setdefault(key, []) if key else None
+            level = len(heading[1])
             continue
         if current is not None:
             current.append(line)
@@ -185,13 +196,12 @@ class CheckFailed(Exception):
     pass
 
 
-def fetch(session=None, timeout: float = TIMEOUT) -> list[Release]:
-    """Office Sentry's published releases, newest first, from GitHub. Raises CheckFailed with words for
-    people."""
+def _page(session, url: str, params: dict | None, timeout: float):
+    """One page of GitHub's release list: the response, and the releases on it."""
     try:
         response = (session or requests).get(
-            RELEASES_URL,
-            params={"per_page": 30},
+            url,
+            params=params,
             headers={
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2022-11-28",
@@ -211,9 +221,30 @@ def fetch(session=None, timeout: float = TIMEOUT) -> list[Release]:
         raise CheckFailed("GitHub's answer wasn't readable.") from exc
     if not isinstance(items, list):
         raise CheckFailed("GitHub's answer wasn't a list of releases.")
-    found = [r for r in (from_github(i) for i in items) if r]
+    return response, [r for r in (from_github(i) for i in items) if r]
+
+
+def fetch(session=None, timeout: float = TIMEOUT, current: Version | None = None) -> tuple[list[Release], bool]:
+    """Office Sentry's published releases, newest first, from GitHub: every one newer than ``current`` (the
+    running version), so none of their Action required is missed however far behind the install is, and at
+    least KEEP_RELEASES. Also whether those are all the newer ones: False when GitHub had more pages of them
+    than ``PAGES``. Raises CheckFailed with words for people."""
+    current = current or running()
+    found: list[Release] = []
+    url, params, complete = RELEASES_URL, {"per_page": PER_PAGE}, True
+    for _ in range(PAGES):
+        response, page = _page(session, url, params, timeout)
+        found += page
+        url, params = (response.links.get("next") or {}).get("url", ""), None
+        if not url.startswith(f"{RELEASES_URL}?"):  # the last page (or a link that isn't GitHub's list)
+            break
+        if current is None or any(r.parsed <= current for r in page):  # the list goes newest first
+            break
+    else:
+        complete = False
     found.sort(key=lambda r: r.parsed, reverse=True)
-    return found[:KEEP_RELEASES]
+    behind = sum(1 for r in found if current and r.parsed > current)
+    return found[: max(KEEP_RELEASES, behind)], complete
 
 
 def _setting(conn, key: str) -> str | None:
@@ -245,7 +276,7 @@ def check(conn, now: datetime | None = None, session=None) -> list[Release]:
     now = now or datetime.now(UTC)
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
-        found = fetch(session)
+        found, complete = fetch(session)
     except CheckFailed as exc:
         with transaction(conn):
             _put(conn, CHECKED_KEY, stamp)
@@ -255,6 +286,7 @@ def check(conn, now: datetime | None = None, session=None) -> list[Release]:
         _put(conn, RELEASES_KEY, json.dumps([asdict(r) for r in found]))
         _put(conn, CHECKED_KEY, stamp)
         _put(conn, ERROR_KEY, None)
+        _put(conn, CUT_KEY, None if complete else "1")
     return found
 
 
@@ -292,12 +324,20 @@ def available(conn, current: Version | None = None) -> Release | None:
 @dataclass
 class CheckState:
     on: bool
-    checked_at: str | None
-    error: str | None
+    checked_at: str | None  # the last check, whether it worked or not
+    error: str | None  # why the last check failed
+    known: bool = False  # a check has worked, so the releases kept are GitHub's
+    cut: bool = False  # GitHub had more newer releases than the check read
 
 
 def check_state(conn) -> CheckState:
-    return CheckState(checking(conn), _setting(conn, CHECKED_KEY), _setting(conn, ERROR_KEY))
+    return CheckState(
+        checking(conn),
+        _setting(conn, CHECKED_KEY),
+        _setting(conn, ERROR_KEY),
+        _setting(conn, RELEASES_KEY) is not None,
+        _setting(conn, CUT_KEY) == "1",
+    )
 
 
 def due(conn, now: datetime) -> bool:

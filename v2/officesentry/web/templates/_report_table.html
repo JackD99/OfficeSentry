@@ -4,15 +4,18 @@
 {% from "_macros.html" import icon, csrf %}
 {% set SEV_RANK = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'info': 4} %}
 
+{#- A person's, mailbox's, group's or site's page is linked only for someone who opens it (can_open, from the
+    route's own checks); anyone else gets the name as plain text, and a site's address keeps its SharePoint link. -#}
 {% macro item(v, p) -%}
-{%- if v.hrefs.get(p) %}<a href="{{ v.hrefs[p] }}">{{ p|wrappable }}</a>{% else %}{{ p|wrappable }}{% endif -%}
+{%- if v.hrefs.get(p) and can_open(v.hrefs[p]) %}<a href="{{ v.hrefs[p] }}">{{ p|wrappable }}</a>{% else %}{{ p|wrappable }}{% endif -%}
 {%- endmacro %}
 
 {#- A long list (Many) shows its short form and opens in place to every item, one a line. Long words (addresses,
     paths) may wrap after an "@" or a slash (wrappable), so they don't hold their column wide. -#}
 {% macro cell(v) -%}
-{%- if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text|wrappable }}</a>
+{%- if v.page_href is defined and v.page_href and can_open(v.page_href) %}<a href="{{ v.page_href }}">{{ v.text|wrappable }}</a>
 {%- elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text|wrappable }}</a>
+{%- elif v.page_href is defined and v.page_href %}{{ v.text|wrappable }}
 {%- elif v.parts is defined and v.short %}<details class="more"><summary title="Show all {{ v.parts|length }}"><span>{{ v.short|wrappable }}</span></summary><ul class="more-list">{% for p in v.parts %}<li>{{ item(v, p) }}</li>{% endfor %}</ul></details>
 {%- elif v.parts is defined %}{% for p in v.parts %}{{ item(v, p) }}{{ ', ' if not loop.last }}{% endfor %}
 {%- else %}{{ v|readable|wrappable }}{% endif -%}

@@ -129,8 +129,10 @@ def _decorate(s) -> dict:
     d["recipients"] = delivery.recipients(g.db, "schedule", s["id"])
     d["describe"] = delivery.describe(s)
     d["tz"] = delivery.schedule_tz(s, _cfg().timezone)
+    # The client is "paused" or "archived": the timer skips it and nothing can be sent by hand.
+    d["client_off"] = delivery.client_off(store.get_tenant(g.db, s["tenant_id"])) if s["kind"] == "report" else None
     # A plan schedule that waits for approval never sends on its timer (month_end.approve sends it).
-    d["next"] = None if s["on_approval"] else delivery.next_send(s, _cfg().timezone)
+    d["next"] = None if s["on_approval"] or d["client_off"] else delivery.next_send(s, _cfg().timezone)
     d["titles"] = delivery.schedule_titles(s, g.db)
     d["upcoming"] = delivery.is_upcoming(s)
     d["views"] = delivery.is_views(s)
@@ -178,6 +180,7 @@ def tenant_emails(tenant_id: int):
     deliveries = g.db.execute(
         f"SELECT * FROM email_deliveries WHERE tenant_id = ?{kinds} ORDER BY id DESC LIMIT 25", (t["id"],)
     ).fetchall()
+    stale = _superseded(deliveries) if staff else set()
     if not staff:
         deliveries = [c for c in (_client_copy(d, contacts) for d in deliveries) if c]
     alert = _decorate_alert(g.db.execute("SELECT * FROM email_alerts WHERE tenant_id = ?", (t["id"],)).fetchone())
@@ -191,6 +194,7 @@ def tenant_emails(tenant_id: int):
         schedules=schedules,
         last=last,
         deliveries=deliveries,
+        stale=stale,
         alert=alert,
         contacts=contacts,
         adds_contacts=staff and not _plan_sends_more(t["id"]),
@@ -203,6 +207,11 @@ def tenant_emails(tenant_id: int):
             (t["id"], _days_ago(30)),
         ).fetchone()[0],
     )
+
+
+def _superseded(deliveries) -> set[int]:
+    """Failed emails whose period went out after them: Retry would send it twice, so they show none."""
+    return {d["id"] for d in deliveries if d["status"] == "failed" and delivery.superseded(g.db, d)}
 
 
 def _client_copy(d, contacts) -> dict | None:
@@ -229,14 +238,22 @@ def report_history(tenant_id: int):
     )
 
 
+def _file_needs(tenant_id: int, report_id: int, **_) -> tuple[str, ...]:
+    """``needs(also=...)`` for an issued file: what its report needs (``_needs``), once the file is looked up."""
+    row = g.db.execute(
+        "SELECT kind FROM issued_reports WHERE id = ? AND tenant_id = ?", (report_id, tenant_id)
+    ).fetchone()
+    return tuple(sorted(_needs(row["kind"]))) if row else ()
+
+
 @bp.get("/tenants/<int:tenant_id>/report-history/<int:report_id>")
-@needs("emails.view", "export")
+@needs("emails.view", "export", also=_file_needs)
 def issued_report(tenant_id: int, report_id: int):
     t = tenant_or_404(tenant_id)
     r = issued.get(g.db, t["id"], report_id)
     if r is None:
         abort(404)
-    require(*_needs(r["kind"]), tenant_id=t["id"])
+    require(*_file_needs(t["id"], report_id), tenant_id=t["id"])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"issued:{r['filename']}")
     return Response(
         bytes(r["data"]),
@@ -487,7 +504,7 @@ def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: 
             if any(existing[k] != values[k] for k in timing):
                 g.db.execute(
                     "UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
-                    (fresh_period, schedule_id),
+                    (_not_back(existing["last_period"], fresh_period), schedule_id),
                 )
             action = "email_schedule_updated"
         delivery.set_recipients(g.db, "schedule", schedule_id, ids)
@@ -576,6 +593,8 @@ def new_views():
 @needs("emails.manage", "reports.security")
 def edit_schedule(schedule_id: int):
     s = _schedule_or_404(schedule_id)
+    if s["plan_id"]:
+        return _on_plan(s)
     tenant = tenant_or_404(s["tenant_id"]) if s["tenant_id"] else None
     if tenant is not None and not _sends_only_what_they_open(s):
         flash("Only someone who can open every report this email sends can change it.", "error")
@@ -593,10 +612,30 @@ def edit_schedule(schedule_id: int):
 @needs("emails.manage")
 def delete_schedule(schedule_id: int):
     s = _schedule_or_404(schedule_id)
+    if s["plan_id"]:
+        return _on_plan(s)
     g.db.execute("DELETE FROM email_schedules WHERE id = ?", (s["id"],))
     audit(g.db, g.user["username"], "email_schedule_deleted", s["tenant_id"], s["kind"])
     flash("Scheduled email removed.", "success")
     return _back(s["tenant_id"])
+
+
+def _on_plan(s):
+    """A client's report plan email is changed on its plan. Changed here it went its own way until the plan
+    was next saved; deleted here, the month waited for an email that was gone."""
+    plan = month_end.get_plan(g.db, s["plan_id"])
+    flash(
+        f"This email comes from the report plan “{plan['name']}”. Change it on the plan, or take the client off"
+        " the plan there, under Month-end, Report plans.",
+        "error",
+    )
+    return _back(s["tenant_id"])
+
+
+def _not_back(last: str | None, fresh: str) -> str:
+    """The period a resumed or re-timed schedule counts as done: the current one, unless a later one is done
+    already (a month approved and sent early), which the timer would otherwise send again."""
+    return last if delivery.period_done(last, fresh) else fresh
 
 
 @bp.post("/schedules/<int:schedule_id>/toggle")
@@ -613,7 +652,7 @@ def toggle_schedule(schedule_id: int):
             )
             g.db.execute(
                 "UPDATE email_schedules SET enabled = 1, last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
-                (period, s["id"]),
+                (_not_back(s["last_period"], period), s["id"]),
             )
         else:
             g.db.execute("UPDATE email_schedules SET enabled = 0 WHERE id = ?", (s["id"],))
@@ -639,6 +678,9 @@ def send_now(schedule_id: int):
         )
     if not delivery.recipients(g.db, "schedule", s["id"]):
         flash("Add someone to send it to first.", "error")
+        return _back(s["tenant_id"])
+    if s["kind"] == "report" and (refused := delivery.not_sending_to(store.get_tenant(g.db, s["tenant_id"]))):
+        flash(refused, "error")
         return _back(s["tenant_id"])
     if delivery.being_sent(g.db, s, _cfg().timezone):
         flash(delivery.BEING_SENT, "error")
@@ -878,6 +920,9 @@ def retry(delivery_id: int):
         tenant_or_404(d["tenant_id"])
     elif not can("settings.manage"):
         abort(404)
+    if d["tenant_id"] is not None and (refused := delivery.not_sending_to(store.get_tenant(g.db, d["tenant_id"]))):
+        flash(refused, "error")
+        return _back(d["tenant_id"]) if request.form.get("from") != "overview" else _back(None)
     error = delivery.retry_delivery(current_app, g.db, _vault(), d, g.user["username"])
     audit(g.db, g.user["username"], "email_retried", d["tenant_id"], d["subject"])
     flash(f"Sending failed again: {error}" if error else "Sent.", "error" if error else "success")
@@ -936,6 +981,7 @@ def overview():
         coming_up=coming_up,
         view_emails=view_emails,
         deliveries=deliveries,
+        stale=_superseded(deliveries),
         tenants=tenants,
         failing=failing,
         last=_last_errors([s["id"] for s in failing]),

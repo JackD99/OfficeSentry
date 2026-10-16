@@ -14,7 +14,7 @@
 {% block content %}
 <div class="page-head"><div><h1>Updates</h1>
   <div class="sub">Office Sentry {{ version }} is running. New releases show here with what each one asks of you{% if docker %}, and the Update button installs them{% endif %}.</div></div>
-  {% if plan.reason == 'current' %}<span class="pill ok">Up to date</span>{% elif target %}<span class="pill accent">{{ target.version }} available</span>{% endif %}</div>
+  {% if plan.reason == 'current' %}{% if check.known %}<span class="pill ok">Up to date</span>{% elif check.error %}<span class="pill warn">Couldn't check</span>{% else %}<span class="pill">Not checked yet</span>{% endif %}{% elif target %}<span class="pill accent">{{ target.version }} available</span>{% endif %}</div>
 
 {% if busy %}
 <section class="card wizard update-progress" data-update-progress="{{ url_for('updates.progress') }}" data-signature="{{ signature }}">
@@ -39,7 +39,8 @@
 {% if target %}
 <section class="card update-offer" id="release">
   <div class="card-head"><h2>{{ icon('download') }} Office Sentry {{ target.version }}</h2>{% if target.published_at %}<span class="meta">released {{ target.published_at|day }}</span>{% endif %}</div>
-  {% if plan.brings|length > 1 %}<p class="muted small">{{ plan.brings|length }} releases since {{ version }}. Updating to {{ target.version }} brings them all, so read what each one asks of you.</p>{% endif %}
+  {% if plan.brings|length > 1 %}<p class="muted small">{{ plan.brings|length }}{% if plan.cut %} or more{% endif %} releases since {{ version }}. Updating to {{ target.version }} brings them all, so read what each one asks of you.</p>{% endif %}
+  {% if plan.cut %}<div class="callout warn">{{ icon('alert') }}<span><strong>{{ version }} is too far behind to list every release here.</strong> The oldest ones aren't below: read their Action required on <a href="{{ releases_page }}">GitHub</a> before updating.</span></div>{% endif %}
   {% for r in plan.brings %}
   <article class="release-notes">
     {% if plan.brings|length > 1 %}<h3>{{ r.version }}{% if r.published_at %} <span class="muted small">{{ r.published_at|day }}</span>{% endif %}</h3>{% endif %}
@@ -62,7 +63,7 @@
       <li>restarts the portal and the worker on it. The portal is unavailable for a minute or so{% if plan.upgrades_database %}, longer while the database is upgraded (a copy of it is made first){% endif %};</li>
       <li>goes back to {{ version }} by itself{% if plan.upgrades_database %}, database included,{% endif %} if the new version doesn't start healthy.</li>
     </ol>
-    {% if plan.asks %}<label class="check"><input type="checkbox" name="read" value="1" required><span>I've read <strong>Action required</strong> above</span></label>{% endif %}
+    {% if plan.asks %}<label class="check"><input type="checkbox" name="read" value="1" required><span>I've read <strong>Action required</strong> above{% if plan.cut %} and in the older releases on GitHub{% endif %}</span></label>{% endif %}
     <div class="form-actions wrap"><button class="primary">Update to {{ target.version }}</button>
       <span class="muted small">Recorded in the activity log.</span></div>
   </form>
@@ -96,9 +97,12 @@
   {% if plan.reason == 'development' %}
   <div class="card-head"><h2>{{ icon('settings') }} A development build</h2></div>
   <p class="muted m0">{{ version }} isn't a release, so no update is offered. Update it the way it was built.</p>
-  {% elif check.checked_at %}
+  {% elif check.known %}
   <div class="card-head"><h2>{{ icon('check') }} You're up to date</h2></div>
-  <p class="muted m0">{{ version }} is the newest release. Office Sentry looked {{ ts(check.checked_at) }}.</p>
+  <p class="muted m0">{% if check.error %}{{ version }} was the newest release when Office Sentry last reached GitHub. Its latest check failed (under New releases).{% else %}{{ version }} is the newest release. Office Sentry looked {{ ts(check.checked_at) }}.{% endif %}</p>
+  {% elif check.error %}
+  <div class="card-head"><h2>{{ icon('alert') }} Couldn't check yet</h2></div>
+  <p class="muted m0">Office Sentry couldn't ask GitHub about new releases: {{ check.error }} {% if check.on %}It tries again within the hour, and <strong>Check now</strong> tries straight away{% else %}<strong>Check now</strong> tries again{% endif %}. Every release is also on <a href="{{ releases_page }}">GitHub</a>.</p>
   {% else %}
   <div class="card-head"><h2>{{ icon('download') }} Not checked yet</h2></div>
   <p class="muted m0">Office Sentry hasn't asked GitHub about new releases yet. <strong>Check now</strong> does, or see every release on <a href="{{ releases_page }}">GitHub</a>.</p>

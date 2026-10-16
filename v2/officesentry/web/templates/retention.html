@@ -9,7 +9,7 @@
 </div>
 {%- endmacro %}
 {% macro next_run(n, noun) -%}
-<p class="footnote">{% if n %}The next pass would delete <strong>about {{ n|plural(noun) }}</strong>.{% else %}Nothing to delete at the saved settings.{% endif %}</p>
+<p class="footnote">{% if n %}The next pass would delete <strong>about {{ n|counted(noun) }}</strong>.{% else %}Nothing to delete at the saved settings.{% endif %}</p>
 {%- endmacro %}
 {% block content %}
 <div class="page-head"><div><h1>Data retention</h1><div class="sub">How long Office Sentry keeps personal data about your clients' staff and your own team. The worker applies these settings once a day, deleting in small batches. Deleted rows are overwritten in the database file where that costs nothing extra; backups keep them until they rotate.</div></div></div>
@@ -35,7 +35,7 @@
   {{ next_run(counts.state_months, 'older collection') }}
 
   <h2>Sign-in detail</h2>
-  <p class="muted small">From the Entra sign-in log: who signed in, from which IP addresses, countries and cities, which apps, failed and risky sign-ins, and legacy-protocol sign-ins. By default it's kept as long as the snapshot it's in, which is about 13 months for monthly snapshots. The full sign-in log is kept separately, under Activity history below.</p>
+  <p class="muted small">From the Entra sign-in log: who signed in, from which IP addresses, countries and cities, which apps, failed and risky sign-ins, and legacy-protocol sign-ins. By default it's kept as long as the snapshot it's in, which is {% if p.keep_monthly is none %}forever for monthly snapshots, since every month's is kept{% else %}about {{ p.keep_monthly|plural('month') }} for monthly snapshots at the setting above{% endif %}. The full sign-in log is kept separately, under Activity history below.</p>
   {{ number('signin_days', p.signin_days, 90, 'Keep as long as its snapshot') }}
   <p class="footnote">At least 30 days, so the sign-in reports always have last night's data. After this, older snapshots still have everything else.</p>
   {{ next_run(counts.signin_days, 'sign-in row') }}

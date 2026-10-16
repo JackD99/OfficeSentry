@@ -227,6 +227,7 @@ class Mailboxes(Collector):
         mailboxes = [m for m in mailboxes if m.get("RecipientTypeDetails") not in SYSTEM_MAILBOX_TYPES]
         window = mailbox_window.plan(ctx, self.key, "mailbox_permission", mailboxes, _mailbox_id, "mailbox permissions")
         rows, failed = [], 0
+        unread: set[str] = set()
         for m in window.mailboxes:
             ident = m.get("Guid") or m.get("PrimarySmtpAddress")
             try:
@@ -235,6 +236,7 @@ class Mailboxes(Collector):
                 raise
             except ExchangeError:
                 failed += 1
+                unread.add(_mailbox_id(m))
                 continue
             for p in perms:
                 user = p.get("User") or ""
@@ -253,6 +255,7 @@ class Mailboxes(Collector):
                     )
                 )
         if failed:
-            ctx.warn(f"Could not read permissions on {plural(failed, 'mailbox')}")
+            kept = window.keep_unread(ctx, unread)
+            ctx.warn(f"Could not read permissions on {plural(failed, 'mailbox')}" + mailbox_window.kept_note(kept))
         ctx.objects("mailbox_permission", rows + window.carried)
         window.save(ctx)

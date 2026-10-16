@@ -8,7 +8,7 @@
     <h1>All clients</h1>
     <div class="sub">{% if group_scope and group_scope.group %}Compare any report across the clients in {{ group_scope.group.name }}.{% else %}Compare any report across every client you look after.{% endif %}</div>
   </div>
-  <div class="actions">{{ group_picker() }}<a class="btn" href="{{ url_for('across.changes') }}">{{ icon('clock') }} What changed this month</a></div>
+  <div class="actions">{{ group_picker() }}{% if can_open('across.changes') %}<a class="btn" href="{{ url_for('across.changes') }}">{{ icon('clock') }} What changed this month</a>{% endif %}</div>
 </div>
 
 <div class="across-bar">

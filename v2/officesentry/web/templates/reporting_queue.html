@@ -14,8 +14,8 @@
     <a class="btn sm" href="{{ url_for('reporting.queue', period=prev, show=show) }}" aria-label="Previous month">&larr;</a>
     {% if period != current %}<a class="btn sm" href="{{ url_for('reporting.queue', period=current) }}">This month</a>{% endif %}
     <a class="btn sm" href="{{ url_for('reporting.queue', period=next, show=show) }}" aria-label="Next month">&rarr;</a>
-    {% if admin %}<a class="btn sm" href="{{ url_for('reporting.plans') }}">Report plans</a>{% endif %}
-    <a class="btn sm" href="{{ url_for('designs.index') }}">Report designs</a>
+    {% if can_open('reporting.plans') %}<a class="btn sm" href="{{ url_for('reporting.plans') }}">Report plans</a>{% endif %}
+    {% if can_open('designs.index') %}<a class="btn sm" href="{{ url_for('designs.index') }}">Report designs</a>{% endif %}
   </div>
 </div>
 
@@ -49,16 +49,16 @@
 
 <section class="card flush">
   {% if rows %}
-  <form method="post" action="{{ url_for('reporting.approve_many', period=period) }}" id="bulk" data-busy="Approving…">
+  {% if admin %}<form method="post" action="{{ url_for('reporting.approve_many', period=period) }}" id="bulk" data-busy="Approving…">
     {{ csrf() }}<input type="hidden" name="show" value="{{ show }}">
-  </form>
+  </form>{% endif %}
   <table class="stack-sm">
     <thead><tr>{% if admin %}<th><span class="sr-only">Select</span></th>{% endif %}<th>Client</th><th>State</th><th>Verdict</th><th class="num">New critical/high</th><th>Needs your eyes</th><th>Reviewer</th></tr></thead>
     <tbody>
     {% for r in rows %}
     <tr>
       {#- A month whose email failed can be ticked too: it's sent again, the same files. -#}
-      {% if admin %}<td>{% if (r.state in ('draft', 'in_review') or (r.state == 'approved' and r.error)) and not r.paused and not r.approving %}<input type="checkbox" name="tenants" value="{{ r.tenant.id }}" form="bulk" aria-label="Select {{ r.tenant.name }}">{% endif %}</td>{% endif %}
+      {% if admin %}<td>{% if ((r.state in ('draft', 'in_review') and not r.blocked) or (r.state == 'approved' and r.error)) and not r.paused and not r.approving %}<input type="checkbox" name="tenants" value="{{ r.tenant.id }}" form="bulk" aria-label="Select {{ r.tenant.name }}">{% endif %}</td>{% endif %}
       <td data-label="Client"><a class="strong" href="{{ url_for('reporting.review', period=period, tenant_id=r.tenant.id) }}">{{ r.tenant.name }}</a>
         <span class="sub">{{ r.plan.name }}{% if r.paused %} · paused{% endif %}</span></td>
       <td data-label="State">{% if r.approving %}<span class="pill accent">{{ 'Approving…' if r.task.status == 'running' else 'Waiting to approve' }}</span>
@@ -90,7 +90,7 @@
   {% else %}
   <div class="empty"><h3>No clients on a report plan</h3>
     <p>Put clients on a report plan and each one gets a draft here every month to review and approve.</p>
-    {% if admin %}<a class="btn primary" href="{{ url_for('reporting.new_plan') }}">{{ icon('plus') }} Create a plan</a>{% endif %}</div>
+    {% if can_open('reporting.new_plan') %}<a class="btn primary" href="{{ url_for('reporting.new_plan') }}">{{ icon('plus') }} Create a plan</a>{% endif %}</div>
   {% endif %}
 </section>
 {% if paused %}

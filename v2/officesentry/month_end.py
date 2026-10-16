@@ -218,6 +218,14 @@ def remove_from_plan(conn, tenant_id: int) -> None:
     if link is None:
         return
     if link["schedule_id"]:
+        # The months its schedule sent are only known by the schedule (``state_of``): say they're Sent, so a
+        # plan made again, or the client put back on one, doesn't offer to approve and send them again.
+        for (period,) in conn.execute(
+            "SELECT DISTINCT period FROM issued_reports WHERE tenant_id = ? AND schedule_id = ? AND period IS NOT NULL",
+            (tenant_id, link["schedule_id"]),
+        ).fetchall():
+            if state_of(conn, tenant_id, period) == "sent":
+                update_review(conn, tenant_id, period, None, state="sent")
         conn.execute("DELETE FROM email_schedules WHERE id = ? AND plan_id IS NOT NULL", (link["schedule_id"],))
     conn.execute("DELETE FROM report_plan_tenants WHERE tenant_id = ?", (tenant_id,))
 
@@ -346,15 +354,18 @@ def update_review(conn, tenant_id: int, period: str, user: str | None, **fields)
 
 def state_of(conn, tenant_id: int, period: str, row=None) -> str:
     row = row if row is not None else review(conn, tenant_id, period)
-    if row is not None:
+    if row is not None and row["state"] not in ("draft", "in_review"):
         return row["state"]
-    # An automatic plan that already went out on its timer (another schedule's report doesn't count).
+    # An automatic plan that already went out on its timer (another schedule's report doesn't count), even if
+    # someone had started reviewing the month first: approving it then would send it a second time.
     sent = conn.execute(
         "SELECT 1 FROM issued_reports WHERE tenant_id = ? AND period = ? AND (trigger = 'approval' OR schedule_id ="
         " (SELECT schedule_id FROM report_plan_tenants WHERE tenant_id = ?)) LIMIT 1",
         (tenant_id, period, tenant_id),
     ).fetchone()
-    return "sent" if sent else "draft"
+    if sent:
+        return "sent"
+    return row["state"] if row is not None else "draft"
 
 
 def start_review(conn, tenant_id: int, period: str, user: str) -> None:
@@ -376,6 +387,7 @@ class QueueRow:
     error: str | None = None
     paused: bool = False
     task: dict | None = None  # the latest approval task for the month (``approval_task``)
+    blocked: str | None = None  # why approving would send nothing (``nothing_to_send``)
     edited: bool = False  # changed since it was approved (``changed_since_approval``)
 
     @property
@@ -401,8 +413,13 @@ class QueueRow:
 
 
 def _last_report_at(conn, tenant_id: int, period: str) -> str:
+    """When the client was last sent a report before ``period``: any report issued before the month began (a
+    weekly or quarterly one too), or an earlier month's approved late. Periods of different frequencies don't
+    compare as text: "2026-W40" sorts after "2026-10"."""
     row = conn.execute(
-        "SELECT MAX(issued_at) FROM issued_reports WHERE tenant_id = ? AND period < ?", (tenant_id, period)
+        "SELECT MAX(issued_at) FROM issued_reports WHERE tenant_id = ? AND period <> ?"
+        " AND (issued_at < ? OR (period GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]' AND period < ?))",
+        (tenant_id, period, period_start(period), period),
     ).fetchone()
     return row[0] or period_start(shift_period(period, -1))
 
@@ -438,7 +455,7 @@ def _review_facts(conn, tenant, now: datetime, stored: Rows | None) -> ReviewFac
             tenant,
             fingerprint,
             {
-                "verdict": [verdict.tone, verdict.label, verdict.headline],
+                "verdict": [verdict.tone, verdict.label, verdict.headline, verdict.detail],
                 "oldest": facts.oldest,
                 "not_run": facts.not_run,
                 "missing": list(facts.missing),
@@ -490,6 +507,8 @@ def flags_for(conn, tenant, facts: ReviewFacts, period: str, now: datetime) -> t
     plan, _ = plan_for(conn, tenant["id"])
     if plan is not None and plan["delivery"] == "email" and not emailed(plan, conn, tenant["id"]):
         flags.append("Nobody to email")
+    if plan is not None and facts.oldest is not None and nothing_to_send(conn, tenant, plan):
+        flags.append("No report to send")
     return counts["severe"] or 0, flags
 
 
@@ -523,6 +542,7 @@ def queue(conn, tenants, period: str, now: datetime | None = None, *, cached: bo
                 error=r["error"] if r else None,
                 paused=not t["enabled"],
                 task=dict(jobs[t["id"]]) if t["id"] in jobs else None,
+                blocked=nothing_to_send(conn, t, plan),
                 edited=changed_since_approval(conn, t["id"], period, r, state),
             )
         )
@@ -812,6 +832,8 @@ def render_files(
     plan, _ = plan_for(conn, tenant["id"])
     if plan is None:
         raise ApprovalError(f"{tenant['name']} isn't on a report plan")
+    if reason := nothing_to_send(conn, tenant, plan):
+        raise ApprovalError(reason)
     keys = json.loads(plan["reports"] or "[]")
     report = monthly_review.build(conn, tenant, now)
     return delivery._attachments(
@@ -824,6 +846,22 @@ def render_files(
         report,
         review_context={"month_end": month},
     )
+
+
+def nothing_to_send(conn, tenant, plan) -> str | None:
+    """Why approving the client's month would send nothing, or None. Approving such a month marked it
+    Approved with no report going out, so the review screen and the queue refuse it, as the timer does."""
+    if delivery.nothing_collected(conn, tenant["id"]):
+        return (
+            f"Nothing has been collected for {tenant['name']} yet, so there's no report to send."
+            " Check its connection under Settings."
+        )
+    if not delivery.attachment_plan(tenant, json.loads(plan["reports"] or "[]"), bool(plan["include_xlsx"]), conn):
+        if delivery.report_titles(plan["reports"], conn):
+            return f"The plan “{plan['name']}” only sends PDFs, and this server can't make them. Add a spreadsheet."
+        # Its only report was a design that has since been deleted.
+        return f"The plan “{plan['name']}” has no reports to send. Choose one on the plan first."
+    return None
 
 
 def freeze(
@@ -1049,14 +1087,16 @@ def _approve_task(ctx: tasks.TaskContext) -> dict:
     tenant = ctx.tenant
     if tenant is None:
         raise tasks.TaskFailed("The client has been removed")
+    if refused := delivery.not_sending_to(tenant):  # Send again too, and a client paused while this waited
+        raise tasks.TaskFailed(refused)
     if p.get("send_only"):
         if state_of(conn, tenant["id"], period) != "approved":
             return {"state": state_of(conn, tenant["id"], period)}
     elif ctx.done != "frozen":
-        if not tenant["enabled"] or tenant["archived_at"]:
-            raise tasks.TaskFailed("The client is paused")
         if state_of(conn, tenant["id"], period) in ("approved", "sent") and not reason:
             return {"state": state_of(conn, tenant["id"], period), "skipped": "already issued"}
+        if _timer_sending(conn, ctx.cfg, tenant["id"]):
+            raise tasks.TaskFailed(delivery.BEING_SENT)
         ctx.progress("Building the reports")
         # Read once: the files and the approved copy the client's live report shows are the same month, even
         # if someone edits the commentary while the files are built.
@@ -1090,6 +1130,18 @@ def _approve_task(ctx: tasks.TaskContext) -> dict:
     if error:
         raise tasks.TaskFailed(error)
     return {"state": "sent"}
+
+
+def _timer_sending(conn, cfg, tenant_id: int) -> bool:
+    """Whether an automatic plan's timer is sending the client's report right now, so approving would send the
+    month a second time."""
+    _, link = plan_for(conn, tenant_id)
+    schedule = (
+        conn.execute("SELECT * FROM email_schedules WHERE id = ?", (link["schedule_id"],)).fetchone()
+        if link and link["schedule_id"]
+        else None
+    )
+    return schedule is not None and delivery.being_sent(conn, schedule, cfg.timezone)
 
 
 def emailed(plan, conn, tenant_id: int) -> bool:

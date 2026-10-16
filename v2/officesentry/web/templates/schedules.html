@@ -18,13 +18,13 @@
     <div class="foot">{% if failing %}<span class="bad-text">{{ failing|length }} failing</span>{% else %}No failures{% endif %}</div></div>
   <div class="tile"><div class="label">New-finding alerts</div>
     <div class="value small-value">{% if alert and alert.enabled %}<span class="ok-text">On</span>{% else %}<span class="faint">Off</span>{% endif %}</div>
-    <div class="foot">{% if alert %}{{ 'Critical only' if alert.min_severity == 'critical' else 'Critical and high' }}{% else %}Turn on in the panel on the right{% endif %}</div></div>
+    <div class="foot">{% if alert %}{{ 'Critical only' if alert.min_severity == 'critical' else 'Critical and high' }}{% elif can_open('email.save_tenant_alert', tenant_id=tenant.id) %}Turn on in the panel on the right{% else %}&nbsp;{% endif %}</div></div>
 </div>
 
 {% for s in failing %}{% set d = last.get(s.id) %}
 <div class="callout bad">{{ icon('alert') }}<div class="grow"><strong>The “{{ s.titles|join(' + ') }}” email didn't send{% if d %} {{ ts(d.created_at) }}{% endif %}.</strong>
   {% if d and d.error %}<div class="small">{{ d.error }}</div>{% endif %}</div>
-  {% if d %}<form method="post" action="{{ url_for('email.retry', delivery_id=d.id) }}" data-busy="Sending…">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Retry</button></form>{% endif %}
+  {% if d and can_open('email.retry', delivery_id=d.id, tenant=tenant.id) %}<form method="post" action="{{ url_for('email.retry', delivery_id=d.id) }}" data-busy="Sending…">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Retry</button></form>{% endif %}
 </div>
 {% endfor %}
 {% endif %}
@@ -34,7 +34,7 @@
   <section class="card flush">
     <div class="card-head toolbar">
       <h2>{{ 'Scheduled emails' if staff else 'Reports emailed to your team' }}</h2>
-      {% if staff and schedules %}<a class="btn sm primary" href="{{ url_for('email.new_schedule', tenant_id=tenant.id) }}">{{ icon('plus') }} New scheduled email</a>{% endif %}
+      {% if staff and schedules and can_open('email.new_schedule', tenant_id=tenant.id) %}<a class="btn sm primary" href="{{ url_for('email.new_schedule', tenant_id=tenant.id) }}">{{ icon('plus') }} New scheduled email</a>{% endif %}
     </div>
     {% if schedules %}
     <ul class="list sched-list">{% for s in schedules %}{{ schedule_item(s, staff) }}{% endfor %}</ul>
@@ -42,7 +42,7 @@
     <div class="empty">
       <h3>No scheduled emails yet</h3>
       <p>Send {{ tenant.name }}'s reports to the client and your team every week, month or quarter.</p>
-      <a class="btn primary" href="{{ url_for('email.new_schedule', tenant_id=tenant.id) }}">{{ icon('plus') }} Schedule an email</a>
+      {% if can_open('email.new_schedule', tenant_id=tenant.id) %}<a class="btn primary" href="{{ url_for('email.new_schedule', tenant_id=tenant.id) }}">{{ icon('plus') }} Schedule an email</a>{% endif %}
     </div>
     {% else %}
     <div class="empty compact"><p>No reports are emailed to your team yet.</p></div>
@@ -52,7 +52,7 @@
   <section class="card flush">
     <div class="card-head toolbar"><h2>Delivery history</h2>
       <span class="meta">{% if deliveries %}Last {{ deliveries|length }} · {% endif %}<a href="{{ url_for('email.report_history', tenant_id=tenant.id) }}" title="Every report file, exactly as it was sent">{{ icon('doc') }} Report history</a></span></div>
-    {% if deliveries %}{{ deliveries_table(deliveries, staff) }}
+    {% if deliveries %}{{ deliveries_table(deliveries, staff, stale=stale) }}
     {% else %}<div class="empty compact"><p>Nothing has been sent yet.</p></div>{% endif %}
   </section>
 </div>
@@ -62,16 +62,22 @@
   <section class="card">
     <div class="card-head"><h2>{{ icon('bell') }} New-finding alerts</h2>{% if alert %}<span class="pill ok">On</span>{% endif %}</div>
     {% set findings = can('reports.security', tenant.id) %}
+    {% set edits = can_open('email.save_tenant_alert', tenant_id=tenant.id) %}
     {% if alert %}
+    {% set previews = can_open('email.preview_alert', alert_id=alert.id, tenant=tenant.id) %}
+    {% set turns_off = can_open('email.delete_alert', alert_id=alert.id, tenant=tenant.id) %}
     <p class="small">Emails {{ people(alert.recipients) }} when a scan finds something new that's <strong>{{ 'critical' if alert.min_severity == 'critical' else 'critical or high' }}</strong>.</p>
+    {% if previews or turns_off %}
     <div class="form-actions">
-      {% if findings %}<a class="btn sm" href="{{ url_for('email.preview_alert', alert_id=alert.id) }}">{{ icon('eye') }} Preview</a>{% endif %}
-      <form method="post" action="{{ url_for('email.delete_alert', alert_id=alert.id) }}">{{ csrf() }}<button class="sm danger">Turn off</button></form>
+      {% if previews %}<a class="btn sm" href="{{ url_for('email.preview_alert', alert_id=alert.id) }}">{{ icon('eye') }} Preview</a>{% endif %}
+      {% if turns_off %}<form method="post" action="{{ url_for('email.delete_alert', alert_id=alert.id) }}">{{ csrf() }}<button class="sm danger">Turn off</button></form>{% endif %}
     </div>
-    {% if findings %}<details class="alert-edit"><summary class="small">Change who gets them</summary>{% endif %}
+    {% endif %}
+    {% if edits %}<details class="alert-edit"><summary class="small">Change who gets them</summary>{% endif %}
     {% endif %}
     {% if not alert %}<p class="muted small">Get an email as soon as a nightly scan finds a new critical problem, instead of waiting for the next report.</p>{% endif %}
     {% if not findings %}<p class="small muted">Alerts name this client's new findings, so someone who can see security findings chooses who gets them.</p>
+    {% elif not edits %}<p class="small muted">Someone who sets up this client's emails {{ 'chooses who gets them' if alert else 'turns them on' }}.</p>
     {% else %}
     <form method="post" action="{{ url_for('email.save_tenant_alert', tenant_id=tenant.id) }}">
       {{ csrf() }}
@@ -91,17 +97,18 @@
   </section>
 
   <section class="card" id="contacts">
+    {% set manages = can_open('email.add_tenant_contact', tenant_id=tenant.id) %}
     <div class="card-head"><h2>{{ icon('users') }} Contacts</h2><span class="meta">{{ tenant.name }}</span></div>
     {% if contacts %}
     <ul class="list compact contacts">
       {% for c in contacts %}
       <li><div class="grow"><div class="title">{{ c.name or c.email }}</div>{% if c.name %}<div class="desc">{{ c.email }}</div>{% endif %}</div>
-        <form method="post" action="{{ url_for('email.delete_contact', contact_id=c.id) }}" data-confirm="Remove {{ c.name or c.email }} from every email for {{ tenant.name }}?">{{ csrf() }}<button class="sm ghost" aria-label="Remove {{ c.email }}">Remove</button></form></li>
+        {% if manages %}<form method="post" action="{{ url_for('email.delete_contact', contact_id=c.id) }}" data-confirm="Remove {{ c.name or c.email }} from every email for {{ tenant.name }}?">{{ csrf() }}<button class="sm ghost" aria-label="Remove {{ c.email }}">Remove</button></form>{% endif %}</li>
       {% endfor %}
     </ul>
-    {% elif adds_contacts %}<p class="muted small">Add the people at {{ tenant.name }} who should get reports.</p>
+    {% elif manages and adds_contacts %}<p class="muted small">Add the people at {{ tenant.name }} who should get reports.</p>
     {% else %}<p class="muted small">No contacts yet.</p>{% endif %}
-    {% if adds_contacts %}
+    {% if manages and adds_contacts %}
     <form method="post" action="{{ url_for('email.add_tenant_contact', tenant_id=tenant.id) }}" class="add-contact">
       {{ csrf() }}
       <div class="form-row tight">
@@ -110,7 +117,7 @@
       </div>
       <div class="form-actions"><button class="sm">{{ icon('plus') }} Add contact</button></div>
     </form>
-    {% else %}
+    {% elif manages %}
     <p class="small muted" id="contacts-locked">New contacts get this client's report plan emails, which have reports you can't open, so someone who can open all of them adds contacts.</p>
     {% endif %}
     <p class="footnote">{% if team %}Your team ({{ team|map(attribute='name')|map('default', '')|select|join(', ') or team|length ~ ' people' }}) can be copied in on any email.{% else %}Add your own team to copy them in on client emails.{% endif %}

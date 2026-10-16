@@ -327,7 +327,8 @@ def search_tenant(conn, tenant, q: str, limit: int = PER_TENANT, allowed=None) -
                     continue
                 if _add(group, SHOW[kind.key](t, obj, value), seen, limit):
                     return group
-                break  # one result per object and kind
+                if not kind.each:
+                    break  # one result per object and kind
     return group
 
 
@@ -350,11 +351,12 @@ def indexed_tenant(conn, tenant, q: str, matches: list, limit: int = PER_TENANT,
     group = Group(tenant)
     ip_query = looks_like_ip(q)
     seen: set = set()
-    done: set[tuple[str, str]] = set()  # one result per object and kind
+    done: set[tuple] = set()  # one result per object and kind (per value, for a kind whose values are things)
     order = {k.key: i for i, k in enumerate(KINDS)}
     for key, run_id, object_id, value in sorted(matches, key=lambda m: order.get(m[0], len(order))):
         kind = search_index.BY_KEY.get(key)
-        if kind is None or (kind.ip and not ip_query) or (key, object_id) in done or not _shown(kind, allowed):
+        once = (key, object_id, value if kind and kind.each else None)
+        if kind is None or (kind.ip and not ip_query) or once in done or not _shown(kind, allowed):
             continue
         obj = search_index.load(conn, run_id, kind, object_id)
         if obj is None:
@@ -362,7 +364,7 @@ def indexed_tenant(conn, tenant, q: str, matches: list, limit: int = PER_TENANT,
         matched = next((v for v in kind.values(obj) if _text(v).lower() == value), None)
         if matched is None:  # the object changed under the index: the fingerprint catches this, but be safe
             continue
-        done.add((key, object_id))
+        done.add(once)
         if _add(group, SHOW[key](t, obj, matched), seen, limit):
             return group
     return group

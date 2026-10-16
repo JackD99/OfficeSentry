@@ -30,7 +30,7 @@
 <div class="callout lead-answer {{ 'bad' if first.window == w.NOW else ('warn' if first.window == w.DAYS_30 else '') }}">{{ icon('calendar') }}
   <div>
     <strong>{% if now_n %}{{ now_n|plural('item') }} {{ 'needs' if now_n == 1 else 'need' }} attention now.{% else %}Next up {{ first.when }}, on {{ first.due.isoformat()|day }}.{% endif %}</strong>
-    {% if first.href %}<a href="{{ first.href }}">{{ first.tenant_name }}: {{ first.title }}</a>{% else %}{{ first.tenant_name }}: {{ first.title }}{% endif %}{% if now_n and first.due %} ({{ first.when }}){% endif %}.
+    {% if first.href and can_open(first.href) %}<a href="{{ first.href }}">{{ first.tenant_name }}: {{ first.title }}</a>{% else %}{{ first.tenant_name }}: {{ first.title }}{% endif %}{% if now_n and first.due %} ({{ first.when }}){% endif %}.
     <div class="small">{{ first.detail }}</div>
   </div>
 </div>

@@ -284,7 +284,9 @@ def test_paused_clients_are_not_approved(client, db, two_tenants, monkeypatch):
     db.execute("UPDATE tenants SET enabled = 0 WHERE id = ?", (alpha,))  # paused while it waited
     work(client)
     assert sends() == [] and month_end.state_of(db, alpha, PERIOD) == "draft"
-    assert tasks.latest(db, month_end.approval_key(alpha, PERIOD))["error"] == "The client is paused"
+    assert tasks.latest(db, month_end.approval_key(alpha, PERIOD))["error"] == (
+        "Alpha Ltd is paused, so nothing is sent to it. Resume it first."
+    )
 
 
 # -- Scheduled report emails -----------------------------------------------------------------

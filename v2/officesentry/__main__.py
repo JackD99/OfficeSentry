@@ -271,23 +271,14 @@ def cmd_backup(args, cfg):
     """Write a consistent copy of the database, safe while the portal is running."""
     from pathlib import Path
 
-    from .backups import BackupIncomplete, backup, record_status
+    from .backups import BackupFailed, backup_and_record
 
     # The outcome goes in backup-status.json for the health check and the "backup failed" alert.
+    folder = Path(args.dir) if args.dir else cfg.data_dir / "backups"
     try:
-        dest, old = backup(cfg.db_path, Path(args.dir) if args.dir else cfg.data_dir / "backups", args.keep)
-    except BackupIncomplete as exc:
-        # The database copy is sound, but the backup as a whole isn't: the alert should say exactly that.
-        error = f"The database was copied to {exc.dest.name}, but {exc}."
-        record_status(cfg.data_dir, "local", False, error)
-        sys.exit(error)
-    except OSError as exc:
-        record_status(cfg.data_dir, "local", False, f"No backup made: {exc.strerror or exc}.")
-        sys.exit(f"No backup made: {exc.strerror or exc}.")
-    except Exception as exc:  # a damaged database, say: record it, then fail loudly as before
-        record_status(cfg.data_dir, "local", False, f"No backup made: {type(exc).__name__}: {exc}")
-        raise
-    record_status(cfg.data_dir, "local", True, file=dest)
+        dest, old = backup_and_record(cfg.data_dir, cfg.db_path, folder, args.keep)
+    except BackupFailed as exc:
+        sys.exit(str(exc))
     print(f"Saved {dest}" + (f" (removed {plural(len(old), 'older backup')})" if old else ""))
     print(
         "Also keep a copy of secrets.json (or your OFFICESENTRY_ENCRYPTION_KEYS) somewhere safe:"
@@ -520,7 +511,7 @@ def cmd_delete_tenant(args, cfg):
             f"{tenant['name']} ({tenant['tenant_ref']}): {plural(stored['runs'], 'collection run')}, "
             f"{plural(stored['objects'], 'stored item')}, {plural(stored['findings'], 'finding')}, "
             f"{plural(stored['schedules'], 'emailed report')}, {plural(stored['contacts'], 'contact')}, "
-            f"access for {plural(stored['access'], 'user')}."
+            f"{plural(stored['issued'], 'file')} in its report history, access for {plural(stored['access'], 'user')}."
         )
         if clients:
             names = ", ".join(u["username"] for u in clients)

@@ -241,7 +241,7 @@ def _roles_text(assignments: list[dict]) -> str:
     "admin_mfa",
     "Every admin has MFA registered",
     "Admins",
-    "Have each listed admin register a strong method (Authenticator or a FIDO2 key), or remove the role. "
+    "Have every admin without MFA register a strong method (Authenticator or a FIDO2 key), or remove their role. "
     "Break-glass accounts should use FIDO2 keys kept offline.",
 )
 def admin_mfa(snap: TenantSnapshot, now: datetime):
@@ -412,7 +412,7 @@ def users_mfa_registered(snap: TenantSnapshot, now: datetime):
     "No inactive accounts",
     "Accounts",
     "Disable accounts that haven't signed in for 90 days, or were created over 30 days ago and never used "
-    "(after checking with the client), then remove their licences. Inactive accounts are a common foothold "
+    "(after checking with their manager), then remove their licences. Inactive accounts are a common foothold "
     "for attackers.",
 )
 def stale_users(snap: TenantSnapshot, now: datetime):
@@ -549,7 +549,12 @@ def admins_ca_mfa(snap: TenantSnapshot, now: datetime):
         seen.add(pid)
         c = coverage.coverage_for(pid, _label(a), a.get("userType") or "Member", policies, d)
         if not c.mfa:
-            why = f"excluded from {', '.join(c.excluded_from)}" if c.excluded_from else "no MFA policy applies"
+            names = ", ".join(c.excluded_from[:2])
+            if len(c.excluded_from) > 3:  # one line on the Findings tab; Conditional Access coverage has them all
+                names += f" and {plural(len(c.excluded_from) - 2, 'more policy')}"
+            elif len(c.excluded_from) == 3:
+                names += f", {c.excluded_from[2]}"
+            why = f"excluded from {names}" if names else "no MFA policy applies"
             findings.append(Finding("high", c.label, f"{_role(a)}: {why}", pid))
     if findings and no_p1:
         return ("fail", f"{plural(len(findings), 'admin')} not covered by MFA", findings, SECURITY_DEFAULTS_ADVICE)

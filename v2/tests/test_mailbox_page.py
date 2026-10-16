@@ -120,6 +120,38 @@ def test_size_growth_and_history_across_collections(db, two_tenants):
     assert ("Access", "Full access for bob@x.com removed") in events
 
 
+def _inbox_rules_run(db, tenant_id, rules=()):
+    run_id = store.enqueue_run(db, tenant_id, "inbox_rules")
+    assert store.claim_next_run(db)["id"] == run_id
+    store.add_objects(
+        db, run_id, "inbox_rule", [(r["_id"], {k: v for k, v in r.items() if k[0] != "_"}) for r in rules]
+    )
+    store.finish_run(db, run_id, "succeeded")
+    return run_id
+
+
+def test_history_shows_the_last_inbox_rule_removed(db, two_tenants):
+    # The usual end of a clean-up: the tenant has no inbox rules left, so the collection stores nothing.
+    alpha, _ = two_tenants
+    _seed(db, alpha)
+    first = store.latest_run(db, alpha, "inbox_rules")["id"]
+    names = sorted(r["displayName"] for r in store.run_objects(db, first, "inbox_rule") if r["mailboxId"] == "u1")
+    assert names
+    _inbox_rules_run(db, alpha)
+    events = {(e.area, e.text) for e in mailbox_page.build(db, _tenant(db, alpha), "u1", NOW).history}
+    assert {("Inbox rules", f'Rule "{n}" removed') for n in names} <= events
+
+
+def test_history_doesnt_take_a_pruned_collection_for_one_with_no_rules(db, two_tenants):
+    alpha, _ = two_tenants
+    _seed(db, alpha)
+    first = store.latest_run(db, alpha, "inbox_rules")["id"]
+    _seed(db, alpha)
+    db.execute("DELETE FROM objects WHERE run_id = ?", (first,))  # as snapshot retention does
+    page = mailbox_page.build(db, _tenant(db, alpha), "u1", NOW)
+    assert not [e for e in page.history if e.area == "Inbox rules"]  # nothing was added: it's only older
+
+
 def test_mailboxes_page_lists_every_mailbox(db, two_tenants):
     alpha, _ = two_tenants
     _seed(db, alpha)

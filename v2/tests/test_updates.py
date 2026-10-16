@@ -193,6 +193,22 @@ def test_very_long_notes_are_cut():
     assert len(sections["action"]) <= updates.SECTION_CHARS + 3 and sections["action"].endswith("…")
 
 
+def test_notes_written_a_little_differently_keep_their_sections():
+    # A sub-heading inside Action required is part of it, not the end of it.
+    nested = updates.from_github(
+        gh("2.4.0", "### Action required\n\n- Do X\n\n#### Docker\n\n- Do Y\n\n### Fixed\n\n- Z\n")
+    )
+    assert "Do X" in nested.action and "#### Docker" in nested.action and "Do Y" in nested.action
+    assert "Z" not in nested.action
+    # A heading with a colon, in any case.
+    colon = updates.from_github(gh("2.4.0", "### Action Required:\n\n- Do X\n\n### Database Upgrade:\n\nYes.\n"))
+    assert colon.asks and colon.upgrades_database
+    # "None" and "No" in bold or italics ask nothing.
+    for none in ("**None.**", "_None_", "*None.* The files are the same."):
+        bold = updates.from_github(gh("2.4.0", f"### Action required\n\n{none}\n\n### Database upgrade\n\n**No.**\n"))
+        assert bold.action and not bold.asks and not bold.upgrades_database, none
+
+
 # -- The release check -------------------------------------------------------------------------------------
 
 
@@ -207,7 +223,7 @@ def test_the_check_keeps_releases_newest_first(db, release_build):
     state = updates.check_state(db)
     assert state.on and state.checked_at == "2026-11-02T09:00:00Z" and state.error is None
     sent = responses.calls[0].request
-    assert sent.headers["User-Agent"].startswith("OfficeSentry/") and "per_page=30" in sent.url
+    assert sent.headers["User-Agent"].startswith("OfficeSentry/") and "per_page=100" in sent.url
 
 
 @pytest.mark.parametrize(
@@ -227,6 +243,50 @@ def test_a_failed_check_says_why_and_keeps_what_it_had(db, release_build, answer
         updates.check(db, NOW + timedelta(hours=1))
     assert said in updates.check_state(db).error
     assert [r.version for r in updates.releases(db)] == ["2.3.0"]
+
+
+def _pages(rsps, pages: list[list[dict]]) -> None:
+    """GitHub's release list over several pages, each linking to the next."""
+    for n, items in enumerate(pages, start=1):
+        link = {"Link": f'<{updates.RELEASES_URL}?per_page=100&page={n + 1}>; rel="next"'} if n < len(pages) else {}
+        query = {"per_page": "100"} if n == 1 else {"per_page": "100", "page": str(n)}
+        rsps.get(updates.RELEASES_URL, json=items, headers=link, match=[responses.matchers.query_param_matcher(query)])
+
+
+def test_the_check_keeps_every_release_since_the_running_one(db, release_build):
+    # 2.2.0 is running and 120 releases have come out since: all of them are kept, so none of their Action
+    # required is missed, however far behind the install is.
+    newer = [gh(f"2.3.{n}") for n in range(120, 0, -1)]
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        _pages(rsps, [newer[:100], [*newer[100:], gh("2.2.0"), gh("2.1.0")], [gh("2.0.0")]])
+        updates.check(db, NOW)
+        assert len(rsps.calls) == 2  # the second page reached 2.2.0, so the third isn't read
+    assert len(updates.newer(db)) == 120 and not updates.check_state(db).cut
+    # Not that far behind: the newest 15 are kept, as before.
+    with responses.RequestsMock() as rsps:
+        rsps.get(updates.RELEASES_URL, json=[gh(f"2.1.{n}") for n in range(30, 0, -1)])
+        assert len(updates.check(db, NOW)) == updates.KEEP_RELEASES
+
+
+def test_the_check_says_when_there_were_more_releases_than_it_read(db, release_build, monkeypatch):
+    monkeypatch.setattr(updates, "PAGES", 2)
+    newer = [gh(f"2.3.{n}") for n in range(300, 0, -1)]
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        _pages(rsps, [newer[:100], newer[100:200], newer[200:]])
+        updates.check(db, NOW)
+        assert len(rsps.calls) == 2
+    assert len(updates.newer(db)) == 200 and updates.check_state(db).cut
+    with responses.RequestsMock() as rsps:  # a later check that reads them all
+        rsps.get(updates.RELEASES_URL, json=[gh("2.3.0"), gh("2.2.0")])
+        updates.check(db, NOW)
+    assert not updates.check_state(db).cut
+
+
+def test_a_next_page_that_isnt_githubs_release_list_isnt_followed(db, release_build):
+    with responses.RequestsMock() as rsps:
+        rsps.get(updates.RELEASES_URL, json=[gh("2.3.0")], headers={"Link": '<https://example.com/x>; rel="next"'})
+        updates.check(db, NOW)
+        assert len(rsps.calls) == 1
 
 
 def test_the_check_runs_daily_and_hourly_after_a_failure(db):
@@ -376,6 +436,15 @@ def test_notes_draw_lists_and_tables():
     assert "---" not in table
 
 
+def test_notes_draw_numbered_steps_and_links_with_brackets():
+    steps = release_notes.render("1. Stop the worker.\n2. Copy the key.\n   Keep it safe.\n\n- Then this", "2.4.0")
+    assert (
+        steps == "<ol><li>Stop the worker.</li><li>Copy the key. Keep it safe.</li></ol>\n<ul><li>Then this</li></ul>"
+    )
+    link = release_notes.render("[MFA](https://en.wikipedia.org/wiki/Authentication_(computing)) helps.", "2.4.0")
+    assert 'href="https://en.wikipedia.org/wiki/Authentication_(computing)"' in link and link.endswith(" helps.</p>")
+
+
 # -- Settings → Updates ------------------------------------------------------------------------------------
 
 
@@ -392,6 +461,57 @@ def test_up_to_date(admin, db, release_build):
     known(db, gh("2.2.0"), gh("2.1.0"))
     page_ = admin.get("/admin/updates").get_data(as_text=True)
     assert "You're up to date" in page_ and "Up to date" in page_ and "Update to" not in page_
+
+
+def _failed_check(db) -> None:
+    with responses.RequestsMock() as rsps, pytest.raises(updates.CheckFailed):
+        rsps.get(updates.RELEASES_URL, status=500, body="oops")
+        updates.check(db, NOW)
+
+
+def test_up_to_date_only_once_a_check_has_worked(admin, db, release_build):
+    page_ = admin.get("/admin/updates").get_data(as_text=True)
+    assert '<span class="pill">Not checked yet</span>' in page_ and "Up to date" not in page_
+    # The first check failed: nothing is known yet, so the page says that, with why.
+    _failed_check(db)
+    page_ = admin.get("/admin/updates").get_data(as_text=True)
+    assert "Couldn't check yet" in page_ and "GitHub answered 500." in page_ and "Couldn't check</span>" in page_
+    assert "up to date" not in page_.lower()
+    # After a check that worked, a failed one leaves what was known, and says it's from then.
+    known(db, gh("2.2.0"))
+    _failed_check(db)
+    page_ = admin.get("/admin/updates").get_data(as_text=True)
+    assert "You're up to date" in page_ and "was the newest release when Office Sentry last reached GitHub" in page_
+
+
+def test_an_install_far_behind_reads_every_releases_action_required(admin, cfg, db, release_build, docker):
+    old = gh("2.2.1", "Fixes.\n\n### Action required\n\n- **Replace your Caddyfile** before updating.\n")
+    known(db, *[gh(f"2.2.{n}", "Fixes.\n\n### Action required\n\nNone.\n") for n in range(30, 1, -1)], old)
+    updater_says(cfg.data_dir)
+    page_ = admin.get("/admin/updates").get_data(as_text=True)
+    assert "30 releases since 2.2.0" in page_ and "Replace your Caddyfile" in page_ and 'name="read"' in page_
+    assert "too far behind" not in page_
+
+
+def test_releases_the_check_couldnt_read_need_the_tick(admin, cfg, db, release_build, docker):
+    known(db, gh("2.2.2", "### Action required\n\nNone.\n"), gh("2.2.1", "### Action required\n\nNone.\n"))
+    db.execute("INSERT INTO settings (key, value) VALUES (?, '1')", (updates.CUT_KEY,))
+    updater_says(cfg.data_dir)
+    page_ = admin.get("/admin/updates").get_data(as_text=True)
+    assert "2 or more releases since 2.2.0" in page_ and "too far behind to list every release" in page_
+    assert 'name="read"' in page_ and "and in the older releases on GitHub" in page_
+    resp = admin.post("/admin/updates/start", data={"version": "2.2.2"})
+    assert resp.status_code == 302 and not updates.read_request(cfg.data_dir)  # not without the tick
+
+
+def test_podman_and_kubernetes_are_containers(monkeypatch):
+    monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+    monkeypatch.setattr(Path, "exists", lambda self: str(self) == "/run/.containerenv")
+    assert page.in_docker()  # Podman
+    monkeypatch.setattr(Path, "exists", lambda self: False)
+    assert not page.in_docker()
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
+    assert page.in_docker()
 
 
 def test_a_development_build_says_so(admin, db, monkeypatch):

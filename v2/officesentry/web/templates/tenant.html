@@ -22,7 +22,7 @@
 <section class="card empty">
   <h3>No data yet</h3>
   <p class="m0">Figures, findings and changes appear here after the first collection{% if not tenant.consented_at %}, which starts once a Global Administrator grants consent{% endif %}.
-    {% if tenant.consented_at %}Follow it on <a href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection</a>.{% endif %}</p>
+    {% if tenant.consented_at and can_open('tenants.collection', tenant_id=tenant.id) %}Follow it on <a href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection</a>.{% endif %}</p>
 </section>
 {% else %}
 {# Each headline number opens the report behind it. #}
@@ -35,7 +35,7 @@
     <div class="label">{{ k.label }}{% if target %}{{ icon('arrow', 'go') }}{% endif %}</div>
     <div class="value">{{ kpi_value(k) }}</div>
     <div class="foot">
-      {% if k.delta %}<span class="delta {{ k.trend }}">{{ '%+g'|format(k.delta) }}{{ k.unit if k.unit != 'currency' }}</span> in 4 weeks
+      {% if k.delta %}<span class="delta {{ k.trend }}">{{ '%+g'|format(k.delta) }}{{ ' pts' if k.unit == '%' }}</span> in 4 weeks
       {% elif k.note %}{{ k.note }}
       {% elif k.previous is not none %}No change in 4 weeks
       {% elif k.value is none %}Not collected yet
@@ -135,7 +135,7 @@
   <span class="pill {{ health[0] }}">{{ health[1] }}</span>
   {% if collected %}<span>Data last collected {{ ts(collected|max) }}.</span>{% endif %}
   {% if health[2] %}<span>{{ health[2] }}</span>{% endif %}
-  <a href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection details</a>
+  {% if can_open('tenants.collection', tenant_id=tenant.id) %}<a href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection details</a>{% endif %}
 </p>
 {% endblock %}
 {% block scripts %}

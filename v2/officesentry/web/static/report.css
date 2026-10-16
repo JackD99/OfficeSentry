@@ -63,6 +63,7 @@ h3 { font-size: var(--fs-lg); font-weight: 600; margin: 0; }
 .verdict.tone-ok { border-left-color: var(--ok-fill); background: var(--ok-soft); border-color: transparent; border-left-color: var(--ok-fill); }
 .verdict .headline { font-size: 1.12rem; font-weight: 600; line-height: 1.35; margin: var(--space-1-5) 0 0; }
 .verdict-body { flex: 1; }
+.verdict .detail { margin: var(--space-1) 0 0; color: var(--text-2); }
 .summary-text { margin-top: var(--space-4); font-size: 1.02em; color: var(--text-2); }
 .summary-text p { margin-bottom: var(--space-2); }
 
@@ -376,8 +377,14 @@ body.pdf .cover.compact .cover-logo img { height: 8mm; }
 body.pdf .cover.compact .cover-titles { position: static; flex: 1; }
 body.pdf .cover.compact h1 { font-size: 20pt; margin-bottom: 0; }
 body.pdf .cover.compact .cover-meta { padding: 3.5mm 0 4mm; grid-template-columns: repeat(4, 1fr); }
+/* On a portrait page, equal columns broke the period and the tenant's domain over two lines; size them to fit. */
+body.pdf article:not(.document) .cover.compact .cover-meta { grid-template-columns: repeat(4, auto); }
 body.pdf .cover.compact .cover-foot { display: none; }
 body.pdf .doc-compact h2 { margin: 5mm 0 2.2mm; }
+/* The summary's small print stays on its second page. */
+body.pdf .about.short { margin-top: 5mm; padding-top: 3mm; }
+body.pdf .about.short h2 { margin: 0 0 1.5mm; }
+body.pdf .about.short p { margin: 0 0 1.5mm; }
 body.pdf .doc-compact .cta { margin-top: 5mm; padding: 4mm 6mm; }
 body.pdf .doc-compact .cta p { font-size: 9pt; }
 body.pdf .doc-compact table.kv tr.group td { padding-top: 1.2mm; padding-bottom: 1.2mm; }
@@ -512,7 +519,9 @@ body.pdf .cover.compact .cover-status:not(:empty) { padding: 0 0 3mm; }
 .sub-head { font-size: var(--fs-lg); margin: var(--space-6) 0 var(--space-2-5); }
 .exec .summary-text + .sub-head { margin-top: var(--space-5); }
 .chart-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-4); margin-bottom: var(--space-1); }
-.chart-head .legend { margin-top: 0; flex-wrap: nowrap; white-space: nowrap; }
+/* Margins, not gap: WeasyPrint leaves a flex gap out of the legend's width and the last key ran off the card. */
+.chart-head .legend { margin-top: 0; flex-wrap: nowrap; white-space: nowrap; gap: 0; }
+.chart-head .legend span + span { margin-left: var(--space-4); }
 .legend .k-found::before { background: var(--chart-2); } .legend .k-fixed::before { background: var(--chart-series); }
 svg.chart .part.tone-1 { fill: var(--chart-series); } svg.chart .part.tone-2 { fill: var(--chart-2); }
 svg.chart .count { fill: var(--muted); font-size: 9px; }
@@ -529,12 +538,15 @@ body.pdf .toc li.toc-group:first-child { padding-top: 0; }
 body.pdf .sub-head { font-size: 10.5pt; margin: 5mm 0 2mm; break-after: avoid; }
 body.pdf .exec .summary-text + .sub-head { margin-top: 4mm; }
 body.pdf .month-chart svg.chart { height: 46mm; }
+body.pdf .doc-compact .month-chart svg.chart { height: 31mm; } /* drawn 120 high for the two-page summary */
 body.pdf .chart-foot { font-size: 7.5pt; }
 body.pdf ul.did li { padding: 1.3mm 0; break-inside: avoid; }
 /* The appendix opens on its own page with a title band, like a divider. */
 body.pdf .appendix-start { margin-top: 0; padding-top: 5mm; border-top-width: 1.2mm; }
 body.pdf .appendix-start h2 { font-size: 18pt; margin: 1mm 0 2mm; }
 body.pdf .appendix-start + section > h2:first-child { margin-top: 6mm; }
+/* The full review's note opens the page after the cover, with At a glance under it. */
+body.pdf .tl-commentary + section > h2:first-child { margin-top: 6mm; }
 /* -- Quarterly review blocks ---------------------------------------------------------------------------- */
 table.quarter td:first-child { width: 40%; }
 table.upcoming td:first-child { width: 22%; white-space: nowrap; }

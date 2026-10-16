@@ -4,12 +4,18 @@ name: Refresh baselines
 # "refresh-baselines" to the pull request does it from the pull request itself: the pinned browser retakes
 # the screenshots (tests/browser/baselines), the nightly suite redraws the example PDFs' pages
 # (tests/nightly/pdf_baselines), whatever changed is committed to the branch, the label comes off, and the
-# checks start again on that commit (a push made with the workflow's own token starts none by itself).
-# Look at the new images in the pull request before merging.
+# ui and nightly comparisons run again on that commit. Look at the new images in the pull request before
+# merging.
+#
+# The pull request can't merge on that commit as it stands. GitHub holds a pull request's runs for a push
+# made with the workflow's own token until someone with write access approves them ("Approve workflows to
+# run" on the pull request), and the ruleset's "CI passed" only counts once they've run: a "CI passed" from
+# a run started here doesn't (#128 on 16 October). Approve them, or push once more (merging main does it).
 #
 # The pages are captured from the pull request merged with main, as the checks compare them (a branch
 # behind main would otherwise get baselines without main's changes), and .github/scripts/commit_baselines.sh
-# carries what changed onto the branch. The ui and nightly runs it starts compare the merged tree too.
+# carries what changed onto the branch. The ui and nightly runs it starts compare the merged tree too, once
+# GitHub's merge for the pull request includes the new commit.
 #
 # Only for pull requests from branches of this repository, never main: a fork's token can't push here, and
 # main's baselines change only through a pull request.
@@ -75,7 +81,7 @@ jobs:
       contents: write  # commits the new baselines to the pull request's branch
       pull-requests: write  # takes the label off
       issues: write  # (a pull request's labels are an issue's)
-      actions: write  # starts the checks on the new commit
+      actions: write  # starts the ui and nightly checks on the new commit
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         # The pull request merged with main, as nightly.yml compares it (the merge from when the label went
@@ -120,8 +126,28 @@ jobs:
             exit 0
           fi
           # The ui and nightly checks only where their baselines changed, comparing the pull request merged
-          # with main as their pull_request runs do; the main suite always, so the new commit has a CI result.
-          gh workflow run v2.yml --ref "$BRANCH"
+          # with main as their pull_request runs do. Not the main suite: the ruleset doesn't count a run
+          # started here, and the approval or push the pull request needs next runs it.
+          # They check out refs/pull/<n>/merge, which GitHub makes again a little after a push. Started
+          # straight away they could compare the merge from before the new baselines and fail on the old
+          # difference (#123 on 16 October), so they wait until it merges the branch's new head (asking for
+          # the pull request makes GitHub work out the merge).
+          head=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
+          merged=false
+          for _ in $(seq 60); do
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .mergeable > /dev/null
+            if git fetch -q --depth=1 origin "refs/pull/$PR/merge"; then
+              merge=$(git cat-file -p FETCH_HEAD)
+              if grep -qx "parent $head" <<< "$merge"; then merged=true; break; fi
+            fi
+            sleep 5
+          done
+          if [ "$merged" != true ]; then
+            echo "::error::GitHub hasn't merged $head with main for #$PR after five minutes (a conflict?), so the" \
+              "ui and nightly checks weren't started. Once it has, start them from Actions > Run workflow with" \
+              "the pull request's number."
+            exit 1
+          fi
           if [ "$SCREENSHOTS" = true ]; then gh workflow run ui.yml --ref "$BRANCH" -f pull_request="$PR"; fi
           if [ "$PDFS" = true ]; then gh workflow run nightly.yml --ref "$BRANCH" -f pull_request="$PR"; fi
           echo "Started the checks on $BRANCH."

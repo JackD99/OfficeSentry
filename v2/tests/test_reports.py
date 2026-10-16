@@ -4,7 +4,7 @@ from openpyxl import load_workbook
 
 from officesentry import store
 from officesentry.reports.export import pdf_available
-from officesentry.reports.monthly_review import build
+from officesentry.reports.monthly_review import Kpi, build
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
@@ -32,6 +32,14 @@ def test_kpi_delta_against_four_weeks_ago(db, two_tenants):
     seed_tenant(db, alpha)
     k = {k.key: k for k in build(db, store.get_tenant(db, alpha)).kpis}["secure_score.pct"]
     assert (k.previous, k.delta, k.trend) == (35.0, 7.0, "better")
+
+
+def test_a_figure_with_no_better_direction_changes_neither_better_nor_worse():
+    """More licensed users is a bigger client, not a worse one, whichever way it moves."""
+    for value in (37, 35):
+        k = Kpi("users.licensed", "Licensed users", value, previous=36, better="none")
+        assert k.delta and k.trend == "flat", value
+    assert Kpi("admins.privileged_principals", "Privileged accounts", 5, previous=4, better="down").trend == "worse"
 
 
 def test_report_pages(client, db, two_tenants):
@@ -159,7 +167,8 @@ def test_months_chart_needs_two_months_of_data(db, two_tenants):
     report.months[-1] = MonthCount(date(2026, 12, 1), 3, 0)
     report.months[:4] = [MonthCount(date(2026, m, 1), None, None) for m in range(1, 5)]
     report.months[4] = MonthCount(date(2026, 5, 1), 2, 2)
-    assert "Jan 26" not in report.months_chart  # months before the first collection are left out
+    chart = report.months_chart  # months before the first collection are left out; the first carries its year
+    assert ">Jan" not in chart and ">May 2026<" in chart and ">Jun<" in chart
 
 
 def test_summary_only_pdf_has_no_appendix(client, db, two_tenants, monkeypatch):

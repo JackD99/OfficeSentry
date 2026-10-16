@@ -189,8 +189,12 @@ def beside(graph: GraphClient, host: str) -> SharePointClient | None:
             return provider()
         except SharePointError:
             raise
-        except Exception as exc:  # a sign-in refused for this resource: no consent for it yet
-            raise SharePointAccessDenied(401, getattr(exc, "code", "token"), getattr(exc, "message", str(exc))) from exc
+        except Exception as exc:
+            code, message = getattr(exc, "code", "token"), getattr(exc, "message", str(exc))
+            if code == "network_error":  # not reaching Microsoft is a network failure, as Graph's is
+                raise SharePointError(0, code, message) from exc
+            # a sign-in refused for this resource: no consent for it yet
+            raise SharePointAccessDenied(401, code, message) from exc
 
     return SharePointClient(
         host,

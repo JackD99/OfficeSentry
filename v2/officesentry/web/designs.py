@@ -12,7 +12,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 
 from .. import month_end
 from ..db import audit
-from ..reports import branding, designs
+from ..reports import branding, data_reports, designs
 from ..reports.export import pdf_available
 from .access import can, needs, report_capability, tenant_or_404, visible_tenants
 from .printing import pdf_response
@@ -115,11 +115,13 @@ def edit(design_id: int):
         "design_editor.html",
         design=row,
         doc=designs.document(row),
-        palette=designs.palette(),
+        palette=designs.palette(data_reports.hidden(g.db)),
         tenants=tenants,
         tenant=tenant,
         pdf_available=pdf_available(),
         text_max=designs.TEXT_MAX,
+        max_blocks=designs.MAX_BLOCKS,
+        placeholders=designs.PLACEHOLDERS,
         preview_url=url_for("designs.preview", design_id=row["id"], tenant=tenant["id"]) if tenant else "",
     )
 
@@ -134,6 +136,10 @@ def save(design_id: int):
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         abort(400)
+    if isinstance(body.get("blocks"), list) and len(body["blocks"]) > designs.MAX_BLOCKS:
+        # Refused whole, rather than keeping the first ones and dropping the rest without a word.
+        error = f"Not saved: a design holds {designs.MAX_BLOCKS} blocks at most. Remove some and it saves."
+        return jsonify({"ok": False, "error": error}), 400
     name = body.get("name") if isinstance(body.get("name"), str) else None
     description = body.get("description") if isinstance(body.get("description"), str) else None
     doc = designs.save(g.db, row["id"], body, name=name, description=description)
@@ -172,9 +178,16 @@ def duplicate(design_id: int):
 @needs("designs.manage", "settings.manage")  # it also drops the design from every plan and schedule
 def delete(design_id: int):
     row = _design_or_404(design_id)
-    designs.remove(g.db, row["id"])
+    emptied = designs.remove(g.db, row["id"])
     audit(g.db, g.user["username"], "report_design_deleted", None, f"{row['id']}: {row['name']}")
     flash(f"Removed “{row['name']}”. Plans and schedules that sent it no longer do.", "success")
+    if emptied:
+        names = ", ".join(f"“{n}”" for n in emptied)
+        flash(
+            f"{names} {'has' if len(emptied) == 1 else 'have'} no reports left, so nothing is approved or sent"
+            f" from {'it' if len(emptied) == 1 else 'them'} until you choose one under Report plans.",
+            "error",
+        )
     return redirect(url_for("designs.index"))
 
 

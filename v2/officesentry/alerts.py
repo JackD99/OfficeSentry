@@ -11,6 +11,9 @@ Sent by the worker when:
     report history, never the files themselves, so only people signed in and granted the tenant can
     open them.
 
+Nothing goes out about a client that is paused or archived, even one paused while its collection ran
+(``alerted_tenant`` reads the tenant again).
+
 Settings live in the ``settings`` table. The webhook URL (which usually carries
 its own access key) and the optional signing secret are encrypted with the
 Vault and never shown again after saving. Delivery never raises into the
@@ -307,10 +310,20 @@ def opened_items(conn, tenant_id: int, finding_ids, min_severity: str) -> list[I
     return items
 
 
+def alerted_tenant(conn, tenant_id: int):
+    """The tenant as it is now, or None once it's paused, archived or deleted. A collection that was running
+    when someone paused the client still finishes, and nothing is alerted or emailed about it (lifecycle.py)."""
+    tenant = conn.execute("SELECT * FROM tenants WHERE id = ?", (tenant_id,)).fetchone()
+    return tenant if tenant is not None and tenant["enabled"] and not tenant["archived_at"] else None
+
+
 def after_sync(conn, alerting: Alerting | None, tenant, stats: dict, run_id: int | None = None) -> bool | None:
     """Alert on findings opened by one ``findings.sync``: the webhook, then any alert emails
     (``delivery.after_sync``). Returns whether a webhook message was sent, None if not needed."""
     if alerting is None or tenant is None:
+        return None
+    tenant = alerted_tenant(conn, tenant["id"])  # the row the run started with may be out of date
+    if tenant is None:
         return None
     sent = _webhook_after_sync(conn, alerting, tenant, stats, run_id)
     if alerting.app is not None and stats.get("opened"):
@@ -356,11 +369,13 @@ def after_run(conn, alerting: Alerting | None, run_id: int, status: str) -> bool
         if s["alerts.enabled"] != "1" or not s["alerts.url_enc"] or s["alerts.on_failures"] != "1":
             return None
         run = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
-        if run is None:
-            return None
+        if run is None or (status == "failed" and run["retry_at"]):
+            return None  # it's tried again by itself (store.plan_retry): the alert waits for the last try
+        # Failures that were tried again never alerted, so a run is compared with the one before them.
         previous = conn.execute(
             "SELECT status FROM runs WHERE tenant_id = ? AND collector = ? AND id < ?"
-            " AND status IN ('succeeded', 'partial', 'failed') ORDER BY id DESC LIMIT 1",
+            " AND status IN ('succeeded', 'partial', 'failed') AND NOT (status = 'failed' AND retry_at IS NOT NULL)"
+            " ORDER BY id DESC LIMIT 1",
             (run["tenant_id"], run["collector"], run_id),
         ).fetchone()
         if previous is None:
@@ -368,7 +383,7 @@ def after_run(conn, alerting: Alerting | None, run_id: int, status: str) -> bool
         failed, was_failed = status == "failed", previous["status"] == "failed"
         if failed == was_failed or (not failed and s["alerts.on_recovery"] != "1"):
             return None
-        tenant = conn.execute("SELECT * FROM tenants WHERE id = ?", (run["tenant_id"],)).fetchone()
+        tenant = alerted_tenant(conn, run["tenant_id"])
         if tenant is None:
             return None
         cls = REGISTRY.get(run["collector"])

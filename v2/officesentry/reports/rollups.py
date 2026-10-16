@@ -43,7 +43,8 @@ class Column:
     key: str
     label: str
     kind: str = "num"  # num | pct | money | sev | status | text
-    better: str | None = None  # up | down: which direction of change is good, when the row has a delta
+    # up | down: which direction of change is good, when the row has a delta (None: neither, so it's neutral)
+    better: str | None = None
     hint: str = ""
 
 
@@ -338,14 +339,19 @@ def _decode(value):
     return value
 
 
-def _data_row(conn, tenant, key: str, now: datetime, stored: Rows | None, snap: TenantSnapshot | None = None) -> dict:
+def _data_row(
+    conn, tenant, key: str, now: datetime, stored: Rows | None, snap: TenantSnapshot | None = None, built=None
+) -> dict:
     """One tenant's line on a detail report's rollup, from the store or built (and stored):
     {note, flagged, flag_link, headlines: [[label, value, tone, href]], tables: [[title, rows, anchor]]}.
-    Both shapes are kept, since the rollup shows headlines when any tenant's report has them."""
+    Both shapes are kept, since the rollup shows headlines when any tenant's report has them. ``built`` holds
+    reports already built from ``snap`` by key (``month_changes.Current``)."""
     fingerprint = stored.fingerprint(tenant) if stored else ""
     if stored and (data := stored.get(tenant, fingerprint)) is not None:
         return data
-    report = data_reports.build(conn, tenant, key, now, snap=snap)
+    report = built.get(key) if built is not None else None
+    if report is None:
+        report = data_reports.build(conn, tenant, key, now, snap=snap)
     data = {"note": report.unavailable or "", "flagged": 0, "flag_link": "", "headlines": [], "tables": []}
     if not report.unavailable:
         data["flagged"] = sum(s.flagged for s in report.sections)
@@ -364,18 +370,28 @@ def _data_row(conn, tenant, key: str, now: datetime, stored: Rows | None, snap: 
 
 
 def data_rollup(
-    conn, tenants, key: str, now: datetime | None = None, rebuild: bool = False, snap: TenantSnapshot | None = None
+    conn,
+    tenants,
+    key: str,
+    now: datetime | None = None,
+    rebuild: bool = False,
+    snap: TenantSnapshot | None = None,
+    reports: dict | None = None,
 ) -> Rollup:
     """Columns are the report's headline figures when it has them, else a row count per table.
 
     Without ``now`` (the page), each tenant's line comes from ``precomputed`` while that's current, and is
     built and stored when it isn't (always, with ``rebuild``). ``snap`` is one tenant's snapshot, when the
-    caller has it (the worker building every report's rollup for a tenant).
+    caller has it (the worker building every report's rollup for a tenant), and ``reports`` the reports
+    already built from it.
     """
     stored = stored_rows(conn, f"rollup:{key}", tenants, now, rebuild)
     now = now or datetime.now(UTC)
     title, description, _collectors, _builder = data_reports.REPORTS[key]
-    built = [(t, _data_row(conn, t, key, now, stored, snap if len(tenants) == 1 else None)) for t in tenants]
+    one = len(tenants) == 1
+    built = [
+        (t, _data_row(conn, t, key, now, stored, snap if one else None, reports if one else None)) for t in tenants
+    ]
     use_headlines = any(d["headlines"] for _t, d in built if not d["note"])
     labels: list[str] = []
     for _t, data in built:

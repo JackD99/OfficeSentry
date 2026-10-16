@@ -73,7 +73,7 @@ def device_compliance(snap: TenantSnapshot, now: datetime):
     "Company computers are encrypted",
     "Devices",
     "Turn on BitLocker (Windows) and FileVault (macOS) with an Intune disk encryption policy, with recovery "
-    "keys escrowed to Entra ID, so a lost or stolen laptop doesn't expose the client's data.",
+    "keys escrowed to Entra ID, so a lost or stolen laptop doesn't expose the organisation's data.",
 )
 def device_encryption(snap: TenantSnapshot, now: datetime):
     managed, reason = _managed_devices(snap)
@@ -128,16 +128,19 @@ def supported_windows(snap: TenantSnapshot, now: datetime):
         if support.status in severity:
             findings.append(Finding(severity[support.status], _device_label(d), support.detail, d["_id"]))
     unsupported = sum(f.severity != "low" for f in findings)
+    soon = len(findings) - unsupported
     if not findings:
         return ("pass", _all_are(len(windows), "Windows computer") + " on a supported release", [])
-    summary = (
-        f"{unsupported} of {plural(len(windows), 'Windows computer')} past end of support"
-        if unsupported
-        else (
-            f"{plural(len(findings), 'Windows computer')} {verb(len(findings), 'reaches', 'reach')} end of "
+    if not unsupported:
+        summary = (
+            f"{plural(soon, 'Windows computer')} {verb(soon, 'reaches', 'reach')} end of "
             f"support within {devices.SOON_DAYS} days"
         )
-    )
+        return ("fail", summary, findings)
+    # Computers reaching it soon are findings too: name them, so the summary agrees with the count shown beside it.
+    summary = f"{unsupported} of {plural(len(windows), 'Windows computer')} past end of support"
+    if soon:
+        summary += f", {soon} more reaching it within {devices.SOON_DAYS} days"
     return ("fail", summary, findings)
 
 
@@ -260,7 +263,7 @@ def bitlocker_keys(snap: TenantSnapshot, now: datetime):
         return _unavailable("Device data hasn't been collected yet")
     state = devices.bitlocker_state(snap)
     if state == "waiting":
-        return _unavailable(f"Waiting for the client to approve {devices.BITLOCKER}")
+        return _unavailable(f"Waiting for {devices.BITLOCKER} to be approved")
     if state != "read":
         return _unavailable(
             "BitLocker recovery keys couldn't be read" if state else "BitLocker recovery keys haven't been read yet"
@@ -311,7 +314,7 @@ def intune_compliance_coverage(snap: TenantSnapshot, now: datetime):
         return _unavailable("The tenant has no Intune licence")
     part = intune.parts(snap).get("compliance")
     if part == "waiting":
-        return _unavailable("Waiting for the client to approve DeviceManagementConfiguration.Read.All")
+        return _unavailable("Waiting for DeviceManagementConfiguration.Read.All to be approved")
     if part != "read":
         return _unavailable("Intune compliance policies couldn't be read")
     managed, reason = _managed_devices(snap)

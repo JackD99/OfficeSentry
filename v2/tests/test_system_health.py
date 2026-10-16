@@ -196,7 +196,7 @@ def test_backup_status(cfg, db):
     (cfg.data_dir / backups.STATUS_FILE).write_text(json.dumps(status), encoding="utf-8")
     check = system_health.check_backup(db, cfg, NOW)
     assert check.summary == "The last off-site backup failed" and check.fix.startswith("403.")
-    assert "backup action" in check.fix and "docker compose exec" not in check.fix
+    assert "bash deploy/jobs.sh now" in check.fix and "docker compose exec" not in check.fix
     assert status["local"]["detail"] == "" and status["local"]["error"] == ""  # the deployment format (WS12)
 
     # The weekly restore drill may be 8 days old; a nightly copy only 26 hours.
@@ -224,7 +224,7 @@ def test_backup_status(cfg, db):
         now=NOW + timedelta(days=3),
     )
     check = system_health.check_backup(db, cfg, NOW + timedelta(days=3))
-    assert check.summary == "The last restore check failed" and "restore-drill" in check.fix
+    assert check.summary == "The last restore check failed" and "bash deploy/jobs.sh drill" in check.fix
     stored = backups.read_status(cfg.data_dir)
     assert stored["restore_check"]["detail"] == "officesentry-20261009-034500.db.gz"
     backups.record_status(cfg.data_dir, "local", True, now=NOW)  # another job's record keeps it

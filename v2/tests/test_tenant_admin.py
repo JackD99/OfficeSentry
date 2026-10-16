@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 import responses
 
-from officesentry import delivery, lifecycle, store, system_health, tasks, tenant_health
+from officesentry import delivery, issued, lifecycle, mailer, store, system_health, tasks, tenant_health
 from officesentry.graph import GraphClient
 from officesentry.worker import execute_run, schedule_tick
 from tests import graphdata as gd
@@ -220,10 +220,10 @@ def test_paused_and_archived_tenants_are_not_collected(db, cfg, two_tenants):
     )
     assert store.claim_next_run(db) is None
 
-    lifecycle.resume(db, store.get_tenant(db, alpha), "admin")
+    lifecycle.resume(db, store.get_tenant(db, alpha), "admin", "UTC")
     assert store.claim_next_run(db)["tenant_id"] == alpha
     with pytest.raises(ValueError):
-        lifecycle.resume(db, store.get_tenant(db, bravo), "admin")  # restore first
+        lifecycle.resume(db, store.get_tenant(db, bravo), "admin", "UTC")  # restore first
     lifecycle.restore(db, store.get_tenant(db, bravo), "admin")
     t = store.get_tenant(db, bravo)
     assert t["archived_at"] is None and not t["enabled"]  # restored, still paused
@@ -422,7 +422,7 @@ def test_offboard_deletes_everything_tenant_scoped_and_nothing_else(client, db, 
 
     login(client, "admin")
     page = client.get(f"/tenants/{alpha}/offboard").get_data(as_text=True)
-    assert "alpha-it" in page and "group-it (client)" in page and "lead (analyst)" in page
+    assert "alpha-it" in page and "group-it (Client viewer)" in page and "lead (Second line)" in page
     assert "Delete Alpha Ltd permanently" in page and "Enterprise applications" in page
     assert "Monthly review PDF" in page
 
@@ -451,6 +451,25 @@ def test_offboard_deletes_everything_tenant_scoped_and_nothing_else(client, db, 
     assert client.get("/").status_code == 200  # the admin's own session is unaffected
     entry = db.execute("SELECT * FROM audit_log WHERE action = 'tenant_deleted'").fetchone()
     assert entry["tenant_id"] == alpha and "Alpha Ltd" in entry["detail"] and "alpha-it" in entry["detail"]
+
+
+def test_offboard_names_the_report_history_it_deletes(client, db, two_tenants):
+    """The files a client was sent go with it, so the page counts them and links to where they download, and
+    big counts carry thousands separators."""
+    alpha, _ = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    sent = issued.IssuedFile("review", "Monthly review", "security-review-alpha.pdf", "application/pdf", b"%PDF-1.7")
+    issued.archive(db, alpha, [sent], period="2026-09", trigger="schedule", user="admin", to=["it@alpha.example"])
+    db.executemany(
+        "INSERT INTO metrics (tenant_id, run_id, key, value, captured_at) VALUES (?, NULL, ?, 1, ?)",
+        [(alpha, f"m{n}", "2026-10-01T00:00:00Z") for n in range(1234)],
+    )
+    page = client.get(f"/tenants/{alpha}/offboard").get_data(as_text=True)
+    assert f'1 file in the <a href="/tenants/{alpha}/report-history">Report history</a>' in page
+    assert "1,234 trend figures" in page
+    client.post(f"/tenants/{alpha}/delete", data={"confirm_name": "Alpha Ltd"})
+    assert not db.execute("SELECT 1 FROM issued_reports WHERE tenant_id = ?", (alpha,)).fetchone()
 
 
 def _on_disk(cfg) -> bytes:
@@ -655,3 +674,23 @@ def test_health_reads_stored_state_only(db, two_tenants):
         tenant_health.assess(db, store.get_tenant(db, alpha))
         assert not rsps.calls
     assert json.dumps(tenant_health.counts(tenant_health.assess(db, store.get_tenant(db, alpha))), default=str)
+
+
+def test_client_names_stay_on_one_line(client, db, two_tenants, connection_id):
+    """A client's name goes into email subjects, which can't hold a line break: the forms and the import keep it
+    on one line, and an email about a client named with one before this still sends."""
+    alpha, _ = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    form = {"tenant_ref": "alpha.onmicrosoft.com", "connection_id": connection_id}
+    client.post(f"/tenants/{alpha}/edit", data=form | {"name": "Alpha\r\nGroup\t\x00Ltd"})
+    assert store.get_tenant(db, alpha)["name"] == "Alpha Group Ltd"
+    form = {"tenant_ref": "charlie.onmicrosoft.com", "connection_id": connection_id}
+    client.post("/tenants/new", data=form | {"name": "Charlie\nLtd\u2028"})
+    client.post(
+        "/admin/onboarding/import", data={"text": 'name,tenant\n"Delta\r\nLtd",delta.onmicrosoft.com\n', "confirm": "1"}
+    )
+    names = dict(db.execute("SELECT tenant_ref, name FROM tenants").fetchall())
+    assert names["charlie.onmicrosoft.com"] == "Charlie Ltd" and names["delta.onmicrosoft.com"] == "Delta Ltd"
+    email = mailer.Email(to=["it@alpha.example"], subject="Report for Alpha\r\nBcc: x@example.com", text="")
+    assert mailer.to_mime(email, "msp@example.com")["Subject"] == "Report for Alpha Bcc: x@example.com"
