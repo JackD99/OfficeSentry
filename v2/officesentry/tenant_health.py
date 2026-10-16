@@ -414,6 +414,9 @@ def _app_checks(result: dict | None, name: str) -> list[Check]:
         )
     missing = permission_batch.missing_original(result)
     new = permission_batch.waiting(result)
+    # What the app asks for in this tenant's cloud: a national cloud may not offer some (clouds.no_permissions).
+    granted = set(result.get("granted") or []) & set(PERMISSIONS)
+    asked = len(granted) + len(result.get("missing") or []) or ALL_PERMISSIONS
     if not result.get("permissions_checked"):
         checks.append(
             Check(
@@ -431,14 +434,14 @@ def _app_checks(result: dict | None, name: str) -> list[Check]:
                 "permissions",
                 "Permissions",
                 "bad",
-                f"{len(missing)} of {ALL_PERMISSIONS} not granted: {', '.join(missing)}.",
+                f"{len(missing)} of {asked} not granted: {', '.join(missing)}.",
                 f"A Global Administrator of {name} opens the consent link again; it asks for every "
                 "permission at once. Then press Check connection now.",
                 "consent",
             )
         )
     elif new:
-        release = permission_batch.release_of(new[0])
+        release = permission_batch.releases(new)
         checks.append(
             Check(
                 "permissions",
@@ -452,7 +455,7 @@ def _app_checks(result: dict | None, name: str) -> list[Check]:
             )
         )
     else:
-        checks.append(Check("permissions", "Permissions", "ok", f"All {ALL_PERMISSIONS} granted."))
+        checks.append(Check("permissions", "Permissions", "ok", f"All {asked} granted."))
     extra = extra_permissions(result)
     if extra:
         checks.append(

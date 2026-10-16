@@ -131,3 +131,12 @@ RECOVERY_KEYS = [
     {"id": "k3", "createdDateTime": days_ago(20), "deviceId": "d-ann", "volumeType": "2"},
     {"id": "k4", "createdDateTime": days_ago(1400), "deviceId": "d-old", "volumeType": "1"},
 ]
+
+# Windows LAPS backups (the list never carries the password). LAPTOP-ANN's is under its device ID in capitals,
+# LAPTOP-BOB's under an ID that isn't its device's (matched by name); DESK-RECEPTION, hybrid joined, may back
+# its password up to on-premises Active Directory; OLD-PC's is left from long ago.
+LAPS_BACKUPS = [
+    {"id": "D-ANN", "deviceName": "LAPTOP-ANN", "lastBackupDateTime": days_ago(3), "refreshDateTime": days_ago(-27)},
+    {"id": "b0b-1", "deviceName": "LAPTOP-BOB", "lastBackupDateTime": days_ago(40), "refreshDateTime": days_ago(10)},
+    {"id": "d-old", "deviceName": "OLD-PC", "lastBackupDateTime": days_ago(400), "refreshDateTime": days_ago(370)},
+]

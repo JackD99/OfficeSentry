@@ -58,6 +58,9 @@ class Cloud:
     # Collectors or parts of one that Microsoft doesn't offer in this cloud -> the reason, for ctx.warn
     # and a report's "unavailable". Keys are a collector key or "<collector>.<part>".
     missing: dict[str, str] = field(default_factory=dict)
+    # Permissions Microsoft doesn't offer in this cloud: an app registered here doesn't ask for them, and the
+    # connection check doesn't count them as missing.
+    no_permissions: tuple[str, ...] = ()
 
     def scope(self, resource: str) -> str:
         """The app-only token scope for one of this cloud's resources (``<resource>/.default``)."""
@@ -129,7 +132,9 @@ CLOUDS: dict[str, Cloud] = {
             "usage.copilot": f"Microsoft doesn't offer Copilot in {_CHINA}.",
             "audit_activity": f"Microsoft doesn't document its audit log feed for {_CHINA}, so the audit log "
             "add-on isn't available there.",
+            "security_alerts": f"Microsoft doesn't offer Defender alerts and incidents through Graph in {_CHINA}.",
         },
+        no_permissions=("SecurityAlert.Read.All", "SecurityIncident.Read.All"),
     ),
 }
 

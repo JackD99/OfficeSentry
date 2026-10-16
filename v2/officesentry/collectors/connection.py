@@ -17,7 +17,7 @@ client's admin, from the instructions shown.
 
 from __future__ import annotations
 
-from .. import permission_batch, store
+from .. import clouds, permission_batch, store
 from ..entra import PERMISSIONS, label
 from ..graph import PermissionMissing
 from ..text import plural
@@ -121,7 +121,8 @@ class ConnectionHealth(Collector):
             permissions_checked=True,
             granted=sorted(granted),
             other=sorted(other),
-            missing=[p for p in PERMISSIONS if p not in granted],
+            # Not ones Microsoft doesn't offer in the tenant's cloud: the app can't ask for those there.
+            missing=[p for p in PERMISSIONS if p not in granted and p not in clouds.of(ctx.tenant).no_permissions],
         )
         problem = permission_batch.missing_original(result)
         if problem:

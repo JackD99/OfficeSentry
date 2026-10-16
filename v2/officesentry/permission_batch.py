@@ -49,6 +49,17 @@ BATCHES: tuple[Batch, ...] = (
             label(SHAREPOINT_APP_ID, "Sites.Read.All"),
         ),
     ),
+    Batch(
+        "2.4",
+        "Windows LAPS, Defender alerts and incidents, service health and the message centre",
+        (
+            "DeviceLocalCredential.ReadBasic.All",
+            "SecurityAlert.Read.All",
+            "SecurityIncident.Read.All",
+            "ServiceHealth.Read.All",
+            "ServiceMessage.Read.All",
+        ),
+    ),
 )
 CURRENT = BATCHES[-1]
 BATCH_OF: dict[str, Batch] = {p: b for b in BATCHES for p in b.permissions}
@@ -72,6 +83,16 @@ ADDS: dict[str, str] = {
     "device and Cyber Essentials reports.",
     label(SHAREPOINT_APP_ID, "Sites.Read.All"): "Who has access to each SharePoint site and list, including "
     "members of SharePoint's own groups.",
+    "DeviceLocalCredential.ReadBasic.All": "Device reports show which computers back up their local admin "
+    "password with Windows LAPS, so a shared or never-changed admin password stands out.",
+    "SecurityAlert.Read.All": "A security alerts report: what Microsoft Defender has flagged, how severe, and "
+    "which alerts nobody has looked at yet.",
+    "SecurityIncident.Read.All": "The same report groups alerts into Defender's incidents, with who is dealing "
+    "with each.",
+    "ServiceHealth.Read.All": "A service health report: Microsoft 365 outages and advisories affecting you, so "
+    "a problem on Microsoft's side is known before anyone troubleshoots it.",
+    "ServiceMessage.Read.All": "The same report lists Microsoft's upcoming changes, with the ones that need "
+    "action by a date first.",
 }
 
 
@@ -117,8 +138,15 @@ def notice(snap, *permissions: str) -> str | None:
     return waiting_text(snap.tenant["name"], pending)
 
 
+def releases(permissions) -> str:
+    """The releases whose batches added ``permissions``, in words: "2.4", or "2.2 and 2.4" for a client that
+    didn't approve an earlier batch before the next one came."""
+    found = sorted({r for p in permissions if (r := release_of(p))}, key=_release_key) or [CURRENT.release]
+    return found[0] if len(found) == 1 else ", ".join(found[:-1]) + " and " + found[-1]
+
+
 def waiting_text(client: str, pending: list[str]) -> str:
-    release = release_of(pending[0]) or CURRENT.release
+    release = releases(pending)
     names = ", ".join(pending)
     return (
         f"Waiting for {client} to approve the new read-only permission{'s' if len(pending) > 1 else ''} this needs "
@@ -224,11 +252,14 @@ class Item:
     adds: str  # what approving it adds
 
 
-def items(words: dict[str, str], batch: Batch = CURRENT) -> list[Item]:
+def items(words: dict[str, str], batch: Batch = CURRENT, only=None) -> list[Item]:
     """The batch's permissions with what each reads (``words``: ``onboarding.CLIENT_WORDS``) and adds, for the
-    What's new page and its PDF."""
+    What's new page and its PDF. ``only``: those permissions instead, from whichever batch added each, so a
+    client that didn't approve an earlier batch is asked for it with this one."""
+    wanted = None if only is None else set(only)
+    chosen = batch.permissions if wanted is None else [p for b in BATCHES for p in b.permissions if p in wanted]
     out = []
-    for p in batch.permissions:
+    for p in chosen:
         resource, name, _ = PERMISSIONS[p]
         out.append(Item(p, resource.name, name, words.get(p, ""), ADDS.get(p, "")))
     return out
