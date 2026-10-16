@@ -232,6 +232,31 @@ def test_rollup_page_shows_the_total_row(client, db, two_tenants, widgets):
     assert client.get("/across/widgets.pdf").status_code == 200
 
 
+def test_cross_client_pdfs_and_workbooks_read_as_one_report_over_many_clients(
+    client, db, two_tenants, widgets, monkeypatch
+):
+    """Every row's PDF and workbook say how many clients they cover, not one tenant's collection date and
+    Microsoft 365 name, and carry the MSP's internal footer like the other cross-client PDFs."""
+    from officesentry.reports import export
+
+    make_user(db, "admin")
+    login(client, "admin")
+    pages = []
+    monkeypatch.setattr(export, "pdf_available", lambda: True)
+    monkeypatch.setattr(export, "to_pdf", lambda html, base_url: pages.append(html) or b"%PDF-1.7")
+    assert client.get("/across/widgets/rows/widgets.pdf").status_code == 200
+    every_row = pages[-1]
+    assert "<dt>Clients</dt><dd>2</dd>" in every_row
+    assert "Microsoft 365 tenant" not in every_row and "Data collected</dt>" not in every_row
+    assert "internal: every client" in every_row and "Prepared for All clients" not in every_row
+    assert client.get("/across/widgets.pdf").status_code == 200
+    assert "<dt>Report</dt>" not in pages[-1]  # the title already says which report
+    wb = load_workbook(io.BytesIO(client.get("/across/widgets/rows/widgets.xlsx").data))
+    summary = [[c.value for c in row] for row in wb["Summary"].iter_rows()]
+    assert any(row[0] == "Clients" and 2 in row for row in summary)
+    assert not any("2 clients" in str(v) for row in summary for v in row if v)  # no tenant line pretending to be one
+
+
 # -- Checks matrix ------------------------------------------------------------------------
 
 
