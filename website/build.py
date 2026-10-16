@@ -372,6 +372,8 @@ WHATS_NEW = [
         ],
         "also": [  # smaller changes, a few words each
             "a check that each client's Microsoft 365 audit log is switched on",
+            "a new look, with serif titles and figures, ruled sections and one bottle green",
+            "each person picks light, dark or their device's setting, and staff one of five colours",
             "a client whose sign-in breaks keeps its last good data, and its findings aren't marked fixed",
             "a month-end report changed after approval reaches the client only as a new version",
             "month-end never sends a client the same month twice",

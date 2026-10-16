@@ -374,7 +374,9 @@ export and the client's side, then deletes the client and everything stored for 
   </tr>
   <tr>
     <td>The checklist for a client being added</td>
-    <td>Dark mode follows your system setting</td>
+    <td>Dark mode follows your system setting
+    unless you choose Light or Dark on your Account page, where staff also pick a colour <!-- since 2.4.0 -->
+    </td>
   </tr>
 </table>
 
