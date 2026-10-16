@@ -385,9 +385,13 @@ def issues(h: DomainHealth, transport: bool = False) -> list[Issue]:
     if not h.sends_mail and not h.sends_only:
         # A domain that never sends mail should say so, or it can be spoofed freely.
         if not h.spf or h.spf_all != "-all":
-            out.append(Issue("low", "SPF", 'Doesn\'t receive mail but has no "v=spf1 -all" record to stop spoofing'))
+            out.append(
+                Issue("low", "SPF", 'Needs a "v=spf1 -all" record saying it sends no mail, or anyone can send as it')
+            )
         if h.dmarc_policy != "reject":
-            out.append(Issue("low", "DMARC", "Doesn't receive mail but has no DMARC p=reject record"))
+            out.append(
+                Issue("low", "DMARC", "Needs a DMARC p=reject record, or spoofed mail from it is still delivered")
+            )
         return [i for i in out if not h.unknown(i.area)]
 
     if h.spf_records == 0:
@@ -532,7 +536,8 @@ def _transport_issues(h: DomainHealth) -> list[Issue]:
 
 
 def summary(h: DomainHealth) -> dict[str, str]:
-    """One plain word per area, for tables: Pass / Weak / Missing / n/a, or Couldn't check."""
+    """A word or two per area, for tables: Pass / Weak / Missing, or Couldn't check. DKIM is "Not needed" for a
+    domain that sends no mail and "Not via Microsoft 365" when Microsoft 365 doesn't send as the domain."""
     found: dict[str, str] = {}
     for i in issues(h):  # most serious first
         found.setdefault(i.area, i.severity)
@@ -544,18 +549,24 @@ def summary(h: DomainHealth) -> dict[str, str]:
             return "Missing"
         return {"high": "Fail", "medium": "Weak", "low": "OK"}.get(found.get(area), "Pass")
 
-    dkim = "n/a" if not h.sends_from_microsoft_365 and not h.unknown("DKIM") else word("DKIM", any(h.dkim.values()))
+    if h.unknown("DKIM") or h.sends_from_microsoft_365:
+        dkim = word("DKIM", any(h.dkim.values()))
+    elif h.sends_mail or h.sends_only:
+        dkim = "Not via Microsoft 365"
+    else:
+        dkim = "Not needed"
     return {"SPF": word("SPF", bool(h.spf)), "DMARC": word("DMARC", bool(h.dmarc)), "DKIM": dkim}
 
 
 def transport_summary(h: DomainHealth) -> dict[str, str]:
-    """MTA-STS (Enforced / Testing / Off / Fail / Missing) and TLS-RPT (Pass / Fail / Missing), for tables."""
+    """MTA-STS (Enforced / Testing / Off / Fail / Missing) and TLS-RPT (Pass / Fail / Missing), for tables; both
+    "Not needed" for a domain that receives no mail."""
     if "MX" in h.failed:
         return {"MTA-STS": UNKNOWN, "TLS-RPT": UNKNOWN}
     if not h.transport_checked:
         return {"MTA-STS": "Not checked", "TLS-RPT": "Not checked"}
     if not h.sends_mail:
-        return {"MTA-STS": "n/a", "TLS-RPT": "n/a"}
+        return {"MTA-STS": "Not needed", "TLS-RPT": "Not needed"}
     if not h.mta_sts:
         sts = "Missing"
     elif not _valid_sts_record(h) or h.mta_sts_error:
