@@ -14,9 +14,9 @@ details that matter to you with the vendor.
 |---|---|---|---|---|
 | **Microsoft admin centres** | Running one tenant | Included | Yes | 30 days of logs |
 | **PowerShell scripts** | Whatever you write | Free, plus your time | If you write it to | What you keep |
-| **CIPP** | Managing many tenants | Free to self-host, or €99 a month hosted | Yes | Not its focus |
+| **CIPP** | Managing many tenants | Free to self-host (about €25 a month of Azure), or €99 a month hosted | Yes | Not its focus |
 | **AdminDroid** | Reporting and auditing | Free edition; paid editions priced on request | Yes | Audit records for years |
-| **Office Sentry** | Reporting for MSPs | Free | Never | Every night kept |
+| **Office Sentry** | Reporting for MSPs | Free, on a small server of your own | Never | Each day for 30 days, then each month for a year, by default |
 
 ### Microsoft admin centres
 
@@ -47,18 +47,21 @@ them, and exports reports or emails them on a schedule.
 
 ### Office Sentry
 
-Open source (AGPL-3.0), read-only and built for MSPs: two Docker containers on a Linux server you run, with
-one read-only app each client approves (or GDAP if you have it). Every report has a view across all clients,
-worst first, and every night is kept, so each report shows what changed since last month and sign-ins and
-admin changes go back beyond Microsoft's 30 days. For clients it writes a branded monthly review and Cyber
-Essentials and insurance evidence, as PDF and Excel.
+Open source (AGPL-3.0), read-only and built for MSPs: two Docker containers on a server you run (Linux, or
+Windows without Docker), with one read-only app that each client's admin approves from a link, or your
+technician approves through GDAP. It has 49 detail reports and 69 checks, and every report has a view across
+all clients, worst first. History is kept (each day for 30 days and each month for a year by default, longer
+if you choose), so each report shows what changed since last month. Sign-ins and admin changes go back
+beyond Microsoft's 30 days. For clients it writes a branded monthly review, evidence for Cyber Essentials,
+ISO 27001, CIS and other schemes, and insurance questionnaires, as PDF and Excel, which you approve before
+they go.
 
 ## Which fits
 
 - **A couple of clients and the odd question:** the admin centres and a few scripts are enough.
 - **Changing settings across many tenants** (new users, standard settings, alerts): CIPP is built for that.
-- **The biggest catalogue of reports and a long audit trail** of file, mailbox and sharing activity, on a
-  Windows server: AdminDroid.
+- **The biggest catalogue of reports and a long audit trail** of file, mailbox and sharing activity, with
+  alerts as it happens: AdminDroid.
 - **Monthly reporting to clients**, with history, evidence for Cyber Essentials and insurers, and every client
   side by side, from something that can't change a tenant: Office Sentry.
 
@@ -73,8 +76,11 @@ Being plain about it saves everyone time:
   only read.
 - It doesn't read the unified audit log (file, sharing and mailbox activity) today, or on-premises Active
   Directory.
-- It has more than 40 detail reports with filters, saved views and exports, not thousands of report variants.
-- You run it yourself, on a Linux server with Docker. There's no hosted version.
+- It has 49 detail reports with filters, saved views and exports, not thousands of report variants.
+- It reports once a night (or when you ask), not in real time, and alerts by email, Teams, Slack or a
+  webhook rather than through a PSA.
+- You run it yourself, on a Linux server with Docker (or Windows without it). There's no hosted version, and
+  support is the docs and GitHub Discussions.
 
 ## Compare in detail
 

@@ -97,10 +97,12 @@ with [ShellCheck](https://www.shellcheck.net) at its strictest level:
 `shellcheck --severity=style <file>` (`tests/test_deploy_hardening.py` runs it
 too when it's installed).
 
-CI runs the same on Python 3.11, 3.12 and 3.13 for every pull request, with
-a Docker image build, a dependency audit (`pip-audit`) and a subset on
-Windows. Changes that only touch Markdown, `docs/`, `examples/` or
-`website/` skip the tests, and the **CI passed** check sums it all up. The
+CI runs the same on Python 3.12 for every pull request, with a Docker image
+build, a dependency audit (`pip-audit`) and a subset on Windows, and on 3.11
+and 3.13 too once it's merged (and on a pull request that changes the
+dependencies or the CI workflow). Changes that only touch Markdown, `docs/`,
+`examples/` or `website/` skip the tests, and the **CI passed** check sums it
+all up. The
 Python 3.12 run measures coverage and fails under 90%;
 `pytest -n auto --cov=officesentry` shows it locally. To finish in minutes,
 each Python's tests run in parts on separate machines at once (four for
@@ -200,10 +202,11 @@ The same gates apply to every change, whoever wrote it:
 - Every change is a pull request against `main`; nothing is pushed to `main`
   directly.
 - CI runs `ruff check` and `ruff format --check`, ShellCheck over the shell
-  scripts, the full test suite on Python 3.11, 3.12 and 3.13 (with a 90%
-  floor on line and branch coverage), a Windows subset, a Docker build and
-  `pip-audit` over every lock file on every pull request, and a pull request
-  isn't merged until it's green. The pull request template's checklist
+  scripts, the full test suite on Python 3.12 (with a 90% floor on line and
+  branch coverage), a Windows subset, a Docker build and `pip-audit` over
+  every lock file on every pull request, and a pull request isn't merged
+  until it's green. Every commit on `main` is tested on Python 3.11 and 3.13
+  as well, and a release needs that run to have passed. The pull request template's checklist
   covers migrations, new permissions, the access gate and read-only access.
 - Tests simulate Microsoft Graph and Exchange at the HTTP level, and
   `tests/test_live_fixture.py` replays responses recorded from a real

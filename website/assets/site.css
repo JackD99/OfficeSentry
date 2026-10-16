@@ -151,6 +151,13 @@ section.whats-new { padding: 88px 0; background: var(--bg-2); border-top: 1px so
 .file-kind { grid-row: span 2; align-self: start; font-size: .6875rem; font-weight: 800; letter-spacing: .04em; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 8px 6px; min-width: 44px; text-align: center; }
 .example-grid strong { font-size: .9375rem; }
 .example-grid span:last-child { font-size: .875rem; color: var(--muted); }
+section.compare { padding: 0 0 88px; }
+.compare-grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.compare-grid a { display: flex; flex-direction: column; gap: 6px; height: 100%; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
+.compare-grid a:hover { text-decoration: none; border-color: var(--accent); box-shadow: var(--shadow); }
+.compare-grid strong { font-size: 1rem; }
+.compare-grid span { font-size: .9375rem; color: var(--muted); }
+.compare .more { display: block; text-align: center; margin-top: 24px; }
 
 /* Home: security, steps, FAQ */
 section.security { background: var(--bg-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
@@ -273,6 +280,7 @@ section.faq { padding: 24px 0 96px; }
   .footer-brand { grid-column: 1 / -1; }
   .demo-inner { flex-direction: column; align-items: flex-start; }
   section.features, section.examples, section.start, section.security, section.whats-new { padding: 64px 0; }
+  section.compare { padding-bottom: 64px; }
   .section-head { margin-bottom: 40px; }
 }
 @media (max-width: 800px) {

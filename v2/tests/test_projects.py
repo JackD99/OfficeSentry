@@ -238,7 +238,9 @@ def test_pages(client, db, seeded, two_tenants):
     assert "Goal: Legacy authentication is blocked" in page  # the check's goal, not a second finding
     assert f"/tenants/{seeded}/findings#check-legacy_auth_blocked" in page
     quick = page[page.index('id="quick-fixes"') :]
-    assert "Every admin has MFA registered" in quick and "Have each listed admin register a strong method" in quick
+    assert (
+        "Every admin has MFA registered" in quick and "Have every admin without MFA register a strong method" in quick
+    )
     assert f"/tenants/{seeded}/findings#check-admin_mfa" in quick
     resp = client.post(f"/tenants/{seeded}/projects/identity", data={"status": "proposed", "note": "Quote sent"})
     assert resp.status_code == 302 and resp.headers["Location"].endswith("#project-identity")

@@ -252,7 +252,7 @@ def test_site_owners_check_waits_when_no_site_can_be_counted():
             return [{"_id": "s1", "name": "Projects", "ownerCount": None, "ownerSource": None}]
 
     status, summary, *_ = site_owners(Snap(), datetime.now(UTC))
-    assert status == "unavailable" and "approve the SharePoint permission" in summary
+    assert status == "unavailable" and "until the SharePoint permission is approved" in summary
 
 
 def test_report_before_collection(db, two_tenants):

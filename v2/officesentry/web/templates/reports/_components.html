@@ -9,6 +9,7 @@
   <div class="verdict-body">
     <span class="status-pill">{{ v.label }}</span>
     <p class="headline">{{ v.headline }}</p>
+    {% if v.detail %}<p class="detail">{{ v.detail }}</p>{% endif %}
   </div>
 </div>
 {%- endmacro %}
@@ -99,4 +100,16 @@
 {% set missing = sources|rejectattr('1')|map(attribute='0')|list %}
 {%- if done %}{% set first, last = done|min, done|max %}Data collected {% if first[:10] == last[:10] %}{{ last|when }}{% else %}between {{ first|day }} and {{ last|day }}{% endif %}.{% endif %}
 {%- if missing %} Not collected yet: {{ missing|join(', ') }}.{% endif %}
+{%- endmacro %}
+
+{# Data sources that are out of date (``monthly_review.Freshness`` with ``stale``), in a sentence. #}
+{% macro out_of_date(stale) -%}
+{% if stale|length > 3 %}
+{#- Many at once (collection paused, or the app's access removed): one line, not a list of every source. -#}
+{%- set dated = stale|selectattr('finished_at')|map(attribute='finished_at')|list -%}
+{%- set never = stale|rejectattr('finished_at')|map(attribute='title')|list -%}
+<p><span class="stale">Out of date:</span>
+{%- if dated %} {{ dated|length|plural('data source') }} last collected {% if dated|min|day == dated|max|day %}{{ dated|max|day }}{% else %}between {{ dated|min|day }} and {{ dated|max|day }}{% endif %}{% endif %}
+{%- if never %}{{ ',' if dated }} {% if never|length > 3 %}{{ never|length|plural('data source') }}{% else %}{{ never|join(', ') }}{% endif %} not collected yet{% endif %}. Figures that rely on these may not reflect the latest settings.</p>
+{% elif stale %}<p><span class="stale">Out of date:</span> {% for f in stale %}{{ f.title }} ({{ ('last collected ' ~ f.finished_at|day) if f.finished_at else 'not collected yet' }}){{ ', ' if not loop.last else '.' }}{% endfor %} Figures that rely on these may not reflect the latest settings.</p>{% endif %}
 {%- endmacro %}

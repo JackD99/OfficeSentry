@@ -6,6 +6,7 @@ The page never touches Docker: pressing Update writes a request for the updater 
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -35,6 +36,7 @@ class Offer:
     target: updates.Release | None
     brings: list[updates.Release] = field(default_factory=list)  # newest first, the target included
     reason: str = ""  # "" when the button is offered
+    cut: bool = False  # it brings older releases than the check read, whose notes only GitHub shows
 
     @property
     def button(self) -> bool:
@@ -42,8 +44,9 @@ class Offer:
 
     @property
     def asks(self) -> bool:
-        """Whether any release it brings asks something of people under Action required."""
-        return any(r.asks for r in self.brings)
+        """Whether any release it brings asks something of people under Action required (or might: one the
+        check didn't read)."""
+        return self.cut or any(r.asks for r in self.brings)
 
     @property
     def upgrades_database(self) -> bool:
@@ -61,6 +64,7 @@ def offer(
     waiting: updates.Request | None,
     public_demo: bool = False,
     docker: bool = True,
+    cut: bool = False,
 ) -> Offer:
     if current is None:
         return Offer(None, reason="development")
@@ -69,7 +73,7 @@ def offer(
     # The button only installs a release of the running major version; a new major version is updated by hand.
     same = [r for r in newer if r.parsed.major == current.major]
     target = same[0] if same else newer[-1]
-    plan = Offer(target, [r for r in newer if r.parsed <= target.parsed])
+    plan = Offer(target, [r for r in newer if r.parsed <= target.parsed], cut=cut)
     if public_demo:
         plan.reason = "demo"
     elif not same:
@@ -104,7 +108,8 @@ def index():
     waiting = updates.waiting(cfg.data_dir, state, now)
     newer = updates.newer(g.db, current)
     docker = in_docker()
-    plan = offer(current, newer, state, waiting, public_demo=cfg.public_demo, docker=docker)
+    check = updates.check_state(g.db)
+    plan = offer(current, newer, state, waiting, public_demo=cfg.public_demo, docker=docker, cut=check.cut)
     job = state.job
     # A request from the last day that the updater never picked up (it isn't running, say).
     asked = updates.read_request(cfg.data_dir)
@@ -125,7 +130,7 @@ def index():
         plan=plan,
         later=[r for r in newer if plan.target and r.parsed > plan.target.parsed],
         notes=lambda text, release: render(text, release.version),
-        check=updates.check_state(g.db),
+        check=check,
         signature=_signature(state, waiting),
         docker=docker,
         releases_page=updates.RELEASES_PAGE,
@@ -137,7 +142,13 @@ def index():
 
 
 def in_docker() -> bool:
-    return Path("/.dockerenv").exists()
+    """Whether the portal runs in a container: Docker, Podman (``/run/.containerenv``) or Kubernetes. Outside
+    one, the page gives the steps for updating by hand on Windows."""
+    return (
+        Path("/.dockerenv").exists()
+        or Path("/run/.containerenv").exists()
+        or bool(os.environ.get("KUBERNETES_SERVICE_HOST"))
+    )
 
 
 @bp.get("/updates/progress")
@@ -164,7 +175,8 @@ def start():
     current = updates.running()
     state = updates.status(cfg.data_dir, now)
     waiting = updates.waiting(cfg.data_dir, state, now)
-    plan = offer(current, updates.newer(g.db, current), state, waiting, cfg.public_demo, in_docker())
+    cut = updates.check_state(g.db).cut
+    plan = offer(current, updates.newer(g.db, current), state, waiting, cfg.public_demo, in_docker(), cut)
     wanted = updates.Version.parse(request.form.get("version"))
     if wanted is None:
         abort(400)
