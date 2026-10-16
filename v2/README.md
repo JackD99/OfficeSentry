@@ -793,7 +793,7 @@ and follows it through consent, Global Reader and its first collection.
 
 ## Managing clients
 
-- **Settings** in the menu opens *Client settings*. Its pages are in four areas, shown as tabs with the open area's pages under them: *Clients* (Client settings, Client groups, App connection), *Reports and email* (Branding, Licence prices, Email delivery, Alerts), *Team* (Users, Microsoft sign-in, Activity log) and *System* (System status, Data retention, Updates, Support). These docs name the page, as in *Settings → Email delivery*.
+- **Settings** in the menu opens *Client settings*. Every settings page opens with the Settings heading, its four areas as tabs and the open area's pages under them, then the page's own title: *Clients* (Client settings, Client groups, App connection), *Reports and email* (Branding, Licence prices, Email delivery, Alerts), *Team* (Users, Microsoft sign-in, Activity log) and *System* (System status, Data retention, Updates, Support). These docs name the page, as in *Settings → Email delivery*.
 - **Switch client**, beside a client's name (staff who see more than one client): opens the page you're on for another client you see, within the client group you picked, with a box to find one by name. From an account, mailbox, group or site it opens that client's list, and a report the other client doesn't have, or that you can't open there, opens its Reports tab.
 - **Client settings** (*Settings → Client settings*, or *Connection health* on
   the Clients page) lists every client with its status (*Onboarding*,

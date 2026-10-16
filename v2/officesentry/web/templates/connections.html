@@ -6,7 +6,7 @@
 {% set ready = connections|selectattr('client_id')|list %}
 {% set status = sign_in.status if sign_in else none %}
 {% set active = status in ('waiting', 'working') %}
-<div class="page-head"><div><h1>App connection</h1>
+<div class="page-head"><div><h2 class="page-title">App connection</h2>
   <div class="sub">Office Sentry signs in to every client tenant as one multi-tenant, <strong>read-only</strong> Entra app. You set it up once (once per Microsoft cloud, if you have clients in GCC High, DoD or China).</div></div>
   {% if ready and not sign_in %}<div class="actions"><a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add a client</a></div>{% endif %}</div>
 
