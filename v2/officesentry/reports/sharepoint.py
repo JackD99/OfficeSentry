@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 from datetime import date, datetime, timedelta
 
+from .. import formatting
 from ..collectors.sharepoint import anyone_can_edit, outside_can_edit
 from ..collectors.sharepoint_lookup import DENIED_TEXT, is_system_site
 from ..devices import parse_day
@@ -75,14 +76,43 @@ def site_type(row: dict) -> str:
     return TEMPLATES.get(template, template or "Unknown")
 
 
-def site_label(row: dict) -> str:
+def url_key(url) -> str:
+    """A site address as compared everywhere: lower case, no trailing slash."""
+    return (url if isinstance(url, str) else "").lower().rstrip("/")
+
+
+def site_names(snap: TenantSnapshot) -> dict[str, str]:
+    """Site names by address (``url_key``), from SharePoint storage. Microsoft's usage report, which lists the
+    sites, only has their addresses."""
+    return {
+        url_key(r.get("url")): r["site"]
+        for r in snap.objects("sharepoint_storage", "site_storage") or []
+        if r.get("url") and isinstance(r.get("site"), str) and r["site"]
+    }
+
+
+def site_name(row: dict, names: dict[str, str] | None = None) -> str:
+    """A site's name: SharePoint storage has it (``names``); otherwise the last part of its address, which reads
+    as a name ("/sites/finance-team" is "Finance Team"); the root site and admin sites keep their address."""
+    url = row.get("url") if isinstance(row.get("url"), str) else ""
+    key = url_key(url)
+    if name := (names or {}).get(key):
+        return name
+    if "/sites/" in key or "/teams/" in key:
+        last = url.rstrip("/").rsplit("/", 1)[-1].replace("-", " ").replace("_", " ")
+        return last.title() if last == last.lower() else last
+    return url
+
+
+def site_label(row: dict, names: dict[str, str] | None = None) -> str:
     if row.get("url"):
-        return row["url"]
+        return site_name(row, names)
     return f"Name hidden by Microsoft ({site_type(row).lower()})"
 
 
-def site_cell(row: dict):
-    label = site_label(row)
+def site_cell(row: dict, names: dict[str, str] | None = None):
+    """The site as a cell: its name, opening the site in SharePoint (or its page, through ``link_pages``)."""
+    label = site_label(row, names)
     return Link(label, row["url"]) if row.get("url") else label
 
 
@@ -189,7 +219,8 @@ def _usage(snap: TenantSnapshot, report: DataReport) -> dict | None:
 
 
 def _as_of(status: dict) -> str:
-    return f" Microsoft's figures as of {status['reportDate']}." if status.get("reportDate") else ""
+    when = formatting.day(status.get("reportDate"))
+    return f" Microsoft's figures as of {when}." if when else ""
 
 
 # -- SharePoint sites ---------------------------------------------------------------
@@ -217,6 +248,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         if not r.get("deleted")
     ]
     before = _objects_before(snap, "sharepoint_usage", "site", now - timedelta(days=GROWTH_DAYS - 2))
+    names = site_names(snap)
     user_sites = [r for r in rows if site_type(r) != "System"]
 
     def inactive(r):
@@ -271,11 +303,11 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         "in. The Shared files report lists the files behind them." + _as_of(status),
         empty="No site has anyone or guest links.",
     )
-    for r in sorted(rows, key=lambda r: (-r["anyoneLinks"], -r["guestLinks"], site_label(r))):
+    for r in sorted(rows, key=lambda r: (-r["anyoneLinks"], -r["guestLinks"], site_label(r, names).lower())):
         if r["anyoneLinks"] or r["guestLinks"]:
             shared.add(
                 [
-                    site_cell(r),
+                    site_cell(r, names),
                     r["anyoneLinks"],
                     r["guestLinks"],
                     r["companyLinks"],
@@ -293,10 +325,10 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         "someone still owns the content.",
         empty=f"Every site has been used in the last {INACTIVE_DAYS} days.",
     )
-    for r in sorted(stale, key=lambda r: (r.get("lastActivityDate") or "", site_label(r))):
+    for r in sorted(stale, key=lambda r: (r.get("lastActivityDate") or "", site_label(r, names).lower())):
         idle.add(
             [
-                site_cell(r),
+                site_cell(r, names),
                 site_type(r),
                 owner_label(r),
                 _date(r.get("lastActivityDate")) or "None recorded",
@@ -317,8 +349,10 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             "Files",
             "Last activity",
             "External sharing on",
+            "Address",
         ],
         drifts=("Storage", "Files"),
+        optional=("Address",),
         intro="Largest first."
         + ("" if before is not None else f" Growth appears once Office Sentry has {GROWTH_DAYS} days of history."),
         empty="No sites.",
@@ -328,7 +362,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         prev = (before or {}).get(r["_id"]) if not r.get("concealed") else None
         every.add(
             [
-                site_cell(r),
+                site_cell(r, names),
                 site_type(r),
                 owner_label(r),
                 size(r["storageUsed"]),
@@ -336,6 +370,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                 r["files"],
                 _date(r.get("lastActivityDate")) or "None recorded",
                 r["externalSharing"],
+                r.get("url") or "",
             ]
         )
     report.sections = [shared, idle, every]
