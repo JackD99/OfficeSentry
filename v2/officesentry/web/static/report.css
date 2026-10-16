@@ -406,7 +406,7 @@ body.pdf thead { display: table-header-group; }
 body.pdf article.document, body.pdf article.document .cover.compact { page: doc; }
 body.pdf article.document.wide, body.pdf article.document.wide .cover.compact { page: wide; }
 body.pdf .lede { margin: 0 0 4mm; }
-body.pdf .kpis + .kpis, body.pdf .kpis + .callout { margin-top: 3mm; }
+body.pdf .kpis + .kpis, body.pdf .kpis + .callout, body.pdf .kpis + .breakdown { margin-top: 3mm; }
 body.pdf .doc-section { margin-top: 2mm; }
 body.pdf .doc-section .section-intro { break-after: avoid; }
 body.pdf .empty-note { break-before: avoid; }
