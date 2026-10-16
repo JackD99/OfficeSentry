@@ -52,7 +52,7 @@
   <section class="card flush">
     <div class="card-head toolbar"><h2>Delivery history</h2>
       <span class="meta">{% if deliveries %}Last {{ deliveries|length }} · {% endif %}<a href="{{ url_for('email.report_history', tenant_id=tenant.id) }}" title="Every report file, exactly as it was sent">{{ icon('doc') }} Report history</a></span></div>
-    {% if deliveries %}{{ deliveries_table(deliveries, staff) }}
+    {% if deliveries %}{{ deliveries_table(deliveries, staff, stale=stale) }}
     {% else %}<div class="empty compact"><p>Nothing has been sent yet.</p></div>{% endif %}
   </section>
 </div>

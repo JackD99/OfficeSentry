@@ -14,7 +14,7 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 from .. import clouds, lifecycle, roles, store, tenant_groups, tenant_health
 from ..db import audit
 from ..discovery import tenant_id_for_domain
-from ..text import plural
+from ..text import one_line, plural
 from .access import can, manages_groups, needs, refused, tenant_or_404, visible_tenants
 from .groups import group_aware, scope
 from .tenants import DOMAIN_RE, GUID_RE, _cfg, _consent_link, cloud_mismatch, not_connected
@@ -139,7 +139,7 @@ def check_connection(tenant_id: int):
 @needs("clients.manage")
 def edit(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    name = request.form.get("name", "").strip()
+    name = one_line(request.form.get("name", ""))
     ref = request.form.get("tenant_ref", "").strip().lower()
     notes = request.form.get("notes", "").strip()
     conn_id = request.form.get("connection_id", type=int)

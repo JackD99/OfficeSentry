@@ -14,7 +14,7 @@ from officesentry import roles as office_roles
 from officesentry.entra import PERMISSIONS
 from officesentry.graph import GRAPH_ROOT
 from officesentry.worker import execute_run
-from tests.conftest import login, make_user
+from tests.conftest import forged, login, make_user
 from tests.seed import exchange_factory, mock_tenant
 from tests.test_certificates import LOGIN, mock_sign_in
 
@@ -320,7 +320,7 @@ def test_client_return_shows_no_microsoft_text(app, client, db, two_tenants):
 def test_forged_or_stale_client_state_falls_back_to_the_admin_flow(app, client, db, two_tenants):
     alpha, _ = two_tenants
     _, state = _link(app, db, alpha)
-    resp = client.get("/consent/callback", query_string={"state": state[:-2] + "xx", "admin_consent": "True"})
+    resp = client.get("/consent/callback", query_string={"state": forged(state), "admin_consent": "True"})
     assert resp.status_code == 302 and "/login" in resp.headers["Location"]
     db.execute("UPDATE tenants SET created_at = '2026-10-10T00:00:00Z' WHERE id = ?", (alpha,))  # number reused
     resp = client.get("/consent/callback", query_string={"state": state, "admin_consent": "True"})

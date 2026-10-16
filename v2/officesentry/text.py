@@ -86,6 +86,12 @@ def duration(seconds: float) -> str:
     return plural(seconds // 86400, "day")
 
 
+def one_line(text: str) -> str:
+    """A name someone typed or imported, on one line: line breaks, tabs and runs of spaces become one space and
+    other control characters go. A client's name goes into email subjects, which can't hold a line break."""
+    return " ".join("".join(c for c in text if c.isspace() or unicodedata.category(c) != "Cc").split())
+
+
 def fold(text: str) -> str:
     """``text`` as it sorts: without case or accents, so "Åsa" comes before "Bea" rather than after "Zoe"."""
     return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)).casefold()
