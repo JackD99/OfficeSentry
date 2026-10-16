@@ -1,6 +1,6 @@
 """The quarterly review: the quarter's figures and the report designer's quarterly blocks and starter."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from officesentry import projects, store
 from officesentry.reports import designs, quarterly
@@ -87,6 +87,35 @@ def test_the_quarterly_starter_renders_for_a_client(client, db, two_tenants):
     preview = _text(client.get(f"/reporting/designs/{did}/preview?tenant={bravo}"))
     assert "Nothing has been collected for this client yet." in preview
     assert "No paid licences in the data yet." in preview
+
+
+def test_a_quarterly_review_compares_with_the_start_of_the_quarter(client, db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    now = datetime.now(UTC)
+    first = _month_starts(now, 3)[0]
+    # Secure Score was 25% the day before the quarter began, and 30% a week into it.
+    for value, when in ((25, quarterly.start(now) - timedelta(days=1)), (30, quarterly.start(now) + timedelta(days=7))):
+        db.execute(
+            "INSERT INTO metrics (run_id, tenant_id, key, value, captured_at)"
+            " VALUES (NULL, ?, 'secure_score.pct', ?, ?)",
+            (alpha, value, when.strftime(ISO)),
+        )
+    tenant = store.get_tenant(db, alpha)
+    ctx = designs.Context(db, tenant, now, by_quarter=True)
+    assert ctx.review.period_start == quarterly.start(now) and ctx.since == f"1 {first:%B}"
+    score = next(k for k in ctx.review.kpis if k.key == "secure_score.pct")
+    assert score.previous == 25 and ctx.quarter.score_from == 25  # the key figure and the quarter's text agree
+    # A design without quarterly blocks still compares with four weeks ago.
+    assert designs.Context(db, tenant, now).review.period_start == now - timedelta(days=28)
+
+    make_user(db, "admin")
+    login(client, "admin")
+    did = designs.create(db, "Quarterly", "admin", designs.STARTERS["quarterly"][2])
+    page = _text(client.get(f"/tenants/{alpha}/designs/{did}"))
+    assert f"<dt>Compared with</dt><dd>1 {first:%B}</dd>" in page
+    assert f"compared with the data from the start of the quarter (1 {first:%B})" in page
+    assert "rose from 25% to" in page and "over the quarter" in page
 
 
 def test_quarterly_widgets_are_in_the_palette_and_take_their_settings():

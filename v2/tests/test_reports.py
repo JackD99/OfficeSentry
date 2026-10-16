@@ -167,7 +167,8 @@ def test_months_chart_needs_two_months_of_data(db, two_tenants):
     report.months[-1] = MonthCount(date(2026, 12, 1), 3, 0)
     report.months[:4] = [MonthCount(date(2026, m, 1), None, None) for m in range(1, 5)]
     report.months[4] = MonthCount(date(2026, 5, 1), 2, 2)
-    assert "Jan 26" not in report.months_chart  # months before the first collection are left out
+    chart = report.months_chart  # months before the first collection are left out; the first carries its year
+    assert ">Jan" not in chart and ">May 2026<" in chart and ">Jun<" in chart
 
 
 def test_summary_only_pdf_has_no_appendix(client, db, two_tenants, monkeypatch):
