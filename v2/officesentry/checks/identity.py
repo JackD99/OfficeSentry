@@ -6,7 +6,7 @@ from datetime import datetime
 
 from .. import coverage
 from ..authmethods import mfa_set_up
-from ..licences import is_stale, last_sign_in, licence_summary, load_prices
+from ..licences import is_stale, last_sign_in, licence_summary, load_prices, shared_needing_licence
 from ..snapshot import TenantSnapshot
 from ..text import day, every, plural, verb
 from .base import Finding, _all_are, _label, _names, _unavailable, rule
@@ -456,7 +456,7 @@ def licensed_disabled(snap: TenantSnapshot, now: datetime):
     users = snap.objects("users", "user")
     if users is None:
         return _unavailable("User data hasn't been collected yet")
-    needs = _shared_needing_licence(snap)
+    needs = shared_needing_licence(snap)
     findings = [
         Finding("medium", _label(u), f"Disabled, holding {plural(len(u.get('skuIds') or []), 'licence')}", u["_id"])
         for u in users
@@ -473,25 +473,6 @@ def licensed_disabled(snap: TenantSnapshot, now: datetime):
         if findings
         else ("pass", f"No disabled account holds a licence{kept}", [])
     )
-
-
-SHARED_FREE_BYTES = 50 * 1024**3
-
-
-def _shared_needing_licence(snap: TenantSnapshot) -> set[str]:
-    """Shared mailboxes that must keep a licence although their account is blocked from sign-in (as it
-    should be): over 50 GB, with an archive or on litigation hold. Their directory object ids."""
-    sizes = {r.get("mailboxId") or r["_id"]: r for r in snap.objects("mailbox_usage", "mailbox_size") or []}
-    out = set()
-    for m in snap.objects("mailboxes", "mailbox") or []:
-        if m.get("RecipientTypeDetails") != "SharedMailbox" or not m.get("ExternalDirectoryObjectId"):
-            continue
-        size = sizes.get(m["_id"]) or {}
-        archive = m.get("ArchiveStatus") not in (None, "", "None")
-        big = isinstance(size.get("totalBytes"), int) and size["totalBytes"] > SHARED_FREE_BYTES
-        if archive or m.get("LitigationHoldEnabled") or big:
-            out.add(m["ExternalDirectoryObjectId"])
-    return out
 
 
 @rule(

@@ -228,13 +228,13 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `groups` | Groups and Teams | Who can create teams and groups, which have no owner, and the guests in each. | `groups` |
 | `guests` | Guests and sharing | Who can invite and share externally, and every guest account. | `tenant_policies`, `users` |
 | `hybrid` | Hybrid identity | Directory sync from on-premises AD, password hash sync, how each domain signs in, and admin accounts synced from AD. | `admin_roles`, `directory_sync`, `users` |
-| `inactive` | Inactive accounts | Members and guests who haven't signed in for a long time, and old invitations. | `admin_roles`, `tenant_profile`, `users` |
+| `inactive` | Inactive accounts | Members and guests who haven't signed in for a long time, and old invitations. | `admin_roles`, `mailbox_usage`, `mailboxes`, `tenant_profile`, `users` |
 | `inbox-rules` | Inbox rules | Rules that forward, delete or hide mail, and every rule in every mailbox. | `inbox_rules`, `mailboxes` |
 | `intune-policies` | Intune policies | Which platforms have a compliance policy, what each compliance policy requires, configuration profiles and Windows update rings, endpoint security policies and app protection for phones, with whom each applies to. | `devices`, `group_nesting`, `groups`, `intune_policies` |
 | `legacy-auth` | Legacy sign-ins | Sign-ins with SMTP AUTH, IMAP, POP and other protocols that can't do MFA, and which mailboxes still allow them. | `legacy_signins`, `mailboxes` |
 | `licence-changes` | Licence changes | Who was given or lost a licence and when, who made the change, and licences bought and assigned month by month, from Office Sentry's own history. | `tenant_profile`, `users` |
-| `licence-rightsizing` | Licence right-sizing | People who could move to a cheaper licence, and services people are licensed for but don't use. | `m365_usage`, `mailbox_usage`, `tenant_profile`, `users` |
-| `licences` | Licence waste | Paid licences nobody uses, in money, and the accounts holding them. | `tenant_profile`, `users` |
+| `licence-rightsizing` | Licence right-sizing | People who could move to a cheaper licence, and services people are licensed for but don't use. | `admin_roles`, `devices`, `m365_usage`, `mailbox_usage`, `tenant_profile`, `users` |
+| `licences` | Licence waste | Paid licences nobody uses, in money, and the accounts holding them. | `mailbox_usage`, `mailboxes`, `tenant_profile`, `users` |
 | `mail-flow` | Mail flow by domain | How much mail each domain sends and receives, how much was delivered, sent to Junk, quarantined or failed, and who gets the most spam and phishing. | `mail_flow` |
 | `mail-protection` | Mail rules and protection | Mail flow rules and what each does, connectors, and the anti-spam, anti-phishing and anti-malware policies (Safe Links and Safe Attachments too) with whom each applies to. | `mail_protection`, `mailboxes` |
 | `mailbox-holds` | Mailbox holds and archiving | Which mailboxes are on litigation hold or have an archive, leavers' mailboxes that aren't held, and large mailboxes that need an archive. | `mailbox_usage`, `mailboxes`, `users` |
@@ -260,7 +260,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `teams` | Teams channels, guests and apps | Each team's private and shared channels and who is in them, guests and people from other organisations, the apps added to each team, and teams nobody has used lately. | `teams` |
 | `tenant-settings` | Tenant settings | What users and guests can do by default, and whether users can ask an admin to approve apps. | `tenant_policies` |
 | `unused-apps` | Unused apps | Every app from outside Microsoft with when it last signed in, and those unused for 90 days that still hold permissions. | `app_consents`, `app_sign_ins` |
-| `usage` | Microsoft 365 usage | Who actually uses email, Teams, OneDrive, SharePoint and the Office apps, and when each person was last active. | `m365_usage` |
+| `usage` | Microsoft 365 usage | Who actually uses email, Teams, OneDrive, SharePoint and the Office apps, and when each person was last active. | `m365_usage`, `users` |
 
 ## Permissions
 

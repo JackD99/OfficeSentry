@@ -5,11 +5,13 @@ import hashlib
 import io
 from datetime import UTC, datetime
 
+import pytest
 from openpyxl import load_workbook
 
 from officesentry import store, usage
-from officesentry.reports import data_reports, rollups
+from officesentry.reports import data_reports, rollups, views
 from officesentry.snapshot import TenantSnapshot
+from tests import devicedata as dd
 from tests import graphdata as gd
 from tests import usagedata as ud
 from tests.conftest import login, make_user
@@ -35,6 +37,14 @@ def _report(db, tenant_id, key):
 
 def _section(report, title):
     return next(s for s in report.sections if s.title == title)
+
+
+@pytest.fixture
+def ann_unmanaged(monkeypatch):
+    """Ann without her Global Administrator role and her Intune-managed devices, so her Business Premium can be
+    right-sized like anyone's."""
+    monkeypatch.setattr(gd, "ROLE_ASSIGNMENTS", [a for a in gd.ROLE_ASSIGNMENTS if a["principalId"] != "u1"])
+    monkeypatch.setattr(dd, "MANAGED_DEVICES", [d for d in dd.MANAGED_DEVICES if d["userPrincipalName"] != "ann@x.com"])
 
 
 def _price(db):
@@ -73,7 +83,7 @@ def test_collector_merges_reports_per_person(db, two_tenants):
     assert usage.desktop_use(erin) and not usage.desktop_use(carol)
     status = usage.status(snap)
     assert status["available"] and not status["concealed"] and all(status["read"].values())
-    assert snap.metric("usage.people") == 5  # Power Automate Free alone isn't a licence
+    assert snap.metric("usage.people") == 4  # Power Automate Free alone isn't a licence; Bob is disabled
     assert snap.metric("usage.active.exchange") == 3
     assert snap.metric("usage.desktop_apps") == 1
     assert snap.runs["m365_usage"]["status"] == "succeeded"
@@ -167,6 +177,23 @@ def test_rules():
     assert usage.Suggestion("SPB", "STANDARDPACK", "").saving(PRICES) is None  # target not priced
 
 
+def test_rules_keep_what_a_person_relies_on():
+    mail = _row(
+        {"exchange", "office"}, {"windows": False, "mac": False, "mobile": False, "web": True}, {"outlook": ["web"]}
+    )
+    web = _row({"exchange", "teams", "office"}, {"windows": False, "mac": False, "mobile": False, "web": True})
+    # An admin, or someone whose PC Intune manages, keeps a suite with Intune and Entra ID P1.
+    assert usage.rightsize(mail, ["SPB"], relies_on_security=True) == []
+    assert usage.rightsize(web, ["SPE_E3"], relies_on_security=True) == []
+    [s] = usage.rightsize(mail, ["O365_BUSINESS_PREMIUM"], relies_on_security=True)  # no Intune to lose
+    assert s.target == "EXCHANGESTANDARD"
+    # A big, archived or held mailbox doesn't go to a 50 GB plan without holds, nor from Business Basic to the
+    # dearer Exchange Online Plan 2.
+    held = {"totalBytes": 80 * 1024**3, "litigationHold": True}
+    assert usage.rightsize(web, ["ENTERPRISEPACK", "O365_BUSINESS_PREMIUM"], held) == []
+    assert usage.rightsize(mail, ["O365_BUSINESS_ESSENTIALS"], held) == []
+
+
 # -- Reports ---------------------------------------------------------------------------------
 
 
@@ -176,11 +203,17 @@ def test_usage_report(db, two_tenants):
     report = _report(db, alpha, "usage")
     assert not report.unavailable and not report.notice
     tiles = {t.label: t for t in report.tiles}
-    assert tiles["Active people"].value == "60%"  # Ann, Carol and Erin of five licensed
-    assert tiles["Email"].value == "60%" and tiles["Email"].foot == "3 of 5 licensed"
-    assert tiles["Desktop Office apps"].foot == "1 of 4 with Office used Windows or Mac apps"
+    # Ann, Carol and Erin of four licensed: Bob's account is disabled, so he can't use anything.
+    assert tiles["Active people"].value == "75%"
+    assert tiles["Email"].value == "75%" and tiles["Email"].foot == "3 of 4 licensed"
+    assert tiles["Desktop Office apps"].foot == "1 of 4 with the desktop apps in their plan used them"
+    assert report.notes == [
+        "1 disabled account still holding licences is left out, as nobody can sign in to it. "
+        "Licence waste counts its licences."
+    ]
     service = {r[0]: r for r in _section(report, "Usage by service").rows}
-    assert service["Teams"] == ["Teams", 5, 2, 3, "40%"]
+    assert service["Teams"] == ["Teams", 4, 2, 2, "50%"]
+    assert "bob@x.com" not in [r[0] for r in _section(report, "Last active in each service").rows]
     last = {r[0]: r for r in _section(report, "Last active in each service").rows}
     assert last["dan@x.com"][1] != "Never" and last["dan@x.com"][2] == "Never"
     assert last["carol@x.com"][6] == "Mobile, Web" and last["erin@x.com"][6] == "Windows, Mac"
@@ -201,7 +234,18 @@ def test_usage_report(db, two_tenants):
     assert not _section(report, "Activity counts").compare
 
 
-def test_rightsizing_report(db, two_tenants):
+def test_desktop_apps_count_only_plans_that_include_them(db, two_tenants):
+    """Business Basic people can't install the desktop apps, so they aren't counted as not using them."""
+    alpha, _ = two_tenants
+    basic = ud.active_user("fay@x.com", ["MICROSOFT 365 BUSINESS BASIC"], exchange=1)
+    apps = ud.APP_USERS + [ud.app_user("fay@x.com", 1, outlook=("Web",))]
+    seed_tenant(db, alpha, usage_kw={"active": ud.ACTIVE_USERS + [basic], "apps": apps})
+    tiles = {t.label: t for t in _report(db, alpha, "usage").tiles}
+    assert tiles["Desktop Office apps"].foot == "1 of 4 with the desktop apps in their plan used them"
+    assert tiles["Active people"].foot == "4 of 5 licensed used Microsoft 365"
+
+
+def test_rightsizing_report(db, two_tenants, ann_unmanaged):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     _price(db)
@@ -224,9 +268,36 @@ def test_rightsizing_report(db, two_tenants):
     assert highlights["Saving / year"].value == 366.00
     assert highlights["People who could move"].value == 3
     assert not any("no price" in n for n in report.notes)
+    # Each figure opens the table behind it.
+    opens = {label: views.rows_view(report, h.rows)[1] for label, h in highlights.items()}
+    assert opens["People who could move"].endswith("could-move-to-a-cheaper-licence")
+    assert opens["Not using a service"].endswith("licensed-but-not-used")
 
 
-def test_rightsizing_skips_new_and_inactive_accounts_and_notes_missing_prices(db, two_tenants):
+def test_rightsizing_keeps_admins_and_managed_devices_on_business_premium(db, two_tenants):
+    """Ann is a Global Administrator with PCs Intune manages: Exchange Online would take her out of Conditional
+    Access and her PCs out of compliance."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    _price(db)
+    report = _report(db, alpha, "licence-rightsizing")
+    rows = {r[0]: r for r in _section(report, "Could move to a cheaper licence").rows}
+    assert "ann@x.com" not in rows and set(rows) == {"dan@x.com", "carol@x.com"}
+    assert {h.label: h.value for h in report.highlights}["Saving / month"] == 15.70
+
+
+def test_a_move_that_saves_nothing_isnt_suggested(db, two_tenants, ann_unmanaged):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    _price(db)
+    db.execute("UPDATE sku_prices SET monthly_price = 4.90 WHERE sku_part_number = 'O365_BUSINESS_PREMIUM'")
+    rows = {
+        r[0]: r for r in _section(_report(db, alpha, "licence-rightsizing"), "Could move to a cheaper licence").rows
+    }
+    assert "carol@x.com" not in rows  # Business Standard to Business Basic, at the same price
+
+
+def test_rightsizing_skips_new_and_inactive_accounts_and_notes_missing_prices(db, two_tenants, ann_unmanaged):
     alpha, _ = two_tenants
     from tests.test_collectors import USERS
 
@@ -251,7 +322,7 @@ def test_rightsizing_skips_new_and_inactive_accounts_and_notes_missing_prices(db
     assert report.highlights[0].value == "Not priced"
 
 
-def test_rightsizing_finds_the_mailbox_by_account_not_address(db, two_tenants):
+def test_rightsizing_finds_the_mailbox_by_account_not_address(db, two_tenants, ann_unmanaged):
     """Ann signs in as ann@x.com, but her mailbox's address is ann.smith@x.com and it holds 48 GB with an archive:
     too much for Exchange Online Plan 1, so the cheaper plan to suggest is Plan 2."""
     alpha, _ = two_tenants
@@ -294,7 +365,7 @@ def test_rightsizing_with_hidden_names_never_suggests_removing_a_licence(db, two
     assert any("removing a licence isn't suggested for 2 people" in n for n in report.notes)
 
 
-def test_rollup_and_pages(client, db, two_tenants):
+def test_rollup_and_pages(client, db, two_tenants, ann_unmanaged):
     alpha, bravo = two_tenants
     seed_tenant(db, alpha)
     _price(db)

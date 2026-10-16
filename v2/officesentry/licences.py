@@ -163,6 +163,7 @@ class SkuLine:
 class LicenceSummary:
     lines: list[SkuLine] = field(default_factory=list)
     stale_available: bool = False
+    kept: int = 0  # shared mailboxes holding paid licences they need, not counted as waste
 
     @property
     def wasted_units(self) -> int:
@@ -194,9 +195,11 @@ def licence_summary(
     prices: dict[str, float],
     now: datetime | None = None,
     subscriptions: list[dict] | None = None,
+    keep: set[str] | None = None,
 ) -> LicenceSummary:
     """Licences bought, assigned and wasted per SKU. Pass the tenant's subscriptions (company_subscription
-    objects) so trial licences aren't counted as bought and unused."""
+    objects) so trial licences aren't counted as bought and unused, and ``keep`` (``shared_needing_licence``)
+    so shared mailboxes that need their licence aren't counted as disabled accounts holding one."""
     now = now or datetime.now(UTC)
     summary = LicenceSummary()
     by_id: dict[str, SkuLine] = {}
@@ -226,6 +229,9 @@ def licence_summary(
         stale = is_stale(u, now) if u.get("accountEnabled") else False
         if u.get("accountEnabled") and stale is not None:  # a disabled user says nothing about sign-in data
             summary.stale_available = True
+        if keep and u.get("_id") in keep:
+            summary.kept += any(sku_id in by_id for sku_id in u.get("skuIds") or [])
+            continue
         for sku_id in u.get("skuIds") or []:
             line = by_id.get(sku_id)
             if line is None:
@@ -236,6 +242,33 @@ def licence_summary(
                 line.on_stale_users += 1
     summary.lines = sorted(by_id.values(), key=lambda line: (line.free, -(line.monthly_waste or 0), line.name))
     return summary
+
+
+# Exchange Online gives a shared mailbox 50 GB without a licence.
+SHARED_FREE_BYTES = 50 * 1024**3
+
+
+def shared_needing_licence(snap) -> set[str]:
+    """Shared mailboxes that must keep a licence although their account is blocked from sign-in (as it
+    should be): over 50 GB, with an archive or on litigation hold. Their directory object ids."""
+    sizes = {r.get("mailboxId") or r["_id"]: r for r in snap.objects("mailbox_usage", "mailbox_size") or []}
+    out = set()
+    for m in snap.objects("mailboxes", "mailbox") or []:
+        if m.get("RecipientTypeDetails") != "SharedMailbox" or not m.get("ExternalDirectoryObjectId"):
+            continue
+        size = sizes.get(m["_id"]) or {}
+        archive = m.get("ArchiveStatus") not in (None, "", "None")
+        big = isinstance(size.get("totalBytes"), int) and size["totalBytes"] > SHARED_FREE_BYTES
+        if archive or m.get("LitigationHoldEnabled") or big:
+            out.add(m["ExternalDirectoryObjectId"])
+    return out
+
+
+def working_units(sku: dict) -> int:
+    """Licences that work: enabled ones, plus those of a subscription in its grace period, which Microsoft
+    moves from enabled to warning until the subscription is suspended."""
+    units = sku.get("prepaidUnits") if isinstance(sku.get("prepaidUnits"), dict) else {}
+    return (units.get("enabled") or 0) + (units.get("warning") or 0)
 
 
 def is_free(sku: dict) -> bool:

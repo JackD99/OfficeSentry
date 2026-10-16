@@ -19,7 +19,7 @@ from ..collectors import REGISTRY, core
 from ..db import try_write, utcnow
 from ..devices import parse_day
 from ..findings import finding_key, lifecycle_map, resolved_since
-from ..licences import LicenceSummary, licence_summary, load_prices
+from ..licences import LicenceSummary, licence_summary, load_prices, shared_needing_licence
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .charts import line_chart, month_columns
@@ -300,7 +300,7 @@ def build(conn, tenant, now: datetime | None = None, since: datetime | None = No
     skus = snap.objects("tenant_profile", "subscribed_sku") or []
     users = snap.objects("users", "user")
     subscriptions = snap.objects("tenant_profile", "company_subscription")
-    licences = licence_summary(skus, users, load_prices(conn), now, subscriptions)
+    licences = licence_summary(skus, users, load_prices(conn), now, subscriptions, shared_needing_licence(snap))
 
     stale = by_key["stale_users"]
     kpis = [

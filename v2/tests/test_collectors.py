@@ -146,6 +146,7 @@ def test_tenant_profile_detects_capabilities(db, two_tenants, factory):
         "licences.purchased": 10,
         "licences.assigned": 7,
         "licences.unassigned": 3,
+        "licences.unassigned_paid": 3,
         "licences.trials": 0,
     }
     subs = {s["_id"]: s for s in store.run_objects(db, run_id, "company_subscription")}
@@ -153,6 +154,27 @@ def test_tenant_profile_detects_capabilities(db, two_tenants, factory):
     assert subs["sub-bp"]["skuPartNumber"] == "SPB" and subs["sub-bp"]["nextLifecycleDateTime"]
     assert "ownerType" not in subs["sub-bp"]  # only what the report uses
     assert store.run_objects(db, run_id, "subscription_status")[0]["available"] is True
+
+
+@responses.activate
+def test_unassigned_paid_licences_leave_out_free_allocations_and_trials(db, two_tenants, factory):
+    """What changed tracks unassigned licences as Licence waste counts them: Power Automate Free's 10,000 and a
+    Copilot trial's 25 seats aren't licences anyone bought."""
+    alpha, _ = two_tenants
+    free = {"skuId": "sku-flow", "skuPartNumber": "FLOW_FREE", "appliesTo": "User", "capabilityStatus": "Enabled"}
+    trial = {"skuId": "sku-cop", "skuPartNumber": "Microsoft_365_Copilot", "appliesTo": "User", "servicePlans": []}
+    skus = SKUS + [
+        free | {"prepaidUnits": {"enabled": 10000}, "consumedUnits": 4, "servicePlans": []},
+        trial | {"capabilityStatus": "Enabled", "prepaidUnits": {"enabled": 25}, "consumedUnits": 2},
+    ]
+    subs = ld.SUBSCRIPTIONS + [ld.subscription("sub-cop", "sku-cop", "Microsoft_365_Copilot", trial=True, total=25)]
+    responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
+    responses.get(f"{V1}/subscribedSkus", json={"value": skus})
+    responses.get(f"{V1}/directory/subscriptions", json={"value": subs})
+    run_id, _ = _run(db, alpha, "tenant_profile", factory)
+    metrics = _metrics(db, run_id)
+    assert metrics["licences.unassigned"] == 3 + 9996 + 23  # every allocation, as before
+    assert metrics["licences.unassigned_paid"] == 3  # Business Premium's only
 
 
 @pytest.mark.parametrize(
@@ -174,6 +196,19 @@ def test_licence_capabilities_recognise_government_education_and_frontline_plans
     }
     caps = capabilities_from_skus([sku])
     assert (caps["exchange"], caps["sharepoint"]) == (exchange, sharepoint)
+
+
+def test_a_subscription_in_its_grace_period_keeps_its_features():
+    """A lapsing Business Premium (licences moved to warning) still gives Intune and sign-in activity, so the
+    reports that need them keep working until it's actually suspended."""
+    from officesentry.collectors.tenant_profile import capabilities_from_skus
+
+    plans = [{"servicePlanName": p, "provisioningStatus": "Success"} for p in ("AAD_PREMIUM", "INTUNE_A")]
+    lapsing = {"capabilityStatus": "Warning", "prepaidUnits": {"enabled": 0, "warning": 10}, "servicePlans": plans}
+    caps = capabilities_from_skus([lapsing])
+    assert caps["entra_p1"] and caps["intune"]
+    suspended = lapsing | {"capabilityStatus": "Suspended", "prepaidUnits": {"enabled": 0, "suspended": 10}}
+    assert not capabilities_from_skus([suspended])["intune"]
 
 
 @responses.activate

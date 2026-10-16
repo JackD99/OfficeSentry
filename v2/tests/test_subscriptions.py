@@ -74,7 +74,21 @@ def test_products_with_cost_and_what_needs_action_first(db, two_tenants):
     figures = {h.label: h for h in report.highlights}
     assert float(figures["Monthly cost"].value) == round(10 * 18.10, 2)  # the Copilot trial costs nothing yet
     assert figures["Monthly cost"].foot == "Licences bought, at your prices"  # lapsed Visio isn't bought any more
-    assert figures["Licences in use"].value == "15 of 18"  # suspended Exchange licences aren't in use
+    # Suspended Exchange licences aren't in use, and the Copilot trial's aren't paid licences.
+    assert figures["Licences in use"].value == "13 of 13"
+
+
+def test_a_trial_beside_paid_licences_isnt_the_renewal_date():
+    from officesentry.reports.subscriptions import _next_dates
+
+    now = datetime(2026, 10, 15, tzinfo=UTC)
+    subs = [
+        {"skuId": "sku-bp", "status": "Enabled", "isTrial": False, "nextLifecycleDateTime": "2027-03-01T00:00:00Z"},
+        {"skuId": "sku-bp", "status": "Enabled", "isTrial": True, "nextLifecycleDateTime": "2026-11-01T00:00:00Z"},
+        {"skuId": "sku-cp", "status": "Enabled", "isTrial": True, "nextLifecycleDateTime": "2026-11-05T00:00:00Z"},
+    ]
+    dates = {sid: f"{when:%Y-%m-%d}" for sid, when in _next_dates(subs, now).items()}
+    assert dates == {"sku-bp": "2027-03-01", "sku-cp": "2026-11-05"}
 
 
 def test_renewals_list_trials_grace_and_suspended_first(db, two_tenants):

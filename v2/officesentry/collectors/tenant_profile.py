@@ -15,6 +15,7 @@ import re
 
 from .. import store
 from ..graph import GraphError
+from ..licences import licence_summary, working_units
 from .base import Collector, RunContext, register
 
 SUBSCRIPTION_FIELDS = (
@@ -61,7 +62,7 @@ def capabilities_from_skus(skus: list[dict]) -> dict:
     for sku in skus:
         if sku.get("capabilityStatus") not in ("Enabled", "Warning"):
             continue
-        if (sku.get("prepaidUnits") or {}).get("enabled", 0) <= 0:
+        if working_units(sku) <= 0:  # a subscription in its grace period still gives its features
             continue
         for plan in sku.get("servicePlans", []):
             flag = capability_of(plan.get("servicePlanName") or "")
@@ -103,18 +104,23 @@ class TenantProfile(Collector):
         ctx.metric("licences.assigned", consumed)
         ctx.metric("licences.unassigned", max(enabled - consumed, 0))
         ctx.log("Capabilities: " + (", ".join(sorted(k for k, v in caps.items() if v)) or "none"))
-        self._subscriptions(ctx)
+        subs = self._subscriptions(ctx)
+        # Unassigned as Licence waste counts them: paid licences only, not free allocations (Power Automate
+        # Free's 10,000) or trial seats. What changed tracks this one.
+        lines = licence_summary(skus, None, {}, subscriptions=subs).lines
+        ctx.metric("licences.unassigned_paid", sum(line.unassigned for line in lines if not line.free))
 
     @staticmethod
-    def _subscriptions(ctx: RunContext) -> None:
+    def _subscriptions(ctx: RunContext) -> list[dict] | None:
         try:
             subs = ctx.paged(ctx.graph.get_all("/directory/subscriptions"))
         except GraphError as exc:
             ctx.warn(f"Subscription renewal dates weren't readable: {exc.message}")
             ctx.objects("subscription_status", [("subscriptions", {"available": False})])
-            return
+            return None
         ctx.objects(
             "company_subscription", [(s["id"], {k: s.get(k) for k in SUBSCRIPTION_FIELDS}) for s in subs if s.get("id")]
         )
         ctx.objects("subscription_status", [("subscriptions", {"available": True})])
         ctx.metric("licences.trials", sum(1 for s in subs if s.get("isTrial") and s.get("status") == "Enabled"))
+        return subs

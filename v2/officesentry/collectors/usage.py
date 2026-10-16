@@ -16,7 +16,8 @@ from datetime import timedelta
 from .. import clouds
 from ..devices import parse_day
 from ..graph import GraphError, PermissionMissing
-from ..usage import ACTIVE_DAYS, APPS, COLLECTOR, COPILOT, PLATFORMS, SERVICES, concealed, part_for_product
+from ..snapshot import TenantSnapshot
+from ..usage import ACTIVE_DAYS, APPS, COLLECTOR, COPILOT, PLATFORMS, SERVICES, blocked, concealed, part_for_product
 from ..usage import licensed as is_licensed
 from .base import Collector, RunContext, register
 from .connection import awaiting
@@ -252,7 +253,9 @@ class Usage(Collector):
             ctx.log("Microsoft is concealing names in usage reports; people show as codes", "warning")
         ctx.objects("user_usage", list(rows.items()))
 
-        licensed = [r for r in rows.values() if is_licensed(r)]
+        # As the usage report counts them: accounts blocked from sign-in can't use anything, so they're left out.
+        disabled = blocked(TenantSnapshot(ctx.conn, ctx.tenant))
+        licensed = [r for upn, r in rows.items() if is_licensed(r) and upn not in disabled]
         ctx.metric("usage.people", len(licensed))
         ctx.metric("usage.active", sum(any(r["active"].values()) for r in licensed))
         for key, _ in SERVICES:

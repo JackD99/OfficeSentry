@@ -25,11 +25,12 @@ from ..licences import (
     licence_summary,
     load_prices,
     never_signed_in,
+    shared_needing_licence,
     sku_name,
 )
 from ..permission_batch import waiting_text
 from ..snapshot import TenantSnapshot
-from ..text import plural
+from ..text import plural, verb
 from .charts import line_chart
 from .data_reports import Chart, DataReport, Highlight, Rows, Section, metric_trend
 from .monthly_review import _secure_score_points, setting
@@ -748,11 +749,20 @@ def _break_glass(roles: dict[str, dict], users: dict[str, dict], reg: Registrati
 # -- Licence waste ---------------------------------------------------------------------------
 
 
+def _kept_note(n: int, left_out: str) -> str:
+    """Shared mailboxes over 50 GB, with an archive or on hold need a licence, though nobody signs in to them."""
+    what = "holds a licence it needs" if n == 1 else "hold licences they need"
+    return (
+        f"{plural(n, 'shared mailbox', 'shared mailboxes')} {what} (over 50 GB, with an archive or on hold), "
+        f"so {verb(n, 'it is not', 'they are not')} {left_out}."
+    )
+
+
 @report(
     "licences",
     "Licence waste",
     "Paid licences nobody uses, in money, and the accounts holding them.",
-    ("tenant_profile", "users"),
+    ("tenant_profile", "users", "mailboxes", "mailbox_usage"),
     group="tenant",
     order=30,
     keywords="licenses waste cost money unused subscriptions",
@@ -765,7 +775,8 @@ def licences(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     users = snap.objects("users", "user")
     currency = setting(snap.conn, "currency", "GBP")
     subscriptions = snap.objects("tenant_profile", "company_subscription")
-    summary = licence_summary(skus, users, load_prices(snap.conn), now, subscriptions)
+    keep = shared_needing_licence(snap)
+    summary = licence_summary(skus, users, load_prices(snap.conn), now, subscriptions, keep)
     paid = {line.sku_id: line for line in summary.lines if not line.free}
 
     def cash(value: float | None) -> object:
@@ -780,6 +791,8 @@ def licences(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             f"Sign-in dates need {P1}, so licences on inactive accounts aren't counted. "
             "Licences on disabled accounts and unassigned licences are."
         )
+    if summary.kept:
+        report.notes.append(_kept_note(summary.kept, "counted as waste"))
     if any(line.monthly_price is None for line in paid.values()):
         report.notes.append(
             "Some licences have no price, so their waste is counted in licences rather than money. "
@@ -848,7 +861,9 @@ def licences(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         prices = [paid[sid].monthly_price for sid in held]
         total = sum(p for p in prices if p is not None) if any(p is not None for p in prices) else None
         status = None
-        if not u.get("accountEnabled"):
+        if u["_id"] in keep:
+            pass  # a shared mailbox that needs its licence
+        elif not u.get("accountEnabled"):
             status = "Disabled"
         elif is_stale(u, now):
             status = "Never signed in" if last_sign_in(u) is None else "Inactive"
@@ -932,7 +947,7 @@ def _inactive_for(user: dict, now: datetime) -> tuple[str, int | None]:
     "inactive",
     "Inactive accounts",
     "Members and guests who haven't signed in for a long time, and old invitations.",
-    ("users", "admin_roles", "tenant_profile"),
+    ("users", "admin_roles", "tenant_profile", "mailboxes", "mailbox_usage"),
     group="identity",
     order=50,
     keywords="stale dormant leavers unused accounts sign-in last login",
@@ -999,11 +1014,14 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     )
     member_rows, guest_rows = [], []
     counts = {"members": 0, "licensed": 0, "guests": 0}
+    keep, kept = shared_needing_licence(snap), 0
     for u in users:
         uid, label = u["_id"], _label(u)
         licences = [sku_name(skus[s]) for s in u.get("skuIds") or [] if s in skus]  # paid ones only
         guest = u.get("userType") == "Guest"
         if not u.get("accountEnabled"):
+            if uid in keep and licences:  # a shared mailbox that needs its licence
+                licences, kept = [], kept + 1
             if licences or uid in roles:
                 disabled.add([label, licences, roles.get(uid), _sign_in(u)], "medium" if uid in roles else "low")
             continue
@@ -1059,6 +1077,8 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         members.add(row, flag)
     for _, row, flag in sorted(guest_rows, key=lambda r: r[0]):
         guests.add(row, flag)
+    if kept:
+        disabled.intro += " " + _kept_note(kept, "listed")
     report.sections = ([members, guests] if activity else []) + [pending, disabled]
 
     def figure(n: int) -> object:

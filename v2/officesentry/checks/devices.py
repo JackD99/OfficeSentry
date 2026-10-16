@@ -248,6 +248,9 @@ def stale_devices(snap: TenantSnapshot, now: datetime):
     )
 
 
+HYBRID_NO_KEY = "Encrypted, no recovery key in Entra ID: check it's saved in on-premises Active Directory"
+
+
 @rule(
     "bitlocker_keys",
     "Windows computers have their BitLocker recovery key saved",
@@ -275,16 +278,24 @@ def bitlocker_keys(snap: TenantSnapshot, now: datetime):
     status = devices.objects(snap, "intune_status") or []
     managed = (devices.objects(snap, "managed_device") or []) if status and status[0].get("available") else []
     encrypted = {(d.get("azureADDeviceId") or "").lower(): d.get("isEncrypted") for d in managed}
-    findings = []
+    findings, unencrypted, hybrid = [], 0, 0
     for d in computers:
         device_id = (d.get("deviceId") or "").lower()
         if devices.has_recovery_key(device_id, keys):
             continue
         is_encrypted = encrypted.get(device_id)
         if is_encrypted is False:
-            continue  # not encrypted at all: device_encryption says so
+            unencrypted += 1  # not encrypted at all: device_encryption says so
+            continue
         name = d.get("displayName") or d["_id"]
-        if is_encrypted:
+        if d.get("trustType") == devices.HYBRID:
+            # Usually saved in on-premises Active Directory, which Office Sentry can't see: worth a look only
+            # when Intune says the disk is encrypted.
+            if is_encrypted:
+                findings.append(Finding("low", name, HYBRID_NO_KEY, d["_id"]))
+            else:
+                hybrid += 1
+        elif is_encrypted:
             findings.append(Finding("medium", name, "Encrypted, but no recovery key saved in Entra ID", d["_id"]))
         else:
             findings.append(Finding("low", name, "No recovery key saved in Entra ID (encryption not known)", d["_id"]))
@@ -294,7 +305,18 @@ def bitlocker_keys(snap: TenantSnapshot, now: datetime):
             f"{len(findings)} of {plural(len(computers), 'joined Windows computer')} without a saved recovery key",
             findings,
         )
-    return ("pass", _all_are(len(computers), "joined Windows computer") + " covered by a saved recovery key", [])
+    if not unencrypted and not hybrid:
+        return ("pass", _all_are(len(computers), "joined Windows computer") + " covered by a saved recovery key", [])
+    saved = len(computers) - unencrypted - hybrid
+    others = [f"{unencrypted} not encrypted"] if unencrypted else []
+    if hybrid:
+        others.append(f"{hybrid} hybrid joined, whose {verb(hybrid, 'key', 'keys')} may be in on-premises AD")
+    return (
+        "pass",
+        f"{saved} of {plural(len(computers), 'joined Windows computer')} {verb(saved, 'has', 'have')} a saved "
+        f"recovery key ({', '.join(others)})",
+        [],
+    )
 
 
 @rule(

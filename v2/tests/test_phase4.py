@@ -9,6 +9,7 @@ import responses
 from officesentry import coverage, store
 from officesentry.exchange import EXCHANGE_ROOT, ExchangeAccessDenied, ExchangeClient, ExchangeError
 from officesentry.mailflow import inbox_rule_risk, is_external, smtp_address
+from officesentry.reports.data_reports import build
 from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
 from tests import graphdata as gd
@@ -588,6 +589,25 @@ def test_shared_mailbox_that_needs_its_licence_is_not_waste(db, two_tenants):
     assert "(not counting 1 shared mailbox that needs one)" in held.summary
     plain = {r.key: r for r in evaluate(TenantSnapshot(db, store.get_tenant(db, beta)))}["licensed_disabled"]
     assert "info@x.com" in [f.subject for f in plain.findings]  # no hold, archive or size: licence not needed
+
+    # The reports agree with the check: Licence waste and Inactive accounts leave it out, and say so.
+    def sections(tenant, key):
+        report = build(db, store.get_tenant(db, tenant), key, datetime.now(UTC))
+        return report, {s.title: s for s in report.sections}
+
+    waste, kept = sections(alpha, "licences")
+    assert "info@x.com" not in [r[0] for r in kept["Accounts to review"].rows]
+    assert any("1 shared mailbox holds a licence it needs" in n for n in waste.notes)
+    _, counted = sections(beta, "licences")
+    assert "info@x.com" in [r[0] for r in counted["Accounts to review"].rows]
+    on_disabled = [sum(r[4] for r in x["Waste by subscription"].rows) for x in (kept, counted)]
+    assert on_disabled[1] == on_disabled[0] + 1
+    _, inactive = sections(alpha, "inactive")
+    disabled = inactive["Disabled accounts still holding licences or roles"]
+    assert "info@x.com" not in [r[0] for r in disabled.rows]
+    assert "so it is not listed" in disabled.intro
+    _, inactive = sections(beta, "inactive")
+    assert "info@x.com" in [r[0] for r in inactive["Disabled accounts still holding licences or roles"].rows]
 
 
 def test_shared_mailbox_over_50_gb_is_not_waste(db, two_tenants):
