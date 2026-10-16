@@ -41,9 +41,12 @@ approved before the update show the month as it is now, as before, until they're
 - **Update button:** when the data volume is full once the new version is running, the updater still goes
   back to the version before if the new one isn't healthy, and an update that stops part way never says
   "before anything was changed".
-- **Clients:** a line break or tab in a client's name becomes a space when the client is added or changed, as
-  the CSV import already did. A name with a line break stopped every email about that client; one saved before
-  this now goes into email subjects as a space, so those emails send.
+- An address or form with a number too big for the database, such as a client number 25 digits long, gets the
+  not-found page or says the number is too big, instead of a server error.
+- The sign-ins download on a client's **Activity history** is not found for a month with a newline after it,
+  which reached the file's name, or for year 0000, which broke the download off.
+- The **Activity log** download says in its last row when it holds only the newest 100,000 rows, and the
+  log's user filter finds someone whatever case their name is typed in.
 
 ### Security
 
