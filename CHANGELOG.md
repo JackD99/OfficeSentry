@@ -17,6 +17,33 @@ Yes, applied on start as usual, after a copy of the database is made: migration 
 each approved month-end report's commentary, recommendations and notes as the client was given them. Months
 approved before the update show the month as it is now, as before, until they're issued again.
 
+### Added
+
+- **The sign-in page says who to ask.** Under the sign-in card, "Trouble signing in? Contact Harbour IT at
+  help@... or 0161 ...", from the Branding page's support details, else the contact line the reports carry.
+
+### Changed
+
+- **A client's home page leads with where they stand**: the month's verdict, the account manager's note once
+  the month is approved, and buttons for the monthly review, its PDF and the two-page summary. Under it, the
+  MSP's own "What we recommend next" with each one's status and target, else what needs attention, led by
+  what was found ("1 admin without MFA") rather than the check's goal.
+- **The report email carries what the attached review does**: the verdict, the account manager's note ("From
+  Harbour IT") and their recommendations (else the top failing checks), in the HTML and the plain text.
+- **The verdict names the most urgent item** under it ("Most urgent: 1 admin without MFA"), on the review's
+  cover, report designs, the client's home page and the email.
+- **The two-page summary is two pages.** The summary PDF's cover is a band on page one, without a contents
+  list, so it's two pages with the account manager's note and recommendations, not three or four.
+- **A quarterly review compares with the start of the quarter.** A design with the quarter's blocks says
+  "Compared with 1 August", and its summary, key figures and What changed run from then, not from four weeks
+  ago.
+- **Check advice reads right to the client too.** "Review each app with the client", "the client's data" and
+  "Waiting for the client to approve" no longer reach a client's report, and admin MFA's advice no longer says
+  "each listed admin" where nothing is listed.
+- Charts of findings found and fixed name the first month and each January in full ("May 2026"), admin
+  activity in What changed gives dates in words ("6 Oct 2026"), and a quarterly review's Coming up shows
+  "Now" for what needs attention now.
+
 ### Fixed
 
 - [v2/DEPLOY.md](v2/DEPLOY.md), *Running on Windows without Docker*: updating no longer deletes the virtual
@@ -41,31 +68,19 @@ approved before the update show the month as it is now, as before, until they're
 - **Update button:** when the data volume is full once the new version is running, the updater still goes
   back to the version before if the new one isn't healthy, and an update that stops part way never says
   "before anything was changed".
-- No alert, alert email or webhook goes out about a client that was paused or archived while its collection
-  ran. The check used the client as it was when the collection started.
-- Accepting a risk with a review date of today or earlier is refused with a message saying why, and the date
-  box starts at tomorrow. Before, the risk was accepted and came straight back as due for review.
-- The report design editor keeps a 0 typed in a number box, such as *Affected items per check*, instead of
-  putting the default back, and keeps a number within the box's range.
-- A report design of more than 60 blocks is refused with a message, instead of saving without the blocks past
-  the 60th. The editor says so when you add or duplicate a block in a full design.
-- The design editor's hint under the cover title lists `{quarter}`, which the title and subtitle already took.
-- The offboard page counts the issued reports in the client's Report history that deleting removes, with a
-  link to it, names each user's role as the Users page does, and writes large counts with thousands
-  separators. `delete-tenant` counts the issued reports too.
-- Importing clients from a CSV:
-  - The preview's line numbers are the file's own, also when it has blank lines or a value over several
-    lines.
-  - UTF-16 files are read: Excel's *Unicode Text* and Windows PowerShell's `Export-Csv`, including the `#TYPE`
-    line it puts above the column names.
-  - The preview says rightly who sees the new clients straight away: everyone who sees every client, not
-    only admins.
-  - The preview says "1 new client", not "1 new clients".
-- A client's **Client sign-in** page keeps the approval link once approval is noted, for when the client
-  removes the sign-in app and has to approve it again. It says the approval was noted when someone there
-  first signed in.
-- The **Data retention** page writes counts with thousands separators, and says how long monthly snapshots
-  keep sign-in details at the saved setting, instead of always "about 13 months".
+- An address or form with a number too big for the database, such as a client number 25 digits long, gets the
+  not-found page or says the number is too big, instead of a server error.
+- The sign-ins download on a client's **Activity history** is not found for a month with a newline after it,
+  which reached the file's name, or for year 0000, which broke the download off.
+- The **Activity log** download says in its last row when it holds only the newest 100,000 rows, and the
+  log's user filter finds someone whatever case their name is typed in.
+- **A client's home page showed checks the month-end reviewer had left out of their copy.** It's now built
+  from the client's copy of the month, as their report, PDFs and email are.
+- **The email and the home page counted affected accounts as checks** ("46 checks need attention (1 critical,
+  30 high, 69 medium, 63 low findings)" beside a report saying 14 high). They count checks, as the report does.
+- In PDFs, the found-and-fixed chart's "Fixed" key was cut off at the right edge.
+- A full review whose month has commentary no longer runs its cover's contents list under the footer: the
+  account manager's note opens the page after the cover.
 
 ### Security
 

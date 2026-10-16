@@ -1,9 +1,14 @@
 name: CI
-# The product's own checks (v2/ is the whole product): lint and format, the tests on Python 3.11, 3.12 and
-# 3.13 with coverage, a subset on Windows, the Docker build and the dependency audit, on every pull request
-# and push to main. The weekly run also catches newly published vulnerabilities in the dependencies. (On a
-# private fork on GitHub Free, where minutes are limited, pull requests run Python 3.12 only and the Windows
-# job waits for main and the weekly run: the jobs below check github.event.repository.private.)
+# The product's own checks (v2/ is the whole product): lint and format, the tests with coverage, a subset on
+# Windows, the Docker build and the dependency audit, on every pull request and push to main. The weekly run
+# also catches newly published vulnerabilities in the dependencies.
+#
+# Pull requests run the tests on Python 3.12, the Docker image's; pushes to main and the weekly and manual
+# runs add 3.11 and 3.13. GitHub runs 20 of the account's jobs at once, and with several pull requests open
+# their jobs waited for a machine longer than they ran. A pull request that changes the dependencies or this
+# workflow still runs all three, since that's where a version-specific failure comes from. (On a private
+# fork on GitHub Free, where minutes are limited, pull requests run Python 3.12 only and the Windows job
+# waits for the weekly run: the jobs below check github.event.repository.private.)
 #
 # Each Python's tests run in parts on separate machines at the same time (pytest --shard, tests/conftest.py):
 # four for 3.12, which measures coverage, two each for 3.11 and 3.13, and three for Windows' subset, so a run
@@ -42,8 +47,8 @@ defaults:
     working-directory: v2
 
 jobs:
-  # Whether the pull request, or the push to main, changes anything but docs. Every other event tests
-  # everything.
+  # Whether the pull request, or the push to main, changes anything but docs, and which Pythons test it.
+  # Every other event tests everything on every Python.
   changes:
     name: What changed
     runs-on: ubuntu-24.04
@@ -56,6 +61,7 @@ jobs:
         working-directory: .
     outputs:
       code: ${{ steps.files.outputs.code }}
+      pythons: ${{ steps.files.outputs.pythons }}
     steps:
       - if: github.event_name == 'push'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -64,7 +70,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           BEFORE: ${{ github.event.before }}
+          PRIVATE: ${{ github.event.repository.private }}
         run: |
+          all='["3.11", "3.12", "3.13"]'
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
           elif [ "$GITHUB_EVENT_NAME" = push ] && [ -n "$BEFORE" ] && [ "${BEFORE//0/}" != "" ] \
@@ -73,18 +81,34 @@ jobs:
             files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
           else
             echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "pythons=$all" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           code=false
+          # Pushes to main test on every Python; pull requests only when they change what each Python installs
+          # or how CI runs it.
+          everywhere=true
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then everywhere=false; fi
           # In a case pattern, * also matches /.
           while IFS= read -r f; do
             case "$f" in
               *.md|docs/*|examples/*|website/*) ;;
+              v2/pyproject.toml|v2/requirements*.txt|.github/workflows/v2.yml) code=true; everywhere=true ;;
               *) code=true ;;
             esac
           done <<<"$files"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ] && [ "$PRIVATE" = true ]; then everywhere=false; fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
-          if [ "$code" = false ]; then echo "Only docs changed, so the tests are skipped." >> "$GITHUB_STEP_SUMMARY"; fi
+          if [ "$everywhere" = true ]; then
+            echo "pythons=$all" >> "$GITHUB_OUTPUT"
+          else
+            echo 'pythons=["3.12"]' >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$code" = false ]; then
+            echo "Only docs changed, so the tests are skipped." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$everywhere" = false ]; then
+            echo "Tests run on Python 3.12; main adds 3.11 and 3.13 after the merge." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   lint:
     needs: changes
@@ -121,14 +145,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Pull requests in the private repo: 3.12 only (the Docker image's Python). Everything else, and every
-        # pull request once the repo is public: 3.11, 3.12 and 3.13.
-        python: ${{ fromJSON(github.event_name == 'pull_request' && github.event.repository.private && '["3.12"]' || '["3.11", "3.12", "3.13"]') }}
+        # 3.12 (the Docker image's Python) on pull requests, 3.11, 3.12 and 3.13 on main and the weekly run:
+        # the changes job decides (see the top of this file).
+        python: ${{ fromJSON(needs.changes.outputs.pythons) }}
         # Change PARTS and the name above with these lists; the coverage job fails if a part is missing.
         part: [1, 2, 3, 4]
         # 3.11 and 3.13 run without coverage, in half the time, so two parts each finish with 3.12's four.
-        # That's four machines fewer for every pull request: GitHub runs 20 of the account's jobs at once, and
-        # with several pull requests open, jobs waited for a machine longer than they ran.
         exclude:
           - {python: '3.11', part: 3}
           - {python: '3.11', part: 4}

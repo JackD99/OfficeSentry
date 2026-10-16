@@ -14,7 +14,7 @@ from .base import Finding, _unavailable, rule
     "domain_federation_changed",
     "No unexpected changes to how domains sign in",
     "Identity",
-    "Confirm with the client that each change was planned (for example, setting up AD FS or another identity "
+    "Confirm that each change was planned (for example, setting up AD FS or another identity "
     "provider). If it wasn't, an attacker with admin rights may have federated the domain to their own identity "
     "provider so they can sign in as any user without a password or MFA: switch the domain back to managed "
     "sign-in, remove unknown federation settings, reset admin credentials and review the audit log.",

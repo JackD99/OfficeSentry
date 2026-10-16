@@ -52,6 +52,14 @@ def site(tmp_path_factory):
         traveller.stop()
 
 
+@pytest.fixture
+def connection_grace():
+    """tests/conftest.py's check that a test leaves no database connection open waits, as tests/layout's
+    does, up to half a minute for the portal's own threads (pages, the worker watchdog) to close theirs: a
+    page has passed and then failed it while the watchdog still had a connection open."""
+    return 30
+
+
 @pytest.fixture(scope="session")
 def browser():
     from playwright.sync_api import sync_playwright
