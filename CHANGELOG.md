@@ -41,17 +41,12 @@ approved before the update show the month as it is now, as before, until they're
 - **Update button:** when the data volume is full once the new version is running, the updater still goes
   back to the version before if the new one isn't healthy, and an update that stops part way never says
   "before anything was changed".
-- **Settings → Updates** lists every release since the one running, however far behind it is. It kept the
-  newest 15, so an install further behind than that never saw the older ones' Action required and wasn't
-  asked for the tick. If there are ever more than it reads, it says so, sends you to GitHub for the rest and
-  asks for the tick.
-- **Settings → Updates** says "Up to date" only once a check has worked. Before the first check it says "Not
-  checked yet", and when the first checks fail it says "Couldn't check yet" with the reason.
-- **Settings → Updates** reads release notes written a little differently: a sub-heading inside Action
-  required, a heading ending with a colon, and "**None.**" or "**No.**" in bold. Numbered steps show as a
-  numbered list, and a link whose address has brackets in it keeps them.
-- **Settings → Updates** recognises Podman and Kubernetes as containers, so it no longer gives them the
-  Windows steps for updating by hand.
+- An address or form with a number too big for the database, such as a client number 25 digits long, gets the
+  not-found page or says the number is too big, instead of a server error.
+- The sign-ins download on a client's **Activity history** is not found for a month with a newline after it,
+  which reached the file's name, or for year 0000, which broke the download off.
+- The **Activity log** download says in its last row when it holds only the newest 100,000 rows, and the
+  log's user filter finds someone whatever case their name is typed in.
 
 ### Security
 
