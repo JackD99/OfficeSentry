@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, csrf, page_link with context %}
-{% block title %}{{ design.name }} · Report designs{% endblock %}
+{% block title %}{{ design.name }} · Custom reports{% endblock %}
 {% block content %}
-<div class="crumbs">{{ page_link(url_for('reporting.index'), 'Month-end') }}<span>/</span><a href="{{ url_for('designs.index') }}">Report designs</a><span>/</span><span>{{ design.name }}</span></div>
+<div class="crumbs"><a href="{{ url_for('reports.overview') }}">Reports</a><span>/</span><a href="{{ url_for('designs.index') }}">Custom reports</a><span>/</span><span>{{ design.name }}</span></div>
 
 <div class="designer" id="designer" data-save="{{ url_for('designs.save', design_id=design.id) }}" data-preview="{{ url_for('designs.preview', design_id=design.id) }}">
   {{ csrf() }}
   <div class="designer-bar">
-    <label class="designer-name"><span class="sr-only">Design name</span>
-      <input type="text" id="design-name" value="{{ design.name }}" maxlength="100" aria-label="Design name"></label>
+    <label class="designer-name"><span class="sr-only">Report name</span>
+      <input type="text" id="design-name" value="{{ design.name }}" maxlength="100" aria-label="Report name"></label>
     <span class="designer-status" id="designer-status" role="status" aria-live="polite">Saved</span>
     <span class="designer-history">
       <button type="button" class="sm ghost icon-btn" id="undo" disabled title="Undo (Ctrl+Z)" aria-label="Undo">{{ icon('undo') }}</button>
@@ -66,7 +66,7 @@
           <label class="check" id="cover-contents-label"><input type="checkbox" id="cover-contents"> List the sections on the cover</label>
           <label class="check"><input type="checkbox" id="cover-notes"> Include setup notes in the client's copy
             <span class="hint">Notes written for your team, like "Microsoft is hiding people's names… sign in as a Global Admin". Off: they're shown here and in the portal only.</span></label>
-          <label>Description <span class="faint">(for the designs list)</span> <input type="text" id="design-description" maxlength="{{ text_max }}" value="{{ design.description }}"></label>
+          <label>Description <span class="faint">(what it's for, shown in the report lists)</span> <input type="text" id="design-description" maxlength="{{ text_max }}" value="{{ design.description }}"></label>
         </div>
       </div>
       <ol class="layout-list" id="layout-list" aria-label="Blocks in order"></ol>
