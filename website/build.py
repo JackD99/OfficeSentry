@@ -402,6 +402,10 @@ WHATS_NEW = [
             "pausing a client mid-collection sends no alerts",
             "a SharePoint network failure no longer reads as awaiting approval",
             "percentage changes read in points everywhere, and the Overview no longer shows more licensed users in red",
+            "licence right-sizing never suggests a plan that would take someone's devices out of Intune or their "
+            "sign-ins out of Conditional Access",
+            "licence counts leave out trial seats and free allocations, and a subscription in its grace period "
+            "keeps its reports working until Microsoft suspends it",
             "search lists every matching domain, and a mailbox's last inbox rule shows as removed",
             "only staff who can open every report in a client's plan can add people to it",
             "every page links only to what the viewer can open and shows only the buttons they can use",
