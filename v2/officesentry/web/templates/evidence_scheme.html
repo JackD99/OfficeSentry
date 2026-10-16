@@ -79,7 +79,8 @@
     <li>
       <div class="fix-head">{{ verdict_pill(c.verdict) }} <a href="#control-{{ c.control.key }}"><span class="ref">{{ c.control.ref }}</span> {{ c.control.title }}</a>{% if c.control.autofail %} <span class="pill bad autofail" title="The assessment fails outright on this">Auto-fail</span>{% endif %}</div>
       {% if c.gaps %}<p class="small m0 gap-summary">{{ c.gap_summary }}</p>{% endif %}
-      {% if c.fix %}<p class="small m0"><strong>Fix:</strong> {{ c.fix.rstrip('.') }}.{% if c.control.report %} <a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=c.control.report) }}">See the rows &rarr;</a>{% else %} <a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}">See the findings &rarr;</a>{% endif %}</p>{% endif %}
+      {% if c.fix %}{% set rows = url_for('reports.data_report', tenant_id=tenant.id, key=c.control.report) if c.control.report else url_for('reports.tenant_findings', tenant_id=tenant.id) %}
+      <p class="small m0"><strong>Fix:</strong> {{ c.fix.rstrip('.') }}.{% if can_open(rows) %} <a href="{{ rows }}">{{ 'See the rows' if c.control.report else 'See the findings' }} &rarr;</a>{% endif %}</p>{% endif %}
       {% if c.set_by %}<p class="small muted m0">Decided by {{ c.set_by }}.</p>{% endif %}
     </li>
     {% endfor %}
@@ -103,7 +104,7 @@
       {% if c.figures %}<dl class="figures">{% for label, value in c.figures %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl>{% endif %}
       {% if c.gaps %}<div class="gap-list"><div class="strong small">Gaps</div><ul>{% for gap in c.gaps %}<li{% if gap.startswith('  ') %} class="sub"{% endif %}>{{ gap.strip() }}</li>{% endfor %}</ul></div>{% endif %}
       {% if c.verdict == V.UNKNOWN and c.reason %}<p class="small muted m0">{{ c.reason }}</p>{% endif %}
-      {% if c.fix and c.verdict in (V.FAIL, V.PARTLY) %}<p class="small m0 fix"><strong>Fix:</strong> {{ c.fix_detail or c.fix }}{% if c.control.report %} <a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=c.control.report) }}">{{ 'See the rows' }} &rarr;</a>{% endif %}</p>{% endif %}
+      {% if c.fix and c.verdict in (V.FAIL, V.PARTLY) %}<p class="small m0 fix"><strong>Fix:</strong> {{ c.fix_detail or c.fix }}{% if c.control.report and can_open('reports.data_report', tenant_id=tenant.id, key=c.control.report) %} <a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=c.control.report) }}">See the rows &rarr;</a>{% endif %}</p>{% endif %}
       {% if c.text %}
       <div class="paste">
         <p class="paste-text" id="text-{{ c.control.key }}">{% for text, blank in c.segments %}{% if blank %}<mark class="blank">{{ text }}</mark>{% else %}{{ text }}{% endif %}{% endfor %}</p>

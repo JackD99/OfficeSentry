@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, csrf %}
+{% from "_macros.html" import icon, csrf, page_link with context %}
 {% block title %}Report designs · Office Sentry{% endblock %}
 {% block content %}
 {% set admin = can('designs.manage') and can('settings.manage') %}
-<div class="crumbs"><a href="{{ url_for('reporting.index') }}">Month-end</a><span>/</span><span>Report designs</span></div>
+<div class="crumbs">{{ page_link(url_for('reporting.index'), 'Month-end') }}<span>/</span><span>Report designs</span></div>
 <div class="page-head">
   <div><h1>Report designs</h1>
     <div class="sub">Client reports built from blocks: drag in the pieces, set each one up, see it on a real client. A design works for every client, and a report plan or schedule can send it.</div></div>

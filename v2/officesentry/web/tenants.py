@@ -297,7 +297,7 @@ def tenant(tenant_id: int):
         health=data_health(t, latest),
         report_groups=report_groups(t["id"]),
         setup=None if setup.onboarded else setup,
-        setup_can_check=_check_problem(t) is None,
+        setup_can_check=_check_problem(t) is None and can("collect", t["id"]),
         cloud_problem=cloud_problem,
     )
 

@@ -85,6 +85,8 @@ The defaults are the secure ones. Nothing below needs switching on.
   reviews*). Every report
   email opens with the client's security summary, so setting up, changing or
   previewing one needs *Security findings and reviews* on that client.
+  Pages don't link to what someone can't open: a person, group or report they can't open shows as its name,
+  and a button they can't use isn't shown. <!-- since 2.4.0 -->
 
 ## Behind a reverse proxy
 

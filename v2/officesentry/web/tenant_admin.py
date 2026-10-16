@@ -86,7 +86,7 @@ def manage(tenant_id: int):
         connections=store.list_connections(g.db),
         consent_link=_consent_link(t, connection),
         redirect_uri=_cfg().base_url + url_for("tenants.consent_callback"),
-        can_check=_check_problem(t) is None,
+        can_check=_check_problem(t) is None and can("collect", t["id"]),
         check_problem=_check_problem(t),
         notes_max=NOTES_MAX,
         groups=tenant_groups.all_groups(g.db) if manages_groups() else [],
