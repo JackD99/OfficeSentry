@@ -350,6 +350,8 @@ jobs:
             > "$RUNNER_TEMP/files/env.example"
           grep -qx "OFFICESENTRY_VERSION=$VERSION" "$RUNNER_TEMP/files/env.example"
           cp v2/Caddyfile "$RUNNER_TEMP/files/Caddyfile"
+          # The server's backup jobs (DEPLOY.md, "Off-site backups"), downloaded into the install's deploy folder.
+          cp v2/deploy/jobs.sh "$RUNNER_TEMP/files/jobs.sh"
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -358,7 +360,8 @@ jobs:
           # A pushed tag already exists; from "Run workflow", the release creates it on the commit just checked.
           gh release create "$TAG" --target "$GITHUB_SHA" --title "Office Sentry $VERSION" \
             --prerelease="$PRERELEASE" --notes-file "$RUNNER_TEMP/notes.md" \
-            "$RUNNER_TEMP/files/docker-compose.yml" "$RUNNER_TEMP/files/Caddyfile" "$RUNNER_TEMP/files/env.example"
+            "$RUNNER_TEMP/files/docker-compose.yml" "$RUNNER_TEMP/files/Caddyfile" "$RUNNER_TEMP/files/env.example" \
+            "$RUNNER_TEMP/files/jobs.sh"
       # The private package counts against GitHub Free's 500 MB. Tidying never fails a release.
       - name: Keep the last three releases' images
         continue-on-error: true

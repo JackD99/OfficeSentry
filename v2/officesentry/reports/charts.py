@@ -301,7 +301,8 @@ def month_columns(
     fills = (("tone-2", TONE_FILL["2"]), ("tone-1", TONE_FILL["1"]))
     for i, (month, first, second) in enumerate(months):
         mid = pad_l + slot * i + slot / 2
-        name = f"{month:%b}" if i and month.month != 1 else f"{month:%b %y}"
+        # The first month and each January carry the year in full: "May 26" reads as a date.
+        name = f"{month:%b}" if i and month.month != 1 else f"{month:%b %Y}"
         parts.append(f'<text class="axis" x="{mid:.1f}" y="{height - 6}" text-anchor="middle" {AXIS}>{name}</text>')
         if first is None and second is None:
             parts.append(

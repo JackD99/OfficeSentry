@@ -217,6 +217,53 @@ def test_start_script_starts_the_worker_once_the_portal_is_healthy(tmp_path, pro
         assert "compose restart caddy" not in lines
 
 
+@pytest.mark.skipif(shutil.which("bash") is None or shutil.which("flock") is None, reason="needs bash and flock")
+def test_the_backup_jobs_run_from_cron_in_a_release_folder(tmp_path):
+    """DEPLOY.md installs the release's files in /opt/officesentry (no v2 folder): the cron lines ``schedule``
+    writes must run there, from cron's own working folder and without OFFICESENTRY_DIR, and keep their log and
+    lock in that folder, which the deploy user can write."""
+    folder = tmp_path / "opt" / "officesentry"
+    (folder / "deploy").mkdir(parents=True)
+    shutil.copy(V2 / "deploy" / "jobs.sh", folder / "deploy" / "jobs.sh")
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    calls, crontab = tmp_path / "calls.log", tmp_path / "crontab"
+    (tools / "docker").write_text(
+        f"#!{sys.executable}\nimport os, pathlib, sys\n"
+        f"pathlib.Path({str(calls)!r}).open('a').write(os.getcwd() + ': ' + ' '.join(sys.argv[1:]) + '\\n')\n",
+        encoding="utf-8",
+    )
+    (tools / "crontab").write_text(
+        f'#!/usr/bin/env bash\nif [ "$1" = -l ]; then cat {crontab} 2>/dev/null; else cat > {crontab}; fi\n',
+        encoding="utf-8",
+    )
+    for tool in tools.iterdir():
+        tool.chmod(tool.stat().st_mode | stat.S_IXUSR)
+    env = {k: v for k, v in os.environ.items() if k != "OFFICESENTRY_DIR"}
+    env["PATH"] = f"{tools}{os.pathsep}{env['PATH']}"
+    bash = shutil.which("bash")
+    out = subprocess.run(  # noqa: S603
+        [bash, "deploy/jobs.sh", "schedule"], cwd=folder, env=env, capture_output=True, text=True, check=False
+    )
+    assert out.returncode == 0, out.stdout + out.stderr
+    nightly = next(line for line in crontab.read_text(encoding="utf-8").splitlines() if " nightly " in line)
+    assert f"OFFICESENTRY_DIR={folder} JOBS_LOG={folder}/jobs.log bash {folder}/deploy/jobs.sh nightly" in nightly
+    # As cron runs it: from the home folder, the command after the five time fields.
+    command = nightly.split(" ", 5)[5].split(" # ")[0]
+    out = subprocess.run(  # noqa: S603
+        [bash, "-c", command], cwd=tmp_path, env=env, capture_output=True, text=True, check=False
+    )
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "Off-site backups aren't set up" in (folder / "jobs.log").read_text(encoding="utf-8")
+    assert (folder / "jobs.lock").exists() and not (folder.parent / "jobs.lock").exists()
+    assert f"{folder}: compose exec -T web python -m officesentry backup --keep 14" in calls.read_text(encoding="utf-8")
+    # Run by hand without OFFICESENTRY_DIR, from anywhere, it finds its folder too.
+    out = subprocess.run(  # noqa: S603
+        [bash, str(folder / "deploy" / "jobs.sh"), "uptime"], cwd=tmp_path, env=env, capture_output=True, text=True
+    )
+    assert out.returncode == 0, out.stdout + out.stderr
+
+
 def test_offsite_and_drill_record_their_status(env_cfg):
     main(["backup-status", "--record", "offsite", "--ok", "--detail", "copy 1a2b3c4d"])
     main(["backup-status", "--record", "offsite", "--failed", "--error", "wrong password or no key found"])

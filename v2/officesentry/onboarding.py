@@ -36,6 +36,7 @@ from .devices import parse_ts
 from .discovery import tenant_id_for_domain
 from .mailer import valid_email
 from .schedule import periodic
+from .text import one_line
 
 GUID_RE = re.compile(r"^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
 DOMAIN_RE = re.compile(r"^(?=.{4,253}$)([a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$")
@@ -220,7 +221,7 @@ def parse(conn, text: str, sees: set[int] | None = None, groups_allowed: bool = 
         for key, cell in zip(header, cells_row, strict=False):
             if key and key not in values:
                 values[key] = cell.strip()
-        name = " ".join(values.get("name", "").split())
+        name = one_line(values.get("name", ""))
         ref = values.get("tenant", "").strip().lower()
         row = Row(line=i, name=name[:NAME_MAX], tenant_ref=ref)
         if not name:

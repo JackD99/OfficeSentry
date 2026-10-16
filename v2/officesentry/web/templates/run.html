@@ -9,10 +9,11 @@
 <div class="page-head">
   <div>
     <h1>{{ title }} {{ status(run.status) }}</h1>
-    <div class="sub">Run {{ run.id }} · queued {{ ts(run.created_at) }}{% if run.finished_at %} · finished {{ ts(run.finished_at) }}{% endif %}{% if run.requested_by %} · by {{ run.requested_by }}{% endif %}{% if run.truncated %} · <strong>truncated</strong>{% endif %}</div>
+    <div class="sub">Run {{ run.id }} · queued {{ ts(run.created_at) }}{% if run.finished_at %} · finished {{ ts(run.finished_at) }}{% endif %}{% if run.requested_by %} · by {{ run.requested_by }}{% endif %}{% if run.retry_of %} · tried again after <a href="{{ url_for('tenants.run', run_id=run.retry_of) }}">run {{ run.retry_of }}</a> failed{% endif %}{% if run.truncated %} · <strong>truncated</strong>{% endif %}</div>
   </div>
 </div>
-{% if run.error %}<div class="callout {{ 'warn' if run.status == 'partial' else 'bad' }}" role="status">{{ icon('alert') }}<div class="grow">{{ run.error|run_error }}
+{% if run.error %}<div class="callout {{ 'warn' if run.status == 'partial' or run|retrying else 'bad' }}" role="status">{{ icon('alert') }}<div class="grow">{{ run.error|run_error }}
+  {% if run|retrying %}<p class="m0">{{ run|retrying }}</p>{% endif %}
   {% if run.error|run_error != run.error %}<details class="small"><summary>Microsoft's message</summary><code>{{ run.error }}</code></details>{% endif %}</div></div>{% endif %}
 
 {% macro period(s) %}{% if s == 1 %}second{% elif s == 60 %}minute{% elif s % 60 == 0 %}{{ (s // 60)|int }} minutes{% else %}{{ s|int }} seconds{% endif %}{% endmacro %}

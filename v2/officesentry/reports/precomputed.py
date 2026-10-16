@@ -161,16 +161,18 @@ def refresh(conn, tenant, rebuild: bool = False) -> None:
     from ..snapshot import TenantSnapshot
     from . import data_reports, month_changes, rollups  # they import this module
 
+    # One read of each collector's data as it stands, and each report built from it once: the three periods of
+    # What changed compare with the same present, and every report's rollup reads the same reports.
+    current = month_changes.Current(TenantSnapshot(conn, tenant))
     for days in month_changes.PERIODS:
-        month_changes.across(conn, [tenant], days, rebuild=rebuild)
+        month_changes.across(conn, [tenant], days, rebuild=rebuild, current=current)
     rollups.check_matrix(conn, [tenant], rebuild=rebuild)
     rollups.evidence_rollup(conn, [tenant], rebuild=rebuild)
     month_end.review_facts(conn, [tenant], rebuild=rebuild)
     projects.pipeline(conn, [tenant], rebuild=rebuild)
-    snap = TenantSnapshot(conn, tenant)  # one read of each collector's data for every report's rollup
     for key in data_reports.REPORTS:
-        rollups.data_rollup(conn, [tenant], key, rebuild=rebuild, snap=snap)
-    search_index.refresh(conn, tenant, snap=snap, rebuild=rebuild)
+        rollups.data_rollup(conn, [tenant], key, rebuild=rebuild, snap=current.snap, reports=current.reports)
+    search_index.refresh(conn, tenant, snap=current.snap, rebuild=rebuild)
 
 
 def queue(conn, tenant_id: int, rebuild: bool = False) -> int:

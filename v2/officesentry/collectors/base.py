@@ -109,6 +109,12 @@ class RunContext:
             self.warn(f"{cmdlet} returned more than {pages} pages of results; the rest were left out")
         self._exchange.truncated.clear()
 
+    def sign_in_failure(self) -> Exception | None:
+        """Why signing in to Graph or Exchange failed during the run, if it did. A collector that reads item by
+        item counts each refused request as one item it couldn't read and carries on, so without this a run
+        that couldn't sign in at all would finish as partial with nothing read, and its checks pass."""
+        return getattr(self.graph, "sign_in_error", None) or getattr(self._exchange, "sign_in_error", None)
+
 
 class Collector:
     key: ClassVar[str]

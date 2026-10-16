@@ -10,18 +10,18 @@ Regenerate them from `v2/` with `python scripts/screenshots.py` after report cha
 | File | What it is |
 |---|---|
 | [monthly-security-licensing-review.pdf](monthly-security-licensing-review.pdf) | The Monthly Security & Licensing Review for one client, as sent to them. |
-| [cyber-essentials-evidence.pdf](cyber-essentials-evidence.pdf) | One client judged against Cyber Essentials: each control's verdict, the fixes and the answers for the form. |
 | [monthly-review-summary.pdf](monthly-review-summary.pdf) | The monthly review's two summary pages on their own, without the appendix. |
+| [cyber-essentials-evidence.pdf](cyber-essentials-evidence.pdf) | One client judged against Cyber Essentials: each control's verdict, the fixes and the answers for the form. |
 | [quarterly-review.pdf](quarterly-review.pdf) | The Quarterly review design from the report designer: three months of score and findings, what was fixed, projects, licence spend and what's coming up. |
 | [insurance-evidence-pack.pdf](insurance-evidence-pack.pdf) | The controls cyber insurers ask about, judged from the data, with the answers for the proposal form. |
 | [sharepoint-storage.pdf](sharepoint-storage.pdf) | A client nearly out of SharePoint space: where it went, when it fills up, what to clean up. |
-| [mfa-coverage.pdf](mfa-coverage.pdf) | Who has MFA registered and who is enforced to use it. |
+| [mfa-coverage.pdf](mfa-coverage.pdf) | Who has MFA registered, and who is required to use it. |
 | [mailbox-permissions.pdf](mailbox-permissions.pdf) | Full access, send as and send on behalf, with leavers and outsiders flagged. |
 | [mail-forwarding.pdf](mail-forwarding.pdf) | Every mailbox and inbox rule that forwards mail, and the policies. |
 | [licence-right-sizing.pdf](licence-right-sizing.pdf) | People who could move to a cheaper licence, with the saving. |
 | [conditional-access-coverage.pdf](conditional-access-coverage.pdf) | Every Conditional Access policy in plain words, and who it covers. |
 | [sign-in-activity.pdf](sign-in-activity.pdf) | Failed and successful sign-ins: password guessing, unusual countries. |
-| [passwords-and-sign-in-methods.pdf](passwords-and-sign-in-methods.pdf) | How people sign in, how strong that is, and admins without passkeys. |
+| [passwords-and-sign-in-methods.pdf](passwords-and-sign-in-methods.pdf) | How people sign in, how strong that is, and admins without a phishing-resistant method. |
 | [licences-and-subscriptions.pdf](licences-and-subscriptions.pdf) | Every subscription, what is assigned and what is paid for but unused. |
 | [account-page.pdf](account-page.pdf) | Everything about one person's account on one page. |
 | [what-changed-all-clients.pdf](what-changed-all-clients.pdf) | Month-over-month changes across every client. |

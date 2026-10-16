@@ -52,14 +52,17 @@ class AutoReplies(Collector):
         window = mailbox_window.plan(ctx, self.key, "auto_reply", _targets(ctx), lambda t: t["id"], "automatic replies")
         targets = window.mailboxes
         rows, failed, denied = [], 0, 0
+        unread: set[str] = set()
         for t in targets:
             try:
                 s = ctx.graph.get(f"/users/{t['id']}/mailboxSettings/automaticRepliesSetting")
             except PermissionMissing:
                 denied += 1
+                unread.add(t["id"])
                 continue
             except GraphError:  # e.g. no mailbox yet, or mailbox on-premises
                 failed += 1
+                unread.add(t["id"])
                 continue
             status = s.get("status") if isinstance(s.get("status"), str) else None
             if status in (None, "disabled"):
@@ -88,7 +91,11 @@ class AutoReplies(Collector):
                 "MailboxSettings.Read consent and any Exchange application access policy",
             )
         if denied or failed:
-            ctx.warn(f"Could not read automatic replies for {denied + failed} of {plural(len(targets), 'mailbox')}")
+            kept = window.keep_unread(ctx, unread)
+            ctx.warn(
+                f"Could not read automatic replies for {denied + failed} of {plural(len(targets), 'mailbox')}"
+                + mailbox_window.kept_note(kept)
+            )
         rows += window.carried
         ctx.objects("auto_reply", rows)
         window.save(ctx)
