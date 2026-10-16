@@ -319,6 +319,21 @@ for. A project drops off by itself once its findings are fixed.
   </tr>
 </table>
 
+<!-- since 2.5.0 -->
+### A grade for every client
+
+Every client gets a **grade from A to E**: one letter to put in front of a client, worked out the same way for
+everyone, with the rules published so you can say exactly why they are a C and what makes them a B. The checks are
+grouped into five parts (admin accounts, sign-in and accounts, mail, devices, and sharing and apps); a part's grade
+is its worst open finding after accepted risks are set aside, and the grade is the worst part, so one critical gap
+keeps a client out of A and B whatever else is in good shape. The grade sits beside the client's name on every page
+about them and leads the figures on their Overview, and its own page shows what moves each part, the grade on each
+of the last twelve month-ends, and how the client compares with the others you look after of about the same size
+(the median grade, Secure Score, MFA coverage, open critical and high findings and licence waste per user), without
+naming any of them. Nothing about a client leaves your install. The rules are in
+[Client grades](v2/docs/client-grades.md).
+<!-- /since -->
+
 ### A view for clients
 
 Client users can sign in too. They see only their own organisation's reports, key numbers and downloads, never
@@ -474,6 +489,7 @@ from there.
   work account
 - [Onboarding a client](v2/docs/onboarding-a-client.md): consent, Global Reader, the first collection, connection
   health and offboarding
+- [Client grades](v2/docs/client-grades.md): how a client's A to E grade is worked out, its history and comparison <!-- since 2.5.0 -->
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes

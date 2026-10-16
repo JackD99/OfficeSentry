@@ -11,6 +11,8 @@ tenant's rows are kept in ``summary_cache``, one per kind:
 * ``rollup:<report key>``: a detail report's rollup (``rollups.data_rollup``);
 * ``review``: the month-end queue's verdict and flags (``month_end.review_facts``), also on Clients;
 * ``projects``: recommended projects and quick fixes (``projects.pipeline``), also on Clients;
+* ``grade``: the client's A to E grade, its parts and how it moved (``grades.rows``), on Clients and in
+  every client header;
 * ``search``: the fingerprint of the tenant's rows in ``search_index`` (``search_index.py``).
 
 The worker builds them after the tenant's collection (``queue``) and once a day (``queue_all``),
@@ -22,8 +24,8 @@ A stored row is used only while its fingerprint matches what the row would be bu
   run, licence flags and cloud, licence prices, currency and Office Sentry's own app IDs;
 * ``changes:<days>``: the tenant's latest run finished by the start of the period, the data the
   period is compared with;
-* ``checks``, ``evidence``, ``review`` and ``projects``: the tenant's open findings and which of
-  them are accepted risks now; ``projects`` also what the account manager set on each project.
+* ``checks``, ``evidence``, ``review``, ``projects`` and ``grade``: the tenant's open findings and which
+  of them are accepted risks now; ``projects`` also what the account manager set on each project.
 
 When it doesn't match, the page builds that tenant's row as before and stores it, so nobody ever
 sees a figure built from older data than the live page would use. New and fixed findings and the
@@ -44,8 +46,8 @@ import sqlite3
 from datetime import UTC, datetime
 
 from .. import tasks
+from ..codeversion import code_version as _code_version
 from ..db import utcnow
-from .monthly_review import _code_version
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +79,7 @@ def _open_findings(conn, tenant_id: int, now: datetime) -> list:
 
 
 # Kinds whose rows depend on the tenant's open findings and accepted risks.
-FINDINGS_KINDS = ("checks", "evidence", "review", "projects")
+FINDINGS_KINDS = ("checks", "evidence", "review", "projects", "grade")
 
 
 def _project_statuses(conn, tenant_id: int) -> list:
@@ -157,7 +159,7 @@ class Rows:
 
 def refresh(conn, tenant, rebuild: bool = False) -> None:
     """Build the tenant's rows that are out of date (every row with ``rebuild``), and its search index."""
-    from .. import month_end, projects, search_index
+    from .. import grades, month_end, projects, search_index
     from ..snapshot import TenantSnapshot
     from . import data_reports, month_changes, rollups  # they import this module
 
@@ -170,6 +172,7 @@ def refresh(conn, tenant, rebuild: bool = False) -> None:
     rollups.evidence_rollup(conn, [tenant], rebuild=rebuild)
     month_end.review_facts(conn, [tenant], rebuild=rebuild)
     projects.pipeline(conn, [tenant], rebuild=rebuild)
+    grades.rows(conn, [tenant], rebuild=rebuild)
     for key in data_reports.REPORTS:
         rollups.data_rollup(conn, [tenant], key, rebuild=rebuild, snap=current.snap, reports=current.reports)
     search_index.refresh(conn, tenant, snap=current.snap, rebuild=rebuild)

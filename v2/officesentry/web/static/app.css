@@ -173,6 +173,27 @@ tr.flag-medium td:first-child { box-shadow: inset 3px 0 0 var(--sev-medium); }
 .sev-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); align-items: center; margin: var(--space-0-5) 0 0; font-size: var(--fs-xs); color: var(--muted); }
 .sev-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .sev-legend .sw { width: 9px; height: 9px; border-radius: var(--radius-xs); display: inline-block; }
+/* A client's grade (grades.py, _grade.html): a serif letter in a ruled square, in the severity colour of what holds it
+   there (A and B are fine, C medium, D high, E critical). The letter is always there, so colour is never the only
+   signal; a client without a grade gets a dashed square. .sm sits beside the client's name, .xs in table rows. */
+.grade { display: inline-grid; place-items: center; width: 44px; height: 44px; border: 2px solid var(--border-strong); border-radius: var(--radius); font-family: var(--serif); font-size: 1.625rem; font-weight: 700; line-height: 1; color: var(--text); background: var(--surface); text-decoration: none; vertical-align: middle; }
+.grade.sm { width: 28px; height: 28px; border-width: 1.5px; font-size: 1rem; align-self: center; }
+.grade.xs { width: 22px; height: 22px; border-width: 1px; font-size: var(--fs-xs); }
+.grade.a, .grade.b { border-color: var(--ok); color: var(--ok); }
+.grade.c { border-color: var(--sev-medium); color: var(--sev-medium); }
+.grade.d { border-color: var(--sev-high); color: var(--sev-high); }
+.grade.e { border-color: var(--sev-critical); color: var(--sev-critical); }
+.grade.none { border-style: dashed; color: var(--muted); font-weight: 500; }
+a.grade:hover, a.grade:focus-visible { background: var(--surface-2); }
+.tile .value .grade { margin-right: var(--space-1-5); }
+.grade-row { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--space-0-5); margin: 0; padding: 0; }
+.grade-row .cell { display: grid; gap: var(--space-0-5); justify-items: center; }
+.card.flush > .footnote { padding: 0 var(--space-5) var(--space-4); }
+.grade-row .cell small { font-size: var(--fs-2xs); color: var(--muted); }
+.grade-row .cell.now small { color: var(--text-2); font-weight: 600; }
+.part-checks { margin-top: var(--space-2); }
+.part-checks summary { cursor: pointer; }
+.part-checks ul { margin: var(--space-1) 0 0; }
 .new-tag { font-size: var(--fs-sm); font-weight: 600; font-variant-caps: all-small-caps; letter-spacing: .05em; color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-xs); padding: 0 5px; margin-left: var(--space-1); }
 
 /* -- Buttons ------------------------------------------------------------- */

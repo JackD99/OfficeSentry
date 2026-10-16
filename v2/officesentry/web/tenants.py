@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
-from .. import clouds, endpoints, lifecycle, store, tenant_groups, tenant_health
+from .. import clouds, endpoints, grades, lifecycle, store, tenant_groups, tenant_health
 from ..collectors import REGISTRY, core, for_tenant
 from ..db import audit, transaction, utcnow
 from ..discovery import tenant_id_for_domain
@@ -274,6 +274,11 @@ def tenant(tenant_id: int):
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
     latest = _latest_runs(t["id"])
     report = build(g.db, t)
+    # The grade leads the figures (grades.py), from the review's results with accepted risks already set aside;
+    # storing its row keeps the badge in every client page's header current.
+    grade_row = None
+    if can("reports.security", t["id"]):
+        grade_row = grades.rows(g.db, [t], graded={t["id"]: grades.grade(report.results)})[t["id"]]
     sev_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
     attention = sorted(report.failing, key=lambda r: (sev_rank.get(r.severity, 5), -len(r.findings)))
     from .tenant_admin import _check_problem
@@ -296,6 +301,7 @@ def tenant(tenant_id: int):
         attention=attention,
         health=data_health(t, latest),
         report_groups=report_groups(t["id"]),
+        grade_row=grade_row,
         setup=None if setup.onboarded else setup,
         setup_can_check=_check_problem(t) is None and can("collect", t["id"]),
         cloud_problem=cloud_problem,

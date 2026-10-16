@@ -382,7 +382,7 @@ def build_site(data_dir: Path):
     """Seed a new, empty data directory; returns (config, tenant ids, passwords by username, names)."""
     from datetime import UTC, datetime, timedelta
 
-    from officesentry import backups, system_health, worker
+    from officesentry import backups, grades, system_health, worker
     from officesentry.config import load_config
     from officesentry.crypto import Vault
     from officesentry.db import connect, migrate
@@ -394,6 +394,9 @@ def build_site(data_dir: Path):
     db = connect(cfg.db_path)
     migrate(db)
     ids = seed(db, Vault(cfg.encryption_keys))
+    # Each client's grade as the worker would have stored it, so the badge beside the name is on every page from
+    # the first one captured (a page builds it otherwise, and only the pages after it would carry the badge).
+    grades.rows(db, db.execute("SELECT * FROM tenants ORDER BY id").fetchall())
     passwords = {ADMIN: secrets.token_urlsafe(12), CLIENT: secrets.token_urlsafe(12)}
     for username, role, all_tenants in ((ADMIN, "admin", 1), (CLIENT, "client", 0)):
         uid = db.execute(
