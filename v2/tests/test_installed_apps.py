@@ -24,7 +24,11 @@ def test_remote_access_tools_are_named():
     assert ia.remote_tool("TeamViewer Host") == "TeamViewer"
     assert ia.remote_tool("TightVNC") == "VNC"
     assert ia.remote_tool("GoTo Resolve Unattended") == "GoTo (LogMeIn)"
-    for app in ("Google Chrome", "Microsoft Teams", "Remote Desktop Connection", None):
+    assert ia.remote_tool("Action1 Agent") == "Action1"
+    assert ia.remote_tool("BeyondTrust Remote Support Jump Client") == "BeyondTrust Remote Support"
+    assert ia.remote_tool("UltraViewer version 6.6") == "UltraViewer"
+    assert ia.remote_tool("UltraVNC Viewer") == "VNC"
+    for app in ("Google Chrome", "Microsoft Teams", "Remote Desktop Connection", "Pulse Secure", None):
         assert ia.remote_tool(app) is None
 
 

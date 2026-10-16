@@ -10,14 +10,22 @@ from .snapshot import TenantSnapshot
 # Tools that let someone control a computer from elsewhere. MSPs use some of them, and attackers install them
 # too (ransomware groups favour AnyDesk, ScreenConnect and the like), so each one found is worth checking.
 REMOTE_TOOLS = {
+    "Action1": r"\baction1\b",
+    "AeroAdmin": r"\baeroadmin\b",
+    "Ammyy Admin": r"\bammyy\b",
     "AnyDesk": r"\banydesk\b",
     "Atera": r"\batera agent\b",
+    "BeyondTrust Remote Support": r"\bbeyondtrust (?:remote support|jump client)\b|\bbomgar\b",
     "Chrome Remote Desktop": r"\bchrome remote desktop\b",
     "DWService": r"\bdwagent\b|\bdwservice\b",
     "GoTo (LogMeIn)": r"\blogmein\b|\bgoto ?(?:resolve|assist|opener)\b",
+    "ISL Online": r"\bisl (?:light|alwayson)\b",
     "MeshCentral": r"\bmesh ?agent\b",
     "NetSupport": r"\bnetsupport\b",
+    "Parsec": r"\bparsec\b",
+    "Pulseway": r"\bpulseway\b",
     "Radmin": r"\bradmin\b",
+    "RemotePC": r"\bremotepc\b",
     "Remote Utilities": r"\bremote utilities\b",
     "RustDesk": r"\brustdesk\b",
     "ScreenConnect": r"\bscreenconnect\b|\bconnectwise control\b",
@@ -25,9 +33,9 @@ REMOTE_TOOLS = {
     "Splashtop": r"\bsplashtop\b",
     "Supremo": r"\bsupremo\b",
     "TeamViewer": r"\bteamviewer\b",
+    "UltraViewer": r"\bultraviewer\b",
     "VNC": r"\b(?:real|tight|ultra|tiger)vnc\b|\bvnc (?:server|viewer|connect)\b",
     "Zoho Assist": r"\bzoho assist\b",
-    "Ammyy Admin": r"\bammyy\b",
 }
 _TOOLS = [(name, re.compile(pattern, re.IGNORECASE)) for name, pattern in REMOTE_TOOLS.items()]
 
