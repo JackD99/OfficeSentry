@@ -75,11 +75,11 @@ def _baseline(history: list[tuple[datetime, int]], latest: datetime, days: int, 
 
 
 def _monthly(points: list[tuple[date, float]]) -> list[tuple[str, float]]:
-    """The last value of each month, oldest first."""
-    months: dict[str, float] = {}
+    """The last value of each month, oldest first, as "October 2026"."""
+    months: dict[tuple[int, int], float] = {}
     for d, v in points:
-        months[d.strftime("%Y-%m")] = v
-    return sorted(months.items())
+        months[(d.year, d.month)] = v
+    return [(f"{date(y, m, 1):%B %Y}", v) for (y, m), v in sorted(months.items())]
 
 
 @report(

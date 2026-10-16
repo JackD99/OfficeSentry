@@ -54,7 +54,7 @@ class Check:
     key: str
     label: str
     status: str
-    summary: str  # one line for people, never tenant data: "Checked in 20 seconds ago"
+    summary: str  # one line for people, never tenant data: "Checked in 2 minutes ago"
     fix: str = ""  # what to do when it isn't ok (only on the page and in alerts, not in the JSON)
     data: dict = field(default_factory=dict)  # figures for the JSON
 
@@ -93,6 +93,11 @@ class Health:
 
 def _iso(dt: datetime | None) -> str | None:
     return dt.strftime(ISO) if dt else None
+
+
+def _ago(delta: timedelta) -> str:
+    """How long ago, in the status tiles' words: "just now" for the first minute, then "12 minutes ago"."""
+    return "just now" if delta.total_seconds() < 60 else f"{duration(delta.total_seconds())} ago"
 
 
 def _hours(delta: timedelta) -> float:
@@ -142,10 +147,8 @@ def check_worker(conn, cfg, now) -> Check:
     seen = worker.last_seen(conn)
     data = {"last_seen": _iso(seen), "age_seconds": int((now - seen).total_seconds()) if seen else None}
     if worker.is_alive(conn, now):
-        return Check(
-            "worker", "Background worker", OK, f"Checked in {duration((now - seen).total_seconds())} ago", data=data
-        )
-    summary = f"Stopped, last checked in {duration((now - seen).total_seconds())} ago" if seen else "Not running"
+        return Check("worker", "Background worker", OK, f"Checked in {_ago(now - seen)}", data=data)
+    summary = f"Stopped, last checked in {_ago(now - seen)}" if seen else "Not running"
     return Check(
         "worker",
         "Background worker",
@@ -302,7 +305,7 @@ def check_collection(conn, cfg, now) -> Check:
             COLLECTION_FIX,
             data,
         )
-    summary = f"Last data collected {duration((now - last).total_seconds())} ago"
+    summary = f"Last data collected {_ago(now - last)}"
     if slot and slot.complete and slot.failed:
         summary += f"; {slot.failed} of {plural(slot.tenants, 'client')} failed in the last scheduled run"
     return Check("collection", "Collection", OK, summary, data=data)
@@ -398,7 +401,7 @@ def check_backup(conn, cfg, now) -> Check:
         return Check("backup", "Backups", WARN, worst[1], worst[2], data)
     if newest is None:
         return Check("backup", "Backups", OK, "Restore check passed", data=data)
-    return Check("backup", "Backups", OK, f"Last backup {duration((now - newest).total_seconds())} ago", data=data)
+    return Check("backup", "Backups", OK, f"Last backup {_ago(now - newest)}", data=data)
 
 
 def disk_usage(path: Path) -> tuple[float, int, int]:

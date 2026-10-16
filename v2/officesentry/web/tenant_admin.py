@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
-from .. import clouds, lifecycle, roles, store, tenant_groups, tenant_health
+from .. import clouds, lifecycle, roles, sso, store, tenant_groups, tenant_health
+from ..auditlog import addon
 from ..db import audit
 from ..discovery import tenant_id_for_domain
 from ..text import one_line, plural
@@ -302,10 +303,21 @@ def offboard(tenant_id: int):
         )
         if u["id"] not in only
     ]
+    # The other Office Sentry apps the client may have approved, also to delete: (name, what it's for, known
+    # to be there). "Known" is false when it may be there, so the steps say "if it's there".
+    other_apps = []
+    s = sso.settings(g.db)
+    if t["sign_in_approved_at"] or sso.clients_enabled(s):
+        name = s.get("sso_app_name") or sso.DEFAULT_NAME
+        other_apps.append((name, "the app their people sign in to Office Sentry with", bool(t["sign_in_approved_at"])))
+    feed = addon.row_for(g.db, t["id"])
+    if addon.enabled(g.db) or (feed and feed["consented_at"]):
+        other_apps.append((addon.AUDIT_NAME, "the audit log add-on", bool(feed and feed["consented_at"])))
     return render_template(
         "offboard.html",
         tenant=t,
         health=health,
+        other_apps=other_apps,
         stored=lifecycle.stored(g.db, t["id"]),
         client_users=client_users,
         other_users=others,

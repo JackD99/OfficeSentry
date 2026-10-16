@@ -27,13 +27,16 @@
       <ol>
         <li><em>Roles and admins</em> → <em>Global Reader</em> → select {{ app }} → <em>Remove assignments</em>{% if r.roles_checked and not r.global_reader %} (it didn't hold the role at the last check){% endif %}.</li>
         <li><em>Enterprise applications</em> → {{ app }} → <em>Properties</em> → <em>Delete</em>. This withdraws the consent; Office Sentry can't sign in to the tenant again.</li>
+        {% for name, why, known in other_apps %}<li>The same for "{{ name }}", {{ why }}{% if not known %}, if it's there{% endif %}.</li>
+        {% endfor %}
       </ol>
       <details class="by-hand"><summary>Text to send the client</summary>
-        <textarea class="copy-text" rows="9" readonly aria-label="Instructions for the client">To remove Office Sentry's read-only access to your Microsoft 365, a Global Administrator signs in to the Microsoft Entra admin centre (https://entra.microsoft.com) and:
+        <textarea class="copy-text" rows="{{ 9 + other_apps|length }}" readonly aria-label="Instructions for the client">To remove Office Sentry's read-only access to your Microsoft 365, a Global Administrator signs in to the Microsoft Entra admin centre (https://entra.microsoft.com) and:
 
 1. Goes to Roles and admins > Global Reader, selects {{ r.app_name or 'the Office Sentry app' }} and chooses Remove assignments.
 2. Goes to Enterprise applications, opens {{ r.app_name or 'the Office Sentry app' }}, chooses Properties, then Delete.
-
+{% for name, why, known in other_apps %}{{ loop.index + 2 }}. Does the same for "{{ name }}", {{ why|replace('their people', 'your people') }}{% if not known %}, if it's there{% endif %}.
+{% endfor %}
 This stops all access straight away. We are deleting everything Office Sentry collected from your Microsoft 365.</textarea>
         <p class="small muted m0">The same steps are in <em>What Office Sentry reads</em> (docs/what-office-sentry-reads.md, "How to remove access"), the document you sent when onboarding.</p>
       </details>

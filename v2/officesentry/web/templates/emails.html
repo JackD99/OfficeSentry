@@ -62,7 +62,7 @@
     <a class="btn sm" href="{{ url_for('email.new_digest') }}">{{ icon('plus') }} Another digest</a>
     {% else %}
     <p class="muted small">One email for your team with every client ranked worst first: what needs attention, what's new and what's fixed.</p>
-    <a class="btn primary sm" href="{{ url_for('email.new_digest') }}">{{ icon('plus') }} Set up a digest</a>
+    <a class="btn sm" href="{{ url_for('email.new_digest') }}">{{ icon('plus') }} Set up a digest</a>
     {% endif %}
   </section>
 
@@ -73,7 +73,7 @@
     <a class="btn sm" href="{{ url_for('email.new_upcoming') }}">{{ icon('plus') }} Another one</a>
     {% else %}
     <p class="muted small">A weekly email for your team of what falls due in the next 90 days: renewals and trials, expiring app secrets and certificates, mailboxes filling up, DMARC still at p=none and accepted risks to review. <a href="{{ url_for('upcoming.index') }}">See it now</a>.</p>
-    <a class="btn primary sm" href="{{ url_for('email.new_upcoming') }}">{{ icon('plus') }} Set up the weekly email</a>
+    <a class="btn sm" href="{{ url_for('email.new_upcoming') }}">{{ icon('plus') }} Set up the weekly email</a>
     {% endif %}
   </section>
 
@@ -84,7 +84,7 @@
     <a class="btn sm" href="{{ url_for('email.new_views') }}">{{ icon('plus') }} Another one</a>
     {% else %}
     <p class="muted small">Email your team a saved view of any report with every client's rows, or one group's: say, mailboxes forwarding outside, every Monday as a CSV. To send a view for one client, add it to that client's scheduled email.</p>
-    <a class="btn primary sm" href="{{ url_for('email.new_views') }}">{{ icon('plus') }} Email a saved view</a>
+    <a class="btn sm" href="{{ url_for('email.new_views') }}">{{ icon('plus') }} Email a saved view</a>
     {% endif %}
   </section>
 
@@ -108,7 +108,7 @@
       </fieldset>
       {% set chosen = global_alert.recipients|map(attribute='id')|list if global_alert else team|map(attribute='id')|list %}
       {{ contact_checks(team, chosen, 'Add your team below first.') }}
-      <div class="form-actions"><button class="{{ 'sm' if global_alert else 'primary sm' }}" {% if not team %}disabled{% endif %}>{{ 'Save' if global_alert else 'Turn on alerts' }}</button></div>
+      <div class="form-actions"><button class="sm" {% if not team %}disabled{% endif %}>{{ 'Save' if global_alert else 'Turn on alerts' }}</button></div>
     </form>
     {% if global_alert %}</details>{% endif %}
     <p class="footnote">One email per client per scan. To post the same alerts to Teams or Slack, use <a href="{{ url_for('alerts.settings') }}">Alerts</a>.</p>

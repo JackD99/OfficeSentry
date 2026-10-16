@@ -209,7 +209,7 @@ def test_backup_status(cfg, db):
         "error": "",
     }
     (cfg.data_dir / backups.STATUS_FILE).write_text(json.dumps(status), encoding="utf-8")
-    assert system_health.check_backup(db, cfg, NOW).summary == "Last backup 0 seconds ago"
+    assert system_health.check_backup(db, cfg, NOW).summary == "Last backup just now"
     assert system_health.check_backup(db, cfg, NOW + timedelta(hours=27)).summary == "No backup for 27 hours"
     status["local"]["last_success"] = status["offsite"]["last_success"] = _iso(NOW + timedelta(days=3))
     (cfg.data_dir / backups.STATUS_FILE).write_text(json.dumps(status), encoding="utf-8")

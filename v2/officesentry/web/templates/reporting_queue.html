@@ -6,14 +6,15 @@
 {% set STATE_PILLS = {'draft': '', 'in_review': 'info', 'approved': 'accent', 'sent': 'ok'} %}
 {% block title %}Month-end · {{ label }} · Office Sentry{% endblock %}
 {% block content %}
-<div class="page-head">
+<div class="page-head month-head">
   <div><h1>Month-end reporting · {{ label }}</h1>
     <div class="sub">{% if group_scope and group_scope.group %}Clients in {{ group_scope.group.name }} on a report plan.{% else %}Every client on a report plan.{% endif %} Review, add your commentary, then approve to send.</div></div>
   <div class="month-nav">
     {{ group_picker() }}
-    <a class="btn sm" href="{{ url_for('reporting.queue', period=prev, show=show) }}" aria-label="Previous month">&larr;</a>
+    {% set before, after = period_label(prev), period_label(next) %}
+    <a class="btn sm" href="{{ url_for('reporting.queue', period=prev, show=show) }}" title="Open {{ before }}" aria-label="Previous month, {{ before }}">&larr; {{ before.split(' ')[0] }}</a>
     {% if period != current %}<a class="btn sm" href="{{ url_for('reporting.queue', period=current) }}">This month</a>{% endif %}
-    <a class="btn sm" href="{{ url_for('reporting.queue', period=next, show=show) }}" aria-label="Next month">&rarr;</a>
+    <a class="btn sm" href="{{ url_for('reporting.queue', period=next, show=show) }}" title="Open {{ after }}" aria-label="Next month, {{ after }}">{{ after.split(' ')[0] }} &rarr;</a>
     {% if can_open('reporting.plans') %}<a class="btn sm" href="{{ url_for('reporting.plans') }}">Report plans</a>{% endif %}
     {% if can_open('designs.index') %}<a class="btn sm" href="{{ url_for('designs.index') }}">Report designs</a>{% endif %}
   </div>
