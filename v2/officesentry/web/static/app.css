@@ -387,6 +387,7 @@ button[aria-busy="true"]::before { content: ""; flex: none; width: 13px; height:
   table.stack-sm td { display: flex; justify-content: flex-end; gap: var(--space-1) var(--space-3); border: 0; padding: 3px 0 !important; text-align: right; }
   table.stack-sm td::before { content: attr(data-label); margin-right: auto; color: var(--muted); font-size: var(--fs-sm); text-align: left; }
   table.stack-sm td:first-child { display: block; text-align: left; font-weight: 600; }
+  table.stack-sm td:first-child .sub { font-weight: normal; }
   table.stack-sm td:first-child::before { content: none; }
   table.stack-sm td:empty { display: none; }
   .card.flush table.stack-sm tr { padding-left: var(--space-4); padding-right: var(--space-4); }
@@ -1356,6 +1357,8 @@ td.row-action { min-width: 150px; }
 .group-picker .clear { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: var(--accent); font-size: 1.05rem; line-height: 1; }
 .group-picker .clear:hover { background: var(--accent); color: var(--accent-text); text-decoration: none; }
 .month-nav { flex-wrap: wrap; }
+/* Month-end's buttons wrap under the title rather than squeeze it onto two lines. */
+.page-head.month-head > :first-child:not(:only-child) { flex-basis: auto; }
 .group-chips { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); }
 .group-chips .chip { padding: 0 var(--space-2); font-size: var(--fs-xs); font-weight: 500; background: var(--sunken); color: var(--text-2); }
 td .group-chips { margin-top: var(--space-1); }

@@ -275,6 +275,7 @@ def queue(period: str):
         "reporting_queue.html",
         period=period,
         label=month_end.issued.period_label(period),
+        period_label=month_end.issued.period_label,
         rows=shown,
         all_rows=rows,
         paused=paused,

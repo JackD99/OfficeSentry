@@ -11,7 +11,7 @@
 <div class="person-head">
   <div class="avatar" aria-hidden="true">{{ (profile.name or '?')|first|upper }}</div>
   <div class="person-id">
-    <div class="crumbs"><a href="{{ url_for('people.people', tenant_id=tenant.id) }}">Users</a><span>/</span></div>
+    <div class="crumbs"><a href="{{ url_for('people.people', tenant_id=tenant.id) }}">&larr; People</a></div>
     <h2>{{ profile.name }}</h2>
     {% if profile.upn and profile.upn != profile.name %}<div class="muted">{{ profile.upn }}</div>{% endif %}
     <div class="badges">{% for text, tone in profile.badges %}<span class="pill {{ PILL.get(tone, '') }}">{{ text }}</span>{% endfor %}</div>
@@ -53,7 +53,13 @@
       <div class="empty compact">{{ icon('check', 'big ok') }}<h3>Nothing needs attention</h3><p>Nothing stands out for this account in the data collected.</p></div>
       {% endif %}
     </section>
+  </div>
 
+  <aside aria-label="Account summary">
+    <section class="card">
+      <div class="card-head"><h2>Account</h2></div>
+      <dl class="kv stacked">{% for label, value in profile.account %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+    </section>
     <section class="card">
       <div class="card-head"><h2>Open findings</h2>
         {% if profile.findings and can_open('reports.tenant_findings', tenant_id=tenant.id) %}<a class="small" href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}">All findings</a>{% endif %}</div>
@@ -67,13 +73,6 @@
       {% else %}
       <p class="muted small m0">No open findings name this account.</p>
       {% endif %}
-    </section>
-  </div>
-
-  <aside aria-label="Account summary">
-    <section class="card">
-      <div class="card-head"><h2>Account</h2></div>
-      <dl class="kv stacked">{% for label, value in profile.account %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
     </section>
   </aside>
 </div>

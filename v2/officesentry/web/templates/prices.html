@@ -18,7 +18,7 @@
       <tbody>
       {% for part, name in skus %}
       <tr><td><span class="strong">{{ name }}</span><span class="sub mono">{{ part }}</span></td>
-        <td class="num"><input class="price" name="price:{{ part }}" inputmode="decimal" placeholder="–" value="{{ current.get(part, '') }}" aria-label="Monthly price for {{ name }}"></td></tr>
+        <td class="num"><input class="price" name="price:{{ part }}" inputmode="decimal" placeholder="–" value="{{ '%.2f'|format(current[part]) if current.get(part) is not none else '' }}" aria-label="Monthly price for {{ name }}"></td></tr>
       {% endfor %}
       </tbody>
     </table>

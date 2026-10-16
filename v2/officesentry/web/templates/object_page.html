@@ -13,7 +13,7 @@
 <div class="person-head object-head">
   <div class="avatar" aria-hidden="true">{{ page.initial }}</div>
   <div class="person-id">
-    <div class="crumbs"><a href="{{ page.list_path }}">{{ page.list_title }}</a><span>/</span></div>
+    <div class="crumbs"><a href="{{ page.list_path }}">&larr; {{ page.list_title }}</a></div>
     <h2>{{ page.name }}</h2>
     {% if page.subtitle %}<div class="muted">{{ page.subtitle }}</div>{% endif %}
     <div class="badges">{% for text, tone in page.badges %}<span class="pill {{ PILL.get(tone, '') }}">{{ text }}</span>{% endfor %}</div>

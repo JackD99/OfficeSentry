@@ -33,7 +33,7 @@
       <td data-label="Action">{{ r.action|replace('tenant', 'client')|replace('_', ' ')|capitalize }}</td>
       <td data-label="Client">{{ tenant_label(r, names, added) }}</td>
       <td data-label="Address" class="mono small">{{ r.ip or '' }}</td>
-      <td data-label="Detail" class="small">{{ r.detail or '' }}</td></tr>
+      <td data-label="Detail" class="small">{{ detail_text(r, names, added) }}</td></tr>
     {% endfor %}
     </tbody>
   </table>

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from .. import store
 from ..collectors.sharepoint import anyone_can_edit, org_can_edit, outside_can_edit
@@ -243,13 +243,13 @@ def storage_part(s: Site) -> Part:
     if len(history) >= 2:
         points = [(when.date(), float(n)) for when, n in history]
         result.chart = storage_chart(points, "Site storage over time", s.now, float(limit) if limit else None)
-        months: dict[str, int] = {}
+        months: dict[tuple[int, int], int] = {}
         for when, n in history:
-            months[when.strftime("%Y-%m")] = n
+            months[(when.year, when.month)] = n
         table = Section("Storage by month", ["Month", "Storage", "Change"], intro="The last collection of each month.")
         previous = None
-        for month, n in sorted(months.items()):
-            table.add([month, size(n), _signed(n - previous) if previous is not None else ""])
+        for (y, mo), n in sorted(months.items()):
+            table.add([f"{date(y, mo, 1):%B %Y}", size(n), _signed(n - previous) if previous is not None else ""])
             previous = n
         table.rows.reverse()
         table.flags.reverse()
