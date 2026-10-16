@@ -174,6 +174,16 @@ def test_check_matrix_squares_carry_a_letter():
     assert '.chk.pass::after { content: "\\2713"; }' in css
 
 
+def test_a_worded_lead_figure_stays_compact():
+    """'Sun 1 Nov, 08:00' as the lead figure: a figure's line height, not small text's 1.9, and on a
+    phone the figure size, so it takes two close lines in a half-width tile rather than three far apart."""
+    css = (STATIC / "app.css").read_text(encoding="utf-8")
+    lead = ".tiles > .tile:first-child .value.small-value"
+    assert f"{lead} {{ line-height: 1.25; }}" in css
+    phone = css[css.index("  .tile .value { font-size: 1.35rem; }") :]
+    assert phone.index(f"  {lead} {{ font-size: var(--fs-figure); }}") < phone.index("\n}")
+
+
 # -- Wording -------------------------------------------------------------------------------------
 
 
