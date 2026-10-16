@@ -45,6 +45,9 @@ PAGES = {
     "/tenants/{t}/data/mfa": (5, 2),
 }
 USERNAME, PASSWORD = "timer", "nightly scale check"  # noqa: S105 (a throwaway database)
+# The build runs in the first test's setup, so the suite's usual two minutes a test would stop it before its own
+# budget does: give every test here room for the build and its slowest page.
+pytestmark = pytest.mark.timeout(BUILD_BUDGET + max(cold for cold, _ in PAGES.values()) + 60)
 
 
 @pytest.fixture(scope="module")
