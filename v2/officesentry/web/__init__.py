@@ -227,6 +227,9 @@ def create_app(cfg: Config | None = None) -> Flask:
         report_areas_open=reports.report_groups,
         report_capability=reports.report_capability,
         entry_capability=reports.entry_capability,
+        # The MSP's custom reports and the person's saved views, as the report menus list them.
+        custom_reports=reports.custom_reports,
+        my_views=reports.my_views,
         # Whether the audit log add-on is switched on for this install (``auditlog/addon.py``): until it is,
         # nothing about it shows.
         audit_addon_on=lambda: g.get("db") is not None and addon_switch.enabled(g.db),

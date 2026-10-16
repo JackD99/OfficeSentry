@@ -226,6 +226,11 @@
 {% set areas = report_catalogue(tenant.id) %}
 {% set shown = ('data', 'review', 'evidence') %}
 {% set here = namespace(area='') %}
+{#- Custom reports (the MSP's own, staff only) and the person's saved views join the menu after the
+    summaries. current is 'designs' on the list of custom reports, 'design:<id>' on one of them. -#}
+{% set custom = custom_reports(tenant.id) if staff else [] %}
+{% set mine = my_views(tenant.id) %}
+{% if current == 'designs' or current.startswith('design:') %}{% set here.area = 'Custom reports' %}{% endif %}
 <nav class="report-menu" aria-label="Reports">
   <a class="skip-picker" href="#report">Skip to the report</a>
   <details class="menu report-switch" id="report-switch">
@@ -242,9 +247,28 @@
           <ul aria-labelledby="picker-{{ area.key }}">
             {% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ _picker_href(tenant, e, on) }}" title="{{ e.description }}"{% if e.key == current %} aria-current="page"{% endif %}>{{ e.title }}</a></li>
             {% endfor %}
-            {% if loop.first and staff %}<li data-name="custom reports report designs blocks"><a href="{{ url_for('designs.tenant_designs', tenant_id=tenant.id) }}" title="Your report designs, on this client's data"{% if current == 'designs' %} aria-current="page"{% endif %}>Custom reports</a></li>{% if current == 'designs' %}{% set here.area = area.title %}{% endif %}{% endif %}
           </ul>
         </div>
+        {% if loop.first and staff %}
+        <div class="report-group">
+          <p class="picker-label" id="picker-custom">Custom reports</p>
+          <ul aria-labelledby="picker-custom">
+            {% for c in custom %}<li data-name="{{ c.search }}"><a href="{{ c.href }}" title="{{ c.description or 'A custom report, on ' ~ tenant.name ~ "'s data" }}"{% if current == c.key %} aria-current="page"{% endif %}>{{ c.name }}</a></li>
+            {% endfor %}
+            <li data-name="custom reports designs blocks all"><a href="{{ url_for('designs.tenant_designs', tenant_id=tenant.id) }}" title="Every custom report, on {{ tenant.name }}'s data"{% if current == 'designs' %} aria-current="page"{% endif %}>{{ 'All custom reports' if custom else 'Custom reports' }}</a></li>
+            {% if can_open('designs.index') %}<li data-name="new custom report design blocks make build"><a class="picker-new" href="{{ url_for('designs.index') }}" title="Build a client report from blocks; it then works for every client">{{ icon('plus') }} New custom report</a></li>{% endif %}
+          </ul>
+        </div>
+        {% endif %}
+        {% if loop.first and mine %}
+        <div class="report-group">
+          <p class="picker-label" id="picker-views">Your views</p>
+          <ul aria-labelledby="picker-views">
+            {% for v in mine %}<li data-name="{{ v.search }}"><a href="{{ v.href }}" title="{{ v.report }} with the filters, columns and sort you saved as “{{ v.name }}”">{{ v.name }} <span class="picker-sub">{{ v.report }}</span></a></li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
         {% endif %}{% endfor %}
       </div>
       <p class="no-match" hidden>No report matches. The <a href="{{ url_for('reports.overview', tenant=tenant.id) }}">Reports page</a> searches by job too.</p>
@@ -255,7 +279,9 @@
 <form method="get" action="{{ url_for('reports.data_index', tenant_id=tenant.id) }}" class="picker-form report-menu-sm" data-autosubmit>
   <label for="report-key">Report</label>
   <select id="report-key" name="key">
-    {% for area in areas %}{% set entries = [] %}{% for e in area.entries if e.kind in shown and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}<optgroup label="{{ area.title }}">{% for e in entries %}<option value="{{ e.key }}"{% if e.key == current %} selected{% endif %}>{{ e.title }}</option>{% endfor %}{% if loop.first and staff %}<option value="designs"{% if current == 'designs' %} selected{% endif %}>Custom reports</option>{% endif %}</optgroup>{% endif %}{% endfor %}
+    {% for area in areas %}{% set entries = [] %}{% for e in area.entries if e.kind in shown and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}<optgroup label="{{ area.title }}">{% for e in entries %}<option value="{{ e.key }}"{% if e.key == current %} selected{% endif %}>{{ e.title }}</option>{% endfor %}</optgroup>
+    {% if loop.first and staff %}<optgroup label="Custom reports">{% for c in custom %}<option value="{{ c.key }}"{% if current == c.key %} selected{% endif %}>{{ c.name }}</option>{% endfor %}<option value="designs"{% if current == 'designs' %} selected{% endif %}>{{ 'All custom reports' if custom else 'Custom reports' }}</option></optgroup>{% endif %}
+    {% if loop.first and mine %}<optgroup label="Your views">{% for v in mine %}<option value="view:{{ v.id }}">{{ v.name }} · {{ v.report }}</option>{% endfor %}</optgroup>{% endif %}{% endif %}{% endfor %}
   </select>
   {% if on %}<input type="hidden" name="on" value="{{ on }}">{% endif %}
   <noscript><button class="btn sm">Show</button></noscript>
