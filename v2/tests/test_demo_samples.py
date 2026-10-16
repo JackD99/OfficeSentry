@@ -35,7 +35,7 @@ def _close(a: float, b: float, places: float) -> bool:
 def _identity_adds_up(db, tenant) -> None:
     """The identity reports show what a real tenant's do: nobody signed in before their account existed, every
     member has a password age, the recycle bin's people have names of their own, sign-ins from abroad come
-    from a city there, and the client with Entra ID P2 has risky users to show."""
+    from a city there, and the client with Entra ID P2 has risky users to show and MFA on every admin."""
     inactive = data_reports.build(db, tenant, "inactive")
     members = next(s for s in inactive.sections if s.title == "Inactive members")
     cols = members.columns
@@ -62,6 +62,13 @@ def _identity_adds_up(db, tenant) -> None:
         assert risky.unavailable is None and any(s.rows for s in risky.sections), tenant["name"]
     else:
         assert risky.unavailable, tenant["name"]
+    # Contoso Legal is the best-run client: every admin has MFA, so the grades on the demo differ.
+    critical = db.execute(
+        "SELECT COUNT(*) FROM findings WHERE tenant_id = ? AND rule_key = 'admin_mfa' AND severity = 'critical'"
+        " AND resolved_at IS NULL",
+        (tenant["id"],),
+    ).fetchone()[0]
+    assert (critical == 0) == (tenant["name"] == "Contoso Legal LLP"), (tenant["name"], critical)
 
 
 def test_demo_reports_add_up(app, db, vault):

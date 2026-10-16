@@ -221,8 +221,8 @@ TENANTS = [
     # name, domain base, top-level domain, staff, share of staff with MFA (first collection, now),
     # inactive staff, Secure Score (5 weeks ago, now), SharePoint storage used as a share of the tenant's quota
     # (5 weeks ago, now), the kind of SharePoint sites, mailboxes forwarding outside, the cities its people sign
-    # in from, the fixture people's new names, and whether it has Entra ID P2. Every domain is under .example,
-    # so nothing points at a real organisation.
+    # in from, the fixture people's new names, whether it has Entra ID P2, and whether every admin has MFA.
+    # Every domain is under .example, so nothing points at a real organisation.
     dict(
         name="Northwind Traders",
         base="northwindtraders",
@@ -275,6 +275,7 @@ TENANTS = [
         staff=17,
         mfa=(0.88, 0.94),
         inactive=1,
+        admins_mfa=True,
         score=(61.0, 68.0),
         storage=(0.27, 0.28),
         forwards=0,
@@ -2068,6 +2069,38 @@ def breakglass(t: dict, now: datetime) -> dict:
     }
 
 
+# How each fixture admin signs in with MFA on the client whose admins all have it: the emergency access account
+# with a FIDO2 key kept offline, as Microsoft advises, the others with the Authenticator app.
+ADMIN_METHODS = {"u4": "fido2", "u3": "microsoftAuthenticatorPush", "u5": "microsoftAuthenticatorPush"}
+
+
+def mfa_registration(t: dict, everyone: list[dict], staff_rows: list[dict]) -> list[dict]:
+    """MFA registration: the fixtures' rows and the staff's. On a client whose admins all have MFA, each admin
+    has a method, so its grade isn't held at E by an admin without one."""
+    rows = graphdata.REGISTRATION_DETAILS
+    if t.get("admins_mfa"):
+        held = graphdata.ROLE_ASSIGNMENTS + graphdata.ROLE_ELIGIBILITY  # the eligible admin isn't in the user list
+        people = {a["principalId"]: a["principal"] for a in held if a.get("principal")}
+        people.update((u["id"], u) for u in everyone)
+        rows = [r for r in rows if r["id"] not in ADMIN_METHODS] + [
+            {
+                "id": uid,
+                "userPrincipalName": people[uid]["userPrincipalName"],
+                "userDisplayName": people[uid]["displayName"],
+                "userType": "guest" if people[uid].get("userType") == "Guest" else "member",
+                "isAdmin": True,
+                "isMfaRegistered": True,
+                "isMfaCapable": True,
+                "methodsRegistered": [method],
+                "isSsprRegistered": True,
+                "isSsprCapable": True,
+                "isPasswordlessCapable": method == "fido2",
+            }
+            for uid, method in ADMIN_METHODS.items()
+        ]
+    return rows + staff_rows
+
+
 def with_p2(u: dict, now: datetime) -> dict:
     """The account with the Entra ID P2 add-on assigned directly, beside its other licences."""
     u = dict(u, assignedLicenses=list(u.get("assignedLicenses") or []) + [{"skuId": "sku-p2"}])
@@ -2135,7 +2168,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> 
                 deleted_users=deleted_people(t, now),
                 ca=seed.pop("ca", None) or ca_policies(t),
                 skus=tenant_skus,
-                registration=graphdata.REGISTRATION_DETAILS + registration,
+                registration=mfa_registration(t, everyone, registration),
                 secure_scores=secure_scores(t["score"][0] - 4, t["score"][0], now)
                 if first
                 else secure_scores(t["score"][0] - 4, t["score"][1], now, 105),
