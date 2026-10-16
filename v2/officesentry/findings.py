@@ -81,13 +81,13 @@ def sync(conn, tenant, now: datetime | None = None) -> dict:
                     if reopened:
                         # A problem that came back is a fresh one: nobody holds it and it isn't snoozed. The
                         # note stays, since why it wasn't fixed is still worth knowing.
-                        _clear(conn, row["id"], hand=True)
+                        conn.execute(f"UPDATE findings SET {UNHAND}, {UNSNOOZE} WHERE id = ?", (row["id"],))
                         opened.append(row["id"])
             for key, row in existing.items():
                 if key not in current and key not in r.keep and row["resolved_at"] is None:
+                    # It keeps its holder and snooze (cleared only if it comes back), so what each person
+                    # closed can be counted.
                     conn.execute("UPDATE findings SET resolved_at = ? WHERE id = ?", (ts, row["id"]))
-                    # It keeps its holder, so what each person closed can be counted; a snooze is over.
-                    _clear(conn, row["id"], hand=False)
                     stats["resolved"] += 1
     return {**stats, "opened": opened}
 
@@ -154,11 +154,8 @@ def unaccept(conn, finding_id: int) -> None:
 NOTE_LENGTH = 2000
 
 
-def _clear(conn, finding_id: int, hand: bool) -> None:
-    columns = "snoozed_until = NULL, snoozed_by = NULL, snoozed_at = NULL"
-    if hand:
-        columns += ", handed_to = NULL, handed_by = NULL, handed_at = NULL"
-    conn.execute(f"UPDATE findings SET {columns} WHERE id = ?", (finding_id,))
+UNHAND = "handed_to = NULL, handed_by = NULL, handed_at = NULL"
+UNSNOOZE = "snoozed_until = NULL, snoozed_by = NULL, snoozed_at = NULL"
 
 
 def note(conn, finding_id: int, text: str | None, by: str) -> None:
@@ -178,7 +175,7 @@ def hand(conn, finding_id: int, to_user_id: int | None, by: str) -> None:
     see the client is the caller's check (``web/finding.holders``): this only refuses what no caller could
     mean, a client account or a disabled or unknown one."""
     if to_user_id is None:
-        _clear(conn, finding_id, hand=True)
+        conn.execute(f"UPDATE findings SET {UNHAND} WHERE id = ?", (finding_id,))
         return
     row = conn.execute(
         "SELECT 1 FROM users WHERE id = ? AND role <> 'client' AND disabled = 0", (to_user_id,)
@@ -194,10 +191,7 @@ def hand(conn, finding_id: int, to_user_id: int | None, by: str) -> None:
 def snooze(conn, finding_id: int, until: str | None, by: str) -> None:
     """Keep the finding out of Today until ``until`` (an ISO timestamp in UTC), or end a snooze (None)."""
     if until is None:
-        conn.execute(
-            "UPDATE findings SET snoozed_until = NULL, snoozed_by = NULL, snoozed_at = NULL WHERE id = ?",
-            (finding_id,),
-        )
+        conn.execute(f"UPDATE findings SET {UNSNOOZE} WHERE id = ?", (finding_id,))
         return
     conn.execute(
         "UPDATE findings SET snoozed_until = ?, snoozed_by = ?, snoozed_at = ? WHERE id = ?",

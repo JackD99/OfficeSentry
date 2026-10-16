@@ -292,12 +292,18 @@ def test_snooze(db, world):
     saved = db.execute("SELECT * FROM findings WHERE id = ?", (row["id"],)).fetchone()
     assert saved["snoozed_until"] == later and saved["snoozed_by"] == "analyst" and saved["snoozed_at"]
     assert findings.is_snoozed(saved) and not findings.is_snoozed(saved, datetime.now(UTC) + timedelta(days=3))
+    # Handing it on, or back to nobody, leaves the snooze alone; ending the snooze leaves the holder.
+    who = db.execute("SELECT id FROM users WHERE username = 'analyst'").fetchone()["id"]
+    findings.hand(db, row["id"], who, "admin")
+    findings.hand(db, row["id"], None, "admin")
+    assert db.execute("SELECT snoozed_until FROM findings WHERE id = ?", (row["id"],)).fetchone()[0] == later
+    findings.hand(db, row["id"], who, "admin")
     findings.snooze(db, row["id"], None, "analyst")
     saved = db.execute("SELECT * FROM findings WHERE id = ?", (row["id"],)).fetchone()
-    assert saved["snoozed_until"] is None and not findings.is_snoozed(saved)
+    assert saved["snoozed_until"] is None and not findings.is_snoozed(saved) and saved["handed_to"] == who
 
 
-def test_sync_keeps_the_holder_on_resolve_and_clears_both_on_reopen(db, world, monkeypatch):
+def test_sync_keeps_holder_and_snooze_on_resolve_and_clears_both_on_reopen(db, world, monkeypatch):
     alpha, _ = world
     tenant = store.get_tenant(db, alpha)
     row = _finding(db, alpha, "admin_mfa")
@@ -309,7 +315,7 @@ def test_sync_keeps_the_holder_on_resolve_and_clears_both_on_reopen(db, world, m
     monkeypatch.setattr(findings, "evaluate", lambda snap, now: [passing])
     findings.sync(db, tenant)
     saved = db.execute("SELECT * FROM findings WHERE id = ?", (row["id"],)).fetchone()
-    assert saved["resolved_at"] and saved["handed_to"] == who and saved["snoozed_until"] is None
+    assert saved["resolved_at"] and saved["handed_to"] == who and saved["snoozed_until"] == "2099-01-01T00:00:00Z"
     assert saved["note"] == "Chased twice"
     back = RuleResult(
         "admin_mfa",
@@ -320,7 +326,6 @@ def test_sync_keeps_the_holder_on_resolve_and_clears_both_on_reopen(db, world, m
         findings=[Finding(row["severity"], row["subject"], row["detail"], row["object_id"])],
     )
     monkeypatch.setattr(findings, "evaluate", lambda snap, now: [back])
-    findings.snooze(db, row["id"], "2099-01-01T00:00:00Z", "admin")
     findings.sync(db, tenant)
     saved = db.execute("SELECT * FROM findings WHERE id = ?", (row["id"],)).fetchone()
     assert saved["resolved_at"] is None and saved["reopened_at"]
