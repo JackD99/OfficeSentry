@@ -26,8 +26,7 @@ digest=${from##*@}
 repository=${from%%:*}
 library=${repository#public.ecr.aws/docker/}
 
-# Temporary, reverted in the next commit: AWS refuses (a repository it doesn't have), to show the fallback.
-for source in "$repository-refused" "mirror.gcr.io/$library" "docker.io/$library"; do
+for source in "$repository" "mirror.gcr.io/$library" "docker.io/$library"; do
   if docker pull -q "$source@$digest" > /dev/null; then
     echo "context=$from=docker-image://$source@$digest" >> "$GITHUB_OUTPUT"
     echo "The base image came from $source." | tee -a "$GITHUB_STEP_SUMMARY"
