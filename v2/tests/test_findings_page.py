@@ -214,5 +214,28 @@ def test_an_impossible_review_date_is_refused(client, db, two_tenants):
         assert _finding(db, alpha, "guest_admins")["accepted_by"] is None
     page = client.get(f"/tenants/{alpha}/findings").get_data(as_text=True)
     assert "isn&#39;t a real date" in page
-    client.post(f"/findings/{guest['id']}/accept", data={"note": "Partner", "until": "2027-02-28"})
+    next_year = datetime.now(UTC).year + 1  # a review date in the past is refused too (below)
+    client.post(f"/findings/{guest['id']}/accept", data={"note": "Partner", "until": f"{next_year}-02-28"})
     assert _finding(db, alpha, "guest_admins")["accepted_by"] == "analyst1"
+
+
+def test_a_review_date_of_today_or_earlier_is_refused(client, db, two_tenants):
+    """An acceptance runs out at the start of its review date, so one of today or earlier would leave the finding
+    open (still alerting and counted) while the page said the risk was accepted."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    make_user(db, "analyst1", role="analyst", tenants=[alpha])
+    login(client, "analyst1")
+    guest = _finding(db, alpha, "guest_admins")
+    today = datetime.now(UTC).date()
+    tomorrow = (today + timedelta(days=1)).isoformat()
+    assert f'name="until" min="{tomorrow}"' in client.get(f"/tenants/{alpha}/findings").get_data(as_text=True)
+    for until in (today.isoformat(), (today - timedelta(days=30)).isoformat()):
+        resp = client.post(f"/findings/{guest['id']}/accept", data={"note": "Partner", "until": until})
+        assert resp.status_code == 302 and "#t-accepted-risks" not in resp.headers["Location"]
+        assert _finding(db, alpha, "guest_admins")["accepted_by"] is None
+        page = client.get(resp.headers["Location"]).get_data(as_text=True)
+        assert "the review date has to be after today" in page and "Risk accepted." not in page
+    resp = client.post(f"/findings/{guest['id']}/accept", data={"note": "Partner", "until": tomorrow})
+    assert resp.headers["Location"].endswith("#t-accepted-risks")
+    assert findings.lifecycle_map(db, alpha)[("guest_admins", guest["object_id"])].accepted

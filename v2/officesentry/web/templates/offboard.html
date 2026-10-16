@@ -43,12 +43,13 @@ This stops all access straight away. We are deleting everything Office Sentry co
     <div class="step-title">Check what will be deleted</div>
     <div class="step-body">
       <ul class="ticks offboard-counts">
-        <li>{{ stored.runs|plural('collection run') }} with {{ stored.objects|plural('stored item') }} of collected data, and {{ stored.metrics|plural('trend figure') }}</li>
-        <li>{{ stored.findings|plural('finding') }} ({{ stored.open_findings }} open), including accepted risks</li>
-        {% if stored.history_signins or stored.history_audits %}<li>Activity history: {{ stored.history_signins|plural('sign-in') }}, {{ stored.history_daily|plural('daily sign-in summary', 'daily sign-in summaries') }} and {{ stored.history_audits|plural('directory audit event') }}</li>{% endif %}
-        {% if stored.history_activity %}<li>Audit log add-on: {{ stored.history_activity|plural('audit record') }} from the client's Microsoft 365 audit log</li>{% endif %}
-        <li>{{ stored.schedules|plural('emailed report') }}, {{ stored.alerts|plural('alert email') }}, {{ stored.contacts|plural('client contact') }} and {{ stored.deliveries|plural('line') }} of email history</li>
-        <li>Access for {{ stored.access|plural('Office Sentry user') }}{% if other_users %}: {% for u in other_users %}{{ u.username }} ({{ u.role }}){{ ', ' if not loop.last }}{% endfor %} lose access to this client only{% endif %}</li>
+        <li>{{ stored.runs|counted('collection run') }} with {{ stored.objects|counted('stored item') }} of collected data, and {{ stored.metrics|counted('trend figure') }}</li>
+        <li>{{ stored.findings|counted('finding') }} ({{ '{:,}'.format(stored.open_findings) }} open), including accepted risks</li>
+        {% if stored.history_signins or stored.history_audits %}<li>Activity history: {{ stored.history_signins|counted('sign-in') }}, {{ stored.history_daily|counted('daily sign-in summary', 'daily sign-in summaries') }} and {{ stored.history_audits|counted('directory audit event') }}</li>{% endif %}
+        {% if stored.history_activity %}<li>Audit log add-on: {{ stored.history_activity|counted('audit record') }} from the client's Microsoft 365 audit log</li>{% endif %}
+        <li>{{ stored.schedules|counted('emailed report') }}, {{ stored.alerts|counted('alert email') }}, {{ stored.contacts|counted('client contact') }} and {{ stored.deliveries|counted('line') }} of email history</li>
+        {% if stored.issued %}<li>{{ stored.issued|counted('file') }} in the {% if can('emails.view', tenant.id) %}<a href="{{ url_for('email.report_history', tenant_id=tenant.id) }}">Report history</a>{% else %}Report history{% endif %}, the reports exactly as they were sent or published to the client. Download any you want to keep first.</li>{% endif %}
+        <li>Access for {{ stored.access|counted('Office Sentry user') }}{% if other_users %}: {% for u in other_users %}{{ u.username }} ({{ role_names[u.id] }}){{ ', ' if not loop.last }}{% endfor %} lose access to this client only{% endif %}</li>
       </ul>
       <p class="small muted m0">Activity log entries stay, so you can see who offboarded the client and when, but details naming the client's people (accepted findings, contacts, alert errors) and deleted client accounts' names and addresses are removed. Deleted data is overwritten in the database. Backups made before today still hold it until they rotate out (7 backups by default).</p>
     </div>

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
@@ -435,6 +435,7 @@ def _findings_page(t, resolved: bool):
         lapsed=lapsed,
         links=views.headline_links(report, request.path),
         counts=counts,
+        first_review_day=_first_review_day(),
     )
 
 
@@ -491,6 +492,12 @@ def _real_date(text: str) -> bool:
     return True
 
 
+def _first_review_day() -> str:
+    """The earliest review date an accepted risk can have: tomorrow. The acceptance runs until midnight UTC at
+    the start of its review date, so one of today or earlier would be over before it began."""
+    return (datetime.now(UTC).date() + timedelta(days=1)).isoformat()
+
+
 def _finding_or_404(finding_id: int):
     row = g.db.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone()
     if row is None:
@@ -510,6 +517,12 @@ def accept_finding(finding_id: int):
     elif until and not _real_date(until):
         # A date like 2026-02-31 would never come round, so the finding would stay hidden for good.
         flash("The review date isn't a real date. Pick one from the calendar.", "error")
+    elif until and until < _first_review_day():
+        flash(
+            "Nothing was accepted: the review date has to be after today, since the risk comes back for review at "
+            "the start of that day. Pick a later date, or leave it empty.",
+            "error",
+        )
     else:
         findings.accept(g.db, row["id"], g.user["username"], note, f"{until}T00:00:00Z" if until else None)
         audit(g.db, g.user["username"], "finding_accepted", row["tenant_id"], f"{row['rule_key']}:{row['subject']}")

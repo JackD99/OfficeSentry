@@ -73,6 +73,7 @@ little as possible with that access. Details and code references are in
   another client's IDs, as staff and as a client, and expects a refusal.
   `tests/test_roles.py` opens every route as every built-in role and expects
   a refusal exactly where the role lacks what the page needs.
+- **Client text stays text.** `tests/test_injection_walk.py` ends every name, title and file name a client's tenant sends with markup, opens every page, report and PDF, and fails if any of them shows it unescaped. <!-- since 2.4.0 -->
 - **The mail app is separate and can be fenced in.** Email through
   Microsoft 365 uses its own single-tenant app with `Mail.Send` in the MSP's
   tenant, signing in with a certificate (or a client secret). The settings

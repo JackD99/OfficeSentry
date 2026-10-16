@@ -13,7 +13,7 @@
 {% if parsed and not parsed.error %}
 {% set new = parsed.new %}
 <div class="tiles">
-  <div class="tile{{ ' tone-ok' if new }}"><div class="label">Will be added</div><div class="value">{{ new|length }}</div><div class="foot">new clients</div></div>
+  <div class="tile{{ ' tone-ok' if new }}"><div class="label">Will be added</div><div class="value">{{ new|length }}</div><div class="foot">{{ 'new client' if new|length == 1 else 'new clients' }}</div></div>
   <div class="tile"><div class="label">Already there</div><div class="value">{{ parsed.skipped|length }}</div><div class="foot">left as they are</div></div>
   <div class="tile{{ ' tone-bad' if parsed.broken }}"><div class="label">Need fixing</div><div class="value">{{ parsed.broken|length }}</div><div class="foot">left out; fix and import again</div></div>
 </div>
@@ -27,7 +27,7 @@
     {% endfor %}
     {% if parsed.new_groups %}<li>{{ icon('tenants') }}<span>New {{ 'group' if parsed.new_groups|length == 1 else 'groups' }}: <strong>{{ parsed.new_groups|join(', ') }}</strong>.</span></li>{% endif %}
     {% for name, analysts in granted.items() if analysts %}<li>{{ icon('eye') }}<span>Analysts given the group <strong>{{ name }}</strong> will see its new clients: {{ analysts|join(', ') }}.</span></li>{% endfor %}
-    <li>{{ icon('shield') }}<span>Only admins see the other new clients, until you give analysts or client users access.</span></li>
+    <li>{{ icon('shield') }}<span>Everyone who sees every client (admins, and any role or person given every client) sees the new {{ 'client' if new|length == 1 else 'clients' }} straight away; anyone else only once you give them access.</span></li>
   </ul>
   <form method="post" class="form-actions">{{ csrf() }}
     <input type="hidden" name="text" value="{{ text }}"><input type="hidden" name="confirm" value="1">
@@ -67,7 +67,7 @@
   <div class="form-actions"><button class="primary">Check the list</button>
     <a class="btn ghost" href="{{ url_for('onboarding.template') }}">{{ icon('download') }} Download a template</a></div>
   <div class="footnote m0">
-    <p class="m0">One row per client, with column names on the first row. Excel's <em>Save as CSV</em> works.</p>
+    <p class="m0">One row per client, with column names on the first row. Excel's <em>Save as CSV</em> or <em>Unicode Text</em> works, and so does PowerShell's <code>ConvertTo-Csv</code>.</p>
     <ul class="column-notes small">
       <li><strong>name</strong>: how the client appears in Office Sentry and on reports.</li>
       <li><strong>tenant</strong>: the Directory (tenant) ID, or any domain the tenant uses, such as contoso.onmicrosoft.com.</li>

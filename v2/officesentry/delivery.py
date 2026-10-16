@@ -1543,9 +1543,13 @@ def after_sync(app, conn, vault, tenant, finding_ids, run_id: int | None = None)
     """Email everyone whose alert covers ``tenant`` about the findings one sync opened.
 
     Called from ``alerts.after_sync``, so emails go out on the same event as Teams, Slack and webhook
-    alerts. Never raises. Returns the number of emails attempted.
+    alerts. Never raises. Returns the number of emails attempted. A client paused or archived since its
+    collection started gets none.
     """
     if not finding_ids:
+        return 0
+    tenant = alerts.alerted_tenant(conn, tenant["id"])
+    if tenant is None:
         return 0
     attempted = 0
     rows = conn.execute(
