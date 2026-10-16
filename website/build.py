@@ -395,8 +395,8 @@ WHATS_NEW = [
             "removing something asks first in the portal's own dialog, light or dark like the page",
             "a pressed Save, Send now or Approve shows it's working and can't send twice",
             "every message after an action carries an icon as well as its colour",
-            "the Activity log spells out access changes and evidence answers, and offboarding names every app to "
-            "delete",
+            "the Activity log and its download spell out access changes and evidence answers, and offboarding "
+            "names every app to delete",
             "a client whose sign-in breaks keeps its last good data, and its findings aren't marked fixed",
             "a month-end report changed after approval reaches the client only as a new version",
             "month-end never sends a client the same month twice",
