@@ -1357,6 +1357,8 @@ td.row-action { min-width: 150px; }
 .group-picker .clear { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: var(--accent); font-size: 1.05rem; line-height: 1; }
 .group-picker .clear:hover { background: var(--accent); color: var(--accent-text); text-decoration: none; }
 .month-nav { flex-wrap: wrap; }
+/* Month-end's buttons wrap under the title rather than squeeze it onto two lines. */
+.page-head.month-head > :first-child:not(:only-child) { flex-basis: auto; }
 .group-chips { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); }
 .group-chips .chip { padding: 0 var(--space-2); font-size: var(--fs-xs); font-weight: 500; background: var(--sunken); color: var(--text-2); }
 td .group-chips { margin-top: var(--space-1); }
