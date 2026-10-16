@@ -250,7 +250,7 @@ def resume(tenant_id: int):
     if t["archived_at"]:
         flash("Restore the client before resuming it.", "error")
     elif not t["enabled"]:
-        lifecycle.resume(g.db, t, g.user["username"])
+        lifecycle.resume(g.db, t, g.user["username"], _cfg().timezone)
         flash(
             f"Resumed {t['name']}. It's collected at the next nightly run; use Refresh all data to collect now.",
             "success",

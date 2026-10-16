@@ -129,8 +129,10 @@ def _decorate(s) -> dict:
     d["recipients"] = delivery.recipients(g.db, "schedule", s["id"])
     d["describe"] = delivery.describe(s)
     d["tz"] = delivery.schedule_tz(s, _cfg().timezone)
+    # The client is "paused" or "archived": the timer skips it and nothing can be sent by hand.
+    d["client_off"] = delivery.client_off(store.get_tenant(g.db, s["tenant_id"])) if s["kind"] == "report" else None
     # A plan schedule that waits for approval never sends on its timer (month_end.approve sends it).
-    d["next"] = None if s["on_approval"] else delivery.next_send(s, _cfg().timezone)
+    d["next"] = None if s["on_approval"] or d["client_off"] else delivery.next_send(s, _cfg().timezone)
     d["titles"] = delivery.schedule_titles(s, g.db)
     d["upcoming"] = delivery.is_upcoming(s)
     d["views"] = delivery.is_views(s)
@@ -583,6 +585,8 @@ def new_views():
 @needs("emails.manage", "reports.security")
 def edit_schedule(schedule_id: int):
     s = _schedule_or_404(schedule_id)
+    if s["plan_id"]:
+        return _on_plan(s)
     tenant = tenant_or_404(s["tenant_id"]) if s["tenant_id"] else None
     if tenant is not None and not _sends_only_what_they_open(s):
         flash("Only someone who can open every report this email sends can change it.", "error")
@@ -600,9 +604,23 @@ def edit_schedule(schedule_id: int):
 @needs("emails.manage")
 def delete_schedule(schedule_id: int):
     s = _schedule_or_404(schedule_id)
+    if s["plan_id"]:
+        return _on_plan(s)
     g.db.execute("DELETE FROM email_schedules WHERE id = ?", (s["id"],))
     audit(g.db, g.user["username"], "email_schedule_deleted", s["tenant_id"], s["kind"])
     flash("Scheduled email removed.", "success")
+    return _back(s["tenant_id"])
+
+
+def _on_plan(s):
+    """A client's report plan email is changed on its plan. Changed here it went its own way until the plan
+    was next saved; deleted here, the month waited for an email that was gone."""
+    plan = month_end.get_plan(g.db, s["plan_id"])
+    flash(
+        f"This email comes from the report plan “{plan['name']}”. Change it on the plan, or take the client off"
+        " the plan there, under Month-end, Report plans.",
+        "error",
+    )
     return _back(s["tenant_id"])
 
 
@@ -652,6 +670,9 @@ def send_now(schedule_id: int):
         )
     if not delivery.recipients(g.db, "schedule", s["id"]):
         flash("Add someone to send it to first.", "error")
+        return _back(s["tenant_id"])
+    if s["kind"] == "report" and (refused := delivery.not_sending_to(store.get_tenant(g.db, s["tenant_id"]))):
+        flash(refused, "error")
         return _back(s["tenant_id"])
     if delivery.being_sent(g.db, s, _cfg().timezone):
         flash(delivery.BEING_SENT, "error")
@@ -891,6 +912,9 @@ def retry(delivery_id: int):
         tenant_or_404(d["tenant_id"])
     elif not can("settings.manage"):
         abort(404)
+    if d["tenant_id"] is not None and (refused := delivery.not_sending_to(store.get_tenant(g.db, d["tenant_id"]))):
+        flash(refused, "error")
+        return _back(d["tenant_id"]) if request.form.get("from") != "overview" else _back(None)
     error = delivery.retry_delivery(current_app, g.db, _vault(), d, g.user["username"])
     audit(g.db, g.user["username"], "email_retried", d["tenant_id"], d["subject"])
     flash(f"Sending failed again: {error}" if error else "Sent.", "error" if error else "success")
