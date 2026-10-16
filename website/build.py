@@ -459,6 +459,8 @@ WHATS_NEW = [
 COPIED = {"docs/screenshots": "screenshots", "examples": "examples"}
 # Also served from the site's root, where browsers, phones and crawlers look for them without being told.
 ROOT_ASSETS = ("favicon.ico", "apple-touch-icon.png")
+# The portal's own fonts and their licences (DESIGN.md), served from the site so nothing is fetched elsewhere.
+FONTS = ROOT / "v2/officesentry/web/static/fonts"
 
 
 # -- Settings -------------------------------------------------------------------------------------------------
@@ -798,6 +800,7 @@ def build() -> Path:
     if OUT.exists():
         shutil.rmtree(OUT)
     shutil.copytree(HERE / "assets", OUT / "assets")
+    shutil.copytree(FONTS, OUT / "assets/fonts")
     for name in ROOT_ASSETS:
         shutil.copy(HERE / "assets" / name, OUT / name)
     for source, published in COPIED.items():

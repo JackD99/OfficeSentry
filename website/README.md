@@ -63,7 +63,8 @@ To see the site as it will look once the next release is out, build it with `SIT
 ## Changing the page about Office Sentry
 
 `templates/home.html` is the front page, `templates/base.html` the header and footer, and
-`assets/site.css` the styles (the same colours as the app, light and dark). Screenshots come from
+`assets/site.css` the styles: the app's look from `DESIGN.md`, light and dark, with the app's own fonts,
+which the build copies from `v2/officesentry/web/static/fonts/` into `assets/fonts/`. Screenshots come from
 `docs/screenshots/` (made by `v2/scripts/screenshots.py`), so the page shows the app as it is. Pages link
 the styles and script with a fingerprint of their contents (`site.css?v=...`), so a browser that kept the
 last deploy's copy for a day fetches the new one. A new stylesheet or script goes in `assets` in
