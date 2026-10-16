@@ -145,6 +145,11 @@ start from there.
 8. Set up the nightly backup and an off-site copy ([Backups](#backups)), so that losing the server doesn't
    lose the data.
 
+   <!-- since 2.4.0 -->
+   From 2.4.0 the worker makes the nightly copy by itself, on the data volume, so what's left is a copy off
+   the server: the [off-site backup](#off-site-backups).
+   <!-- /since -->
+
 When something doesn't work, [Troubleshooting](docs/troubleshooting.md) covers the usual causes, and
 [Getting help](docs/getting-help.md) says where to ask.
 
