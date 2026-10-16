@@ -15,8 +15,8 @@ from datetime import UTC, datetime
 from .. import store, usage
 from ..collectors.exchange import SYSTEM_MAILBOX_TYPES
 from ..devices import parse_ts
-from ..licences import last_sign_in
-from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
+from ..licences import last_sign_in, never_signed_in
+from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, org_holds, retention_hold, tenant_domains
 from ..snapshot import TenantSnapshot
 from ..text import fold, plural
 from .auto_replies import OUTSIDE, _at, first_seen, state
@@ -120,6 +120,7 @@ class Mailbox(Subject):
         self.users = snap.objects("users", "user") or []
         self.user = next((u for u in self.users if u["_id"] == box.get("ExternalDirectoryObjectId")), None)
         self.domains = tenant_domains(snap) or set()
+        self.retention_hold = retention_hold(box, org_holds(snap))
         self.keys = {
             k.lower() for k in (self.address, _text(box.get("UserPrincipalName")), (self.user or {}).get("mail")) if k
         }
@@ -546,7 +547,7 @@ def _about(m: Mailbox) -> list[tuple[str, object]]:
         if m.shared:
             last = last_sign_in(u)
             if u.get("signInActivityAvailable"):
-                facts.append(("Last sign-in to the account", _when(last, m.now) if last else "Never"))
+                facts.append(("Last sign-in to the account", _when(last, m.now) if last else never_signed_in(u)))
         facts.append(("Licensed", "Yes" if u.get("licensed") else "No"))
     elif m.box.get("UserPrincipalName"):
         facts.append(("Sign-in name", m.box["UserPrincipalName"]))
@@ -566,7 +567,8 @@ def _account_attention(m: Mailbox) -> None:
             "The shared mailbox's account allows sign-in. Block it: shared mailboxes are opened through people's "
             "own accounts, so the account itself needs no password.",
         )
-    if m.type == "UserMailbox" and not u.get("accountEnabled") and not m.box.get("LitigationHoldEnabled"):
+    held = m.box.get("LitigationHoldEnabled") or m.retention_hold
+    if m.type == "UserMailbox" and not u.get("accountEnabled") and not held:
         m.flag(
             "low",
             "The person's sign-in is blocked and the mailbox isn't on hold: once the licence goes, the mail goes "
@@ -632,7 +634,7 @@ def build(conn, tenant, mailbox_id: str, now: datetime | None = None) -> ObjectP
     page.badges = [(TYPE_WORDS.get(m.type, m.type or "Mailbox"), None)]
     if m.user is not None:
         page.badges.append(("Sign-in allowed", "ok") if m.user.get("accountEnabled") else ("Sign-in blocked", "bad"))
-    if m.box.get("LitigationHoldEnabled"):
+    if m.box.get("LitigationHoldEnabled") or m.retention_hold:
         page.badges.append(("On hold", None))
     if m.box.get("ArchiveStatus") not in (None, "", "None"):
         page.badges.append(("Archive on", None))

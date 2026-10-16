@@ -69,6 +69,9 @@ def summarise(user: dict, activity_available: bool) -> dict:
         "lastSignInDateTime": activity.get("lastSignInDateTime"),
         "lastNonInteractiveSignInDateTime": activity.get("lastNonInteractiveSignInDateTime"),
         "lastSuccessfulSignInDateTime": activity.get("lastSuccessfulSignInDateTime"),
+        # Microsoft sent the successful time (null when none), so the other two, which failed attempts also
+        # move, aren't needed to tell when the account was last used (licences.last_sign_in).
+        "successfulSignInKnown": "lastSuccessfulSignInDateTime" in activity,
         "signInActivityAvailable": activity_available,
     }
 

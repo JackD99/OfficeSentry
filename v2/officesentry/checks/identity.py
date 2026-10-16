@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from .. import coverage
+from ..authmethods import mfa_set_up
 from ..licences import is_stale, last_sign_in, licence_summary, load_prices
 from ..snapshot import TenantSnapshot
 from ..text import day, every, plural, verb
@@ -245,27 +246,30 @@ def _roles_text(assignments: list[dict]) -> str:
     "Break-glass accounts should use FIDO2 keys kept offline.",
 )
 def admin_mfa(snap: TenantSnapshot, now: datetime):
-    admins = _privileged_users(snap)
+    # PIM-eligible holders count: whoever sets up MFA on the account first can activate the role.
+    admins = _privileged_users(snap, eligible=True)
     reg = snap.objects("mfa_registration", "mfa_registration")
     if admins is None or reg is None:
         return _unavailable("Needs admin role and MFA registration data")
     if not reg:
         return _unavailable("Microsoft returned no MFA registration data yet")
-    registered = {r["_id"]: r.get("isMfaRegistered") for r in reg}
-    findings, seen = [], set()
-    for a in admins:
-        pid = a["principalId"]
-        if a.get("principalType") != "user" or pid in seen or a.get("accountEnabled") is False:
+    registered = {r["_id"]: mfa_set_up(r) for r in reg}
+    findings, seen, eligible = [], set(), 0
+    for pid, held in _by_principal(admins).items():
+        a = held[0]
+        if a.get("principalType") != "user" or any(h.get("accountEnabled") is False for h in held):
             continue
         seen.add(pid)
         if registered.get(pid) is False:
-            findings.append(Finding("critical", _label(a), f"{_role(a)} with no MFA method registered", pid))
+            findings.append(Finding("critical", _label(a), f"{_roles_text(held)} with no MFA method registered", pid))
+            eligible += all(h.get("assignment") == "eligible" for h in held)
         elif pid not in registered:
-            findings.append(Finding("low", _label(a), f"{_role(a)}: MFA registration unknown", pid))
+            findings.append(Finding("low", _label(a), f"{_roles_text(held)}: MFA registration unknown", pid))
     missing = sum(f.severity == "critical" for f in findings)
     unknown = len(findings) - missing
     if missing:
-        extra = f", and {unknown} whose registration isn't known" if unknown else ""
+        extra = f" ({eligible} through PIM)" if eligible else ""
+        extra += f", and {unknown} whose registration isn't known" if unknown else ""
         return ("fail", f"{plural(missing, 'admin')} without MFA{extra}", findings)
     if unknown:  # can't call it a pass, and "0 admins without MFA" as a failure reads as nonsense
         return _unavailable(f"MFA registration isn't known for {plural(unknown, 'admin')}")
@@ -393,7 +397,7 @@ def users_mfa_registered(snap: TenantSnapshot, now: datetime):
         if str(r.get("userType") or "member").lower() != "member":
             continue
         checked += 1
-        if r.get("isMfaRegistered"):
+        if mfa_set_up(r):
             continue
         findings.append(
             Finding("high" if r.get("isAdmin") else "medium", _label(r), "No MFA method registered", r["_id"])

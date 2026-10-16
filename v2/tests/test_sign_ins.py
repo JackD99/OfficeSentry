@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 import responses
 from openpyxl import load_workbook
 
-from officesentry import signins, store
+from officesentry import formatting, signins, store
 from officesentry.collectors import sign_ins
 from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.reports import data_reports, export, library, user_profile, views
@@ -248,6 +248,7 @@ def test_report_leads_with_what_to_act_on(db, two_tenants):
     assert reasons["50074"][2] == "Prompt"
     countries = {r[0]: r for r in s["Sign-ins by country"].rows}
     assert countries["FR"][-1] == "Yes" and countries["GB"][-1] == "No"
+    assert countries["RU"][-1] == "Only failed sign-ins"  # not "No": unusual is judged on successes
     tiles = {t.label: t for t in report.tiles}
     assert tiles["Sign-ins"].value == len(gd.SIGNINS)
     assert tiles["Repeated failures"].value == 1 and tiles["Repeated failures"].tone == "bad"
@@ -314,7 +315,9 @@ def test_risky_sign_ins_with_entra_p2(db, two_tenants):
     assert result.status == "fail" and result.summary.startswith("1 account signed in despite")
     [finding] = result.findings
     assert (finding.severity, finding.subject, finding.object_id) == ("medium", "ann@x.com", "u1")
-    assert f"{gd.SIGNIN_BASE - timedelta(days=2)} from FR (medium risk, at risk)" in finding.detail
+    assert (
+        f"latest {formatting.day(gd.SIGNIN_BASE - timedelta(days=2))} from FR (medium risk, at risk)" in finding.detail
+    )
     report = data_reports.build(db, tenant, "sign-ins")
     s = _sections(report)
     assert report.sections[0].title == "Risky sign-ins" and s["Risky sign-ins"].flags == ["medium"]

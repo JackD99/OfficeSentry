@@ -161,3 +161,21 @@ def test_classify_counts_a_message_against_one_of_our_domains():
     )
     assert mail_flow.classify({**row, "Status": "Expanded"}, ours) is None
     assert mail_flow.classify({**row, "RecipientAddress": "c@o.example"}, ours) is None
+
+
+def test_the_span_starts_at_the_first_day_counted():
+    """After a gap in watching, the trace can reach back before the tenant was last watched from: the figure says
+    since the first day in its total, not since the watch began."""
+    from officesentry.reports.mail_flow import mail_flow_report
+
+    now = datetime(2026, 10, 10, tzinfo=UTC)
+    counts = {"in": {"delivered": 3}}
+    data = {
+        ("mail_flow", "mail_flow"): [{"_id": "x.com", "days": {"2026-09-28": counts, "2026-10-05": counts}}],
+        ("mail_flow", "mail_flow_status"): [{"available": True, "watchedFrom": "2026-10-02T00:00:00Z"}],
+    }
+    snap = type("Snap", (), {"objects": lambda self, collector, kind: data.get((collector, kind))})()
+    out = data_reports.DataReport("mail-flow", "Mail flow", "", {}, now)
+    mail_flow_report(snap, now, out)
+    messages = out.tiles[0]
+    assert (messages.value, messages.foot) == (6, "Once per recipient, since 28 Sep 2026")

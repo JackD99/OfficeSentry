@@ -32,7 +32,7 @@ from ..authmethods import (
     who,
 )
 from ..devices import parse_ts
-from ..licences import last_sign_in
+from ..licences import FAILED_ONLY, last_sign_in, never_signed_in
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import Chart, DataReport, Highlight, Many, Rows, Section
@@ -417,7 +417,26 @@ def _expiry(snap: TenantSnapshot, report: DataReport) -> Section | None:
     return section
 
 
-def _passwords(users: list[dict], reg: Registration, now: datetime) -> tuple[Section, dict]:
+def _domain_never_expires(snap: TenantSnapshot) -> dict[str, bool]:
+    """Domain: whether its policy says cloud passwords never expire, for the domains Microsoft reported one for
+    (Microsoft's default for new tenants is never)."""
+    out = {}
+    for d in snap.objects("directory_sync", "domain") or []:
+        days = d.get("passwordValidityPeriodInDays")
+        if isinstance(days, int) and d.get("authenticationType") != "Federated":
+            out[str(d["_id"]).lower()] = days >= NEVER_EXPIRES or days <= 0
+    return out
+
+
+def _never_expires(u: dict, by_domain: dict[str, bool]) -> bool:
+    """The account's own setting, or its domain's policy for a cloud-only account (a synced one follows AD)."""
+    if u.get("passwordNeverExpires"):
+        return True
+    domain = str(u.get("userPrincipalName") or "").rpartition("@")[2].lower()
+    return not u.get("onPremisesSyncEnabled") and by_domain.get(domain, False)
+
+
+def _passwords(users: list[dict], reg: Registration, now: datetime, by_domain: dict[str, bool]) -> tuple[Section, dict]:
     section = Section(
         PASSWORDS,
         [
@@ -452,7 +471,8 @@ def _passwords(users: list[dict], reg: Registration, now: datetime) -> tuple[Sec
         never = bool(u.get("signInActivityAvailable")) and last is None
         # By calendar day, as the table's "Older than a year" filter counts, so the figure opens these rows.
         old = bool(changed and (now.date() - changed.date()).days > OLD_DAYS)
-        stats["never_expires"] += bool(u.get("passwordNeverExpires"))
+        never_expires = _never_expires(u, by_domain)
+        stats["never_expires"] += never_expires
         stats["old"] += old
         flag, meaning = None, ""
         if never and set_at and set_at < now - timedelta(days=NEVER_USED_DAYS):
@@ -470,14 +490,14 @@ def _passwords(users: list[dict], reg: Registration, now: datetime) -> tuple[Sec
         if not u.get("signInActivityAvailable"):
             seen = "Not checked"
         else:
-            seen = _iso(last) if last else "Never"
+            seen = _iso(last) if last else never_signed_in(u)
         rows.append(
             (
                 (flag is None, changed or now),
                 [
                     label,
                     _iso(changed) or UNKNOWN,
-                    bool(u.get("passwordNeverExpires")),
+                    never_expires,
                     bool(u.get("onPremisesSyncEnabled")),
                     seen,
                     _known(registered),
@@ -529,7 +549,7 @@ def auth_methods(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
     for extra in (_policy(snap, report), _strengths(snap, report)):
         if extra is not None:
             sections.append(extra)
-    passwords, pw = _passwords(users, reg, now)
+    passwords, pw = _passwords(users, reg, now, _domain_never_expires(snap))
     sections.append(passwords)
     expiry = _expiry(snap, report)
     if expiry is not None:
@@ -597,6 +617,6 @@ def auth_methods(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
             pw["never_used"] if pw["activity"] else "Not checked",
             "Probably still the first password",
             "warn" if pw["never_used"] else None,
-            Rows(PASSWORDS, {"Last sign-in": "Never"}, flagged=True),
+            Rows(PASSWORDS, {"Last sign-in": ["Never", FAILED_ONLY]}, flagged=True),
         ),
     ]

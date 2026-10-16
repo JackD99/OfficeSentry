@@ -94,18 +94,56 @@ def _report(db, tenant):
 def test_every_mailbox(db, tenant):
     report, s = _report(db, tenant)
     every = s["Every mailbox"]
-    assert every.columns == ["Mailbox", "Type", "Account", "Litigation hold", "Archive", "Mailbox size"]
+    assert every.columns == [
+        "Mailbox",
+        "Type",
+        "Account",
+        "Litigation hold",
+        "Retention or eDiscovery hold",
+        "Archive",
+        "Mailbox size",
+    ]
     rows = {r[0]: r for r in every.rows}
     assert set(rows) == {"ann@x.com", "bob@x.com", "info@x.com", "old@x.com"}  # no discovery mailbox
-    assert rows["ann@x.com"][1:] == ["User", "Active", "No", "No", "48.0 GB"]
-    assert rows["bob@x.com"][1:] == ["User", "Sign-in blocked", "No", "Yes", "2.0 GB"]
-    assert rows["info@x.com"][1:5] == ["Shared", "Active", "Yes", "No"]
+    # The test data has no InPlaceHolds, as in snapshots from before they were read.
+    assert rows["ann@x.com"][1:] == ["User", "Active", "No", "Not read", "No", "48.0 GB"]
+    assert rows["bob@x.com"][1:] == ["User", "Sign-in blocked", "No", "Not read", "Yes", "2.0 GB"]
+    assert rows["info@x.com"][1:6] == ["Shared", "Active", "Yes", "Not read", "No"]
     assert "1 of 4 mailboxes is on litigation hold and 1 has an archive" in every.intro
     tiles = {t.label: t for t in report.tiles}
     assert tiles["Mailboxes on litigation hold"].value == "1 of 4"
     assert tiles["Archive turned on"].value == "1 of 4"
     assert tiles["Leavers' mailboxes without a hold"].value == 2
     assert tiles["Leavers' mailboxes without a hold"].tone == "warn"
+
+
+def test_retention_policies_and_ediscovery_holds_keep_a_leavers_mail(db, two_tenants):
+    """An organisation-wide retention policy keeps every mailbox's mail unless the mailbox is excluded; a
+    delete-only policy (":1") keeps nothing."""
+    alpha, _ = two_tenants
+    data = _exchange()
+    data["Get-OrganizationConfig"] = [{"AuditDisabled": False, "InPlaceHolds": ["mbxaa11:2", "mbxbb22:1", "grpcc33:3"]}]
+    for box in data["Get-Mailbox"]:
+        box["InPlaceHolds"] = {"g-u2": ["-mbxaa11"]}.get(box["Guid"], [])
+    seed_tenant(db, alpha, users=USERS + [gd.INFO_USER, OLD_USER], exchange=data)
+    _, s = _report(db, store.get_tenant(db, alpha))
+    rows = {r[0]: r for r in s["Every mailbox"].rows}
+    assert {a: r[4] for a, r in rows.items()} == {
+        "ann@x.com": "Yes",
+        "bob@x.com": "No",  # excluded from the policy
+        "info@x.com": "Yes",
+        "old@x.com": "Yes",
+    }
+    assert [r[0] for r in s["Leavers without a hold"].rows] == ["bob@x.com"]
+    assert "3 are kept by a retention policy or eDiscovery hold" in s["Every mailbox"].intro
+
+    # An eDiscovery hold on the mailbox itself keeps it too.
+    data["Get-OrganizationConfig"] = [{"AuditDisabled": False, "InPlaceHolds": []}]
+    for box in data["Get-Mailbox"]:
+        box["InPlaceHolds"] = {"g-u2": ["UniH7d3f"]}.get(box["Guid"], [])
+    seed_tenant(db, alpha, users=USERS + [gd.INFO_USER, OLD_USER], exchange=data)
+    _, s = _report(db, store.get_tenant(db, alpha))
+    assert [r[0] for r in s["Leavers without a hold"].rows] == ["old@x.com"]
 
 
 def test_leavers_without_a_hold(db, tenant):

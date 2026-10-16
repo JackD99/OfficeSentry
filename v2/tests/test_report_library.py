@@ -221,6 +221,9 @@ COUNTS_ROWS = {
     "groups": ("Teams and groups", "Without an owner", "Only one owner"),
     "devices": ("Managed devices", "Not compliant", "Not encrypted", "Not checking in"),
     "hybrid": ("Federated domains",),
+    "mfa": ("No MFA at all", "MFA not required", "Required, not set up", "Admins with a gap"),
+    "admins": ("Admins without MFA",),
+    "auth-methods": ("Password never expires",),
 }
 
 
@@ -230,7 +233,7 @@ def test_headline_figures_count_the_rows_they_open(db, two_tenants):
     tenant = db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone()
     for key, labels in COUNTS_ROWS.items():
         report = data_reports.build(db, tenant, key)
-        tiles = {t.label: t for t in report.tiles}
+        tiles = {t.label: t for t in report.tiles + report.highlights}
         assert set(labels) <= set(tiles), (key, list(tiles))
         for label in labels:
             view, _anchor = views.rows_view(report, tiles[label].rows)
@@ -270,7 +273,7 @@ def test_report_page_filters_hides_and_downloads_the_same_rows(client, db, two_t
     assert f"/tenants/{alpha}/data/mailboxes.pdf?{q}" in page.replace("%2F", "/").replace("%3A", ":")
     body = client.get(f"{base}.csv?section=1&{q}").get_data(as_text=True).lstrip("\ufeff")
     rows = list(csv.reader(io.StringIO(body)))
-    assert rows[0] == ["Mailbox", "Forwards to", "Set by", "Outside the organisation", "Flag"]
+    assert rows[0] == ["Mailbox", "Forwards to", "Set by", "Outside the organisation", "Reaches outside", "Flag"]
     assert len(rows) == 3 and all(r[3] == "Yes" for r in rows[1:])
     wb = load_workbook(io.BytesIO(client.get(f"{base}.xlsx?{q}").data))
     assert wb["Forwarding"].max_row == 3
@@ -392,10 +395,10 @@ def test_rollup_figures_open_the_tenant_rows(client, db, two_tenants):
     row = next(r for r in data.rows if r.tenant["id"] == alpha)
     assert row.links["c:Forwarding outside"] == (
         "mailboxes",
-        "?f=forwarding%2Foutside-the-organisation%3AYes#t-forwarding",
+        "?f=forwarding%2Fflag%3Amedium#t-forwarding",  # active forwards outside, which the default policy blocks
     )
     page = unescape(client.get("/across/mailboxes").get_data(as_text=True))
-    assert f'href="/tenants/{alpha}/data/mailboxes?f=forwarding%2Foutside-the-organisation%3AYes#t-forwarding"' in page
+    assert f'href="/tenants/{alpha}/data/mailboxes?f=forwarding%2Fflag%3Amedium#t-forwarding"' in page
     page = client.get("/across/review").get_data(as_text=True)
     assert re.search(rf'href="/tenants/{alpha}/data/inactive#t-inactive-members"', page)
 
