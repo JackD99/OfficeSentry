@@ -489,6 +489,7 @@ walks through it:
    Properties → Delete*). The page has the steps, with the app's name in their
    tenant, as text to send the client; they're also in
    [What Office Sentry reads](what-office-sentry-reads.md#how-to-remove-access).
+   The steps also name the client sign-in app and the audit log add-on, deleted the same way, when the client may have approved them. <!-- since 2.4.0 -->
 3. **Check what will be deleted**: collection runs and stored data, findings
    (including accepted risks), emailed reports, alert emails, client contacts,
    email history, the files in the client's **Report history** (the reports
