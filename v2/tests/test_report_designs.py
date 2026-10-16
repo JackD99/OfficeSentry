@@ -384,6 +384,29 @@ def test_send_on_a_schedule_from_the_clients_custom_reports(client, db, two_tena
 # -- Sending ------------------------------------------------------------------------------------------------
 
 
+def test_plan_and_schedule_forms_list_custom_reports_under_their_own_heading(client, db, two_tenants):
+    """A custom report used to sit among the summary reports with nothing saying it was one, so people
+    looking for their custom report in a plan didn't find it. Both forms now list them under Custom reports,
+    after the summaries and before the detail reports, and say how to make one when there are none."""
+    alpha, _ = two_tenants
+    _staff(client, db, "admin")
+    for url in ("/reporting/plans/new", f"/tenants/{alpha}/schedules/new"):
+        page = _text(client.get(url))
+        assert "No custom reports yet." in page and 'href="/reporting/designs">Make one</a>' in page, url
+    key = designs.key_of(designs.create(db, "Board pack", "test", designs.STARTERS["executive"][2]))
+    for url in ("/reporting/plans/new", f"/tenants/{alpha}/schedules/new"):
+        page = _text(client.get(url))
+        order = [
+            page.index('value="review"'),
+            page.index(">Custom reports <"),
+            page.index(f'value="{key}"'),
+            page.index(">Detail reports <"),
+            page.index('value="data:'),
+        ]
+        assert order == sorted(order) and "No custom reports yet." not in page, url
+        assert "Your custom report, built from blocks, as a PDF." in page  # no description of its own
+
+
 def test_a_plan_sends_a_design_as_a_pdf(client, db, two_tenants, app):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
