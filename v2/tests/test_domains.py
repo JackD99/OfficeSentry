@@ -72,6 +72,49 @@ def test_parked_domain_should_block_spoofing():
     assert all(i.severity == "low" for i in dnscheck.issues(h))
 
 
+def test_a_subdomain_without_dmarc_is_covered_by_its_parents_record():
+    records = {
+        ("uk.contoso.com", "MX"): ["uk-contoso-com.mail.protection.outlook.com"],
+        ("uk.contoso.com", "TXT"): ["v=spf1 include:spf.protection.outlook.com -all"],
+        ("selector1._domainkey.uk.contoso.com", "CNAME"): ["s1"],
+        ("selector2._domainkey.uk.contoso.com", "CNAME"): ["s2"],
+        ("_dmarc.contoso.com", "TXT"): ["v=DMARC1; p=reject; rua=mailto:d@contoso.com"],
+    }
+    h = dnscheck.check_domain("uk.contoso.com", resolver(records))
+    assert (h.dmarc_from, h.dmarc_policy) == ("contoso.com", "reject")
+    assert dnscheck.issues(h) == [] and dnscheck.summary(h)["DMARC"] == "Pass"
+    assert dnscheck.DomainHealth.from_dict(h.to_dict()).dmarc_from == "contoso.com"
+
+    # The parent's sp= is what applies to its subdomains.
+    records[("_dmarc.contoso.com", "TXT")] = ["v=DMARC1; p=reject; sp=none; rua=mailto:d@contoso.com"]
+    h = dnscheck.check_domain("uk.contoso.com", resolver(records))
+    assert h.dmarc_policy == "none"
+    assert [i.detail for i in dnscheck.issues(h)] == [
+        "DMARC is monitor-only (p=none); spoofed mail is still delivered (from contoso.com's record)"
+    ]
+
+    # A public suffix's record isn't the client's; nor is a top-level domain looked up.
+    lookups = []
+    looked = resolver({("_dmarc.co.uk", "TXT"): ["v=DMARC1; p=reject; psd=y"]})
+    h = dnscheck.check_domain("contoso.co.uk", lambda n, t: lookups.append(n) or looked(n, t))
+    assert h.dmarc is None and "_dmarc.co.uk" in lookups and "_dmarc.uk" not in lookups
+
+
+def test_a_domain_that_only_sends_mail_isnt_told_to_block_it():
+    h = dnscheck.check_domain(
+        "news.a.com",
+        resolver(
+            {
+                ("news.a.com", "TXT"): ["v=spf1 include:servers.mcsv.net -all"],
+                ("servers.mcsv.net", "TXT"): ["v=spf1 ip4:205.201.128.0/20 -all"],
+                ("_dmarc.news.a.com", "TXT"): ["v=DMARC1; p=none; rua=mailto:x@a.com"],
+            }
+        ),
+    )
+    assert h.sends_only and not h.sends_mail
+    assert [i.detail for i in dnscheck.issues(h)] == ["DMARC is monitor-only (p=none); spoofed mail is still delivered"]
+
+
 def test_dns_errors_are_recorded_not_raised():
     def broken(name, rdtype):
         raise dnscheck.DnsError("timeout")

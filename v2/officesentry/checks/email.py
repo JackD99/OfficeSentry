@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from .. import mailprotection as mp
-from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
+from ..mailflow import inbox_rule_risk, is_default_policy, is_external, mailbox_forwarding, tenant_domains
 from ..snapshot import TenantSnapshot
 from ..text import every, plural, verb
 from .base import Finding, _unavailable, rule
@@ -142,7 +142,7 @@ def auto_forward_policy(snap: TenantSnapshot, now: datetime):
             p["_id"],
         )
         for p in allowing
-        if _is_default_policy(p)
+        if is_default_policy(p)
     ]
     if findings:
         return ("fail", "Automatic external forwarding is allowed for everyone", findings)
@@ -158,14 +158,6 @@ def auto_forward_policy(snap: TenantSnapshot, now: datetime):
         ),
         [],
     )
-
-
-def _is_default_policy(policy: dict) -> bool:
-    """Whether an outbound spam filter policy is the organisation-wide default. Without IsDefault, the
-    default is the one Microsoft names "Default"."""
-    if isinstance(policy.get("IsDefault"), bool):
-        return policy["IsDefault"]
-    return policy.get("Name") == "Default" or policy.get("_id") == "Default"
 
 
 @rule(

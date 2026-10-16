@@ -14,6 +14,10 @@ from .base import Collector, RunContext, register
 
 TEXT_LIMIT = 500  # characters kept of free text: a rule's description or comments, a disclaimer
 LIST_LIMIT = 50  # items kept of a list setting (sender domains, file types)
+# Allowed sender lists are kept whole (Microsoft allows 1,024 entries), so every entry is checked for free mail or
+# the organisation's own domains, and counted.
+WHOLE_LISTS = {"AllowedSenderDomains", "AllowedSenders"}
+WHOLE_LIST_LIMIT = 1024
 
 RULE_FIELDS = (
     "Name",
@@ -183,17 +187,21 @@ PRESETS = {"eop": "Get-EOPProtectionPolicyRule", "defender": "Get-ATPProtectionP
 PARTS = ("rules", "connectors", "anti_spam", "anti_phish", "anti_malware", "safe_links", "safe_attachments", "presets")
 
 
-def _value(value):
-    """A setting as stored: lists cut to ``LIST_LIMIT`` items, text to ``TEXT_LIMIT`` characters."""
+def _value(value, limit: int = LIST_LIMIT):
+    """A setting as stored: lists cut to ``limit`` items, text to ``TEXT_LIMIT`` characters."""
     if isinstance(value, list):
-        return [_value(v) for v in value[:LIST_LIMIT]]
+        return [_value(v) for v in value[:limit]]
     if isinstance(value, str):
         return value[:TEXT_LIMIT]
     return value
 
 
 def _kept(item: dict, fields: tuple[str, ...]) -> dict:
-    return {f: _value(item[f]) for f in fields if f in item and item[f] is not None}
+    return {
+        f: _value(item[f], WHOLE_LIST_LIMIT if f in WHOLE_LISTS else LIST_LIMIT)
+        for f in fields
+        if f in item and item[f] is not None
+    }
 
 
 def scope(rule: dict) -> dict:

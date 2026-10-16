@@ -307,6 +307,12 @@ def applies_to(policy: dict) -> list[str] | str:
     return out or "Everyone"
 
 
+def _some(names: list[str], shown: int = 10) -> str:
+    """The first few names and how many more, so a long allow list stays one readable line."""
+    more = len(names) - shown
+    return ", ".join(names[:shown]) + (f" and {more} more" if more > 0 else "")
+
+
 def risky_domains(allowed: list[str], domains: set[str] | None) -> list[str]:
     """The allowed sender domains anyone can send from: free mail, or the organisation's own (which attackers
     fake to look like a colleague)."""
@@ -326,9 +332,9 @@ def policy_problems(policy: dict, domains: set[str] | None, defender: bool = Fal
         allowed = [d.lower() for d in text_list(policy.get("AllowedSenderDomains"))]
         risky = risky_domains(allowed, domains)
         if allowed:
-            text = f"Lets mail claiming to be from {', '.join(allowed)} skip spam filtering"
+            text = f"Lets mail claiming to be from {_some(allowed)} skip spam filtering"
             if risky:
-                text += f"; {', '.join(risky)} {'is' if len(risky) == 1 else 'are'} free mail or the organisation's own"
+                text += f"; {_some(risky)} {'is' if len(risky) == 1 else 'are'} free mail or the organisation's own"
             out.append(("high" if risky else "medium", text))
         if text_list(policy.get("AllowedSenders")):
             out.append(

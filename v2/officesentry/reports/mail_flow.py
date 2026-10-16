@@ -68,13 +68,7 @@ def mail_flow_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> No
         out.unavailable = "This tenant has no Exchange Online licence."
         return
     since = (now - timedelta(days=WINDOW_DAYS)).date().isoformat()
-    watched = parse_ts(status.get("watchedFrom"))
     read_to = parse_ts(status.get("readTo"))
-    span = (
-        f"since {day(watched.isoformat())}"
-        if watched and watched.date().isoformat() > since
-        else f"in the last {WINDOW_DAYS} days"
-    )
 
     domains = Section(
         DOMAINS,
@@ -122,6 +116,10 @@ def mail_flow_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> No
             ],
             "medium" if failed_share > FAILED_SHARE else None,
         )
+    # From the first day counted: after a gap in watching, Microsoft's trace can reach back before the tenant
+    # was last watched from, and those days are in the totals.
+    first = min((date for date, *_ in per_day), default=None)
+    span = f"since {day(first)}" if first and first > since else f"in the last {WINDOW_DAYS} days"
     for date, name, direction, counts in sorted(
         per_day, key=lambda r: (r[0], r[1], DIRECTIONS.index(r[2])), reverse=True
     ):
@@ -181,7 +179,7 @@ def mail_flow_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> No
         return Tile(label, value, foot, tone, rows)
 
     out.tiles = [
-        counted("Messages", messages, f"Counted {span}", None, Rows(DOMAINS)),
+        counted("Messages", messages, f"Once per recipient, {span}", None, Rows(DOMAINS)),
         counted("Delivered", _share(totals["delivered"], messages) or 0, plural(totals["delivered"], "message"), None),
         counted(
             "Quarantined",

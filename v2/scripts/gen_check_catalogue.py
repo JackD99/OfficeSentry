@@ -115,7 +115,8 @@ def licence_notes(fn: Callable) -> list[str]:
                 and LICENCE_RE.search(node.value)
             ):
                 notes.add(node.value.strip())
-    return sorted(notes)
+    # A reason that's the start of a longer one ("no Intune licence" and "no Intune licence, or ...") is said once.
+    return sorted(n for n in notes if not any(m != n and m.startswith(n.rstrip(".")) for m in notes))
 
 
 def _is_verdict(node: ast.AST) -> bool:

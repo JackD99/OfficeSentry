@@ -136,12 +136,20 @@ class DomainHealth:
     tls_rpt_records: int = 0
     tls_rpt_reports: bool = False  # rua= has a mailto: or https: address
     transport_checked: bool = False  # MTA-STS policy and TLS-RPT were checked (not in older snapshots)
+    dmarc_from: str | None = None  # the parent domain whose DMARC record covers this one, when it has none
     errors: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)  # areas whose lookups failed ("MX", "SPF", ...): unknown
 
     @property
     def sends_mail(self) -> bool:
         return any(self.mx)  # a null MX ("0 .") says the domain accepts no mail
+
+    @property
+    def sends_only(self) -> bool:
+        """Receives no mail but sends it: its SPF record authorises servers (a marketing or notifications
+        domain). Telling it to publish "v=spf1 -all" would stop its mail."""
+        terms = (self.spf or "").lower().split()[1:]
+        return not self.sends_mail and any(t.lstrip("+-~?") != "all" for t in terms)
 
     @property
     def microsoft_365(self) -> bool:
@@ -193,6 +201,10 @@ class DomainHealth:
                 value = default
             values[name] = value
         return cls(**values)
+
+
+def _dmarc_records(answer: list[str]) -> list[str]:
+    return [r for r in answer if r.lower().startswith("v=dmarc1")]
 
 
 def _tag(record: str, name: str) -> str | None:
@@ -261,12 +273,29 @@ def check_domain(domain: str, resolve=None, fetch=None) -> DomainHealth:
         if h.spf_all is None and any(t.startswith("redirect=") for t in terms):
             h.spf_all = "redirect"
         h.spf_lookups = count_spf_lookups(h.spf, resolve, missing=h.spf_missing_includes)
-    dmarc = [r for r in safe(f"_dmarc.{h.domain}", "TXT", "DMARC") if r.lower().startswith("v=dmarc1")]
+    dmarc = _dmarc_records(safe(f"_dmarc.{h.domain}", "TXT", "DMARC"))
+    if not dmarc and "DMARC" not in h.failed:
+        # A subdomain with no record of its own is covered by its parent's, with the parent's sp= policy.
+        # Receivers walk up the names to find it (DMARCbis), so this does too, short of the top-level domain.
+        # A public suffix's record (psd=y) isn't the client's, so it isn't taken as theirs.
+        labels = h.domain.split(".")
+        for i in range(1, len(labels) - 1):
+            parent = ".".join(labels[i:])
+            found = [
+                r
+                for r in _dmarc_records(safe(f"_dmarc.{parent}", "TXT", "DMARC"))
+                if (_tag(r, "psd") or "").lower() != "y"
+            ]
+            if found:
+                dmarc, h.dmarc_from = found, parent
+                break
     h.dmarc_records = len(dmarc)
     if dmarc:
         h.dmarc = dmarc[0]
         h.dmarc_policy = (_tag(h.dmarc, "p") or "").lower() or None
         h.dmarc_subdomain_policy = (_tag(h.dmarc, "sp") or "").lower() or None
+        if h.dmarc_from:
+            h.dmarc_policy = h.dmarc_subdomain_policy or h.dmarc_policy
         pct = _tag(h.dmarc, "pct")
         h.dmarc_pct = int(pct) if pct and pct.isdigit() else 100
         h.dmarc_reports = bool(_tag(h.dmarc, "rua"))
@@ -353,7 +382,7 @@ def issues(h: DomainHealth, transport: bool = False) -> list[Issue]:
     domain has to arrive encrypted.
     """
     out: list[Issue] = []
-    if not h.sends_mail:
+    if not h.sends_mail and not h.sends_only:
         # A domain that never sends mail should say so, or it can be spoofed freely.
         if not h.spf or h.spf_all != "-all":
             out.append(Issue("low", "SPF", 'Doesn\'t receive mail but has no "v=spf1 -all" record to stop spoofing'))
@@ -421,7 +450,12 @@ def issues(h: DomainHealth, transport: bool = False) -> list[Issue]:
         out.append(
             Issue("medium", "DKIM", f"Microsoft 365 DKIM isn't set up ({', '.join(missing)} CNAME missing){why}")
         )
-    if transport and h.transport_checked:
+    if h.dmarc_from:
+        out = [
+            Issue(i.severity, i.area, f"{i.detail} (from {h.dmarc_from}'s record)") if i.area == "DMARC" else i
+            for i in out
+        ]
+    if transport and h.transport_checked and h.sends_mail:  # MTA-STS and TLS-RPT are for receiving mail
         out += _transport_issues(h)
     rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     return sorted((i for i in out if not h.unknown(i.area)), key=lambda i: rank[i.severity])

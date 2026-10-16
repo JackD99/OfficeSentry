@@ -103,6 +103,17 @@ class Strength:
         return [label for label, _ in self.methods]
 
 
+def mfa_set_up(reg: dict | None) -> bool | None:
+    """Whether the person can do MFA: a method registered that the methods policy allows (Microsoft's
+    isMfaCapable). isMfaRegistered stays true for someone whose only method is one the tenant has since
+    turned off, such as texts after SMS is switched off, who then can't do MFA at all. None with no
+    registration row."""
+    if reg is None:
+        return None
+    capable = reg.get("isMfaCapable")
+    return bool(capable if isinstance(capable, bool) else reg.get("isMfaRegistered"))
+
+
 def _text(value) -> str:
     return value if isinstance(value, str) else ""
 

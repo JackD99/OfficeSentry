@@ -11,7 +11,7 @@ from officesentry import mailprotection as mp
 from officesentry import store
 from officesentry.checks import evaluate
 from officesentry.collectors import mail_protection
-from officesentry.reports import data_reports
+from officesentry.reports import data_reports, views
 from officesentry.reports import mail_protection as report_module
 from officesentry.snapshot import TenantSnapshot
 from tests import graphdata as gd
@@ -171,6 +171,10 @@ def test_report_describes_each_rule_connector_and_policy_and_what_needs_a_look(d
     tiles = {t.label: t for t in report.tiles}
     assert tiles["Rules that skip spam filtering"].value == 2 and tiles["Rules that skip spam filtering"].tone == "bad"
     assert tiles["Rules sending mail outside"].value == 1
+    view, _ = views.rows_view(report, tiles["Rules sending mail outside"].rows)  # opens just that rule
+    assert [r[0] for s in views.apply(report, view).sections if s.title == "Mail flow rules" for r in s.rows] == [
+        "Copy finance mail"
+    ]
     assert tiles["Allowed sender domains"].value == 1
     assert tiles["Preset protection"].value == "Standard"
     assert tiles["Preset protection"].foot == "Standard for some people"
@@ -337,3 +341,17 @@ def test_rule_wording_and_problems():
     assert mp.policy_problems(phish, {"x.com"}) == [("medium", "Ignores what senders' DMARC policies ask for")]
     spam = {"kind": "anti_spam", "IsDefault": True, "HighConfidencePhishAction": "MoveToJmf", "BulkThreshold": 9}
     assert [s for s, _ in mp.policy_problems(spam, {"x.com"})] == ["high", "low"]
+
+
+def test_a_long_allow_list_is_checked_whole():
+    """Every allowed sender domain is kept, so one past the first 50 is still found to be free mail."""
+    allowed = [f"partner{n}.com" for n in range(60)] + ["gmail.com"]
+    kept = mail_protection._kept(
+        {"AllowedSenderDomains": allowed, "FileTypes": allowed}, ("AllowedSenderDomains", "FileTypes")
+    )
+    assert len(kept["AllowedSenderDomains"]) == 61 and len(kept["FileTypes"]) == mail_protection.LIST_LIMIT
+    policy = {"kind": "anti_spam", "Name": "Default", "IsDefault": True, **kept}
+    [(severity, text)] = [p for p in mp.policy_problems(policy, {"x.com"}) if "skip spam" in p[1]]
+    assert severity == "high"
+    assert text.startswith("Lets mail claiming to be from partner0.com, ") and "and 51 more skip spam filtering" in text
+    assert text.endswith("; gmail.com is free mail or the organisation's own")

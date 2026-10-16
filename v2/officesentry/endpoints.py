@@ -21,6 +21,8 @@ import re
 from dataclasses import dataclass, field
 from urllib.parse import parse_qsl, urlsplit
 
+from .entra import SHAREPOINT_APP_ID, label
+
 GRAPH_DOCS = "https://learn.microsoft.com/graph/throttling-limits"
 SHAREPOINT_DOCS = (
     "https://learn.microsoft.com/sharepoint/dev/general-development/"
@@ -533,7 +535,7 @@ EXCHANGE += tuple(
 # SharePoint's own REST API (``sharepoint_api.py``), for what Graph doesn't expose: SharePoint group members,
 # permission levels and inheritance. Paths are what follows a site's ``/_api``. Microsoft counts these against
 # the same tenant SharePoint limits as Graph's SharePoint calls.
-_SP_PERMISSION = "Sites.Read.All (SharePoint)"
+_SP_PERMISSION = label(SHAREPOINT_APP_ID, "Sites.Read.All")  # "SharePoint Sites.Read.All", not Graph's
 SHAREPOINT: tuple[Endpoint, ...] = tuple(
     Endpoint(path, ("rest",), _SP_PERMISSION, ("sharepoint",), cost=cost, api="sharepoint", fallback=fallback)
     for path, cost, fallback in (

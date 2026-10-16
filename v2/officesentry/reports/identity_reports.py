@@ -13,6 +13,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from .. import clouds, coverage
+from ..authmethods import mfa_set_up
 from ..devices import parse_day, parse_ts
 from ..formatting import money
 from ..licences import (
@@ -23,6 +24,7 @@ from ..licences import (
     last_sign_in,
     licence_summary,
     load_prices,
+    never_signed_in,
     sku_name,
 )
 from ..permission_batch import waiting_text
@@ -85,7 +87,7 @@ def _sign_in(user: dict | None) -> str:
     if not user or not user.get("signInActivityAvailable"):
         return "Not checked"
     last = last_sign_in(user)
-    return _day(last) if last else "Never"
+    return _day(last) if last else never_signed_in(user)
 
 
 def _roles(snap: TenantSnapshot) -> dict[str, dict] | None:
@@ -112,6 +114,7 @@ def _roles(snap: TenantSnapshot) -> dict[str, dict] | None:
                 "privileged": False,
                 "privileged_active": False,
                 "privileged_roles": [],
+                "privileged_eligible_roles": [],  # as the role columns show them: "Global Administrator (eligible)"
                 "global_admin": False,
                 "groups": [],
             },
@@ -131,6 +134,8 @@ def _roles(snap: TenantSnapshot) -> dict[str, dict] | None:
             p["privileged_active"] |= r.get("assignment") == "active"
             if r.get("assignment") == "active" and name not in p["privileged_roles"]:
                 p["privileged_roles"].append(name)
+            elif r.get("assignment") != "active" and f"{name} (eligible)" not in p["privileged_eligible_roles"]:
+                p["privileged_eligible_roles"].append(f"{name} (eligible)")
         p["global_admin"] |= r.get("roleName") == "Global Administrator" and r.get("assignment") == "active"
     return out
 
@@ -146,11 +151,12 @@ def _admin_role_names(roles: dict[str, dict] | None) -> dict[str, list[str]]:
     return {pid: p["active"] + [f"{n} (eligible)" for n in p["eligible"]] for pid, p in (roles or {}).items()}
 
 
-def _privileged_names(holders) -> list[str]:
-    """The active privileged roles these holders hold, named as the role columns show them, so a filter on them
-    keeps exactly the rows of people with an active privileged role. Never empty: with nobody holding one, the
-    filter still shows no rows rather than every row."""
-    return sorted({n for p in holders for n in p["privileged_roles"]}) or ["Global Administrator"]
+def _privileged_names(holders, eligible: bool = False) -> list[str]:
+    """The active privileged roles these holders hold (and with ``eligible`` the PIM-eligible ones), named as
+    the role columns show them, so a filter on them keeps exactly the rows of people with such a role. Never
+    empty: with nobody holding one, the filter still shows no rows rather than every row."""
+    names = {n for p in holders for n in p["privileged_roles"] + (p["privileged_eligible_roles"] if eligible else [])}
+    return sorted(names) or ["Global Administrator"]
 
 
 METHOD_NAMES = {
@@ -209,8 +215,7 @@ class Registration:
             )
 
     def registered(self, uid: str) -> bool | None:
-        row = self.by_id.get(uid)
-        return None if row is None else bool(row.get("isMfaRegistered"))
+        return mfa_set_up(self.by_id.get(uid))
 
     def get(self, uid: str) -> dict | None:
         return self.by_id.get(uid)
@@ -258,6 +263,11 @@ class Enforcement:
         if self.per_user.get(uid) in ("enforced", "enabled"):
             sources.append(f"Per-user MFA ({self.per_user[uid]})")
         return sources, excluded
+
+    def unread(self, uid: str) -> bool:
+        """Per-user MFA is the only way this tenant can require MFA, and this account's setting wasn't read
+        (a failed read, a new account or over the limit), so whether MFA is required is unknown."""
+        return self.per_user_checked and uid not in self.per_user and not self.security_defaults and self.p1 is False
 
     def describe_rows(self) -> list[tuple[list, str | None]]:
         rows: list[tuple[list, str | None]] = []
@@ -339,9 +349,9 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     enf = Enforcement(snap)
     held = _roles(snap)
     roles = _admin_role_names(held)
-    # Severity follows the admin checks: only an active privileged role makes a gap an admin's gap, not a
-    # read-only role (Directory Readers) or one that must first be activated through PIM.
-    privileged = {pid for pid, p in (held or {}).items() if p["privileged_active"]}
+    # Severity follows the admin checks: a privileged role makes a gap an admin's gap, active or PIM-eligible
+    # (whoever sets up MFA first can activate it), but not a read-only role such as Directory Readers.
+    privileged = {pid for pid, p in (held or {}).items() if p["privileged"]}
     report.notes += [n for n in (reg.note, enf.note) if n]
 
     how = Section(
@@ -382,6 +392,8 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         sources, excluded = enf.for_user(uid, label, user_type) if enf.known else ([], [])
         required = bool(sources) if enf.known else None
         required_text = _some(sources) or ("Nothing" if enf.known else "Not checked")
+        if required is False and enf.unread(uid):
+            required, required_text = None, "Not read"
         if user_type == "Guest":
             guests.add([label, required_text, _some(excluded)], "low" if required is False else None)
             continue
@@ -445,11 +457,11 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             Rows("Accounts with a gap", {"Gap": GAP_TEXT["none"][0]}),
         ),
         Highlight(
-            "Set up, not required",
-            counts["not_required"] if enf.known else "Not checked",
-            "A password alone gets in",
-            "warn" if counts["not_required"] else None,
-            Rows("Accounts with a gap", {"Gap": [GAP_TEXT["not_required"][0], "Not required"]}),
+            "MFA not required",
+            counts["none"] + counts["not_required"] if enf.known else "Not checked",
+            "A password alone gets in, whether or not MFA is set up",
+            "warn" if counts["none"] + counts["not_required"] else None,
+            Rows("Accounts with a gap", {"Gap": [GAP_TEXT[k][0] for k in ("none", "not_required")] + ["Not required"]}),
         ),
         Highlight(
             "Required, not set up",
@@ -466,7 +478,7 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             Rows(
                 "Accounts with a gap",
                 {
-                    "Admin roles": _privileged_names(held[pid] for pid in privileged),
+                    "Admin roles": _privileged_names((held[pid] for pid in privileged), eligible=True),
                     "Gap": [GAP_TEXT[k][0] for k in ("none", "not_required", "not_registered")] + ["Not required"],
                 },
             ),
@@ -1015,7 +1027,7 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                     [
                         label,
                         bucket,
-                        _day(last) or "Never",
+                        _day(last) or never_signed_in(u),
                         days,
                         "Not accepted" if u.get("externalUserState") == "PendingAcceptance" else "Accepted",
                         _day(created),
@@ -1033,7 +1045,7 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                 [
                     label,
                     bucket,
-                    _day(last) or "Never",
+                    _day(last) or never_signed_in(u),
                     days,
                     licences,
                     roles.get(uid),

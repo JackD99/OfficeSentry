@@ -344,6 +344,8 @@ def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
     by_country.chart = Chart("Country", ("Succeeded", "Failed"), total="Sign-ins", tones=("1", "bad"), rest="Prompts")
     for c in sorted(countries, key=lambda c: -_n(c.get("signIns"))):
         odd = _text(c.get("country")) in unusual
+        # Unusual is judged on successful sign-ins; a country only failures came from isn't "No".
+        tried = not _n(c.get("succeeded")) and _n(c.get("failed")) and _text(c.get("country")) not in home
         by_country.add(
             [
                 signins.country(c.get("country")),
@@ -352,7 +354,7 @@ def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
                 _n(c.get("failed")),
                 _n(c.get("accounts")),
                 _share(_n(c.get("succeeded")), successes),
-                odd,
+                "Only failed sign-ins" if tried else odd,
             ],
             "low" if odd else None,
         )
