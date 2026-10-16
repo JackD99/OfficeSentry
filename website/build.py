@@ -393,6 +393,7 @@ WHATS_NEW = [
             "a month-end report changed after approval reaches the client only as a new version",
             "month-end never sends a client the same month twice",
             "month-end never approves an empty report, and a paused client gets no email",
+            "client PDFs never end on a page of only small print, and their charts use the report's own font",
             "pausing a client mid-collection sends no alerts",
             "a SharePoint network failure no longer reads as awaiting approval",
             "percentage changes read in points everywhere, and the Overview no longer shows more licensed users in red",
