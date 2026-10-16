@@ -4,7 +4,9 @@ from urllib.parse import parse_qs, urlsplit
 import responses
 
 from officesentry import store
+from officesentry.snapshot import TenantSnapshot
 from tests import graphdata as gd
+from tests import trustdata as trust
 from tests.test_collectors import V1, _metrics, _run, factory  # noqa: F401
 
 GROUP_ELIGIBILITY = f"{V1}/identityGovernance/privilegedAccess/group/eligibilitySchedules"
@@ -76,10 +78,36 @@ def test_conditional_access(db, two_tenants, factory):  # noqa: F811
         f"{V1}/identity/conditionalAccess/policies",
         json={"value": [gd.CA_MFA_ALL, gd.CA_BLOCK_LEGACY, gd.CA_REPORT_ONLY]},
     )
+    responses.get(f"{V1}/identity/conditionalAccess/namedLocations", json={"value": trust.NAMED_LOCATIONS})
     run_id, status = _run(db, alpha, "conditional_access", factory)
     assert status == "succeeded"
     m = _metrics(db, run_id)
     assert (m["ca.policies_total"], m["ca.policies_enabled"], m["ca.policies_report_only"]) == (3, 2, 1)
+    snap = TenantSnapshot(db, store.get_tenant(db, alpha))
+    assert sorted(loc["name"] for loc in snap.objects("conditional_access", "named_location")) == [
+        "Head office",
+        "Old VPN",
+        "Test lab",
+        "United Kingdom",
+    ]
+
+
+@responses.activate
+def test_conditional_access_without_named_locations_is_partial(db, two_tenants, factory):  # noqa: F811
+    """The policies are kept when the named locations can't be read, and the run says something is missing."""
+    alpha, _ = two_tenants
+    responses.get(f"{V1}/policies/identitySecurityDefaultsEnforcementPolicy", json={"isEnabled": False})
+    responses.get(f"{V1}/identity/conditionalAccess/policies", json={"value": [gd.CA_MFA_ALL]})
+    responses.get(
+        f"{V1}/identity/conditionalAccess/namedLocations",
+        status=500,
+        json={"error": {"code": "InternalServerError", "message": "Something went wrong."}},
+    )
+    run_id, status = _run(db, alpha, "conditional_access", factory)
+    assert status == "partial"
+    snap = TenantSnapshot(db, store.get_tenant(db, alpha))
+    assert len(snap.objects("conditional_access", "ca_policy")) == 1
+    assert snap.objects("conditional_access", "named_location_status")[0]["state"] == "failed"
 
 
 @responses.activate

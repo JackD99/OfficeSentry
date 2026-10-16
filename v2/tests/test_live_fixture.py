@@ -39,7 +39,71 @@ RECORDED = datetime(2026, 10, 12, 18, 30, tzinfo=UTC)
 # Requests added since the recording, answered with Microsoft's documented response shape, and requests whose
 # $select asks for fields added since (the recorded response is served). Empty while the recording is current:
 # add an entry when a collector starts asking for something new, and re-record soon after.
-STAND_INS: dict[str, dict] = {}
+STAND_INS: dict[str, dict] = {
+    # Trusted organisations and locations (collectors/policies.py, collectors/identity.py) and Installed apps
+    # (collectors/detected_apps.py), in Microsoft's documented shapes: a tenant on Microsoft's defaults with one
+    # named location and no organisation of its own, and two apps.
+    "/v1.0/policies/crossTenantAccessPolicy/default": {
+        "isServiceDefault": True,
+        "inboundTrust": {
+            "isMfaAccepted": False,
+            "isCompliantDeviceAccepted": False,
+            "isHybridAzureADJoinedDeviceAccepted": False,
+        },
+        "automaticUserConsentSettings": {"inboundAllowed": False, "outboundAllowed": False},
+        **{
+            setting: {
+                "usersAndGroups": {"accessType": access, "targets": [{"target": "AllUsers", "targetType": "user"}]},
+                "applications": {
+                    "accessType": access,
+                    "targets": [{"target": "AllApplications", "targetType": "application"}],
+                },
+            }
+            for setting, access in (
+                ("b2bCollaborationInbound", "allowed"),
+                ("b2bCollaborationOutbound", "allowed"),
+                ("b2bDirectConnectInbound", "blocked"),
+                ("b2bDirectConnectOutbound", "blocked"),
+            )
+        },
+    },
+    "/v1.0/policies/crossTenantAccessPolicy/partners": {"value": []},
+    "/v1.0/identity/conditionalAccess/namedLocations": {
+        "value": [
+            {
+                "@odata.type": "#microsoft.graph.ipNamedLocation",
+                "id": "0b5b0c1e-0000-4000-8000-000000000001",
+                "displayName": "Office",
+                "createdDateTime": "2026-01-05T10:00:00Z",
+                "modifiedDateTime": "2026-01-05T10:00:00Z",
+                "isTrusted": True,
+                "ipRanges": [{"@odata.type": "#microsoft.graph.iPv4CidrRange", "cidrAddress": "198.51.100.0/24"}],
+            }
+        ]
+    },
+    "/v1.0/deviceManagement/detectedApps": {
+        "value": [
+            {
+                "id": "0000000000000000000000000000000000000000000001",
+                "displayName": "Microsoft Edge",
+                "version": "141.0.3537.71",
+                "sizeInByte": 0,
+                "deviceCount": 1,
+                "publisher": "Microsoft Corporation",
+                "platform": "windows",
+            },
+            {
+                "id": "0000000000000000000000000000000000000000000002",
+                "displayName": "Microsoft 365 Apps for business - en-gb",
+                "version": "16.0.19127.20264",
+                "sizeInByte": 0,
+                "deviceCount": 1,
+                "publisher": "Microsoft Corporation",
+                "platform": "windows",
+            },
+        ]
+    },
+}
 NEW_FIELDS: frozenset[str] = frozenset()
 
 

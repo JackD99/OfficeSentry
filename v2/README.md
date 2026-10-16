@@ -287,6 +287,7 @@ Each report is listed under its area in the report menu, in menu order.
 - *Conditional Access coverage*: every policy in plain words, and for each
   account which enforced policy requires MFA, whether legacy sign-in is
   blocked, and which policies exclude it (group membership expanded).
+- *Trusted organisations and locations*: the cross-tenant access settings (what other organisations' people can do here, as guests and in Teams shared channels, and whether their MFA and devices are trusted), each organisation with settings of its own, and every named location with the Conditional Access policies that include or leave it out. Trusting every organisation's MFA and wide IP ranges marked trusted are flagged. <!-- since 2.4.0 -->
 - *Inactive accounts*: members and guests with no sign-in for 90 days, or
   never signed in and created over 30 days ago (admins and licensed accounts
   first), guest invitations still unaccepted after 30 days, and disabled
@@ -456,6 +457,7 @@ Each report is listed under its area in the report menu, in menu order.
   every Entra ID device record by last activity. Tenants without Intune
   still get the Entra records and Windows versions.
   Also which computers back up their local admin password with Windows LAPS (never the password), with its own check. <!-- since 2.4.0 -->
+- *Installed apps*: every app Intune has found on managed devices and how many devices have it, each app's versions newest first, and remote access tools (AnyDesk, ScreenConnect, TeamViewer and others) flagged to check they're expected. <!-- since 2.4.0 -->
 - *Intune policies*: which platforms have enrolled devices but no
   compliance policy, what each compliance policy requires, configuration
   profiles and Windows update rings (deferrals, restart deadline, paused),
