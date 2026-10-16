@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 import responses
 
-from officesentry import delivery, lifecycle, mailer, store, system_health, tasks, tenant_health
+from officesentry import delivery, issued, lifecycle, mailer, store, system_health, tasks, tenant_health
 from officesentry.graph import GraphClient
 from officesentry.worker import execute_run, schedule_tick
 from tests import graphdata as gd
@@ -220,10 +220,10 @@ def test_paused_and_archived_tenants_are_not_collected(db, cfg, two_tenants):
     )
     assert store.claim_next_run(db) is None
 
-    lifecycle.resume(db, store.get_tenant(db, alpha), "admin")
+    lifecycle.resume(db, store.get_tenant(db, alpha), "admin", "UTC")
     assert store.claim_next_run(db)["tenant_id"] == alpha
     with pytest.raises(ValueError):
-        lifecycle.resume(db, store.get_tenant(db, bravo), "admin")  # restore first
+        lifecycle.resume(db, store.get_tenant(db, bravo), "admin", "UTC")  # restore first
     lifecycle.restore(db, store.get_tenant(db, bravo), "admin")
     t = store.get_tenant(db, bravo)
     assert t["archived_at"] is None and not t["enabled"]  # restored, still paused
@@ -422,7 +422,7 @@ def test_offboard_deletes_everything_tenant_scoped_and_nothing_else(client, db, 
 
     login(client, "admin")
     page = client.get(f"/tenants/{alpha}/offboard").get_data(as_text=True)
-    assert "alpha-it" in page and "group-it (client)" in page and "lead (analyst)" in page
+    assert "alpha-it" in page and "group-it (Client viewer)" in page and "lead (Second line)" in page
     assert "Delete Alpha Ltd permanently" in page and "Enterprise applications" in page
     assert "Monthly review PDF" in page
 
@@ -451,6 +451,25 @@ def test_offboard_deletes_everything_tenant_scoped_and_nothing_else(client, db, 
     assert client.get("/").status_code == 200  # the admin's own session is unaffected
     entry = db.execute("SELECT * FROM audit_log WHERE action = 'tenant_deleted'").fetchone()
     assert entry["tenant_id"] == alpha and "Alpha Ltd" in entry["detail"] and "alpha-it" in entry["detail"]
+
+
+def test_offboard_names_the_report_history_it_deletes(client, db, two_tenants):
+    """The files a client was sent go with it, so the page counts them and links to where they download, and
+    big counts carry thousands separators."""
+    alpha, _ = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    sent = issued.IssuedFile("review", "Monthly review", "security-review-alpha.pdf", "application/pdf", b"%PDF-1.7")
+    issued.archive(db, alpha, [sent], period="2026-09", trigger="schedule", user="admin", to=["it@alpha.example"])
+    db.executemany(
+        "INSERT INTO metrics (tenant_id, run_id, key, value, captured_at) VALUES (?, NULL, ?, 1, ?)",
+        [(alpha, f"m{n}", "2026-10-01T00:00:00Z") for n in range(1234)],
+    )
+    page = client.get(f"/tenants/{alpha}/offboard").get_data(as_text=True)
+    assert f'1 file in the <a href="/tenants/{alpha}/report-history">Report history</a>' in page
+    assert "1,234 trend figures" in page
+    client.post(f"/tenants/{alpha}/delete", data={"confirm_name": "Alpha Ltd"})
+    assert not db.execute("SELECT 1 FROM issued_reports WHERE tenant_id = ?", (alpha,)).fetchone()
 
 
 def _on_disk(cfg) -> bytes:

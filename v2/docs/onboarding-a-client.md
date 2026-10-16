@@ -238,9 +238,11 @@ bulk and following each one through consent.
    optionally `group` (several separated by `;`; missing groups are created),
    `contact` (`jane@contoso.com` or `Jane Smith <jane@contoso.com>`, also added
    to the client's email contacts) and `cloud` (empty for Commercial, or GCC
-   High, DoD, China). Excel's *Save as CSV* works, comma or semicolon. Up to
-   1,000 rows at a time; **Download a template** has the layout. You see every
-   row first, with what's wrong with any of them, which app connection each
+   High, DoD, China). Excel's *Save as CSV* works, comma or semicolon, and so
+   do Excel's *Unicode Text* and Windows PowerShell's `ConvertTo-Csv > clients.csv`
+   (UTF-16). Up to 1,000 rows at a time; **Download a template** has the
+   layout. You see every row first, with its line in the file and what's
+   wrong with any of them, which app connection each
    cloud uses, any groups the import creates and who will see the new
    clients through a group. Nothing is added until you press **Import**.
    Clients already in Office Sentry are skipped, never changed.
@@ -465,6 +467,7 @@ On the **Manage** page, people who can manage clients can:
   and findings stay, and the client still shows (marked *Paused*) in lists and
   to its client users. Month-end names it under the queue instead, since
   nothing goes out for it. **Resume** picks up at the next nightly collection.
+- An emailed report that came due while the client was paused isn't sent the moment you resume it; the next one goes as usual, and a month-end month can still be approved and sent from **Month-end**. <!-- since 2.4.0 -->
 - **Archive** a client you've stopped working with but who may come back. An
   archived client is also paused, and is hidden from the Clients page, All
   clients, What changed, the Reports page, digests and its client users.
@@ -488,7 +491,9 @@ walks through it:
    [What Office Sentry reads](what-office-sentry-reads.md#how-to-remove-access).
 3. **Check what will be deleted**: collection runs and stored data, findings
    (including accepted risks), emailed reports, alert emails, client contacts,
-   email history, and which Office Sentry users lose access.
+   email history, the files in the client's **Report history** (the reports
+   as they were sent or published, linked so you can download them first),
+   and which Office Sentry users lose access, with their roles.
 4. **Delete permanently**: tick any client accounts that had access to this
    client only, if they should go too (they'd see nothing afterwards), type the
    client's name and press *Delete … permanently*.

@@ -46,14 +46,15 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   settings, and lists your saved views.
 - **All clients** (`/across/<report>`): a sortable, filterable table with one row
   per client for the monthly review, the insurance evidence pack and every
-  detail report, limited to the clients you can see. New detail reports appear
-  automatically. **Every row** (`/across/<report>/rows/<table>`) stacks every
-  client's rows of one table of a detail report under a Client column, with the
-  same filters, sorting, saved views and PDF, XLSX and CSV downloads (up to
-  10,000 rows a table; it says when it stops there). **Checks**
-  (`/across/checks`) is every check for every client in one grid, a square per
-  check grouped by area, with a page per area that names each check and XLSX
-  and CSV downloads; a failing or accepted square opens that client's findings.
+  detail report (its headline figures as the columns), limited to the clients
+  you can see. New detail reports appear automatically. **Every row**
+  (`/across/<report>/rows/<table>`) stacks every client's rows of one table of
+  a detail report under a Client column, with the same filters, sorting, saved
+  views and PDF, XLSX and CSV downloads (up to 10,000 rows a table; it says when
+  it stops there). **Checks** (`/across/checks`) is every check for every client
+  in one grid, a square per check grouped by area, with a page per area that
+  names each check and XLSX and CSV downloads; a failing or accepted square opens
+  that client's findings.
 - **What changed** (`/changes`, and each client's *Changes* tab): a standalone
   month-over-month report for the last 7, 30 or 90 days, or, on a client's
   *Changes* tab, between any two days the kept data reaches back to. It covers
@@ -101,7 +102,8 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
 - **Findings** (`/tenants/<id>/findings`): every finding keeps first seen,
   resolved and reopened dates. Anyone who can accept risks (Second line, Team
   leader and Administrator by default) can accept one with a reason and an
-  optional expiry; accepted risks leave the totals and get their own section.
+  optional review date after today, when it comes back for review; accepted
+  risks leave the totals and get their own section.
 - **Since last month**: new and fixed findings, admin role changes, new,
   disabled and deleted accounts, licences people were given or lost, and
   Conditional Access policies added, switched or edited, compared with the
@@ -586,8 +588,9 @@ spend, and what's coming up in the next 90 days) or a blank page.
 A design belongs to the MSP and works for every client: a block with nothing to show for a client (no
 accepted risks, no commentary yet) is left out of that client's report. Each client's **Reports →
 Custom reports** lists every design as a page and a PDF, and a report plan or a client's email schedule
-can send a design (as a PDF) alongside or instead of the monthly review. Text blocks take `{client}`,
-`{month}`, `{quarter}`, `{msp}` and `{date}`. Anyone who can *Design custom reports* makes and edits designs; removing
+can send a design (as a PDF) alongside or instead of the monthly review. Text blocks and the cover's title
+and subtitle take `{client}`, `{month}`, `{quarter}`, `{msp}` and `{date}`, and a design holds up to 60 blocks.
+Anyone who can *Design custom reports* makes and edits designs; removing
 one also needs *Settings*, since it comes out of any plan or schedule that sent it.
 
 Setup notes written for your team (a detail report saying Microsoft is hiding people's names, and how to

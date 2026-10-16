@@ -928,17 +928,27 @@ def save(conn, design_id: int, document: dict, name: str | None = None, descript
     return doc
 
 
-def remove(conn, design_id: int) -> None:
-    """Remove the design, and its key from every plan and schedule that sent it."""
+def remove(conn, design_id: int) -> list[str]:
+    """Remove the design, and its key from every plan and schedule that sent it. Returns the names of the
+    plans it was the only report on: they have nothing to send until someone chooses another."""
     key = key_of(design_id)
+    emptied = []
     for table in ("report_plans", "email_schedules"):
-        for row in conn.execute(f"SELECT id, reports FROM {table} WHERE reports LIKE ?", (f'%"{key}"%',)):
+        for row in conn.execute(f"SELECT * FROM {table} WHERE reports LIKE ?", (f'%"{key}"%',)).fetchall():
             try:
                 keys = [k for k in json.loads(row["reports"] or "[]") if k != key]
             except ValueError:
                 continue
             conn.execute(f"UPDATE {table} SET reports = ? WHERE id = ?", (json.dumps(keys), row["id"]))
+            if table == "report_plans" and not keys:
+                emptied.append(row["name"])
+    # What reviewers left out of it goes too: SQLite gives the next design this id again, and the items would
+    # leave its blocks out of those clients' copies.
+    conn.execute(
+        "DELETE FROM report_hidden WHERE item LIKE ? OR item = ?", (block_item(design_id, "%"), f"notes:{design_id}")
+    )
     conn.execute("DELETE FROM report_designs WHERE id = ?", (design_id,))
+    return emptied
 
 
 def usage(conn) -> dict[int, int]:

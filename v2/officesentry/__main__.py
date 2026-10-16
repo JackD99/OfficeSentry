@@ -511,7 +511,7 @@ def cmd_delete_tenant(args, cfg):
             f"{tenant['name']} ({tenant['tenant_ref']}): {plural(stored['runs'], 'collection run')}, "
             f"{plural(stored['objects'], 'stored item')}, {plural(stored['findings'], 'finding')}, "
             f"{plural(stored['schedules'], 'emailed report')}, {plural(stored['contacts'], 'contact')}, "
-            f"access for {plural(stored['access'], 'user')}."
+            f"{plural(stored['issued'], 'file')} in its report history, access for {plural(stored['access'], 'user')}."
         )
         if clients:
             names = ", ".join(u["username"] for u in clients)

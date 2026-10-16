@@ -12,8 +12,8 @@
   <div class="tile"><div class="label">Sign in with Microsoft</div>
     <div class="value small-value">{% if ready %}<span class="pill ok">Ready</span>{% elif clients_enabled %}<span class="pill warn">Not for this client</span>{% else %}<span class="pill">Off</span>{% endif %}</div>
     <div class="foot">{% if ready %}With their own work account.{% elif not clients_enabled %}Client accounts use a password.{% elif not same_cloud %}Another Microsoft cloud.{% elif own %}Your own tenant.{% else %}Tenant ID not known yet.{% endif %}</div></div>
-  <div class="tile"><div class="label">Approved by {{ tenant.name }}</div>
-    <div class="value small-value">{% if approved %}<span class="pill ok">Approved</span>{% else %}<span class="pill">Not yet</span>{% endif %}</div>
+  <div class="tile"><div class="label">Approval by {{ tenant.name }}</div>
+    <div class="value small-value">{% if approved %}<span class="pill ok">Noted</span>{% else %}<span class="pill">Not yet</span>{% endif %}</div>
     <div class="foot">{% if approved %}{{ ts(approved) }}{% else %}Noted when someone there first signs in.{% endif %}</div></div>
 </div>
 
@@ -81,9 +81,13 @@
 
 {% if clients_enabled and same_cloud and not own %}
 <section class="card" id="approval">
-  <div class="card-head"><h2>{{ tenant.name }}'s approval</h2>{% if approved %}<span class="pill ok">Approved</span>{% endif %}</div>
+  <div class="card-head"><h2>{{ tenant.name }}'s approval</h2>{% if approved %}<span class="pill ok">Noted</span>{% endif %}</div>
   {% if approved %}
-  <p class="m0">Approved {{ ts(approved) }}. Their people can sign in with Microsoft.</p>
+  <p>Approval noted {{ ts(approved) }}, when someone from {{ tenant.name }} first signed in with Microsoft.</p>
+  {% if approval %}
+  <p>If {{ tenant.name }} removes the sign-in app from their Microsoft 365 (under <em>Enterprise applications</em>), their people are asked for approval again. Send this link to their Microsoft 365 administrator to approve it once more.</p>
+  <div class="form-actions wrap"><button type="button" class="sm" data-copy-text="{{ approval }}">{{ icon('copy') }} Copy approval link</button></div>
+  {% endif %}
   {% elif approval %}
   <p>{{ tenant.name }}'s Microsoft 365 administrator approves sign-in once for their organisation, from this link. It only lets their people sign in here: Office Sentry learns each person's name and sign-in address, and nothing else.</p>
   <div class="form-actions wrap"><button type="button" class="primary" data-copy-text="{{ approval }}">{{ icon('copy') }} Copy approval link</button></div>

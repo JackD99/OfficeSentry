@@ -10,7 +10,7 @@ import pytest
 import requests
 import responses
 
-from officesentry import alerts, store
+from officesentry import alerts, lifecycle, store
 from officesentry.collectors import REGISTRY
 from officesentry.db import utcnow
 from officesentry.graph import GraphClient
@@ -250,7 +250,9 @@ def test_disabled_or_unconfigured_sends_nothing(db, vault, alerting, two_tenants
     assert not responses.calls
 
 
-def _seed_with_alerts(db, tenant_id, alerting, hook_status=202, hook_body=None):
+def _seed_with_alerts(db, tenant_id, alerting, hook_status=202, hook_body=None, last_run_started=None):
+    """Collect every data source for the tenant through the worker. ``last_run_started`` is called once the
+    night's last run is running (so with nothing left queued)."""
     factory = lambda tenant, connection: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
     with (
         responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
@@ -262,6 +264,10 @@ def _seed_with_alerts(db, tenant_id, alerting, hook_status=202, hook_body=None):
             store.enqueue_run(db, tenant_id, key)
         statuses = []
         while (run := store.claim_next_run(db)) is not None:
+            queued = db.execute("SELECT 1 FROM runs WHERE tenant_id = ? AND status = 'queued'", (tenant_id,))
+            if last_run_started and not queued.fetchone():
+                last_run_started()
+                last_run_started = None
             statuses.append(execute_run(db, run, factory, exchange_factory, alerting))
         hook_calls = [c for c in rsps.calls if c.request.url == HOOK]
     return statuses, hook_calls
@@ -285,6 +291,24 @@ def test_worker_alerts_on_new_findings_only_once(db, vault, alerting, two_tenant
     # The same data again: nothing new, so nothing sent.
     _, calls = _seed_with_alerts(db, alpha, alerting)
     assert calls == []
+
+
+@pytest.mark.parametrize("action", ["pause", "archive"])
+def test_no_alert_for_a_client_paused_while_it_was_collected(db, vault, alerting, two_tenants, action):
+    """Pausing drops the queued runs, but the running one finishes and syncs the findings: a client paused or
+    archived meanwhile gets no alert about them."""
+    alpha, _ = two_tenants
+    configure(db, vault, fmt="generic")
+    statuses, calls = _seed_with_alerts(
+        db,
+        alpha,
+        alerting,
+        last_run_started=lambda: getattr(lifecycle, action)(db, store.get_tenant(db, alpha), "admin"),
+    )
+    assert set(statuses) <= {"succeeded", "partial"}
+    assert db.execute("SELECT COUNT(*) FROM findings WHERE tenant_id = ? AND severity = 'high'", (alpha,)).fetchone()[0]
+    assert calls == []
+    assert not audit_rows(db, "alert_sent", "alert_failed")
 
 
 @pytest.mark.parametrize(
@@ -342,6 +366,20 @@ def test_failure_alerts_on_state_change_only(db, vault, alerting, two_tenants):
     title = REGISTRY["users"].title
     assert body["title"] == f"Alpha Ltd: {title} collection failed"
     assert db.execute("SELECT message FROM run_events WHERE run_id = ?", (failed,)).fetchone()[0] == "Alert sent"
+
+
+@responses.activate
+@pytest.mark.parametrize("action", ["pause", "archive"])
+def test_no_failure_alert_for_a_client_paused_while_it_was_collected(db, vault, alerting, two_tenants, action):
+    alpha, _ = two_tenants
+    configure(db, vault, fmt="generic", recovery=True)
+    responses.post(HOOK)
+    add_run(db, alpha, "succeeded")
+    failed = add_run(db, alpha, "failed", error="boom")
+    getattr(lifecycle, action)(db, store.get_tenant(db, alpha), "admin")
+    assert alerts.after_run(db, alerting, failed, "failed") is None
+    assert alerts.after_run(db, alerting, add_run(db, alpha, "succeeded"), "succeeded") is None
+    assert not responses.calls
 
 
 def test_run_worker_alerts_when_a_collection_starts_failing(cfg, db, vault, two_tenants):

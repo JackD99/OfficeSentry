@@ -577,6 +577,22 @@ def test_an_approval_link_for_a_deleted_client_does_nothing_for_a_new_one(client
     assert resp.status_code == 302 and store.get_tenant(db, alpha)["sign_in_approved_at"] is None
 
 
+def test_the_approval_link_is_still_offered_once_approval_is_noted(client, db, world):
+    """Office Sentry can't see the client remove the sign-in app from their tenant, after which their people
+    are asked for approval again, so the page keeps the link to send again, beside when approval was noted."""
+    alpha, _ = world
+    login(client, "owner")
+    before = _approval_link(client, alpha)
+    db.execute("UPDATE tenants SET sign_in_approved_at = '2026-09-01T09:00:00Z' WHERE id = ?", (alpha,))
+    db.commit()
+    text = page(client, f"/tenants/{alpha}/sign-in")
+    approval = text.split('id="approval"', 1)[1].split("</section>", 1)[0]
+    assert "Approval noted" in approval and "2026-09-01T09:00:00Z" in approval
+    assert "removes the sign-in app" in approval and "to approve it once more" in approval
+    assert ">Approved<" not in text
+    assert _approval_link(client, alpha) == before
+
+
 # -- The client's Client sign-in page ----------------------------------------------------------------------
 
 
