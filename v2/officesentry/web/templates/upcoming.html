@@ -21,7 +21,7 @@
 </div>
 
 {% if not up.tenants %}
-<div class="card empty"><h3>No clients to show</h3>
+<div class="card empty"><h2>{{ 'No clients yet' if can('clients.manage') else 'No clients to show' }}</h2>
   <p>{% if can('clients.manage') %}Add a client and its renewals, expiring credentials and full mailboxes show here after the first collection.{% else %}You haven't been given access to any active clients yet. Ask an admin to grant access.{% endif %}</p></div>
 {% else %}
 {% set first = up.soonest %}
