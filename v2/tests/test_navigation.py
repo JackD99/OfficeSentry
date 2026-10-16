@@ -49,6 +49,11 @@ def _user_href(client, alpha):
     return re.search(rf'href="(/tenants/{alpha}/users/[^".]+)"', page).group(1)
 
 
+def _run_href(client, alpha):
+    page = client.get(f"/tenants/{alpha}/collection").get_data(as_text=True)
+    return re.search(r'href="(/runs/\d+)"', page).group(1)
+
+
 def test_every_tenant_page_opens_one_tab(client, db, seeded):
     alpha = seeded
     make_user(db, "admin")
@@ -74,6 +79,9 @@ def test_every_tenant_page_opens_one_tab(client, db, seeded):
         f"/tenants/{alpha}/collection": ("Settings", "Data collection"),
         f"/tenants/{alpha}/manage": ("Settings", "Manage"),
         f"/tenants/{alpha}/offboard": ("Settings", "Manage"),
+        f"/tenants/{alpha}/report-history": ("Emails", None),
+        f"/tenants/{alpha}/schedules/new": ("Emails", None),
+        _run_href(client, alpha): ("Settings", "Data collection"),
     }
     for url, (tab, sub) in pages.items():
         resp = client.get(url)
@@ -205,3 +213,43 @@ def test_landmarks(client, db, seeded):
     assert 'class="skip-link" href="#main"' in person and '<main id="main"' in person
     dashboard = client.get("/").get_data(as_text=True)
     assert re.search(r'<span class="sevbar" role="img" aria-label="\d+ critical, \d+ high', dashboard)
+
+
+def test_a_page_opened_from_a_list_says_where_it_came_from(client, db, seeded):
+    """A client page that isn't a tab or a second-row page shows "← <the page it was opened from>" above
+    its title, as a person's page shows "← People"; a page that isn't a client's shows crumbs from its
+    menu entry ending with itself, and no page has both crumbs and a Back button."""
+    alpha = seeded
+    make_user(db, "admin")
+    login(client, "admin")
+    backs = {
+        _run_href(client, alpha): f'<a href="/tenants/{alpha}/collection">&larr; Data collection</a>',
+        f"/tenants/{alpha}/schedules/new": f'<a href="/tenants/{alpha}/schedules">&larr; Emailed reports</a>',
+        f"/tenants/{alpha}/report-history": f'<a href="/tenants/{alpha}/schedules">&larr; Emailed reports</a>',
+        f"/tenants/{alpha}/offboard": f'<a href="/tenants/{alpha}/manage">&larr; Manage</a>',
+        f"/tenants/{alpha}/projects": f'<a href="/tenants/{alpha}/findings">&larr; Findings</a>',
+    }
+    for url, back in backs.items():
+        page = client.get(url).get_data(as_text=True)
+        assert f'<div class="crumbs">{back}</div>' in page, url
+        assert page.count("<h1") == 1 and f"<h1>{'Alpha Ltd'}</h1>" in page, url  # the client's name
+        assert ">Back</a>" not in page, url
+    sid = db.execute(
+        "INSERT INTO email_schedules (kind, tenant_id, reports, include_xlsx, frequency, day_of_week, day_of_month,"
+        " hour, timezone, created_at) VALUES ('report', ?, '[\"review\"]', 1, 'monthly', 0, 1, 8, 'UTC', ?)",
+        (alpha, "2026-01-01T00:00:00Z"),
+    ).lastrowid
+    db.commit()
+    for url in (f"/schedules/{sid}/edit", f"/schedules/{sid}/preview"):
+        page = client.get(url).get_data(as_text=True)
+        assert f'<div class="crumbs"><a href="/tenants/{alpha}/schedules">&larr; Emailed reports</a></div>' in page, url
+        assert _active(_tab_bar(page)) == ["Emails"] and ">Back</a>" not in page, url
+    digest = client.get("/emails/digests/new").get_data(as_text=True)
+    assert (
+        '<div class="crumbs"><a href="/emails">Email reports</a><span>/</span><span>New digest</span></div>' in digest
+    )
+    plan = client.get("/reporting/plans/new").get_data(as_text=True)
+    assert (
+        "<span>/</span><span>New report plan</span></div>" in plan
+        and 'href="/reporting/plans">Report plans</a>' in plan
+    )
