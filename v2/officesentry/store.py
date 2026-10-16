@@ -72,11 +72,25 @@ def list_connections(conn, kind: str | None = MAIN):
 # -- Tenants -----------------------------------------------------------------
 
 
+LAST_TENANT_ID = "tenants.last_id"  # settings: the highest client id ever handed out
+
+
 def create_tenant(conn, name: str, tenant_ref: str, connection_id: int | None, cloud: str = "commercial") -> int:
-    cur = conn.execute(
-        "INSERT INTO tenants (name, tenant_ref, connection_id, created_at, cloud) VALUES (?, ?, ?, ?, ?)",
-        (name, tenant_ref, connection_id, utcnow(), cloud),
-    )
+    """A new client, with an id no client has had before. SQLite would hand out a deleted newest client's id
+    again, and the activity log keeps a deleted client's rows (``lifecycle.KEPT``), so the new client would
+    show them to whoever is granted it."""
+    with atomic(conn):
+        # Until the first client is made with this, the activity log's ids stand in for the ones handed out.
+        cur = conn.execute(
+            "INSERT INTO tenants (id, name, tenant_ref, connection_id, created_at, cloud) SELECT MAX("
+            " COALESCE((SELECT MAX(id) FROM tenants), 0), COALESCE((SELECT CAST(value AS INTEGER) FROM settings"
+            " WHERE key = ?), (SELECT MAX(tenant_id) FROM audit_log), 0)) + 1, ?, ?, ?, ?, ?",
+            (LAST_TENANT_ID, name, tenant_ref, connection_id, utcnow(), cloud),
+        )
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (LAST_TENANT_ID, str(cur.lastrowid)),
+        )
     return cur.lastrowid
 
 
