@@ -57,7 +57,7 @@
     {% for e in entries %}{% set t = e.tenant %}{% set link = links.get(t.id) %}
     <tr>
       <td><input type="checkbox" name="tenant" value="{{ t.id }}" form="bulk" aria-label="Select {{ t.name }}"></td>
-      <td data-label="Client" class="who"><a class="strong" href="{{ url_for('onboarding.send', tenant_id=t.id) }}">{{ t.name }}</a><span class="sub mono">{{ t.tenant_ref }}</span></td>
+      <td data-label="Client" class="who"><a class="strong" href="{{ url_for('onboarding.send', tenant_id=t.id) }}">{{ t.name }}</a><span class="sub">{{ t.tenant_ref }}</span></td>
       <td data-label="Contact" class="wrap">{% if e.row and (e.row.contact_name or e.row.contact_email) %}{{ e.row.contact_name or e.row.contact_email }}{% if e.row.contact_name and e.row.contact_email %}<span class="sub">{{ e.row.contact_email }}</span>{% endif %}{% else %}<span class="faint">—</span>{% endif %}</td>
       <td data-label="State" class="wrap"><span class="pill {{ e.state.tone }}">{{ e.state.label }}</span>
         <span class="sub">{{ e.state.detail }}{% if e.state.key in ('sent', 'new_sent') and e.sent_at %} Sent {{ ts(e.sent_at) }}.{% endif %}</span></td>
