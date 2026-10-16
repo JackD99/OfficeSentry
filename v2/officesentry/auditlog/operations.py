@@ -44,6 +44,8 @@ SYSTEM = {3, 4}
 
 FORWARDING = ("ForwardingSmtpAddress", "ForwardingAddress", "DeliverToMailboxAndForward")
 RULE_FORWARDS = ("ForwardTo", "ForwardAsAttachmentTo", "RedirectTo")
+# A mail flow rule that redirects mail, or sends a copy of it (Bcc, Cc, an added recipient) to someone else.
+FLOW_FORWARDS = ("RedirectMessageTo", "BlindCopyTo", "CopyTo", "AddToRecipients")
 RULE_DELETES = ("DeleteMessage", "SoftDeleteMessage", "PermanentDelete")
 EMPTY = {"", "$null", "null", "none", "false"}
 
@@ -301,7 +303,7 @@ def summary(record: dict, op: Operation) -> str:
     if op.name == "Set-Mailbox":
         return "; ".join(_changes(record, FORWARDING)) or "Forwarding removed"
     if op.group == "rules":
-        parts = _changes(record, RULE_FORWARDS + RULE_DELETES + ("MoveToFolder",))
+        parts = _changes(record, RULE_FORWARDS + FLOW_FORWARDS + RULE_DELETES + ("MoveToFolder",))
         props = properties(record)
         if not parts and props.get("ruleactions"):
             parts = [props["ruleactions"][:200]]
@@ -329,7 +331,7 @@ def attention(record: dict, op: Operation) -> str:
     if op.group == "rules" and op.name not in ("Remove-InboxRule", "Remove-TransportRule"):
         actions = " ".join(_changes(record, RULE_FORWARDS + RULE_DELETES)).lower()
         actions += " " + properties(record).get("ruleactions", "").lower()
-        if any(w in actions for w in ("forward", "redirect")):
+        if any(w in actions for w in ("forward", "redirect")) or _changes(record, FLOW_FORWARDS):
             return "A rule forwards mail."
         if "delete" in actions:
             return "A rule deletes mail."
@@ -349,15 +351,10 @@ def attention(record: dict, op: Operation) -> str:
 
 # -- The report's headline figures, also stored as metrics for their trends --------------------------------
 
-DELETES = {
-    "filedeleted",
-    "filerecycled",
-    "filedeletedfirststagerecyclebin",
-    "filedeletedsecondstagerecyclebin",
-    "fileversionsalldeleted",
-    "folderdeleted",
-    "folderrecycled",
-}
+# Someone deleting a file or folder. Emptying it from a recycle bin afterwards isn't deleting it again, and
+# clearing a file's version history leaves the file; both stay in the Files table under their own labels.
+DELETES = {"filedeleted", "filerecycled", "folderdeleted", "folderrecycled"}
+SAME_DELETE = 300  # seconds: one delete may be logged as both FileDeleted and FileRecycled
 RULE_CHANGES = {"new-inboxrule", "set-inboxrule", "enable-inboxrule", "updateinboxrules"}
 FIGURES = {  # key: title
     "files_deleted": "Files deleted",
@@ -370,15 +367,28 @@ FIGURES = {  # key: title
 FORWARDING_SET = "Mail forwarding was set on a mailbox."
 
 
+def deletes(activities) -> list:
+    """Each delete in stored records (``events.Activity``) once, oldest first: a second record of the same
+    person deleting the same item within ``SAME_DELETE`` is the same delete."""
+    out, last = [], {}
+    for a in sorted((a for a in activities if a.operation.lower() in DELETES), key=lambda a: a.ts):
+        key = (a.actor.lower(), a.object.lower())
+        if key not in last or a.ts - last[key] > SAME_DELETE:
+            last[key] = a.ts
+            out.append(a)
+    return out
+
+
 def figures(activities) -> dict[str, int]:
-    """The headline figures over stored records (``events.Activity``): mailboxes are counted once each."""
+    """The headline figures over stored records (``events.Activity``): deletes and mailboxes are counted once
+    each."""
+    activities = list(activities)
     out = dict.fromkeys(FIGURES, 0)
+    out["files_deleted"] = len(deletes(activities))
     opened = set()
     for a in activities:
         name = a.operation.lower()
-        if name in DELETES:
-            out["files_deleted"] += 1
-        elif name == "filedownloaded":
+        if name == "filedownloaded":
             out["files_downloaded"] += 1
         elif name == "anonymouslinkcreated":
             out["anyone_links"] += 1

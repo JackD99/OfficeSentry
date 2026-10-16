@@ -116,7 +116,8 @@ def settings():
         sign_in = None
     connections = addon.connections(g.db)
     rows = g.db.execute("SELECT * FROM audit_feeds").fetchall()
-    tenants = {t["id"]: t for t in visible_tenants(g.db, g.user)}
+    # Archived clients too: one whose feed is still on keeps the add-on from being switched off.
+    tenants = {t["id"]: t for t in visible_tenants(g.db, g.user, archived=True)}
     clients = sorted(
         ((tenants[r["tenant_id"]], addon.state(r)) for r in rows if r["tenant_id"] in tenants),
         key=lambda pair: (list(addon.STATES).index(pair[1].key), pair[0]["name"].lower()),

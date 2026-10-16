@@ -2,7 +2,7 @@
 Subject: Please approve audit log reports for your Microsoft 365
 Hi {{ (contact.contact_name.split()[0] if contact and contact.contact_name else 'there') }},
 
-We'd like to add a report on who deleted, downloaded and shared files and who opened other people's mailboxes to {{ tenant.name }}'s Microsoft 365 reports. It comes from your Microsoft 365 audit log, so a Global Administrator of your Microsoft 365 needs to approve one more read-only app. It takes a couple of minutes:
+We'd like to add a report on who deleted, downloaded and shared files and who opened other people's mailboxes to {{ tenant.name|possessive }} Microsoft 365 reports. It comes from your Microsoft 365 audit log, so a Global Administrator of your Microsoft 365 needs to approve one more read-only app. It takes a couple of minutes:
 
 1. Open this link and sign in with a Global Administrator account:
 {{ link }}

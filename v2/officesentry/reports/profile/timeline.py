@@ -224,7 +224,7 @@ def timeline(p: Person) -> list[_Happened]:
     for name, at in held.items():
         first(at, oldest, "Admin roles", f"{name} role first seen", "warn")
 
-    if addon.row_for(conn, tid) is not None:
+    if addon.shown(conn, tid):
         out.extend(_audit_log(p))
 
     cutoff = (p.now - timedelta(days=TIMELINE_DAYS)).strftime("%Y-%m-%d")
@@ -287,7 +287,7 @@ def timeline_part(p: Person) -> Part:
         result.tone = "bad" if any(e.tone == "bad" for e in events) else None
     timed = (
         "Admin changes, sign-ins and audit log records"
-        if addon.row_for(p.snap.conn, p.snap.tenant["id"])
+        if addon.shown(p.snap.conn, p.snap.tenant["id"])
         else ("Admin changes and sign-ins")
     )
     result.note = (
