@@ -191,6 +191,20 @@ def test_the_small_print_ends_a_table_report_under_its_last_rows(client, db, two
         assert not any(total in page for page in pages[:-1]), (n, pages)
 
 
+def test_a_short_licences_section_stays_on_one_page_of_the_review_pdf(client, db, two_tenants, monkeypatch):
+    """The monthly review's Licences section (the saving, a few licences and their total) moves to the next
+    page whole, like the sections after it, rather than leaving one licence at the foot of a page."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    make_user(db, "admin")
+    login(client, "admin")
+    pages = []
+    monkeypatch.setattr(export, "pdf_available", lambda: True)
+    monkeypatch.setattr(export, "to_pdf", lambda html, base_url: pages.append(html) or b"%PDF-1.7")
+    client.get(f"/tenants/{alpha}/report.pdf")
+    assert '<section id="licences" class="keep">' in pages[0]
+
+
 def test_pdf_detail_matches_the_page(client, db, two_tenants, no_weasyprint):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
