@@ -50,14 +50,17 @@
   {% else %}
   {#- Staff: each entry needs the capability its page needs (web/access.py), so the menu only offers what opens. -#}
   {% set across = can('clients.compare') %}
+  {#- The jump box (jump.js) opens from this box: "/", Ctrl+K and ⌘K open it too. Without script the box
+      is the search form (/search), and folded, a link to it. -#}
   {% if across %}
   <form method="get" action="{{ url_for('search.index') }}" class="nav-search" role="search">
     <label>{{ icon('search') }}<span class="sr-only">Search all clients</span>
-      <input type="search" name="q" placeholder="Search all clients" autocomplete="off" maxlength="200" aria-keyshortcuts="/ Control+K Meta+K"{% if request.endpoint == 'search.index' %} value="{{ request.args.get('q', '') }}"{% endif %}></label>
+      <input type="search" name="q" placeholder="Search all clients" autocomplete="off" maxlength="200"{% if request.endpoint == 'search.index' %} value="{{ request.args.get('q', '') }}"{% endif %}></label>
   </form>
   <a class="nav-search-link" href="{{ url_for('search.index') }}">{{ icon('search') }}<span>Search all clients</span></a>
-  {{ nav_link('home.index', 'Home', 'home', ('home.today', 'home.clients')) }}
   {% endif %}
+  <button type="button" class="nav-search-btn" data-jump-open hidden aria-keyshortcuts="/ Control+K Meta+K">{{ icon('search') }}<span>{{ 'Search all clients' if across else 'Search' }}</span><kbd aria-hidden="true">/</kbd></button>
+  {% if across %}{{ nav_link('home.index', 'Home', 'home', ('home.today', 'home.clients')) }}{% endif %}
   {{ nav_link('tenants.dashboard', 'Clients', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'tenant_admin.manage', 'tenant_admin.offboard', 'projects.tenant')) }}
   {{ nav_link('reports.overview', 'Reports', 'library') }}
   {% if across %}{{ nav_link('across.index', 'All clients', 'grid', ('across.rollup', 'across.rows_index', 'across.rows', 'across.checks')) }}{% endif %}
@@ -175,6 +178,10 @@
 </script>
 <script src="{{ url_for('static', filename='app.js') }}" nonce="{{ csp_nonce }}"></script>
 <script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% if current_user and current_user.role != 'client' %}
+{% include "_jump.html" %}
+<script src="{{ url_for('static', filename='jump.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

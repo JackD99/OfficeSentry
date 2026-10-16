@@ -31,6 +31,7 @@ NOT_PAGES = {
     "branding.logo": "an image",
     "reporting.progress": "JSON polled by the queue page",
     "updates.progress": "JSON polled by the Updates page",
+    "jump.index": "JSON for the jump box's typeahead",
     "email.issued_report": "a file download",
     "auth.setup": "only before the first admin exists",
     "auth.login_code": "only part-way through signing in",

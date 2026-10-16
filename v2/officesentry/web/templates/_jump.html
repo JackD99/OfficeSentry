@@ -1,0 +1,45 @@
+{#- The jump box (web/jump.py, static/jump.js): "/" or Ctrl+K (⌘K) opens it over any staff page, and so
+    does the menu's search box. Type a few letters to land on a client, a report for a client ("north
+    mfa"), a person, a page or a setting. data-tenant is the client whose page is open, so a report typed
+    on its own opens for that client first. -#}
+{% from "_macros.html" import icon %}
+{% set here = (request.view_args or {}).get('tenant_id') %}
+<dialog id="jump" class="jump-box" aria-label="Jump to" data-src="{{ url_for('jump.index') }}" data-who="{{ current_user.id }}"{% if here %} data-tenant="{{ here }}"{% endif %}>
+  <form method="dialog" class="jump-form" role="search">
+    <div class="jump-field">
+      {{ icon('search') }}
+      <label for="jump-q" class="sr-only">Jump to a client, report, person, page or setting</label>
+      <input id="jump-q" type="text" role="combobox" aria-expanded="false" aria-controls="jump-list" aria-autocomplete="list" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="200" enterkeyhint="go" placeholder="Jump to a client, report, person or setting">
+      <button type="submit" class="jump-close" aria-label="Close">{{ icon('close') }}</button>
+    </div>
+    <div id="jump-list" class="jump-list" role="listbox" aria-label="Where to jump"></div>
+    <div class="jump-empty" data-jump-hint>
+      <p>Type a client, a report, a person, an IP address or a setting.</p>
+      <p>Two words find a report for a client: <code>contoso mfa</code>. Add <code>pdf</code> for its file.</p>
+    </div>
+    <div class="jump-foot">
+      <span class="jump-keys" aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> move <kbd>↵</kbd> open <kbd>esc</kbd> close</span>
+      <span class="jump-status" role="status" aria-live="polite"></span>
+    </div>
+  </form>
+  {#- One icon per kind of row, cloned by jump.js. -#}
+  <template data-icon="client">{{ icon('tenants') }}</template>
+  <template data-icon="report">{{ icon('doc') }}</template>
+  <template data-icon="review">{{ icon('doc') }}</template>
+  <template data-icon="findings">{{ icon('shield') }}</template>
+  <template data-icon="changes">{{ icon('clock') }}</template>
+  <template data-icon="evidence">{{ icon('check') }}</template>
+  <template data-icon="across">{{ icon('grid') }}</template>
+  <template data-icon="download">{{ icon('download') }}</template>
+  <template data-icon="page">{{ icon('arrow') }}</template>
+  <template data-icon="setting">{{ icon('settings') }}</template>
+  <template data-icon="person">{{ icon('person') }}</template>
+  <template data-icon="group">{{ icon('users') }}</template>
+  <template data-icon="mailbox">{{ icon('mail') }}</template>
+  <template data-icon="site">{{ icon('library') }}</template>
+  <template data-icon="signin">{{ icon('alert') }}</template>
+  <template data-icon="app">{{ icon('connection') }}</template>
+  <template data-icon="device">{{ icon('grip') }}</template>
+  <template data-icon="domain">{{ icon('external') }}</template>
+  <template data-icon="more">{{ icon('search') }}</template>
+</dialog>
