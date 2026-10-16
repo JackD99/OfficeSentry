@@ -11,42 +11,11 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.4.0] - Unreleased
 
-### Action required
-
-- **If you set up off-site backups** (DEPLOY.md, "Off-site backups"): download this release's `jobs.sh` into
-  the `deploy` folder next to `docker-compose.yml`, then run `OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh schedule`
-  there again. The crontab lines the old one wrote never ran on an install in `/opt/officesentry`, so there
-  was no off-site copy and no Sunday restore drill. The Update button doesn't change this file.
-
 ### Database upgrade
 
 Yes, applied on start as usual, after a copy of the database is made: migration 45 adds a column that keeps
 each approved month-end report's commentary, recommendations and notes as the client was given them. Months
 approved before the update show the month as it is now, as before, until they're issued again.
-Migration 46 adds two columns to each collection run, saying when a failed run is tried again by itself and
-which failure a run tries again for.
-
-### Added
-
-- **A collection that fails because Microsoft was busy is tried again by itself.** A data source that failed
-  for a reason that passes by waiting (Microsoft throttling, a server error or outage, no answer at all, or the
-  worker restarted mid-run, as an update does) used to wait for the next night, so a bad few minutes at 02:00
-  left a client a day out of date and flagged on the month-end queue. It's now tried again about 20 minutes
-  later and once more two hours after that. The Data collection and run pages say when, Today and the client
-  list show it as a warning rather than a failure, and a collection-failure alert waits for the last try.
-  Failures someone has to fix first (a permission, a licence, the certificate) aren't retried.
-- **Every install backs itself up every night.** The worker now makes the nightly database copy itself, at
-  03:30 in Office Sentry's timezone, into `/data/backups`, keeping 7, so an install nobody added a crontab
-  line to has backups too. `OFFICESENTRY_BACKUP_CRON` changes when (or `off`) and `OFFICESENTRY_BACKUP_KEEP` how
-  many. A server that already runs the `backup` command every night (the off-site job, the crontab line in
-  DEPLOY.md, the cloud-init file, the Kubernetes CronJob, a NAS task) keeps doing so, wherever it writes, and
-  the worker leaves those nights to it, stepping in if that job stops.
-
-### Changed
-
-- **The worker's nightly rebuild does about 40% less work.** What changed's three periods and every report's
-  All clients row now share one read of each client's data and one build of each report, rather than building
-  each report four times, so the night's work is done sooner on a large install.
 
 ### Fixed
 
@@ -66,18 +35,30 @@ which failure a run tries again for.
   - The [deploy guides](v2/docs/deploy/README.md) say a restore needs both containers stopped.
   - The NAS guide's backup copies no longer pile up.
   - The Azure and AWS guides restart Caddy after an update.
-- **Off-site backups and the restore drill run from cron.** `deploy/jobs.sh schedule` wrote crontab lines that
-  looked for Office Sentry in `/opt/officesentry/v2`, where only the project's own server keeps it, and kept
-  its log and lock in the folder above, which a normal user can't write. The lines now name the folder they
-  were made in, and the log and lock stay in it. The nightly job also waits for a database copy that's still
-  being made rather than make a second one beside it, and `jobs.sh` is now one of each release's files.
-- **System status says how to rerun an off-site backup or the drill on your own server**: `bash deploy/jobs.sh
-  now` and `bash deploy/jobs.sh drill`, rather than the project's own deploy workflow.
-- **Logs keep what matters through a month-end.** Each PDF wrote about 200 lines of the PDF and font libraries'
-  own notes to the portal's and worker's logs, so a month-end's reports pushed every earlier line, errors
-  included, out of the rolling log files the support package reads. Those libraries now only log their errors.
-- **The support package covers the audit log add-on**: whether it's switched on, each client's step (sent,
-  approved, on or off, with the reason the feed hasn't started), and which app connection is the add-on's.
+- **Settings → Updates:** an Action required that starts "Nonetheless" still asks for the tick, and a
+  Database upgrade that starts "Note" still shows its warning (only "None" and "No" as words count as
+  nothing to do). Release notes holding a NUL character no longer break the page.
+- **Update button:** when the data volume is full once the new version is running, the updater still goes
+  back to the version before if the new one isn't healthy, and an update that stops part way never says
+  "before anything was changed".
+
+### Security
+
+- **Update button:** the updater only installs a release whose tag is on a commit in main's history, so a tag
+  pushed on another branch's commit (which runs that commit's own release workflow) is refused even though
+  its image is signed. The updater, which runs as root, never follows a link the portal could put in place of
+  its shared `updates` folder, when it makes the folder, writes its status or takes its lock, and a named pipe
+  or deeply nested file left as the request no longer stops it.
+- **Files and mailbox access:** only a file in the client's own SharePoint or OneDrive becomes a link shown by
+  its path. An inbox rule or other item named like an address on another host is shown whole and never as a
+  link, on the page, in the PDF and spreadsheet and in a person's timeline, so it can't pass for the client's
+  file.
+- **Connections:** the steps that add Office Sentry's permissions to an app registration only work on the
+  shared read-only app, never on the audit log add-on's app, which its clients approved for one permission.
+- **Clients:** a new client never gets the id of one that was deleted. Before, the next client added after
+  deleting the newest one took its id, and with it the deleted client's rows in the **Activity log**, its
+  name and domain included, for anyone granted the new client. Rows from before a client was added no longer
+  show as its own, so an id already reused this way stops showing the old client's history too.
 
 ### Security
 
