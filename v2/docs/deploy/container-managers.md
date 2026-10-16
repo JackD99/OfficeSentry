@@ -15,7 +15,7 @@ screens, so they run the same one-file stack as [Portainer](portainer.md):
 - **At least these variables:**
 
   ```text
-  OFFICESENTRY_VERSION=2.4.0
+  OFFICESENTRY_VERSION=2.4.1
   OFFICESENTRY_BASE_URL=https://sentry.yourmsp.com
   OFFICESENTRY_TIMEZONE=Europe/London
   ```
