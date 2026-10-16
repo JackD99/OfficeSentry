@@ -11,7 +11,7 @@
 {% elif c.kind == 'pct' %}{{ '%g'|format(v) }}%
 {% elif c.kind == 'num' %}{{ '%g'|format(v) }}
 {% else %}{% if row.tones.get(c.key) %}<span class="dot {{ row.tones[c.key] }}"></span> {% endif %}{{ v }}{% endif %}
-{% set d = row.deltas.get(c.key) %}{% if d %} <span class="delta {{ 'better' if (d > 0) == (c.better == 'up') else 'worse' }} tiny">{{ '%+g'|format(d) }}</span>{% endif %}
+{% set d = row.deltas.get(c.key) %}{% if d %} <span class="delta {{ 'flat' if not c.better else ('better' if (d > 0) == (c.better == 'up') else 'worse') }} tiny">{{ '%+g'|format(d) }}</span>{% endif %}
 {%- endmacro %}
 {% macro tenant_href(t) -%}
 {% if rollup.tenant_link == 'review' %}{{ url_for('reports.tenant_report', tenant_id=t.id) }}

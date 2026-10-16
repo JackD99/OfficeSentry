@@ -128,16 +128,19 @@ def supported_windows(snap: TenantSnapshot, now: datetime):
         if support.status in severity:
             findings.append(Finding(severity[support.status], _device_label(d), support.detail, d["_id"]))
     unsupported = sum(f.severity != "low" for f in findings)
+    soon = len(findings) - unsupported
     if not findings:
         return ("pass", _all_are(len(windows), "Windows computer") + " on a supported release", [])
-    summary = (
-        f"{unsupported} of {plural(len(windows), 'Windows computer')} past end of support"
-        if unsupported
-        else (
-            f"{plural(len(findings), 'Windows computer')} {verb(len(findings), 'reaches', 'reach')} end of "
+    if not unsupported:
+        summary = (
+            f"{plural(soon, 'Windows computer')} {verb(soon, 'reaches', 'reach')} end of "
             f"support within {devices.SOON_DAYS} days"
         )
-    )
+        return ("fail", summary, findings)
+    # Computers reaching it soon are findings too: name them, so the summary agrees with the count shown beside it.
+    summary = f"{unsupported} of {plural(len(windows), 'Windows computer')} past end of support"
+    if soon:
+        summary += f", {soon} more reaching it within {devices.SOON_DAYS} days"
     return ("fail", summary, findings)
 
 

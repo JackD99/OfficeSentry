@@ -9,7 +9,7 @@ from openpyxl import load_workbook
 
 from officesentry import store
 from officesentry.changes import all_changes
-from officesentry.devices import windows_support
+from officesentry.devices import WINDOWS_RELEASES, WindowsRelease, windows_support
 from officesentry.graph import GraphClient
 from officesentry.reports import data_reports, evidence
 from officesentry.rules import evaluate
@@ -145,6 +145,31 @@ def test_device_checks(db, two_tenants):
     assert [f.subject for f in r["device_checkin"].findings] == ["LAPTOP-BOB (bob@x.com)"]
     assert [f.subject for f in r["stale_devices"].findings] == ["OLD-PC"]
     assert all(r[k].category == "Devices" for k in ("device_compliance", "stale_devices"))
+
+
+def test_windows_summary_names_the_computers_reaching_end_of_support_too(client, db, two_tenants, monkeypatch):
+    """Overview shows the summary beside the number of computers found, so it counts every one of them."""
+    alpha, _ = two_tenants
+    today = datetime.now(UTC).date()
+    # A release whose Home and Pro updates end in a month, whatever day this runs.
+    soon = WindowsRelease("Windows 11 (test)", 26300, today + timedelta(days=30), today + timedelta(days=395))
+    monkeypatch.setattr("officesentry.devices.WINDOWS_RELEASES", (soon, *WINDOWS_RELEASES))
+    _, bob, phone = dd.MANAGED_DEVICES  # Bob's laptop is on Windows 10
+    desks = [{**bob, "id": f"md-desk{n}", "deviceName": f"DESK-{n}", "osVersion": "10.0.26300.1"} for n in (1, 2)]
+    monkeypatch.setattr(dd, "MANAGED_DEVICES", [bob, phone, *desks])
+    seed_tenant(db, alpha)
+    r = _results(db, alpha)["supported_windows"]
+    assert r.summary == "1 of 3 Windows computers past end of support, 2 more reaching it within 90 days"
+    assert [f.severity for f in r.findings] == ["high", "low", "low"]
+    make_user(db, "admin")
+    login(client, "admin")
+    page = client.get(f"/tenants/{alpha}").get_data(as_text=True)
+    row = page.split(f'<div class="title">{r.summary}</div>')[1].split("</li>")[0]
+    assert '<span class="pill" title="Accounts or items affected">3</span>' in row
+    # Past it, nothing to come: the summary says only that.
+    monkeypatch.setattr(dd, "MANAGED_DEVICES", [bob, phone])
+    seed_tenant(db, alpha)
+    assert _results(db, alpha)["supported_windows"].summary == "1 of 1 Windows computer past end of support"
 
 
 def test_jailbroken_device_is_high(db, two_tenants, monkeypatch):
