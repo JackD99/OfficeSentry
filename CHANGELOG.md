@@ -41,26 +41,12 @@ approved before the update show the month as it is now, as before, until they're
 - **Update button:** when the data volume is full once the new version is running, the updater still goes
   back to the version before if the new one isn't healthy, and an update that stops part way never says
   "before anything was changed".
-- **Audit log add-on:**
-  - A client first collected more than 7 days after its feed started no longer says every night that its
-    first hours haven't been read yet: the report says which hours couldn't be read.
-  - A stop Microsoft refuses because of the add-on app's own certificate, or an outage, no longer says the
-    client removed the add-on, and is sent again every hour for a week.
-  - Switching a client on again after they removed the app no longer shows it as Approved: it asks for the
-    link to be sent again.
-  - An approval Office Sentry hasn't confirmed by signing in yet reads *Approved, confirming*, as onboarding's
-    does.
-  - A paused client is no longer signed in to, or its feed started, until it's resumed.
-  - An archived client whose feed is on, which keeps the add-on from being switched off for the install, is
-    named in the refusal and listed on the add-on's page.
-  - Mail flow rules that redirect mail or copy it to someone else are flagged in **Needs attention**, like
-    inbox rules that forward it.
-  - Once what was collected is deleted, the report no longer says it's kept until retention removes it.
-  - A client whose name ends in s reads "Northwind Traders'" on the add-on's page and in its email, not
-    "Northwind Traders's".
-  - **Files deleted** counts each file once: not again when the recycle bin is emptied or purged or when one
-    delete is logged twice, and not when only a file's old versions are deleted. Emptying a bin no longer
-    raises a mass delete.
+- An address or form with a number too big for the database, such as a client number 25 digits long, gets the
+  not-found page or says the number is too big, instead of a server error.
+- The sign-ins download on a client's **Activity history** is not found for a month with a newline after it,
+  which reached the file's name, or for year 0000, which broke the download off.
+- The **Activity log** download says in its last row when it holds only the newest 100,000 rows, and the
+  log's user filter finds someone whatever case their name is typed in.
 
 ### Security
 
@@ -79,20 +65,9 @@ approved before the update show the month as it is now, as before, until they're
   deleting the newest one took its id, and with it the deleted client's rows in the **Activity log**, its
   name and domain included, for anyone granted the new client. Rows from before a client was added no longer
   show as its own, so an id already reused this way stops showing the old client's history too.
-- **Audit log add-on:** switching it off for a client, or deleting the client, stops whatever of the client's
-  feed may still be on at Microsoft, including a start that worked for SharePoint and not Exchange, and when
-  Microsoft says the feed is off for one kind of record, the other is stopped too, so no feed is left on that
-  nobody reads. The add-on can't be switched off for the install while a client's feed is still being
-  started. **Also delete the events collected** is no longer lost when an earlier stop is still waiting to be
-  sent, and switching a client on again waits for that stop.
-- **Audit log add-on switched off for the install:** people's Timelines no longer list its records, report
-  designs no longer offer its **Files and mailbox access** report or show its records, and schedules and
-  month-end plans made while it was on no longer email the report or saved views of it.
-- **Audit log add-on for one client:** its report is only there for a client the add-on was asked for, not one
-  whose request was taken back or whose admin opened the link unasked, and a client's own sign-in no longer
-  reads who on the team switched it off or what the team should do next. The add-on's nightly read no longer
-  counts as the client approving the shared app, so after the shared app's client ID changes, clients aren't
-  shown as approved and their other data sources aren't queued until they approve it.
+
+### Security
+
 - **After approval, the client keeps the approved month-end report until a new version is issued.** Commentary,
   recommendations and client-visible notes changed after a month was approved used to show on the client's live
   report straight away. The client now sees what was approved (the same as their PDF), the review screen says the
