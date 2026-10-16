@@ -6,18 +6,16 @@ the shared report table, so filters, sort and the PDF, XLSX and CSV downloads ke
 
 from __future__ import annotations
 
-from flask import Blueprint, Response, g, render_template, request
+from flask import Blueprint, g, render_template, request
 
 from .. import upcoming
 from ..db import audit
 from ..reports import branding, data_reports, tables, views
 from ..reports.data_reports import Rows
 from .access import can, needs, visible_tenants
-from .printing import pdf_response
+from .printing import file_response, pdf_response
 
 bp = Blueprint("upcoming", __name__)
-
-XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def _collect() -> upcoming.Upcoming:
@@ -52,10 +50,9 @@ def index():
 def download(ext: str):
     report = views.apply(upcoming.report(_collect()), views.View.parse(request.args))
     audit(g.db, g.user["username"], "report_downloaded", None, f"{upcoming.KEY}.{ext}")
+    name = tables.filename("coming-up")  # as the weekly email names it
     if ext == "pdf":
-        return pdf_response("reports/detail.html", "coming-up", report=report)
+        return pdf_response("reports/detail.html", name, report=report)
     if ext == "xlsx":
-        body, mimetype = data_reports.to_xlsx(report, brand=branding.load(g.db)), XLSX
-    else:
-        body, mimetype = tables.to_csv(data_reports.section_table(report.sections[0])), "text/csv"
-    return Response(body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="coming-up.{ext}"'})
+        return file_response(data_reports.to_xlsx(report, brand=branding.load(g.db)), name, ext)
+    return file_response(tables.to_csv(data_reports.section_table(report.sections[0])), name, ext)
