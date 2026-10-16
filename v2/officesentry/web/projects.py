@@ -11,8 +11,8 @@ from ..db import audit
 from ..reports import tables
 from ..snapshot import TenantSnapshot
 from .access import needs, tenant_or_404, visible_tenants
-from .across import _cover, _download
-from .printing import pdf_response
+from .across import _cover
+from .printing import file_response, pdf_response
 
 bp = Blueprint("projects", __name__)
 
@@ -60,7 +60,7 @@ def download(ext: str):
             ),
         )
     )
-    return _download(body, "recommended-projects", ext)
+    return file_response(body, tables.filename("all-clients", "projects"), ext)
 
 
 @bp.get("/tenants/<int:tenant_id>/projects")

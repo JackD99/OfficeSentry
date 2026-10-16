@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, date, datetime, timedelta
 
-from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
 from .. import findings, store, usage
 from ..db import audit, transaction, utcnow
@@ -35,13 +35,12 @@ from .access import (
     tenant_or_404,
     visible_tenants,
 )
-from .printing import pdf_response
+from .printing import file_response, pdf_response
 from .reporting import report_extras
 from .saved_views import page_url
 
 bp = Blueprint("reports", __name__)
 
-XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 CURRENCIES = ("GBP", "USD", "EUR", "AUD", "CAD", "NZD")
 
 
@@ -173,10 +172,10 @@ def tenant_report_pdf(tenant_id: int):
 def tenant_report_xlsx(tenant_id: int):
     t = tenant_or_404(tenant_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "xlsx")
-    return Response(
+    return file_response(
         export.to_xlsx(_client_copy(t, report_extras(t, page=False)), brand=branding.load(g.db)),
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={_filename(t, 'xlsx')}"},
+        _filename(t, "xlsx")[:-5],
+        "xlsx",
     )
 
 
@@ -328,9 +327,8 @@ def data_report_pdf(tenant_id: int, key: str):
         abort(404)
     require(*by_report(key), tenant_id=t["id"])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.pdf")
-    slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
     day = as_of.day(g.db, t["id"], request.args.get("on"))
-    name = f"{key}-{slug}" + (f"-{day.on.isoformat()}" if day.on else "")
+    name = tables.filename(key, t["name"], on=day.on)
     return pdf_response(
         "reports/detail.html", name, report=_viewed(data_reports.build(g.db, t, key, as_of=day.as_of)), day=day
     )
@@ -344,13 +342,12 @@ def data_report_xlsx(tenant_id: int, key: str):
         abort(404)
     require(*by_report(key), tenant_id=t["id"])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.xlsx")
-    slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
     day = as_of.day(g.db, t["id"], request.args.get("on"))
-    name = f"{key}-{slug}" + (f"-{day.on.isoformat()}" if day.on else "")
-    return Response(
+    name = tables.filename(key, t["name"], on=day.on)
+    return file_response(
         data_reports.to_xlsx(_viewed(data_reports.build(g.db, t, key, as_of=day.as_of)), brand=branding.load(g.db)),
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={name}.xlsx"},
+        name,
+        "xlsx",
     )
 
 
@@ -468,21 +465,20 @@ def findings_download(tenant_id: int, ext: str, resolved: bool):
     if ext not in ("pdf", "xlsx", "csv"):
         abort(404)
     report = views.apply(findings_report.build(g.db, t, resolved=resolved), views.View.parse(request.args))
-    name = f"{report.key}-{tables.slug(t['name'])}"
+    name = tables.filename(report.key, t["name"])
     if ext == "csv":
         index = request.args.get("section", 1, type=int)
         if not 1 <= index <= len(report.sections):
             abort(404)
         section = report.sections[index - 1]
-        name = f"{report.key}-{tables.slug(section.title)}-{tables.slug(t['name'])}"
+        # The table is named only when the page has several (Resolved findings has one).
+        name = tables.filename(report.key, section.title if len(report.sections) > 1 else "", t["name"])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{report.key}.{ext}")
     if ext == "pdf":
         return pdf_response("reports/detail.html", name, report=report)
     if ext == "xlsx":
-        body, mimetype = data_reports.to_xlsx(report, brand=branding.load(g.db)), XLSX
-    else:
-        body, mimetype = tables.to_csv(data_reports.section_table(section)), "text/csv"
-    return Response(body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{name}.{ext}"'})
+        return file_response(data_reports.to_xlsx(report, brand=branding.load(g.db)), name, ext)
+    return file_response(tables.to_csv(data_reports.section_table(section)), name, ext)
 
 
 def _real_date(text: str) -> bool:
