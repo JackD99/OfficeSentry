@@ -264,9 +264,9 @@ def trusted_access_report(snap: TenantSnapshot, now: datetime, out: DataReport) 
     if default is not None:
         out.tiles.append(
             Tile(
-                "Own settings",
+                "Organisations with own settings",
                 len(orgs.rows),
-                "Organisations with settings of their own",
+                "Each replaces the default for that organisation",
                 rows=Rows(PARTNERS),
             )
         )

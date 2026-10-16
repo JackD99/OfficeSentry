@@ -121,7 +121,12 @@ def test_report_flags_outside_mfa_trust_and_wide_trusted_ranges(client, db, two_
     }
 
     tiles = {t.label: t.value for t in report.tiles}
-    assert tiles == {"Own settings": 2, "Outside MFA trusted": "Yes", "Trusted locations": 2, "Locations not used": 1}
+    assert tiles == {
+        "Organisations with own settings": 2,
+        "Outside MFA trusted": "Yes",
+        "Trusted locations": 2,
+        "Locations not used": 1,
+    }
 
     make_user(db, "admin")
     login(client, "admin")
@@ -145,4 +150,4 @@ def test_without_entra_p1_the_locations_say_why(db, two_tenants):
     assert not report.unavailable
     section = next(s for s in report.sections if s.title == "Named locations")
     assert not section.rows and section.empty.endswith("which needs Entra ID P1.")
-    assert [t.label for t in report.tiles] == ["Own settings", "Outside MFA trusted"]
+    assert [t.label for t in report.tiles] == ["Organisations with own settings", "Outside MFA trusted"]

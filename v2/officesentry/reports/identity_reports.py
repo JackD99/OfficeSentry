@@ -1094,7 +1094,7 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Highlight(
             "Inactive guests",
             figure(counts["guests"]),
-            f"No sign-in for {STALE_DAYS}+ days" if activity else f"Needs {P1}",
+            f"No sign-in for {STALE_DAYS}+ days, or never" if activity else f"Needs {P1}",
             "warn" if counts["guests"] else None,
         ),
         Highlight(

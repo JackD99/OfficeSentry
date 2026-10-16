@@ -906,7 +906,7 @@ def conditional_access(snap: TenantSnapshot, now: datetime, report: DataReport) 
         Tile(
             "MFA not required",
             accounts.flagged,
-            "Members no enforced policy asks for MFA in every app"
+            "Enabled accounts no enforced policy asks for MFA in every app"
             + (f", including {plural(admins, 'admin')}" if admins else ""),
             ("bad" if admins else "warn") if accounts.flagged else "ok",
             Rows(accounts.title, flagged=True),
@@ -1007,7 +1007,7 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         activity = any(u.get("signInActivityAvailable") for u in users)
         guest = Section(
             "Guest accounts",
-            ["Guest", "Invited", "Invitation", "Last sign-in", "Sign-in allowed"],
+            ["Guest", "Name", "Invited", "Invitation", "Last sign-in", "Sign-in allowed"],
             intro="Every external account, oldest activity first."
             + ("" if activity else " Sign-in dates need Entra ID P1."),
             empty="No guest accounts.",
@@ -1022,6 +1022,7 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             guest.add(
                 [
                     u.get("mail") or u.get("userPrincipalName"),
+                    u.get("displayName") or "",
                     _date(u.get("createdDateTime")),
                     "Not accepted" if pending else "Accepted",
                     last.date().isoformat() if last else (never_signed_in(u) if activity else "Unknown"),
@@ -1895,6 +1896,22 @@ def _synced_at(value: str | None, now: datetime) -> str:
     return "Never" if hours is None else f"{value[:16].replace('T', ' ')} ({hybrid.age(hours)})"
 
 
+# What Microsoft says a domain is used for (a domain's supportedServices), in words. Values it hasn't
+# named yet show as they come.
+DOMAIN_SERVICES = {
+    "Email": "Email",
+    "EmailInternalRelayOnly": "Email (internal relay only)",
+    "Sharepoint": "SharePoint",
+    "SharePointDefaultDomain": "SharePoint (default domain)",
+    "SharePointPublic": "SharePoint (public site)",
+    "OfficeCommunicationsOnline": "Teams and Skype for Business",
+    "OrgIdAuthentication": "Sign-in",
+    "Yammer": "Viva Engage",
+    "Intune": "Intune",
+    "FullRedelegation": "DNS delegated to Microsoft",
+}
+
+
 def _sync_word(problem: tuple[str, str] | None, last: str | None) -> str:
     """A sync in a word, for the Value column, so a sync that keeps running isn't a change every month."""
     if not last:
@@ -1964,7 +1981,7 @@ def hybrid_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
                 d.get("authenticationType"),
                 d.get("isVerified"),
                 d.get("isDefault"),
-                d.get("supportedServices") or [],
+                [DOMAIN_SERVICES.get(s, s) for s in d.get("supportedServices") or [] if isinstance(s, str)],
             ]
         )
     sections = [sync, domains]
