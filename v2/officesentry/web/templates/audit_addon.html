@@ -105,9 +105,9 @@
     <thead><tr><th>Client</th><th>Add-on</th><th>What's happening</th></tr></thead>
     <tbody>
     {% for t, s in clients %}
-    <tr><td><a class="strong" href="{{ url_for('audit_addon.client', tenant_id=t.id) }}">{{ t.name }}</a></td>
+    <tr><td><a class="strong" href="{{ url_for('audit_addon.client', tenant_id=t.id) }}">{{ t.name }}</a>{% if t.archived_at %} <span class="pill">Archived</span>{% endif %}</td>
       <td data-label="Add-on"><span class="pill {{ s.tone }}">{{ s.label }}</span></td>
-      <td data-label="What's happening">{{ s.detail }}</td></tr>
+      <td data-label="What's happening">{% if t.archived_at and s.key == 'on' %}Archived, so nothing is read, but its feed stays on at Microsoft until you switch the add-on off for it.{% else %}{{ s.detail }}{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>

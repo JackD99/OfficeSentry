@@ -275,8 +275,9 @@ it hasn't been read: the client isn't connected, has no Exchange Online, the app
 Exchange didn't answer.
 
 While the [audit log add-on](audit-log-addon.md) is switched on, the column also says where each client has got
-with it (*Not asked*, *Sent*, *Approved*, *On* or *Off*), linking to the client's **Audit log add-on** page once
-the client has consented. The add-on reads the audit log, so it has nothing to read while the log is off.
+with it (*Not asked*, *Sent*, *Approved, confirming* while Office Sentry hasn't signed in to confirm the approval
+yet, *Approved*, *On* or *Off*), linking to the client's **Audit log add-on** page once the client has
+consented. The add-on reads the audit log, so it has nothing to read while the log is off.
 <!-- /since -->
 
 Imported clients are ordinary clients: people whose role covers every client

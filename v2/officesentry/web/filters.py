@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from ..formatting import capability, day, money, parse, strftime, when
 from ..reports.cells import breakable, display, pdf_cell, wrappable
+from ..reports.summary import possessive
 from ..store import retry_pending
 from ..text import counted, plural, subject_label
 
@@ -92,6 +93,7 @@ def register(app) -> None:
         retrying=retrying,
         plural=plural,
         counted=counted,
+        possessive=possessive,  # "Northwind Traders'", not "Northwind Traders's"
         figure_columns=figure_columns,
         pdf_cell=pdf_cell,
         readable=display,

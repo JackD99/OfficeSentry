@@ -495,7 +495,8 @@ def data_report_csv(tenant_id: int, key: str):
         abort(404)
     table = report_tables[index - 1]
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.csv")
-    return _download(tables.to_csv(table), f"{key}-{tables.slug(table.title)}-{tables.slug(t['name'])}", "csv")
+    name = f"{key}-{tables.slug(table.title)}-{tables.slug(t['name'])}" + (f"-{day.on.isoformat()}" if day.on else "")
+    return _download(tables.to_csv(table), name, "csv")  # a past day is named, as the PDF and workbook are
 
 
 @bp.get("/tenants/<int:tenant_id>/report.csv")
