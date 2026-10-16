@@ -2,6 +2,7 @@
 waiting, refused and national cloud states."""
 
 import json
+import re
 from datetime import UTC, datetime
 
 from officesentry import store
@@ -126,6 +127,7 @@ def test_check_raises_open_high_and_medium_alerts(db, two_tenants):
     ]
     assert result.findings[0].detail.startswith("Defender for Office 365, nobody has picked it up, since ")
     assert result.findings[0].detail.endswith("; names ann@x.com")
+    assert re.search(r", since \d{1,2} [A-Z][a-z]{2} 20\d\d;", result.findings[0].detail)  # a day, not ISO
     assert result.findings[1].detail.startswith("Defender for Endpoint, in progress with helpdesk@msp.example")
 
     seed_tenant(db, bravo, security_kw={"alerts": [a for a in sec.ALERTS if a["severity"] in ("low", "informational")]})
