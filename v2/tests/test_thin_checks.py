@@ -176,7 +176,7 @@ def test_dkim_is_judged_for_a_gateway_domain_microsoft_365_sends_for():
     )
     assert not only_gateway.sends_from_microsoft_365 and not only_gateway.behind_gateway
     assert not any(i.area == "DKIM" for i in dnscheck.issues(only_gateway))
-    assert dnscheck.summary(only_gateway)["DKIM"] == "n/a"
+    assert dnscheck.summary(only_gateway)["DKIM"] == "Not via Microsoft 365"
 
 
 def test_the_dkim_check_counts_gateway_domains(db, two_tenants):

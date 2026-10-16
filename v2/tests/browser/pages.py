@@ -33,6 +33,7 @@ PAGES = [
     Page("findings", "/tenants/{t}/findings"),
     Page("finding-sheet", "/tenants/{t}/findings/{f}"),
     Page("tenant-changes", "/tenants/{t}/changes"),
+    Page("tenant-timeline", "/tenants/{t}/timeline"),
     Page("detail-reports", "/tenants/{t}/data"),
     Page("sharepoint-storage", "/tenants/{t}/data/sharepoint-storage"),
     Page("mfa", "/tenants/{t}/data/mfa"),
