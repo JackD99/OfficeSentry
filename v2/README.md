@@ -17,7 +17,7 @@ in the database, never kept as a file; only the public `.cer` can be
 downloaded, by people who manage settings. Report emails sent through
 Microsoft 365 go from a mailbox in your own tenant, through a separate
 send-only app.
-The audit log add-on's own app also starts and stops the activity feed of each client who approves it: its only calls that aren't reads. <!-- since 2.4.0 -->
+The audit log add-on's own app also starts and stops the activity feed of each client who approves it: its only calls that aren't reads.
 
 **Certificates and extra access are watched.** People who manage settings see
 a banner, and the team gets an email and an alert, 60, 30 and 7 days before a
@@ -87,7 +87,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   or "who signed in from this IP?" is one search. Each result opens the
   person's or object's page, or the detail report filtered to that row, and it
   only finds what you can open.
-  Press `/` (or Ctrl+K, ⌘K on a Mac) on any page to start typing in it. <!-- since 2.4.0 -->
+  Press `/` (or Ctrl+K, ⌘K on a Mac) on any page to start typing in it.
 - **Home pages** (staff): **Today** (`/today`, for technicians) lists the
   clients that need someone today and why: critical and high findings new in
   the last day, collections that failed or are out of date, access not granted
@@ -120,14 +120,14 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
     for your team.
   - Recipients are contacts: the client's people get the email, your team gets a
     hidden copy. Optional note at the top of the email.
-    New contacts also get the client's report plan emails, so only someone who can open every report the plan sends adds one. <!-- since 2.4.0 -->
+    New contacts also get the client's report plan emails, so only someone who can open every report the plan sends adds one.
   - A cross-client **digest** for your team, worst clients first.
   - A weekly **Coming up** email for your team, with the same list as the
     Coming up page above.
   - **Alert emails** when a scan finds something new and critical (or high), for
     one client or all of them. They come from the same alert event as the
     Teams/Slack alerts below. A client's first scan never emails.
-    They name the findings, so choosing who gets them needs security findings. <!-- since 2.4.0 -->
+    They name the findings, so choosing who gets them needs security findings.
   - Preview (desktop and phone width), Send now, pause, and a delivery history
     with failures, automatic retries (5 min, 30 min, 2 h) and a Retry button.
   - Sent over SMTP or Microsoft 365 (Graph `sendMail` from a mailbox in your own
@@ -223,21 +223,23 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   and download a client-facing proposal PDF without the notes or estimates.
   Accepted risks don't count, and a project drops off once its findings are
   fixed.
-- **Client view**: client users land on a page that leads with their latest
-  monthly review (page and PDF), then open recommendations with their status,
-  key numbers, the other reports and who to contact at the MSP; they don't see
-  collection internals or run logs.
+- **Client view**: client users land on a page that leads with where they
+  stand: the month's verdict and its most urgent item, the account manager's
+  note once the month is approved, and buttons for the monthly review, its PDF
+  and the two-page summary. Under it come the MSP's recommendations with their
+  status and target (else what needs attention), key numbers, the other
+  reports and who to contact at the MSP; they don't see collection internals
+  or run logs.
 - **Branding** (`/admin/branding`): the MSP's name, logo and colour on report
   covers, the portal, the sign-in page and the browser tab icon ("Powered by
-  Office Sentry" stays small in the footer), the support contact clients see,
+  Office Sentry" stays small in the footer), the support contact clients see
+  in reports and on the sign-in page,
   and an optional note printed at the end of every report. The name is also
   the email sender's name unless Email delivery sets one.
-  Without a colour of its own, reports and emails use the portal's bottle green. <!-- since 2.4.0 -->
-<!-- since 2.4.0 -->
+  Without a colour of its own, reports and emails use the portal's bottle green.
 - **Appearance** (each person's Account page): light, dark or the same as the device, and for staff a colour
   for the menu and buttons (bottle green, navy, claret, graphite or plum). Only that person's screen changes;
   client reports, PDFs and emails keep the MSP's branding.
-<!-- /since -->
 - **Data retention** (*Settings → Data retention*, `/admin/retention`): every
   collection is kept as a snapshot, so reports can show history and changes.
   By default the last collection of each of the last 30 days and of each of
@@ -287,7 +289,7 @@ Each report is listed under its area in the report menu, in menu order.
 - *Conditional Access coverage*: every policy in plain words, and for each
   account which enforced policy requires MFA, whether legacy sign-in is
   blocked, and which policies exclude it (group membership expanded).
-- *Trusted organisations and locations*: the cross-tenant access settings (what other organisations' people can do here, as guests and in Teams shared channels, and whether their MFA and devices are trusted), each organisation with settings of its own, and every named location with the Conditional Access policies that include or leave it out. Trusting every organisation's MFA and wide IP ranges marked trusted are flagged. <!-- since 2.4.0 -->
+- *Trusted organisations and locations*: the cross-tenant access settings (what other organisations' people can do here, as guests and in Teams shared channels, and whether their MFA and devices are trusted), each organisation with settings of its own, and every named location with the Conditional Access policies that include or leave it out. Trusting every organisation's MFA and wide IP ranges marked trusted are flagged.
 - *Inactive accounts*: members and guests with no sign-in for 90 days, or
   never signed in and created over 30 days ago (admins and licensed accounts
   first), guest invitations still unaccepted after 30 days, and disabled
@@ -446,7 +448,7 @@ Each report is listed under its area in the report menu, in menu order.
   levels deep), dynamic groups with their rule, flagging paused ones, teams
   and groups about to expire (and whether an owner can renew them),
   role-assignable groups, and blocked accounts still in groups.
-- *Files and mailbox access*, for clients with the [audit log add-on](docs/audit-log-addon.md): who deleted, downloaded and shared files, who opened someone else's mailbox, and the inbox rules, forwarding and mailbox permissions set up, from the client's Microsoft 365 audit log. <!-- since 2.4.0 -->
+- *Files and mailbox access*, for clients with the [audit log add-on](docs/audit-log-addon.md): who deleted, downloaded and shared files, who opened someone else's mailbox, and the inbox rules, forwarding and mailbox permissions set up, from the client's Microsoft 365 audit log.
 
 #### Devices and apps
 
@@ -456,8 +458,8 @@ Each report is listed under its area in the report menu, in menu order.
   their BitLocker recovery key saved there (never the key itself), and
   every Entra ID device record by last activity. Tenants without Intune
   still get the Entra records and Windows versions.
-  Also which computers back up their local admin password with Windows LAPS (never the password), with its own check. <!-- since 2.4.0 -->
-- *Installed apps*: every app Intune has found on managed devices and how many devices have it, each app's versions newest first, and remote access tools (AnyDesk, ScreenConnect, TeamViewer and others) flagged to check they're expected. <!-- since 2.4.0 -->
+  Also which computers back up their local admin password with Windows LAPS (never the password), with its own check.
+- *Installed apps*: every app Intune has found on managed devices and how many devices have it, each app's versions newest first, and remote access tools (AnyDesk, ScreenConnect, TeamViewer and others) flagged to check they're expected.
 - *Intune policies*: which platforms have enrolled devices but no
   compliance policy, what each compliance policy requires, configuration
   profiles and Windows update rings (deferrals, restart deadline, paused),
@@ -479,7 +481,7 @@ Each report is listed under its area in the report menu, in menu order.
   controls whose points changed in the last 30 days, and where the points
   are: each control's points now against the most possible, with its user
   impact and effort.
-- *Security alerts*: Microsoft Defender's open incidents and alerts, most severe first, with who is dealing with each and the accounts and devices each names, then the alerts resolved in the last 30 days and what they turned out to be. A check fails while a high or medium alert is open. Never the email, file or command behind an alert. <!-- since 2.4.0 -->
+- *Security alerts*: Microsoft Defender's open incidents and alerts, most severe first, with who is dealing with each and the accounts and devices each names, then the alerts resolved in the last 30 days and what they turned out to be. A check fails while a high or medium alert is open. Never the email, file or command behind an alert.
 - *Licences and subscriptions*: for renewals and fixing licence problems.
   Every product with licences purchased, in a grace period, suspended,
   assigned and available, and its monthly cost at your prices; every
@@ -536,13 +538,13 @@ Each report is listed under its area in the report menu, in menu order.
   Federation changes, new app credentials, role grants and Conditional Access
   policies deleted or switched off are listed first, then every change and
   who made them.
-- *Service health*: whether each Microsoft 365 service is working for the client, Microsoft's open outages and advisories and those resolved in the last 30 days, and the message centre's upcoming changes, those with a date to act by first (flagged when due within 30 days), then major changes. <!-- since 2.4.0 -->
+- *Service health*: whether each Microsoft 365 service is working for the client, Microsoft's open outages and advisories and those resolved in the last 30 days, and the message centre's upcoming changes, those with a date to act by first (flagged when due within 30 days), then major changes.
 
 ### Checks
 
-69 checks in 13 areas: Accounts, Admins, Apps, Devices, Email, Groups,
-Guests, Hybrid identity, Identity, Licences, Sharing, Storage and Tenant
-settings. Each check has a title that states its goal ("No inactive
+71 checks in 14 areas: Accounts, Admins, Apps, Devices, Email, Groups,
+Guests, Hybrid identity, Identity, Licences, Sharing, Storage, Tenant
+settings and Threats. Each check has a title that states its goal ("No inactive
 accounts"), a summary of what was found ("4 accounts inactive for 90+ days"),
 a recommendation that says what to do and where, and, when it fails, a
 severity taken from its worst finding. A check whose data hasn't been
@@ -653,7 +655,7 @@ work without it.
 - [Securing the portal](docs/securing-the-portal.md): what the portal does
   by itself, what the person running it has to do, and reverse proxy setups
   for Caddy, nginx, Traefik and a CDN.
-- [The audit log add-on](docs/audit-log-addon.md): an optional second app that keeps who deleted, downloaded or shared files and who opened someone else's mailbox, for the clients who approve it. <!-- since 2.4.0 -->
+- [The audit log add-on](docs/audit-log-addon.md): an optional second app that keeps who deleted, downloaded or shared files and who opened someone else's mailbox, for the clients who approve it.
 
 ## Sign-in security
 
@@ -675,7 +677,7 @@ work without it.
   clients return 404 and a capability taken away on one client answers 403
   there. There is always at least one Administrator.
   Pages only link to what the person can open, and only show buttons they can
-  use (`access.can_open`): a name or report they can't open shows as text. <!-- since 2.4.0 -->
+  use (`access.can_open`): a name or report they can't open shows as text.
 - **Sign in with Microsoft** (optional, off until an admin sets it up): staff sign
   in with their own Microsoft Entra ID account through OpenID Connect, under the
   MSP's own Conditional Access and MFA. *Settings → Microsoft sign-in* creates a
@@ -791,8 +793,8 @@ and follows it through consent, Global Reader and its first collection.
 
 ## Managing clients
 
-- **Settings** in the menu opens *Client settings*. Its pages are in four areas, shown as tabs with the open area's pages under them: *Clients* (Client settings, Client groups, App connection), *Reports and email* (Branding, Licence prices, Email delivery, Alerts), *Team* (Users, Microsoft sign-in, Activity log) and *System* (System status, Data retention, Updates, Support). These docs name the page, as in *Settings → Email delivery*. <!-- since 2.4.0 -->
-- **Switch client**, beside a client's name (staff who see more than one client): opens the page you're on for another client you see, within the client group you picked, with a box to find one by name. From an account, mailbox, group or site it opens that client's list, and a report the other client doesn't have, or that you can't open there, opens its Reports tab. <!-- since 2.4.0 -->
+- **Settings** in the menu opens *Client settings*. Its pages are in four areas, shown as tabs with the open area's pages under them: *Clients* (Client settings, Client groups, App connection), *Reports and email* (Branding, Licence prices, Email delivery, Alerts), *Team* (Users, Microsoft sign-in, Activity log) and *System* (System status, Data retention, Updates, Support). These docs name the page, as in *Settings → Email delivery*.
+- **Switch client**, beside a client's name (staff who see more than one client): opens the page you're on for another client you see, within the client group you picked, with a box to find one by name. From an account, mailbox, group or site it opens that client's list, and a report the other client doesn't have, or that you can't open there, opens its Reports tab.
 - **Client settings** (*Settings → Client settings*, or *Connection health* on
   the Clients page) lists every client with its status (*Onboarding*,
   *Healthy*, *Needs attention*, *Paused*, *Archived*), consent, missing
@@ -838,7 +840,7 @@ and follows it through consent, Global Reader and its first collection.
   client and everything stored for it after you type its name, optionally with
   client accounts that had no other client. `python -m officesentry
   delete-tenant <id>` does the same from the server.
-  The client's side also names the client sign-in app and the audit log add-on, deleted the same way, when the client may have approved them. <!-- since 2.4.0 -->
+  The client's side also names the client sign-in app and the audit log add-on, deleted the same way, when the client may have approved them.
 
 ## National clouds (GCC High, DoD, China)
 

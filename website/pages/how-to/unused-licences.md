@@ -34,10 +34,8 @@ Get-MgUser -All -Property UserPrincipalName, AssignedLicenses, SignInActivity |
         @{ Name = "LastSignIn"; Expression = { $_.SignInActivity.LastSuccessfulSignInDateTime } }
 ```
 
-<!-- since 2.4.0 -->
 Use the last successful sign-in. `LastSignInDateTime` also moves when someone fails to sign in, so a
 forgotten account under a password spray looks as if it's in use.
-<!-- /since -->
 
 Licences come back as part numbers rather than names (`SPB` is Microsoft 365 Business Premium,
 `ENTERPRISEPACK` is Office 365 E3), so keep Microsoft's product names list to hand.

@@ -9,21 +9,144 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
-## [2.4.0] - Unreleased
+## [2.4.0] - 2026-10-16
+
+### Action required
+
+- **Five new read-only Microsoft permissions** (below): after updating, press **Update the app** under
+  *Settings → App connection* (or run `update-app`), then send each client the approval link from its
+  **What's new** page under *Onboarding*. A client that hasn't approved 2.2's permissions yet is asked for
+  those too, with the same link.
+- **If you set up off-site backups** ([v2/DEPLOY.md, "Off-site backups"](v2/DEPLOY.md#off-site-backups)):
+  download this release's `jobs.sh` into the `deploy` folder next to `docker-compose.yml`, then run
+  `OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh schedule` there again. The crontab lines the old one wrote never
+  ran on an install in `/opt/officesentry`, so there was no off-site copy and no Sunday restore drill. The
+  Update button doesn't change this file.
+
+### New Microsoft permissions
+
+Five read-only application permissions, released together so each client approves once ([v2/DEPLOY.md, "When
+a release adds permissions"](v2/DEPLOY.md#when-a-release-adds-permissions)). Until a client approves, everything
+else keeps working and the reports that need them say they're waiting for approval. Microsoft 365 operated by
+21Vianet has no Defender alerts or incidents in Microsoft Graph, so apps and clients there aren't asked for
+those two.
+
+| Permission | API | For |
+|---|---|---|
+| `DeviceLocalCredential.ReadBasic.All` | Microsoft Graph | Which computers back up their local admin password with Windows LAPS (never the password) |
+| `SecurityAlert.Read.All` | Microsoft Graph | Microsoft Defender's alerts |
+| `SecurityIncident.Read.All` | Microsoft Graph | Microsoft Defender's incidents |
+| `ServiceHealth.Read.All` | Microsoft Graph | Microsoft 365 service status, outages and advisories |
+| `ServiceMessage.Read.All` | Microsoft Graph | Message centre posts about upcoming changes |
+
+The new audit log add-on is a separate app with one permission, `ActivityFeed.Read` on the Office 365
+Management APIs, and is only ever approved by clients you ask.
 
 ### Database upgrade
 
-Yes, applied on start as usual, after a copy of the database is made: migration 45 adds a column that keeps
-each approved month-end report's commentary, recommendations and notes as the client was given them. Months
-approved before the update show the month as it is now, as before, until they're issued again.
+Yes, applied on start as usual, after a copy of the database is made: migration 44 marks each app connection
+as the shared app or the audit log add-on's, and adds a table for each client the add-on was asked for.
+Migration 45 adds a column that keeps each approved month-end report's commentary, recommendations and notes
+as the client was given them; months approved before the update show the month as it is now, as before, until
+they're issued again. Migration 46 adds two columns to each collection run, saying when a failed run is tried
+again by itself and which failure a run tries again for. Migration 47 adds each person's appearance (light,
+dark or the device's setting, and their colour) to their account.
 
 ### Added
 
+- **Audit log add-on: who deleted, downloaded or shared a file, who opened someone else's mailbox, and who
+  created that inbox rule.** An optional second app, "Office Sentry audit log add-on", reads each approving
+  client's Microsoft 365 audit log for SharePoint, OneDrive and Exchange through Microsoft's Office 365
+  Management Activity feed, every night, and keeps about 70 kinds of record in the activity history (files
+  opened or edited and mail read by its owner are left out; email subjects are never stored). A new **Files
+  and mailbox access** report leads with figures for the last 30 days and a **Needs attention** list (an admin
+  opening someone else's mailbox, forwarding, rules that forward or delete mail, anyone links, auditing turned
+  off, mailbox exports, malware, mass deletes), then a table per kind of activity; each person's Timeline and
+  the client's Activity history page show the records too. It's off until an admin creates the add-on's app
+  under *Settings → App connection → Audit log add-on* (a device sign-in, or by hand), then each client is
+  asked from its *Settings → Audit log add-on* page with a link, email text and a one-page pack, and the
+  onboarding tracker's **Audit log** column shows where each client has got (Not asked, Sent, Approved, On,
+  Off). Every request it makes only reads, apart from the feed's own *start* and *stop*: start is sent only
+  once a client an admin asked for has approved, and stop when the add-on is switched off for the client, the
+  client is deleted, or Microsoft says part of the client's feed was turned off (the rest is stopped too).
+  Neither changes anything in the client's tenant. The report is only there for clients the add-on was asked
+  for. Switched off for the install, the add-on is hidden everywhere, people's Timelines, report designs and
+  scheduled emails included. Records are kept for 2 years by default (*Files and mailbox events* under
+  *Settings → Data retention*). See [v2/docs/audit-log-addon.md](v2/docs/audit-log-addon.md).
+- **Is the client's audit log on?** The onboarding tracker has an **Audit log** column saying whether each
+  client's Microsoft 365 audit log is recording, and a new check, *The Microsoft 365 audit log is on*, fails
+  (high) when it isn't, with where to turn it on in Microsoft Purview. Without it nobody can find out who
+  deleted or shared a file, opened someone else's mailbox or created an inbox rule. It's read with one more
+  read-only Exchange command, `Get-AdminAuditLogConfig`, under the Global Reader role clients already gave,
+  and the CIS benchmark pack judges its audit log search recommendation from it.
+- **Security alerts report and check.** Microsoft Defender's open incidents and alerts, most severe first,
+  with who is dealing with each and the accounts and devices each names, then the alerts resolved in the last
+  30 days and what they turned out to be. Its figures count open alerts, high severity ones, alerts nobody has
+  picked up and open incidents. A new check fails while a high or medium severity alert is open. Office Sentry
+  keeps an alert's accounts and devices, never the email, file or command behind it.
+- **Service health report.** Whether each Microsoft 365 service is working for the client, Microsoft's open
+  outages and advisories and those resolved in the last 30 days, and the message centre's upcoming changes:
+  those with a date to act by first (flagged when due within 30 days), then major changes, then everything
+  else posted in the last 30 days.
+- **Windows LAPS on the Devices report**, with a check: which Windows computers back up their local admin
+  password in Entra ID, when it was last backed up and when it next changes. Entra joined computers without a
+  backup are flagged; hybrid joined ones may back theirs up to on-premises Active Directory, so they're listed
+  but not flagged. Never the password itself.
+- **Installed apps report.** Every app Intune has found on managed devices, most installed first, with each
+  app's versions newest first. Remote access tools (AnyDesk, ScreenConnect, TeamViewer and others) are listed
+  first and flagged, since attackers install them too. Needs Intune; no new permissions.
+- **Trusted organisations and locations report.** The cross-tenant access settings: what other
+  organisations' people can do here, as guests and in Teams shared channels, whether their MFA and devices
+  are trusted, and each organisation with settings of its own. Then every Conditional Access named location
+  with the policies that include or leave it out. Trusting every organisation's MFA by default and wide IP
+  ranges marked trusted are flagged. No new permissions.
+- **Headline figures on nine more reports.** Admin activity, Apps and consents, Conditional Access coverage,
+  Guests and sharing, Tenant settings, Email domains, Groups and Teams, Devices and Hybrid identity now open
+  with their key numbers, each opening the rows behind it, with a 90-day trend where Office Sentry keeps one.
+  Their **All clients** pages compare those figures across clients (changes to review in the last 30 days,
+  accounts MFA isn't required for, domains without DMARC enforced, teams without an owner, devices not
+  compliant or not encrypted, directory sync that stopped) instead of counting each table's rows.
+- **A collection that fails because Microsoft was busy is tried again by itself.** A data source that failed
+  for a reason that passes by waiting (Microsoft throttling, a server error or outage, no answer at all, or the
+  worker restarted mid-run, as an update does) used to wait for the next night, so a bad few minutes at 02:00
+  left a client a day out of date and flagged on the month-end queue. It's now tried again about 20 minutes
+  later and once more two hours after that. The Data collection and run pages say when, Today and the client
+  list show it as a warning rather than a failure, and a collection-failure alert waits for the last try.
+  Failures someone has to fix first (a permission, a licence, the certificate) aren't retried.
+- **Every install backs itself up every night.** The worker now makes the nightly database copy itself, at
+  03:30 in Office Sentry's timezone, into `/data/backups`, keeping 7, so an install nobody added a crontab
+  line to has backups too. `OFFICESENTRY_BACKUP_CRON` changes when (or `off`) and `OFFICESENTRY_BACKUP_KEEP` how
+  many. A server that already runs the `backup` command every night (the off-site job, the crontab line in
+  DEPLOY.md, the cloud-init file, the Kubernetes CronJob, a NAS task) keeps doing so, wherever it writes, and
+  the worker leaves those nights to it, stepping in if that job stops. The worker only ever deletes copies it
+  made itself, so such a job keeps as many as its `--keep` says.
+- **Switch client**, beside every client's name, opens the page you're on for another client you see (within
+  the group you picked), with a box to find one by name. From an account, mailbox, group or site it opens
+  that client's list instead.
+- Press **/** (or Ctrl+K, ⌘K) on any page to search all clients.
+- **Appearance** on each person's Account page: light, dark or the same as the device, and for staff a colour
+  for the menu and buttons (bottle green, navy, claret, graphite or plum). Only their own screen changes;
+  client reports, PDFs and emails keep your branding.
 - **The sign-in page says who to ask.** Under the sign-in card, "Trouble signing in? Contact Harbour IT at
   help@... or 0161 ...", from the Branding page's support details, else the contact line the reports carry.
 
 ### Changed
 
+- **A new look.** Office Sentry has a design of its own: text in Source Sans 3, page titles and headline
+  figures in Source Serif 4 with figures that line up, a stone background, a bottle-green menu and ruled
+  cards instead of floating ones, in light and dark. Client reports and their PDFs use the new type and
+  still take your branding colours. Both fonts ship with Office Sentry, so nothing is fetched from
+  elsewhere. [DESIGN.md](DESIGN.md) describes the look for anyone changing a page.
+- **Figures, tables and severity in the new look.** A page's headline figures read as one ruled line led by
+  its main figure, table headings sit on an ink rule, the open tab is underlined, and severity has one shape
+  everywhere: a small square in its colour and its word (Critical, High, Medium, Low). Counts are plain
+  figures and tags have square corners. Client reports and PDFs are unchanged. The browser tab icon is
+  bottle green too.
+- Emails are in the reports' colours: stone paper, green-black text and the reports' severity colours, with each
+  severity tag in its level's colour on a soft background. They keep the MSP's colour for the band and the
+  button, and the system's fonts.
+- Reports, the client portal and emails for an MSP that hasn't picked a brand colour use the new bottle green
+  instead of the old blue. A colour an MSP has saved stays as it is.
 - **A client's home page leads with where they stand**: the month's verdict, the account manager's note once
   the month is approved, and buttons for the monthly review, its PDF and the two-page summary. Under it, the
   MSP's own "What we recommend next" with each one's status and target, else what needs attention, led by
@@ -43,9 +166,179 @@ approved before the update show the month as it is now, as before, until they're
 - Charts of findings found and fixed name the first month and each January in full ("May 2026"), admin
   activity in What changed gives dates in words ("6 Oct 2026"), and a quarterly review's Coming up shows
   "Now" for what needs attention now.
+- **Settings** are in four areas, Clients, Reports and email, Team and System, shown as tabs with the open
+  area's pages under them the way a client's pages are, instead of one row of fourteen links. Settings in the
+  menu opens Client settings.
+- Removing or deleting something, pausing or archiving a client, and signing people out now ask in the
+  portal's own dialog (light or dark like the page, the risky button in red) instead of the browser's
+  "127.0.0.1 says" box. Removing a report plan or a report design asks too; they didn't before.
+- A pressed Save, Send now or Approve button shows it's working and ignores a second press until the next
+  page arrives, so a slow page can't send a form twice.
+- Messages after an action carry an icon (a tick, or a warning sign) as well as their colour.
+- **An account's page** puts its open findings under the account's details, beside Needs attention, so the
+  first screen is two even columns. Account, mailbox, group and site pages link back to their list with
+  "← People", "← Mailboxes" and so on.
+- **Month-end**'s arrows name the month they open ("← September", "November →").
+- **Size by month** on a mailbox page, **Storage by month** on a site page and **Total size by month** in
+  Mailbox size trend name their months ("October 2026" rather than "2026-10").
+- The **Activity log** says what changed in words: "jordan.desk: allowed Refresh data for Fabrikam Dental
+  Group" rather than "+collect@2", and an evidence answer names its question. The CSV keeps the rows as they
+  were written.
+- **Offboarding** also names the client sign-in app and the audit log add-on's app, when the client may have
+  approved them, in the steps and in the text to send the client.
+- **Email reports**: Set up a digest, Set up the weekly email, Email a saved view and Turn on alerts are plain
+  buttons, so the page no longer has four main actions.
+- The **Activity log** download adds a "What happened" column, each row in words as the page reads it ("User
+  access changed: jordan.desk: allowed Refresh data for Alpha Ltd"). The columns before it stay as they were,
+  so spreadsheets built on the file keep working.
+- **What's new** lists every new permission a client hasn't approved, from earlier releases too, and the notes
+  on reports and the client's health say which release added each ("added in Office Sentry 2.2 and 2.4").
+- **The worker's nightly rebuild does about 40% less work.** What changed's three periods and every report's
+  All clients row now share one read of each client's data and one build of each report, rather than building
+  each report four times, so the night's work is done sooner on a large install.
+- The deploy guides for Unraid, Portainer, other container managers and Kubernetes say their nightly backup
+  step is optional, since the worker now makes the nightly copy itself; the Synology and TrueNAS tasks stay,
+  as only they copy backups out of the volume.
 
 ### Fixed
 
+- **Data collection** no longer marks a client's findings fixed when it can't sign in. Inbox rules, automatic
+  replies, mailbox permissions, mailbox sizes and mobile devices read one mailbox at a time and carried on past
+  each refusal, so a client that removed the app (or whose certificate stopped working) finished as partial
+  with nothing read: a suspicious inbox rule or forwarding showed as fixed, and the monthly review said so.
+  A run that can't sign in now fails with the reason and keeps the last good data.
+- **Data collection** keeps a mailbox's earlier inbox rules, automatic reply, permissions, size and device
+  sync times when Microsoft fails to answer about it one night, rather than leave it out, and says so in the
+  run's warning. Losing those rows made its findings look fixed until the next night.
+- **Month-end reporting** never sends a client the same month twice. An automatic plan's month that someone
+  had started reviewing stayed In review after the timer sent it, so approving sent it again; Retry on a
+  failed email sent it again after the automatic retry had already got it through (or sent a later month, or a
+  fresh copy of an approved month instead of its approved files); deleting and re-making a plan forgot the
+  months it had sent; and pausing and resuming or re-timing a schedule could send a month approved early a
+  second time. Approving now also waits while the timer is sending that client's report, and a failed email
+  that went out later has no Retry button.
+- **Month-end reporting** never approves a month with nothing to send. Approving a client nothing had been
+  collected for emailed a blank report, and a plan whose only report was a deleted design was marked Approved
+  with nothing sent. Both are now refused with the reason, the queue has no tick box for them and flags "No
+  report to send", the Report plans page marks a plan with no reports, and deleting a design that was a plan's
+  only report says so. What a reviewer left out of a deleted design no longer leaves blocks out of the next one.
+- **Paused clients get no email.** Send now, Retry and Month-end's Send again all emailed a paused client, its
+  Emails page said "Due now" for good, and resuming it sent the report it had missed straight away. Its
+  schedules now say "Client paused", nothing can be sent by hand, and resuming waits for the next send time.
+- **Saving a report plan changes its archived clients too.** They kept the plan's old settings, so a restored
+  client could go back to sending without approval after the plan was changed to wait for it.
+- **A month-end plan's email is changed on its plan.** Editing or deleting it on the client's Emails page left
+  the month waiting for an email that no longer existed; the page now points to the plan, and the email
+  preview no longer offers Send now for a plan that sends on approval.
+- **"New critical since the last report"** on the month-end queue counted back months for clients that also
+  get weekly or quarterly reports. It now counts from the last report the client was sent.
+- **Last sign-in** is the last successful sign-in wherever it's shown. Microsoft's other two sign-in times move
+  on failed attempts too, so a password spray against a dormant account used to take it off **Inactive
+  accounts**, **Licence waste** and **Admins**. An account with only failed attempts says "Failed attempts
+  only".
+- **Mail forwarding** reads a mailbox's forward the way Exchange does: when both are set, the forwarding
+  recipient an admin picked wins over the forwarding address, which people can set themselves in Outlook on
+  the web. It says which of the two set the forward, whether the outbound spam policy and the default remote
+  domain let it reach outside, and whether an inbox rule keeps a copy. A forward that's blocked is still
+  listed, since someone set it up, but it no longer counts as getting out. A policy that allows forwarding
+  for some mailboxes reads "Some mailboxes" instead of "Allowed".
+- **Shared mailboxes** leaves rooms with a Teams Rooms licence out of "Can be signed in to", because the
+  room's device signs in with that account. It also no longer shows the figure as fine when the mailboxes
+  couldn't be matched to accounts.
+- **Email domains** finds DMARC for a subdomain without its own record in its parent's record, with the
+  parent's sp= policy, as receivers do. It used to say "No DMARC record". A domain that only sends mail (SPF
+  but no MX) is no longer told to publish "v=spf1 -all".
+- **MFA coverage**, **Admins and roles** and **Every admin has MFA registered** count PIM-eligible admins
+  alike, because whoever sets up MFA on the account first can activate the role. MFA counts as set up only
+  with a method the authentication methods policy allows, so someone whose only method is texts isn't
+  counted as protected once texts are turned off. "Set up, not required" is now **MFA not required** and
+  counts every account that isn't asked for MFA. An account whose per-user MFA setting couldn't be read shows
+  as unknown rather than "No MFA".
+- **Passwords and sign-in methods** counts passwords that never expire because of the domain's policy
+  (Microsoft's default for new tenants), not only accounts set to never expire.
+- **Mail flow by domain** dates its total from the first day it counted and says it counts each message once
+  per recipient.
+- **Mailbox holds and archiving** counts retention policies and eDiscovery holds, both on the mailbox and for
+  the whole organisation. A leaver's mailbox kept by an organisation-wide retention policy is no longer listed
+  as having no hold.
+- **Sign-in activity** says "Only failed sign-ins" for a country with no successful sign-ins, instead of
+  "Unusual: No".
+- **Mail rules and protection**: "Rules sending mail outside" opens just those rules. Allowed sender lists are
+  read whole (Microsoft allows 1,024 entries), so a free mail domain after the first 50 is still found.
+- The check catalogue names SharePoint's Sites.Read.All as SharePoint's permission and gives each licence
+  reason once.
+- **Devices**: a device last seen today reads "15 Oct 2026 (today)" like the others, not "2026-10-15
+  (today)", on the page and in the PDF, and is a real date in the spreadsheet.
+- Findings of **No risky sign-ins succeeded** and **No accounts are at risk in Entra ID Protection** give their
+  date as "13 Oct 2026", like the rest of the app, instead of "2026-10-13".
+- **Licence right-sizing** keeps a security suite (Business Premium, E3, E5) for anyone with a device Intune
+  manages or an admin role, since a cheaper plan would take their devices out of compliance and their sign-ins
+  out of Conditional Access. It doesn't suggest Business Basic or E1 for a mailbox that's large, archived or on
+  hold, or a move that saves nothing, and its figures open the rows behind them.
+- Trial licences no longer count as bought: **Subscriptions** counts paid licences in "Licences in use" and
+  takes the renewal date from the paid subscription, and **Licence changes** counts licences bought without
+  trial seats.
+- **Licence waste**, **Inactive accounts** and the monthly review leave out shared mailboxes that need their
+  licence (over 50 GB, with an archive or on hold), as the "No licences on disabled accounts" check already did.
+- **What changed** tracks unassigned paid licences. Its "Unassigned licences" figure added free allocations
+  such as Power Automate Free's 10,000; the new figure starts from the first collection after the update.
+- A subscription in its grace period still counts for the features it gives, so a lapsing Business Premium no
+  longer turns Intune and sign-in reports to "Not checked" before it's suspended.
+- **Devices** and **Windows computers have their BitLocker recovery key saved** expect a key in Entra ID only
+  from Entra joined and hybrid joined Windows PCs, not from Windows Server or personal PCs that are only
+  registered. A hybrid joined PC often keeps its key in on-premises Active Directory, so it's flagged only when
+  Intune says it's encrypted, and as low.
+- **Microsoft 365 usage** leaves disabled accounts out of its shares, and counts "Desktop Office apps" among
+  people whose plan includes them, not Business Basic, E1 or F3.
+- **Intune policies**: "Update rings paused" opens only the assigned rings it counts.
+- **Shared files**, **No files are shared with anyone links**, site pages and OneDrive sharing say who can
+  edit by each link: an edit link sent to someone outside now shows they can edit, and an anyone link that
+  only lets people view is no longer rated as "Anyone can edit" because the file also has an organisation
+  edit link.
+- **Site access** counts only the group's own guests as its members and lists a guest given access on the
+  site itself as that, rather than as a member of the site's group. A guest whose address has an underscore
+  in it shows the right address.
+- Microsoft's own sites (the search centre and the content type hub) are left out of **Site access**, **Site
+  permissions** and their checks, and show as system sites in **SharePoint sites**, so they're no longer
+  listed as inactive or missing an owner.
+- **OneDrive** lists under "Sharing by person" only people who share beyond named colleagues.
+- **SharePoint storage** says how far over its storage a tenant is, instead of "Free space: 0 bytes", and
+  lists only files that keep older versions under "Files with the most version history".
+- **File and folder permissions** lists an expiring link once, with everyone it was sent to, and counts the
+  days left by date.
+- **Group structure** shows the owners of groups that can be given admin roles; it used to leave them blank
+  for security groups.
+- **Administrative units** shows a group with a role scoped to a unit as a group, not as a member account.
+- Storage growth on **SharePoint sites**, **OneDrive** and **SharePoint storage** uses Microsoft's daily
+  figures on their own where it has them, instead of mixing them day by day with Office Sentry's.
+- A table report's PDF no longer ends on a page holding only its small print: the last page carries at least
+  the last two rows with it, and a short table splits to do it. A short **All clients** table stays whole and
+  moves with its notes instead, and its **Total** comes once, under the last client, rather than at the foot
+  of every page.
+- Chart labels in reports and their PDFs are set in the report's font rather than the server's default, and
+  the two-page summary keeps its severity bar on page one when the month has a note from the MSP.
+- In the monthly review's PDF, a short **Licences** section moves to the next page whole rather than splitting
+  its table across two pages, and a table's **Total** never repeats under the rows on the first page.
+- **Audit log add-on:**
+  - A client first collected more than 7 days after its feed started no longer says every night that its
+    first hours haven't been read yet: the report says which hours couldn't be read.
+  - A stop Microsoft refuses because of the add-on app's own certificate, or an outage, no longer says the
+    client removed the add-on, and is sent again every hour for a week.
+  - Switching a client on again after they removed the app no longer shows it as Approved: it asks for the
+    link to be sent again.
+  - An approval Office Sentry hasn't confirmed by signing in yet reads *Approved, confirming*, as onboarding's
+    does.
+  - A paused client is no longer signed in to, or its feed started, until it's resumed.
+  - An archived client whose feed is on, which keeps the add-on from being switched off for the install, is
+    named in the refusal and listed on the add-on's page.
+  - Mail flow rules that redirect mail or copy it to someone else are flagged in **Needs attention**, like
+    inbox rules that forward it.
+  - Once what was collected is deleted, the report no longer says it's kept until retention removes it.
+  - A client whose name ends in s reads "Northwind Traders'" on the add-on's page and in its email, not
+    "Northwind Traders's".
+  - **Files deleted** counts each file once: not again when the recycle bin is emptied or purged or when one
+    delete is logged twice, and not when only a file's old versions are deleted. Emptying a bin no longer
+    raises a mass delete.
 - [v2/DEPLOY.md](v2/DEPLOY.md), *Running on Windows without Docker*: updating no longer deletes the virtual
   environment. The steps said to replace the `v2` folder, which holds `.venv`; they now say to replace
   everything in it except `.venv`.
@@ -81,6 +374,112 @@ approved before the update show the month as it is now, as before, until they're
 - In PDFs, the found-and-fixed chart's "Fixed" key was cut off at the right edge.
 - A full review whose month has commentary no longer runs its cover's contents list under the footer: the
   account manager's note opens the page after the cover.
+- **Off-site backups and the restore drill run from cron.** `deploy/jobs.sh schedule` wrote crontab lines that
+  looked for Office Sentry in `/opt/officesentry/v2`, where only the project's own server keeps it, and kept
+  its log and lock in the folder above, which a normal user can't write. The lines now name the folder they
+  were made in, and the log and lock stay in it. The nightly job also waits for a database copy that's still
+  being made rather than make a second one beside it, and `jobs.sh` is now one of each release's files.
+- **System status says how to rerun an off-site backup or the drill on your own server**: `bash deploy/jobs.sh
+  now` and `bash deploy/jobs.sh drill`, rather than the project's own deploy workflow.
+- **Logs keep what matters through a month-end.** Each PDF wrote about 200 lines of the PDF and font libraries'
+  own notes to the portal's and worker's logs, so a month-end's reports pushed every earlier line, errors
+  included, out of the rolling log files the support package reads. Those libraries now only log their errors.
+- **The support package covers the audit log add-on**: whether it's switched on, each client's step (sent,
+  approved, on or off, with the reason the feed hasn't started), and which app connection is the add-on's.
+- **Site permissions no longer says it's waiting for the client's approval when the server couldn't reach
+  Microsoft.** A SharePoint sign-in that never reached Microsoft's sign-in service was taken for the client not
+  having approved the SharePoint permission yet, or, once approved, for every site refusing access. The
+  collection now fails as a network failure and is tried again by itself, and the report keeps the last one.
+- **Findings** keeps an admin excluded from many Conditional Access policies to one line (the first two
+  policies and how many more).
+- Report wording: Secure Score changes are in points, not percent; the mailbox size change says since when in
+  words; **Inactive accounts** groups everyone who never signed in under one bar; **Shared files** no longer
+  says "address(es)" and **SharePoint sites** no longer says "plus 0 system sites"; **Tenant settings** calls
+  the self-service reset setting what Microsoft says it is (whether admins can reset their own password);
+  **Guests and sharing** says "Not reported" rather than leaving a setting blank; **Admins** no longer says
+  every role is permanent on a tenant without Entra ID P2 that lists eligible roles.
+- A client's **Overview** no longer shows more licensed users in red: a figure that's neither better nor worse
+  for going up or down shows its change in grey, there and on **All clients → Monthly review**. Its tiles give
+  the change in a percentage, such as Users with MFA, in points too ("+9 pts" rather than "+9%").
+- **Windows computers still get security updates** names the computers reaching end of support as well as
+  those past it ("5 of 36 Windows computers past end of support, 20 more reaching it within 90 days"), so
+  under **Needs attention** on Overview it agrees with the number of computers beside it.
+- A mailbox's **History** shows its inbox rules removed when the client has none left, the usual end of a
+  clean-up. The collection that found no rules was skipped, so the rules never showed as removed.
+- **As of** (a report shown as it was on a past day) no longer offers days with no data once the daily history
+  has been pruned: a data source with nothing in it, such as no inbox rules, kept the first collection as the
+  day the data starts. A day that isn't held any more says the daily history doesn't go back that far, rather
+  than blaming the retention of snapshots. Switching reports keeps the day, and a CSV of a past day has the
+  day in its name, as the PDF and spreadsheet already did.
+- **Admin activity** on a past day from before Office Sentry started keeping the client's audit log shows that
+  day's changes instead of none, and so does a person's page.
+- **Search** lists every domain of a client that matches, not only the first, and finds names and addresses
+  that look like the start of an IP address (`cafe.de`) whether or not its index is up to date.
+- **Report history** names a week as the email does: "Week of 5 Oct 2026" rather than "Week 41, 2026".
+- No alert, alert email or webhook goes out about a client that was paused or archived while its collection
+  ran. The check used the client as it was when the collection started.
+- Accepting a risk with a review date of today or earlier is refused with a message saying why, and the date
+  box starts at tomorrow. Before, the risk was accepted and came straight back as due for review.
+- The report design editor keeps a 0 typed in a number box, such as *Affected items per check*, instead of
+  putting the default back, and keeps a number within the box's range.
+- A report design of more than 60 blocks is refused with a message, instead of saving without the blocks past
+  the 60th. The editor says so when you add or duplicate a block in a full design.
+- The design editor's hint under the cover title lists `{quarter}`, which the title and subtitle already took.
+- The offboard page counts the issued reports in the client's Report history that deleting removes, with a
+  link to it, names each user's role as the Users page does, and writes large counts with thousands
+  separators. `delete-tenant` counts the issued reports too.
+- Importing clients from a CSV:
+  - The preview's line numbers are the file's own, also when it has blank lines or a value over several
+    lines.
+  - UTF-16 files are read: Excel's *Unicode Text* and Windows PowerShell's `Export-Csv`, including the `#TYPE`
+    line it puts above the column names.
+  - The preview says rightly who sees the new clients straight away: everyone who sees every client, not
+    only admins.
+  - The preview says "1 new client", not "1 new clients".
+- A client's **Client sign-in** page keeps the approval link once approval is noted, for when the client
+  removes the sign-in app and has to approve it again. It says the approval was noted when someone there
+  first signed in.
+- The **Data retention** page writes counts with thousands separators, and says how long monthly snapshots
+  keep sign-in details at the saved setting, instead of always "about 13 months".
+- Pages no longer offer links or buttons that someone's role can't use. A person, group, site or report they
+  can't open shows as its name, and buttons such as *Edit*, *Retry*, *Turn off*, *Check connection now* or a
+  project's status only show to people who can use them; someone who can't change a project's status sees
+  it, and its note, as text.
+- **Settings → Updates** lists every release since the one running, however far behind it is. It kept the
+  newest 15, so an install further behind than that never saw the older ones' Action required and wasn't
+  asked for the tick. If there are ever more than it reads, it says so, sends you to GitHub for the rest and
+  asks for the tick.
+- **Settings → Updates** says "Up to date" only once a check has worked. Before the first check it says "Not
+  checked yet", and when the first checks fail it says "Couldn't check yet" with the reason.
+- **Settings → Updates** reads release notes written a little differently: a sub-heading inside Action
+  required, a heading ending with a colon, and "**None.**" or "**No.**" in bold. Numbered steps show as a
+  numbered list, and a link whose address has brackets in it keeps them.
+- **Settings → Updates** recognises Podman and Kubernetes as containers, so it no longer gives them the
+  Windows steps for updating by hand.
+- **Clients:** a line break or tab in a client's name becomes a space when the client is added or changed, as
+  the CSV import already did. A name with a line break stopped every email about that client; one saved before
+  this now goes into email subjects as a space, so those emails send.
+- A change in a percentage is in points wherever it's read, as on the **Overview**: **What changed** (the page
+  and its PDF) and the **Client digest** email say "+7 pts" beside a Secure Score or MFA figure rather than
+  "+7", and the report style guide's sample figures read as the monthly review's do.
+- **Clients:** a long domain breaks before "onmicrosoft.com" rather than before "com", and isn't bold on a
+  phone. Long addresses and host names in reports keep their ending together the same way.
+- **System status** says "Checked in just now" rather than "0 seconds ago", as its tiles do.
+- **Licence prices** show as money ("3.30" rather than "3.3").
+- The READMEs: [v2/README.md](v2/README.md) lists all 53 reports by area and links the 71 checks, and covers
+  month-end reporting, Every row, Coming up and search, which it had left out. The development notes moved to
+  the [developer guide](DEVELOPING.md), which no longer says the portal never calls Microsoft. The website's
+  compare pages give Office Sentry's history and cost as they are, and its front page links them.
+- [What Office Sentry reads](v2/docs/what-office-sentry-reads.md), the page a client reads before approving,
+  says Office Sentry keeps the first 300 characters of an automatic reply, names each Office Sentry app and how
+  to remove it, and says how long backups keep a client's data. The guides to
+  [onboarding a client](v2/docs/onboarding-a-client.md), [staff sign-in](v2/docs/staff-sign-in.md) and
+  [client sign-in](v2/docs/client-sign-in.md) use the portal's own button names and list every onboarding
+  state, the six data sources that need Global Reader and how often consent is checked.
+- [SECURITY.md](SECURITY.md) gives the data retention defaults as they are (it said everything was kept as
+  before) and how long backups keep a deleted client, and says what's in scope for a vulnerability report. The
+  bug report form asks for the version and how you run Office Sentry, and gives the support package command
+  for Docker.
 
 ### Security
 
@@ -109,6 +508,20 @@ approved before the update show the month as it is now, as before, until they're
   included, and receive reports they can't open. The Contacts card and the schedule form now say who can add
   one. Choosing who gets a client's new-finding alerts now needs *Security findings and reviews*, since alerts
   name the findings.
+- **Audit log add-on:** switching it off for a client, or deleting the client, stops whatever of the client's
+  feed may still be on at Microsoft, including a start that worked for SharePoint and not Exchange, and when
+  Microsoft says the feed is off for one kind of record, the other is stopped too, so no feed is left on that
+  nobody reads. The add-on can't be switched off for the install while a client's feed is still being
+  started. **Also delete the events collected** is no longer lost when an earlier stop is still waiting to be
+  sent, and switching a client on again waits for that stop.
+- **Audit log add-on switched off for the install:** people's Timelines no longer list its records, report
+  designs no longer offer its **Files and mailbox access** report or show its records, and schedules and
+  month-end plans made while it was on no longer email the report or saved views of it.
+- **Audit log add-on for one client:** its report is only there for a client the add-on was asked for, not one
+  whose request was taken back or whose admin opened the link unasked, and a client's own sign-in no longer
+  reads who on the team switched it off or what the team should do next. The add-on's nightly read no longer
+  counts as the client approving the shared app, so after the shared app's client ID changes, clients aren't
+  shown as approved and their other data sources aren't queued until they approve it.
 
 ## [2.3.1] - 2026-10-12
 
@@ -1242,7 +1655,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
-[2.4.0]: https://github.com/JackD99/OfficeSentry/compare/v2.3.1...HEAD
+[2.4.0]: https://github.com/JackD99/OfficeSentry/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/JackD99/OfficeSentry/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0

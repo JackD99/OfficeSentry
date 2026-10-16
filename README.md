@@ -2,7 +2,7 @@
 
 **Branded Microsoft 365 security and licensing reports for every client, without gathering anything by hand.**
 Office Sentry reads each client's Microsoft 365 every night, keeps the history, and turns it into the reports an MSP
-actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, 49 detail reports, a page for
+actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, 53 detail reports, a page for
 every person, mailbox, group and site, a view across all clients, and what changed since last month. It never changes
 anything in a client's tenant.
 
@@ -40,7 +40,7 @@ review it and send it, or let it email itself.
 ### Instead of a paid tool?
 
 For reporting, it does the job paid tools are bought for: monthly client reviews, evidence for Cyber Essentials,
-ISO 27001, CIS and insurers, 49 detail reports and 69 checks across every client, with history. What it doesn't do,
+ISO 27001, CIS and insurers, 53 detail reports and 71 checks across every client, with history. What it doesn't do,
 plainly:
 
 - **It reports; it doesn't manage.** It never creates users, changes settings or fixes findings, so it sits beside
@@ -84,7 +84,7 @@ Before a month's reports go out, **Month-end** lists every client to review. On 
 pick what you recommend next, add notes to findings and leave out anything that client shouldn't get this month (a
 check, a key figure, a whole part of the report), with a preview of the client's copy beside you. Then approve
 one client or many: each is frozen as it is and emailed or published to the client's portal.
-Anything you change after approving waits for a new version, so the client's portal always matches what they were sent. <!-- since 2.4.0 -->
+Anything you change after approving waits for a new version, so the client's portal always matches what they were sent.
 
 **Report designs** let an account manager build their own client report without code: drag in blocks (a
 verdict, key figures, failing checks, what changed, licences, a table from any detail report, your own text),
@@ -143,7 +143,6 @@ from other organisations in them, the apps added to each team (custom uploads fl
   </tr>
 </table>
 
-<!-- since 2.4.0 -->
 ### Who deleted, shared or opened what
 
 The optional **audit log add-on** reads each approving client's Microsoft 365 audit log every night. **Files and
@@ -152,11 +151,10 @@ or deleted by an admin or a delegate, and inbox rules, forwarding and mailbox pe
 look first at the top. It keeps two years by default, where Microsoft's own search keeps 180 days, and never what's
 in a file or an email. Every client, with the add-on or not, is also checked for an audit log that's switched off.
 [Setting up the add-on](v2/docs/audit-log-addon.md)
-<!-- /since -->
 
 ### Detail reports you can filter, save and export
 
-49 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
+53 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
 values (or by age, for dates), sorted and have columns hidden; the view can be saved and reused on any client, and
 the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline figure opens the rows behind it.
 
@@ -187,7 +185,7 @@ the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline f
   </tr>
 </table>
 
-There are 49 in all: mailboxes, inbox rules, shared mailboxes, mailbox size and its trend, automatic replies, mobile
+There are 53 in all: mailboxes, inbox rules, shared mailboxes, mailbox size and its trend, automatic replies, mobile
 devices, distribution lists, mail flow per domain, legacy sign-ins, passwords and sign-in methods, admins and roles,
 administrative units, apps and consents, guests and sharing, groups and Teams, Teams channels with their guests and
 apps, empty, nested and expiring groups, who can reach each SharePoint site and its permission levels, who can open
@@ -197,7 +195,7 @@ licence changes month by month, tenant settings, Microsoft 365 usage, Secure Sco
 [catalogue](v2/docs/checks.md#detail-reports) lists every one with the data it reads. The **Reports** page finds any
 of them by name or by the job you're doing ("Offboarding check", "Insurance renewal", "Storage cleanup").
 
-New in 2.4: **Security alerts**, Microsoft Defender's open incidents and alerts with who is dealing with each, and **Service health**, Microsoft's outages and the message centre's changes with a date to act by. The Devices report adds which computers back up their local admin password with Windows LAPS. **Installed apps** lists every app Intune has found on managed devices, remote access tools first, and **Trusted organisations and locations** shows whose MFA the tenant accepts and the named locations Conditional Access trusts. <!-- since 2.4.0 -->
+New in 2.4: **Security alerts**, Microsoft Defender's open incidents and alerts with who is dealing with each, and **Service health**, Microsoft's outages and the message centre's changes with a date to act by. The Devices report adds which computers back up their local admin password with Windows LAPS. **Installed apps** lists every app Intune has found on managed devices, remote access tools first, and **Trusted organisations and locations** shows whose MFA the tenant accepts and the named locations Conditional Access trusts.
 
 ![The Reports page: every report, searchable, grouped by job](docs/screenshots/reports-library.png)
 
@@ -377,7 +375,7 @@ export and the client's side, then deletes the client and everything stored for 
   <tr>
     <td>The checklist for a client being added</td>
     <td>Dark mode follows your system setting
-    unless you choose Light or Dark on your Account page, where staff also pick a colour <!-- since 2.4.0 -->
+    unless you choose Light or Dark on your Account page, where staff also pick a colour
     </td>
   </tr>
 </table>
@@ -396,7 +394,7 @@ Office Sentry holds read access to many clients, so it is built to do as little 
 - **Read-only by construction.** One multi-tenant Entra app asks only for read permissions (`*.Read*`, plus
   `Exchange.ManageAsApp`). The Graph client has no write methods, and the Exchange client refuses any cmdlet that
   isn't on a fixed allow-list of `Get-` cmdlets. It never creates or changes anything in a client's tenant.
-- **The audit log add-on is a second app with one permission** (`ActivityFeed.Read`), off until you turn it on and approved by each client you ask. It keeps file, sharing and mailbox events, never what's in a file or an email. <!-- since 2.4.0 -->
+- **The audit log add-on is a second app with one permission** (`ActivityFeed.Read`), off until you turn it on and approved by each client you ask. It keeps file, sharing and mailbox events, never what's in a file or an email.
 - **Certificate sign-in, no credential files.** The app signs in with a certificate whose private key is encrypted
   in the database. Secrets and private keys are never downloadable; only the public `.cer` is, by admins.
 - **Tenant isolation and roles.** Deny by default: people see only the clients they're granted, every client

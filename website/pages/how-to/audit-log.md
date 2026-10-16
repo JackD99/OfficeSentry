@@ -1,4 +1,3 @@
-<!-- since 2.4.0 -->
 # Find who deleted or shared a file, or opened someone's mailbox, in Microsoft 365
 
 "Who deleted the client folder?", "Did anyone download the price list before they left?", "Has someone been
@@ -86,4 +85,3 @@ from the day the add-on starts, so switch it on before you need it.
 [Set up the audit log add-on](../../../v2/docs/audit-log-addon.md) ·
 [What the client approves](../../../v2/docs/what-office-sentry-reads.md#the-audit-log-add-on-if-you-approve-it) ·
 [Every check](../../../v2/docs/checks.md) · [Install Office Sentry](../../../README.md#quick-start)
-<!-- /since -->

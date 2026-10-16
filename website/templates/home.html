@@ -29,7 +29,7 @@
       {% if whats_new %}<a class="hero-chip" href="#whats-new"><span>{{ 'New in' if whats_new.released else 'Coming in' }} {{ whats_new.short }}</span> <b>{{ whats_new.chip }}</b></a>{% endif %}
       <p class="eyebrow">{{ "Free and open source" if source_public else "Free software" }} · Built for MSPs</p>
       <h1>Microsoft 365 reports for every client, without the busywork</h1>
-      <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, client reports you design yourself, evidence for Cyber Essentials and insurance forms, 49 detail reports, a page for every person, mailbox, group and site, a view across every client and what changed since last month.</p>
+      <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, client reports you design yourself, evidence for Cyber Essentials and insurance forms, 53 detail reports, a page for every person, mailbox, group and site, a view across every client and what changed since last month.</p>
       <div class="actions">
         <a class="btn primary lg" href="{{ demo_url }}">Try the live demo</a>
         {% if contact and not source_public %}<a class="btn lg" href="{{ contact }}">Ask for early access</a>
@@ -110,8 +110,8 @@
 
     <article class="feature">
       <div class="feature-copy">
-        <h3>49 detail reports you can filter, save and export</h3>
-        <p>Identity, email, files and Teams, devices and licences: MFA coverage, mail forwarding, mailbox permissions, mail flow per domain, mail flow rules and spam protection, sign-ins, Conditional Access, administrative units, Teams channels and their guests, who can reach each SharePoint site, Intune policies and BitLocker recovery keys, licence changes month by month, licence right-sizing and more.</p>
+        <h3>53 detail reports you can filter, save and export</h3>
+        <p>Identity, email, files and Teams, devices and licences: MFA coverage, mail forwarding, mailbox permissions, mail flow per domain, mail flow rules and spam protection, sign-ins, Conditional Access and the organisations and networks it trusts, administrative units, Teams channels and their guests, who can reach each SharePoint site, Intune policies, BitLocker recovery keys and remote access tools on managed devices, Defender alerts, Microsoft 365 outages, licence changes month by month, licence right-sizing and more.</p>
         <ul class="ticks">
           <li>{{ check() }}Filter by any value or date, sort and hide columns</li>
           <li>{{ check() }}Tables fit a laptop: wide reports open on their key columns, and long lists fold to a short form</li>
@@ -393,7 +393,7 @@
     <details><summary>How do I update it?</summary><p><em>Settings → Updates</em> lists every newer release with its notes and anything to do first. Turn on the optional updater and its Update button installs a release, after checking it's genuine, and goes back to the old version by itself if the new one doesn't start. Updating by hand with Docker works as well. <a href="/docs/install/#updating">Updating</a> has both.</p></details>
     <details><summary>Where is the data kept?</summary><p>On your own server, in a database and the activity history beside it, which its backups copy, encrypted off the server if you like. Office Sentry has no telemetry, so nothing is sent to us: the only thing it asks for is GitHub's list of releases, once a day, which an admin can turn off.</p></details>
     <details><summary>How is it different from Microsoft's own admin centres?</summary><p>Microsoft shows one tenant at a time, in its own words, with little history. Office Sentry collects every client every night, keeps the history, compares it month by month and across clients, and turns it into branded reports.</p></details>
-    <details><summary>Can it replace AdminDroid, CIPP or another paid tool?</summary><p>For reporting, yes: monthly client reviews, evidence for Cyber Essentials, ISO 27001 and insurers, 49 detail reports and 69 checks across every client, with history. It never changes a tenant, so for creating users or applying settings keep a management tool such as CIPP beside it. <a href="/docs/compare/">How it compares</a> sets out what each is good at.</p></details>
+    <details><summary>Can it replace AdminDroid, CIPP or another paid tool?</summary><p>For reporting, yes: monthly client reviews, evidence for Cyber Essentials, ISO 27001 and insurers, 53 detail reports and 71 checks across every client, with history. It never changes a tenant, so for creating users or applying settings keep a management tool such as CIPP beside it. <a href="/docs/compare/">How it compares</a> sets out what each is good at.</p></details>
   </div>
 </section>
 {% endblock %}

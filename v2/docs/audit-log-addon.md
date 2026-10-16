@@ -1,4 +1,3 @@
-<!-- since 2.4.0 -->
 # The audit log add-on
 
 For MSP admins who want to answer the questions clients ask after something goes wrong: **who deleted,
@@ -175,4 +174,3 @@ The client's **Audit log add-on** page says what Microsoft answered, in words. T
 | Microsoft's audit log feed refused, and Office Sentry tries again in 20 minutes | Usually nothing. If it keeps happening, check the tracker's **Audit log** column: Microsoft won't start a feed for a client whose audit log is off, so have them turn it on in Microsoft Purview (*Audit → Start recording user and admin activity*), which can take a few hours to take effect |
 | Office Sentry couldn't reach Microsoft's audit log feed | Nothing: it tries again shortly |
 | A problem with the add-on app's certificate | Replace the certificate on **App connection**, as for the shared app |
-<!-- /since -->

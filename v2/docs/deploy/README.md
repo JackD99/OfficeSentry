@@ -58,7 +58,7 @@ Whichever guide you follow, these hold. They explain most of the choices in the 
 - **Network.** The server makes outbound HTTPS calls to Microsoft (sign-in, Graph, Exchange Online and each
   client's SharePoint), to `ghcr.io` for updates, and once a day to `api.github.com` for the list of releases
   (*Settings → Updates* can turn that off).
-  The audit log add-on also reads Microsoft's activity feed at `manage.office.com`. <!-- since 2.4.0 -->
+  The audit log add-on also reads Microsoft's activity feed at `manage.office.com`.
   Nothing from Microsoft ever connects in: only the people using the portal need to reach it, plus a
   client's administrator returning from Microsoft's consent page (`/consent/callback`).
 - **Updating.** Each guide says how: change the release and redeploy. *Settings → Updates* lists every new

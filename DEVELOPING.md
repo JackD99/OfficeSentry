@@ -49,7 +49,7 @@ database. There is no Redis, Celery or message broker.
   client's data is only ever read from Microsoft there, and collections only
   read. It also runs the schedule, sends report emails and alerts, and tidies
   old data.
-  The audit log add-on's two calls that aren't reads (starting and stopping a client's activity feed) go from the worker too, as background tasks, never from a collection. <!-- since 2.4.0 -->
+  The audit log add-on's two calls that aren't reads (starting and stopping a client's activity feed) go from the worker too, as background tasks, never from a collection.
 - **The portal** (`officesentry/web/`, Flask) shows people what is already
   stored; no page reads a client's data from Microsoft. It calls Microsoft only
   for sign-in, setup and checks someone asks for: signing staff and clients'
@@ -95,11 +95,11 @@ Paths are in `v2/`, except the website.
 | `officesentry/checks/` | the checks, one module per area; they read snapshots only, never Microsoft |
 | `officesentry/reports/` | report builders (`@report`), charts, PDF/XLSX/CSV export, cross-tenant rollups, and the pages for a person, mailbox, group or site |
 | `officesentry/web/` | the Flask app: routes, `templates/`, `static/` (`tokens.css` holds every colour and size); `access.py` is the single authorization gate |
-| `officesentry/auditlog/` | the audit log add-on: each opted-in client's Microsoft 365 audit log, read through the Office 365 Management Activity feed | <!-- since 2.4.0 -->
+| `officesentry/auditlog/` | the audit log add-on: each opted-in client's Microsoft 365 audit log, read through the Office 365 Management Activity feed |
 | `officesentry/migrations/` | numbered SQL files, applied in order, never edited once applied |
 | `officesentry/*.py` | everything else, one line each in [Every module](#every-module) below |
 | `tests/` | the pytest suite; `graphdata.py` and friends are simulated Microsoft responses |
-| `tests/auditdata.py` | the audit log add-on's Management Activity feed, simulated with `responses` | <!-- since 2.4.0 -->
+| `tests/auditdata.py` | the audit log add-on's Management Activity feed, simulated with `responses` |
 | `tests/browser/` | screenshot and accessibility tests (their README says how to run them) |
 | `tests/layout/` | every page at four widths, for layouts that break (likewise) |
 | `scripts/` | demo data, screenshots, the check catalogue generator, scale data, the month-end dry run |
@@ -212,7 +212,7 @@ capabilities it needs (`test_roles.py`), no one sees another tenant's data
 (`test_isolation_walk.py`), every Microsoft call is listed in `endpoints.py`
 (`test_ratelimit.py`), and every check and report survives missing or odd
 data (`test_robustness.py`).
-Names, titles and file names from a client's tenant never become markup on a page or in a PDF (`test_injection_walk.py`). <!-- since 2.4.0 -->
+Names, titles and file names from a client's tenant never become markup on a page or in a PDF (`test_injection_walk.py`).
 
 Templates and CSS also have browser tests that compare screenshots with
 baselines; see `tests/browser/README.md`. CI runs them on pull requests that
@@ -293,7 +293,7 @@ only an empty one, and are tested with simulated data only:
   policies, so the policies themselves are simulated.
 - **BitLocker recovery keys**: the tenant hasn't approved
   BitLockerKey.ReadBasic.All yet, so the replay covers the waiting state.
-- **Windows LAPS, Defender alerts and service health**: recorded before the 2.4 permissions, so the replay covers the waiting state and the rest is simulated. <!-- since 2.4.0 -->
+- **Windows LAPS, Defender alerts and service health**: recorded before the 2.4 permissions, so the replay covers the waiting state and the rest is simulated.
 - **Mail connectors and changed protection policies**: the tenant's mail flow
   rule and its default and preset protection policies are real, but it has no
   connectors, allowed or blocked senders, or policies of its own, so those are
@@ -316,7 +316,7 @@ only an empty one, and are tested with simulated data only:
   address, so resolving a forwarding recipient (`Get-Recipient`) is simulated.
 - **SharePoint recycle bin items**: Microsoft answered the recycle bin request
   with an empty list, though the site's storage figures count a deleted file.
-- **The audit log add-on**: `live-test` runs add-on collectors only when asked for them, and the recording has none, so Microsoft's activity feed is simulated (`tests/auditdata.py`). <!-- since 2.4.0 -->
+- **The audit log add-on**: `live-test` runs add-on collectors only when asked for them, and the recording has none, so Microsoft's activity feed is simulated (`tests/auditdata.py`).
 
 ## Adding things
 

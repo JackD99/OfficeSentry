@@ -42,7 +42,7 @@ Unraid 6.12 or later, with the **Docker Compose Manager** plugin (*Apps*, search
    paste the stack file and save; then **Edit Stack → ENV File**:
 
    ```text
-   OFFICESENTRY_VERSION=2.3.1
+   OFFICESENTRY_VERSION=2.4.0
    OFFICESENTRY_BASE_URL=https://sentry.yourmsp.com
    OFFICESENTRY_TIMEZONE=Europe/London
    OFFICESENTRY_DATA=/mnt/user/appdata/officesentry/data
@@ -63,11 +63,9 @@ Unraid 6.12 or later, with the **Docker Compose Manager** plugin (*Apps*, search
    docker exec officesentry-web-1 python -m officesentry backup --keep 14
    ```
 
-   <!-- since 2.4.0 -->
    From 2.4.0 this script is optional: the worker makes the same copy by itself every night at 03:30 and keeps
    the last 7 (`OFFICESENTRY_BACKUP_CRON` and `OFFICESENTRY_BACKUP_KEEP` change when and how many; see
    [Backups](../../DEPLOY.md#backups)).
-   <!-- /since -->
 
    The copies land in `/mnt/user/appdata/officesentry/data/backups`, which an appdata backup (the
    **Appdata Backup** plugin) then copies off the pool. The keys are in their own folder,
@@ -105,7 +103,7 @@ environment variables, so you write your settings into the stack itself; the fil
    ```
 
    and on the `image:` line, put the release instead of `${OFFICESENTRY_VERSION:-2}`
-   (`ghcr.io/jackd99/officesentry:2.3.1`). For Cloudflare Tunnel, also delete the `profiles: ["tunnel"]` line
+   (`ghcr.io/jackd99/officesentry:2.4.0`). For Cloudflare Tunnel, also delete the `profiles: ["tunnel"]` line
    under `cloudflared` and put the token in place of `${CLOUDFLARE_TUNNEL_TOKEN:-}`. Leave the data and keys
    as Docker volumes: Container Manager makes them writable for Office Sentry by itself.
 3. **Next**, **Done**. The project builds and starts; *Container* shows `officesentry-web-1` and
@@ -128,10 +126,8 @@ environment variables, so you write your settings into the stack itself; the fil
    **Hyper Backup** can take them off the NAS, and the last one deletes copies older than two weeks there,
    as the volume does. The keys never go there.
 
-   <!-- since 2.4.0 -->
    Keep the task from 2.4.0 on, too. The worker's own nightly copy stays in the volume, and the worker skips
    it on nights the task has made one.
-   <!-- /since -->
 
 **HTTPS on the office network:** *Control Panel → Login Portal → Advanced → Reverse Proxy → Create*: source
 HTTPS, your hostname, port 443; destination HTTP, `localhost`, port 8000. Give it a certificate under
@@ -162,10 +158,8 @@ apps on Kubernetes and aren't covered.
    with `/mnt/tank/backups` a dataset of yours that a replication or Cloud Sync task already takes off the
    NAS. The `find` at the end deletes copies older than two weeks there, as the volume does.
 
-   <!-- since 2.4.0 -->
    Keep the job from 2.4.0 on, too. The worker's own nightly copy stays in the volume, and the worker skips
    it on nights the job has made one.
-   <!-- /since -->
 5. Save the keys: `docker exec ix-officesentry-web-1 cat /keys/secrets.json` in *System → Shell*, into your
    password manager.
 
