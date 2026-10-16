@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from ..devices import parse_ts
+from ..formatting import day
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from .data_reports import DataReport, Rows, Section, Tile, _type
@@ -212,7 +213,7 @@ def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
         Tile(
             "Change in the last month",
             _signed(size_now - sum(month_base[1].values())) if month_base else "Not yet",
-            f"Since {month_base[0].date().isoformat()}" if month_base else "Needs a week of history",
+            f"Since {day(month_base[0])}" if month_base else "Needs a week of history",
         ),
         Tile(
             "Fastest growing",

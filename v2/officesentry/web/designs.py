@@ -120,6 +120,8 @@ def edit(design_id: int):
         tenant=tenant,
         pdf_available=pdf_available(),
         text_max=designs.TEXT_MAX,
+        max_blocks=designs.MAX_BLOCKS,
+        placeholders=designs.PLACEHOLDERS,
         preview_url=url_for("designs.preview", design_id=row["id"], tenant=tenant["id"]) if tenant else "",
     )
 
@@ -134,6 +136,10 @@ def save(design_id: int):
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         abort(400)
+    if isinstance(body.get("blocks"), list) and len(body["blocks"]) > designs.MAX_BLOCKS:
+        # Refused whole, rather than keeping the first ones and dropping the rest without a word.
+        error = f"Not saved: a design holds {designs.MAX_BLOCKS} blocks at most. Remove some and it saves."
+        return jsonify({"ok": False, "error": error}), 400
     name = body.get("name") if isinstance(body.get("name"), str) else None
     description = body.get("description") if isinstance(body.get("description"), str) else None
     doc = designs.save(g.db, row["id"], body, name=name, description=description)

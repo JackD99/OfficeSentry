@@ -344,9 +344,18 @@ WHATS_NEW = [
                 "href": "/docs/reference/#month-end-reporting",
                 "link": "Month-end reporting",
             },
+            {
+                "icon": "shield",
+                "title": "Looks after itself",
+                "text": "Every install backs its database up every night with no crontab line, and a collection "
+                "that failed because Microsoft was busy tries again by itself.",
+                "href": "/docs/install/#backups",
+                "link": "Backups",
+            },
         ],
         "also": [  # smaller changes, a few words each
             "a check that each client's Microsoft 365 audit log is switched on",
+            "a client whose sign-in breaks keeps its last good data, and its findings aren't marked fixed",
             "a month-end report changed after approval reaches the client only as a new version",
             "month-end never sends a client the same month twice",
             "only staff who can open every report in a client's plan can add people to it",

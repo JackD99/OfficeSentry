@@ -108,6 +108,12 @@ Portainer doesn't schedule commands, so make the nightly backup with the Docker 
 45 3 * * * docker exec officesentry-web-1 python -m officesentry backup --keep 14
 ```
 
+<!-- since 2.4.0 -->
+From 2.4.0 the crontab line is optional: the worker makes the same copy by itself every night at 03:30 and
+keeps the last 7 (`OFFICESENTRY_BACKUP_CRON` and `OFFICESENTRY_BACKUP_KEEP`, set as the settings above, change
+when and how many; see [Backups](../../DEPLOY.md#backups)).
+<!-- /since -->
+
 Copies go to the `backups` folder in the data volume (on the host,
 `/var/lib/docker/volumes/officesentry_officesentry-data/_data/backups`). Include that folder in whatever
 backs up the host, or set `OFFICESENTRY_DATA` to a host folder owned by user ID 10001 that's already backed up.

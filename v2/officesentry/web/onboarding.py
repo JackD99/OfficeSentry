@@ -29,7 +29,7 @@ from .tenants import _cfg, cloud_mismatch
 
 bp = Blueprint("onboarding", __name__, url_prefix="/admin/onboarding")
 
-MAX_UPLOAD = onboarding.MAX_BYTES
+MAX_UPLOAD = 2 * onboarding.MAX_BYTES  # a UTF-16 file takes two bytes a character; parse() checks the text's size
 FILTERS = {"waiting": "Still to do", "all": "All clients"}
 ON_CLIENT = {"sent", "approved"}  # the tracker's "Waiting on client" tile, as the filter ?state=client
 GROUPED = {"client": ON_CLIENT, "new": onboarding.NEW_STATES}  # ?state= values that stand for several states
