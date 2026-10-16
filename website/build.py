@@ -338,11 +338,12 @@ WHATS_NEW = [
             },
             {
                 "icon": "alert",
-                "title": "Defender alerts and Microsoft's own outages",
-                "text": "Two new reports: Security alerts, with each client's open Defender incidents and alerts and "
-                "who has picked them up, and Service health, with Microsoft 365 outages and the message centre "
-                "changes to act on by a date. Devices shows which computers back up their local admin password with "
-                "Windows LAPS, never the password itself. Each client approves the new read-only permissions once.",
+                "title": "Four new reports, from Defender alerts to remote access tools",
+                "text": "Security alerts lists each client's open Defender incidents and alerts and who has picked "
+                "them up, and Service health has Microsoft 365 outages and the message centre changes to act on "
+                "by a date. Installed apps puts remote access tools such as AnyDesk and ScreenConnect first, and "
+                "Trusted organisations and locations shows whose MFA a client accepts and which networks "
+                "Conditional Access trusts. The first two need read-only permissions each client approves once.",
                 "href": "/docs/what-it-reads/",
                 "link": "What Office Sentry reads",
             },
@@ -385,6 +386,8 @@ WHATS_NEW = [
         ],
         "also": [  # smaller changes, a few words each
             "a check that each client's Microsoft 365 audit log is switched on",
+            "Devices shows which computers back up their local admin password with Windows LAPS, never the password "
+            "itself",
             "a client's What's new page lists every permission it hasn't approved, from any release",
             "a new look, with serif titles and figures, ruled sections and one bottle green",
             "emails in the reports' colours, and bottle green for MSPs who haven't picked a colour",
