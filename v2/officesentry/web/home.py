@@ -7,9 +7,13 @@ own home (the dashboard).
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
+
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 
 from .. import first_run, home, month_end
+from ..formatting import strftime as datefmt
 from ..issued import period_label
 from ..reports.monthly_review import setting
 from .access import access_of, can, current, is_staff, login_required, needs, safe_next
@@ -18,9 +22,15 @@ from .groups import group_aware, scoped_tenants
 
 bp = Blueprint("home", __name__)
 
-# What each home page needs besides a staff role; Today also shows only the reasons its reader may open.
+# What each home page needs besides a staff role; Today also shows only the lines its reader may open.
 NEEDS = {home.TODAY: ("clients.compare",), home.CLIENTS: ("clients.compare", "reports.tenant")}
-REASON_NEEDS = {"findings": "reports.security", "collection": "collect", "access": "collect", "due": "reports.tenant"}
+LINE_NEEDS = {
+    "finding": "reports.security",
+    "fixed": "reports.security",
+    "collection": "collect",
+    "access": "collect",
+    "due": "reports.tenant",
+}
 
 
 def open_to(user) -> list[str]:
@@ -41,17 +51,36 @@ def home_url(user) -> str:
     return url_for(f"home.{chosen if chosen in pages else pages[0]}")
 
 
-def _link(reason: home.Reason) -> str:
-    """Where a reason on Today points: the client's page that shows or fixes it."""
-    if reason.target == "findings":
-        return url_for("reports.tenant_findings", tenant_id=reason.tenant_id)
-    if reason.target == "collection":
-        return url_for("tenants.collection", tenant_id=reason.tenant_id)
-    if reason.target == "tenant":
-        return url_for("tenants.tenant", tenant_id=reason.tenant_id)
-    if reason.target == "upcoming":
+def _link(entry: home.Entry) -> str:
+    """Where a line on Today points: the client's page that shows or fixes it."""
+    tenant_id = entry.tenant["id"]
+    if entry.target == "findings":
+        return url_for("reports.tenant_findings", tenant_id=tenant_id) + entry.anchor
+    if entry.target == "fixed":
+        return url_for("reports.resolved_findings", tenant_id=tenant_id)
+    if entry.target == "collection":
+        return url_for("tenants.collection", tenant_id=tenant_id)
+    if entry.target == "tenant":
+        return url_for("tenants.tenant", tenant_id=tenant_id)
+    if entry.target == "upcoming":
         return url_for("upcoming.index")
-    return reason.target or url_for("tenants.tenant", tenant_id=reason.tenant_id)
+    return entry.target or url_for("tenants.tenant", tenant_id=tenant_id)
+
+
+def _zone() -> ZoneInfo:
+    try:
+        return ZoneInfo(current_app.extensions["officesentry.config"].timezone)
+    except (KeyError, ValueError):
+        return ZoneInfo("UTC")
+
+
+def stamp(when: datetime, now: datetime, zone: ZoneInfo) -> tuple[str, str]:
+    """A line's time as the ledger shows it, in the MSP's timezone: the clock time today, the weekday this
+    week, the date before that; and the whole date and time for its tooltip."""
+    local, today = when.astimezone(zone), now.astimezone(zone).date()
+    days = (today - local.date()).days
+    short = local.strftime("%H:%M") if days <= 0 else (local.strftime("%a") if days < 7 else datefmt(local, "%-d %b"))
+    return short, datefmt(local, "%a %-d %b %Y, %H:%M %Z")
 
 
 def get_started() -> list[first_run.Step] | None:
@@ -87,12 +116,19 @@ def _homes() -> dict:
 @group_aware
 def today():
     a = current()
-    data = home.today(g.db, scoped_tenants(), shows=lambda kind, tenant_id: a.can(REASON_NEEDS[kind], tenant_id))
-    for row in data.rows:
-        for reason in row.reasons:
-            reason.href = _link(reason)
+    now = datetime.now(UTC)
+    data = home.today(g.db, scoped_tenants(), now, shows=lambda kind, tenant_id: a.can(LINE_NEEDS[kind], tenant_id))
+    zone = _zone()
+    for entry in data.entries:
+        entry.href = _link(entry)
+        entry.stamp, entry.stamp_full = stamp(entry.when, now, zone)
     return render_template(
-        "home_today.html", data=data, homes=_homes(), mine=home.home_of(g.user), get_started=get_started()
+        "home_today.html",
+        data=data,
+        since=stamp(data.since, now, zone)[1],
+        homes=_homes(),
+        mine=home.home_of(g.user),
+        get_started=get_started(),
     )
 
 
