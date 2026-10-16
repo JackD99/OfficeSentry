@@ -131,7 +131,7 @@ def test_client_home_leads_with_the_report_then_recommendations_then_contact(cli
     page = client.get("/").get_data(as_text=True)
     report, recs, contact = (
         page.index(f'/tenants/{alpha}/report"'),
-        page.index("<h2>Recommendations</h2>"),
+        page.index('class="card client-recs"'),
         page.index("Questions about your reports?"),
     )
     assert report < recs < contact
@@ -147,7 +147,7 @@ def test_client_home_without_support_details_has_no_contact_card(client, db, two
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")
     page = client.get("/").get_data(as_text=True)
-    assert "Questions about your reports?" not in page and "Monthly review" in page
+    assert "Questions about your reports?" not in page and "Open your monthly review" in page
 
 
 def test_report_footer_prints_on_client_reports(client, db, two_tenants, monkeypatch):

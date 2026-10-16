@@ -3,6 +3,7 @@ import json
 import os
 import sqlite3
 import sys
+import time
 import traceback
 import zlib
 from datetime import UTC, datetime
@@ -132,8 +133,16 @@ class TrackedConnection(sqlite3.Connection):
         super().close()
 
 
+@pytest.fixture
+def connection_grace():
+    """Seconds ``_every_connection_is_closed`` waits for the test's connections to close before it counts
+    them: none, except where a folder's tests run a portal whose own threads may still be finishing
+    (tests/browser and tests/layout set their own)."""
+    return 0
+
+
 @pytest.fixture(autouse=True)
-def _every_connection_is_closed(monkeypatch):
+def _every_connection_is_closed(monkeypatch, connection_grace):
     """A database connection opened during a test and still open when it ends fails the test. Python only
     warns about those (and only when the object is collected, so the warning lands on whichever test runs
     next), and nothing turned the warnings into failures; a connection the code under test forgets stays
@@ -152,6 +161,9 @@ def _every_connection_is_closed(monkeypatch):
 
     monkeypatch.setattr(sqlite3, "connect", connect)
     yield
+    deadline = time.monotonic() + connection_grace
+    while time.monotonic() < deadline and not all(conn.closed for conn, _, _ in opened):
+        time.sleep(0.05)
     monkeypatch.undo()
     left = []
     for conn, where, database in opened:
