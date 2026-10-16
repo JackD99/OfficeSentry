@@ -175,7 +175,6 @@ together ran every test.
   accepts) so the walk sends a form the route would act on, not an empty
   one.
 
-<!-- since 2.4.0 -->
 - A collection run that fails for a reason waiting fixes (`worker.passing`:
   Microsoft busy, throttling or out of reach, the database locked; or a
   worker that stopped mid-run, `store.expire_run_leases`) gets a `retry_at`
@@ -192,7 +191,6 @@ together ran every test.
   makes one itself if no newer copy comes `nightly_backup.LATE` after it.
   It only deletes its own copies (`nightly_backup.MINE`), never one a
   server's job made in the same folder.
-<!-- /since -->
 
 ## Signing off your commits
 

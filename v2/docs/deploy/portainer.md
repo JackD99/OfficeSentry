@@ -35,7 +35,7 @@ console.
 Under **Environment variables**, switch to **Advanced mode** and paste, with your own values:
 
 ```text
-OFFICESENTRY_VERSION=2.3.1
+OFFICESENTRY_VERSION=2.4.0
 OFFICESENTRY_BASE_URL=https://sentry.yourmsp.com
 OFFICESENTRY_TIMEZONE=Europe/London
 ```
@@ -108,11 +108,9 @@ Portainer doesn't schedule commands, so make the nightly backup with the Docker 
 45 3 * * * docker exec officesentry-web-1 python -m officesentry backup --keep 14
 ```
 
-<!-- since 2.4.0 -->
 From 2.4.0 the crontab line is optional: the worker makes the same copy by itself every night at 03:30 and
 keeps the last 7 (`OFFICESENTRY_BACKUP_CRON` and `OFFICESENTRY_BACKUP_KEEP`, set as the settings above, change
 when and how many; see [Backups](../../DEPLOY.md#backups)).
-<!-- /since -->
 
 Copies go to the `backups` folder in the data volume (on the host,
 `/var/lib/docker/volumes/officesentry_officesentry-data/_data/backups`). Include that folder in whatever
@@ -123,7 +121,7 @@ To restore one: **Stop** both containers, then on the Docker host
 
 ```bash
 docker run --rm -v officesentry_officesentry-data:/data -v officesentry_officesentry-keys:/keys \
-  -e OFFICESENTRY_SECRETS_FILE=/keys/secrets.json ghcr.io/jackd99/officesentry:2.3.1 \
+  -e OFFICESENTRY_SECRETS_FILE=/keys/secrets.json ghcr.io/jackd99/officesentry:2.4.0 \
   python -m officesentry restore /data/backups/<file>.db.gz
 ```
 

@@ -29,7 +29,7 @@ The defaults are the secure ones. Nothing below needs switching on.
 | Logs | The access log records the path, status and timing of each request, never the query string or the referer. |
 | PDFs | Rendered on the server from the app's own templates, with a fetcher that loads only the app's static files: no other files, no network. |
 | Microsoft 365 | Read-only Graph permissions and `Get-` Exchange cmdlets only; the certificate's private key never leaves the server. [What Office Sentry reads](what-office-sentry-reads.md) lists every permission. Emailing reports through Microsoft 365 uses a separate app in your own tenant, with `Mail.Send` only. |
-| Audit log add-on | A second app with one permission, `ActivityFeed.Read`, that only clients you ask approve. Its only calls that aren't reads start and stop that client's activity feed. | <!-- since 2.4.0 -->
+| Audit log add-on | A second app with one permission, `ActivityFeed.Read`, that only clients you ask approve. Its only calls that aren't reads start and stop that client's activity feed. |
 
 ## What you have to do
 
@@ -86,7 +86,7 @@ The defaults are the secure ones. Nothing below needs switching on.
   email opens with the client's security summary, so setting up, changing or
   previewing one needs *Security findings and reviews* on that client.
   Pages don't link to what someone can't open: a person, group or report they can't open shows as its name,
-  and a button they can't use isn't shown. <!-- since 2.4.0 -->
+  and a button they can't use isn't shown.
 
 ## Behind a reverse proxy
 

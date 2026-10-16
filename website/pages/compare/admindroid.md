@@ -16,8 +16,8 @@ of date, [tell us](https://github.com/JackD99/OfficeSentry/issues/new/choose) an
 | **Cost** | Free edition (around 140 Microsoft 365 reports and 10 dashboards); paid editions priced on request; a 15-day trial of everything | Free, every feature |
 | **Licence** | Commercial | Open source (AGPL-3.0) |
 | **Runs on** | A Windows server, with PostgreSQL | Two Docker containers on a Linux server, with SQLite, or Windows without Docker |
-| **Reports** | Over 3,500 in the paid editions, plus dashboards | 49 detail reports with filters, saved views and exports, 69 checks, and client reports and evidence for 11 schemes |
-| **Audit trail** | The unified audit log: file, sharing, mailbox and Teams activity, kept for up to 10 years, with alerts on events | Entra sign-ins and admin changes kept beyond Microsoft's 30 days; not the unified audit log yet |
+| **Reports** | Over 3,500 in the paid editions, plus dashboards | 53 detail reports with filters, saved views and exports, 71 checks, and client reports and evidence for 11 schemes |
+| **Audit trail** | The unified audit log: file, sharing, mailbox and Teams activity, kept for up to 10 years, with alerts on events | Entra sign-ins and admin changes kept beyond Microsoft's 30 days; file, sharing and mailbox activity through the optional audit log add-on, kept 2 years by default |
 | **Changes tenants** | Yes: management actions, bulk changes and workflows | Never: read-only permissions only |
 | **Several clients** | Switch between tenants, group them, connect through GDAP | Every report across every client, worst first, and what changed this month across all of them |
 | **Month-over-month** | Some reports over time | Every report compared with last month, and findings with when they were first seen and fixed |
@@ -27,8 +27,9 @@ of date, [tell us](https://github.com/JackD99/OfficeSentry/issues/new/choose) an
 
 - **Breadth.** If a report exists for Microsoft 365, AdminDroid probably has a version of it, across more
   services (Power BI, Viva Engage, Stream) and on-premises Active Directory.
-- **Activity auditing.** It reads the unified audit log, so it can answer "who opened, shared or deleted this
-  file" and "who read this mailbox", and alert as it happens.
+- **Activity auditing.** It reads the unified audit log for every service, Teams included, keeps it for up
+  to 10 years and alerts as it happens. Office Sentry's add-on reads SharePoint, OneDrive and Exchange
+  activity each night.
 - **Making changes.** Its management actions, bulk operations and workflows let you fix what a report finds
   from the same screen.
 

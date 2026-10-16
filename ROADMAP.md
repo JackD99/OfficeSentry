@@ -12,12 +12,14 @@ supplier questionnaires judged from the data; evidence packs for IASME Cyber Ass
 staff sign-in with Microsoft. 2.3 brought client sign-in with Microsoft; an Update button that
 installs a release from the portal; a month-end review that leaves things out of one client's
 report; the Intune policies and Mail rules and protection reports, BitLocker recovery keys and
-PIM for groups; and projects you'd put on a quote.
+PIM for groups; and projects you'd put on a quote. 2.4 brought the optional audit log add-on
+and a check that each client's audit log is on; the Security alerts, Service health, Installed
+apps and Trusted organisations and locations reports; Windows LAPS on the Devices report; a
+new look, with light and dark for each person; and Switch client and search from any page.
 
 ## Next
 
-- Audit log add-on (optional, separate app): who deleted, downloaded or shared files, and
-  who opened someone else's mailbox.
+Nothing is fixed yet. Ideas are welcome in Discussions.
 
 ## Later
 

@@ -68,19 +68,19 @@ little as possible with that access. Details and code references are in
   app, adding a release's new permissions to it, and sign-in with Microsoft
   (its token request, creating its sign-in app, and letting that app accept
   other organisations' accounts for client sign-in).
-  The audit log add-on adds one more: starting and stopping a client's audit feed (below). <!-- since 2.4.0 -->
+  The audit log add-on adds one more: starting and stopping a client's audit feed (below).
   `tests/test_isolation_walk.py` opens every tenant-scoped route with
   another client's IDs, as staff and as a client, and expects a refusal.
   `tests/test_roles.py` opens every route as every built-in role and expects
   a refusal exactly where the role lacks what the page needs.
-- **Client text stays text.** `tests/test_injection_walk.py` ends every name, title and file name a client's tenant sends with markup, opens every page, report and PDF, and fails if any of them shows it unescaped. <!-- since 2.4.0 -->
+- **Client text stays text.** `tests/test_injection_walk.py` ends every name, title and file name a client's tenant sends with markup, opens every page, report and PDF, and fails if any of them shows it unescaped.
 - **The mail app is separate and can be fenced in.** Email through
   Microsoft 365 uses its own single-tenant app with `Mail.Send` in the MSP's
   tenant, signing in with a certificate (or a client secret). The settings
   page asks the admin to limit it to the one sending mailbox and shows a
   warning until they confirm it, because without that limit a leaked
   credential could send as anyone in the MSP's company.
-- **The audit log add-on is its own app, with one permission.** It's off until an admin turns it on, and each client approves it separately. Its app has only `ActivityFeed.Read` on the Office 365 Management APIs and its own certificate, and Office Sentry keeps only a fixed list of file, sharing and mailbox events from it, without email subjects. Its only requests other than GET start and stop a client's audit feed: they tell Microsoft whether to make that client's audit records available to the add-on, and change nothing in the tenant. <!-- since 2.4.0 -->
+- **The audit log add-on is its own app, with one permission.** It's off until an admin turns it on, and each client approves it separately. Its app has only `ActivityFeed.Read` on the Office 365 Management APIs and its own certificate, and Office Sentry keeps only a fixed list of file, sharing and mailbox events from it, without email subjects. Its only requests other than GET start and stop a client's audit feed: they tell Microsoft whether to make that client's audit records available to the add-on, and change nothing in the tenant.
 - **Bound consent links.** The admin-consent link's signed state carries a
   one-time nonce, stored server-side with the admin and the signed-in
   browser that opened it, and expires after an hour. A client added by
@@ -94,8 +94,8 @@ little as possible with that access. Details and code references are in
 |---|---|
 | Tenant isolation | Deny by default. Users see only clients granted to them; others return 404. One gate (`web/access.py`) loads every client. |
 | Roles | A role is a set of capabilities and a scope (every client, or those granted). Seven built-in roles (Administrator, Team leader, Second line, First line, Account manager, Auditor, Client viewer), custom roles, and per-person capabilities added or taken away, everywhere or on one client; taking away wins. Every page and download checks on the server. Someone who manages users without being an Administrator can only give out what they hold on every client they see, can't change an account, or a role held by one, that sees or does more, and isn't shown client accounts of other clients. A role limited to some clients manages clients, users and the activity log within those clients only; client groups, Settings, System status and installing updates need every client. A report area someone can't open on a client stays closed wherever that client's data goes: scheduled emails and their previews, the report history, report designs, the home pages and What changed. Clients see only their own organisation's reports. |
-| Client contacts and alerts | New contacts get a client's report plan emails, so only someone who can open everything the plan sends adds a contact. New-finding alerts name the findings, so choosing who gets them needs security findings. | <!-- since 2.4.0 -->
-| Approved reports | Once a month's report is approved, its client sees that approved copy. Commentary, recommendations and notes changed afterwards reach them only with a new version. | <!-- since 2.4.0 -->
+| Client contacts and alerts | New contacts get a client's report plan emails, so only someone who can open everything the plan sends adds a contact. New-finding alerts name the findings, so choosing who gets them needs security findings. |
+| Approved reports | Once a month's report is approved, its client sees that approved copy. Commentary, recommendations and notes changed afterwards reach them only with a new version. |
 | Sign in with Microsoft | Optional, off until an admin sets it up. OpenID Connect against a single-tenant app in the MSP's own tenant with no API permissions, authorization code with PKCE, a certificate-signed client assertion (`private_key_jwt`; the private key is encrypted in the database) and the ID token verified against the tenant's published keys: signature, audience, issuer, tenant, lifetime and nonce. Roles are app roles assigned in Entra (one per built-in role, and values an admin gives custom roles) and read at every sign-in; client access is still granted in Office Sentry. Passwords stay as the break-glass route until an admin signed in with Microsoft turns them off; `python -m officesentry staff-sign-in --passwords on` turns them back on from the server. An account with no password confirms a security change by signing in to Microsoft again (`prompt=login`, the same Microsoft account), which counts for ten minutes on that session. |
 | Client sign-in with Microsoft | Optional, off until an admin turns it on. The same sign-in app accepts other organisations' accounts (`AzureADMultipleOrgs`; changed in the MSP's tenant only, by device sign-in with `Application.ReadWrite.All` or by hand), and the button signs in through `organizations`. The ID token's issuer must be the tenant in its own `tid`. A token from the MSP's tenant takes the staff path above; any other tenant can only reach an existing client account, matched on the token's `tid` and `oid` together and never on `preferred_username` or `email`, and only when the account is granted (directly, never through a group) a client whose Directory ID is that `tid`, in the sign-in app's cloud and not archived. Staff connect a client's person to their object ID when they add them, from the client's directory as Office Sentry last collected it (members only, not guests). Accounts are never created this way, a client's account never becomes staff (nor a staff account a client's), the same object ID from another tenant is refused, and app roles in a client's token are ignored. A client account connected this way only ever sees clients whose Directory ID is its own tenant's, whatever it is granted; disconnecting it removes its grants of clients in any other organisation, and staff limited to some clients can't change an account that holds a client outside them, even one it can't see now. Microsoft sign-in, staff or client, doesn't ask for Office Sentry's own two-step code, whatever `OFFICESENTRY_REQUIRE_MFA` says; it relies on Entra's MFA and Conditional Access. Refusals don't say whether an account exists, and strangers' sign-ins are counted per address without their names. A client's administrator can approve the sign-in scopes (`openid profile email`, no API permissions) from a signed link; its public return page records nothing for the client (the approval is noted at the first sign-in from that client's tenant) and never shows Microsoft's text. |
 | Two-step sign-in | Authenticator-app codes (TOTP) with ten one-time recovery codes. New installs require it for everyone; installs made before the first release (2.0.0) keep requiring it for staff (everyone but client accounts) until `OFFICESENTRY_REQUIRE_MFA=all` is set (the Users page recommends it). A code or recovery code works once, even when sent twice at the same moment. Recovery codes are stored as an HMAC under a random key that is itself encrypted with the encryption key, so a copy of the database alone can't be used to guess them; codes made before 2.2.0 (a plain SHA-256) are put under the key when the portal starts. Adding an authenticator from the account page, turning it off and replacing recovery codes ask for the password, and an admin resetting someone else's password, two-step sign-in or sessions gives their own password too. |
@@ -120,7 +120,7 @@ retention*. By default:
 - the daily history of how each item changed: 25 months;
 - the activity history: every sign-in for 180 days, daily sign-in summaries
   for 25 months and directory audit events for 7 years;
-- the audit log add-on's file and mailbox events: 2 years; <!-- since 2.4.0 -->
+- the audit log add-on's file and mailbox events: 2 years;
 - run logs: 90 days, after which only their warnings and errors stay;
 - resolved findings, the activity log and issued reports: until an admin
   sets a period.
@@ -142,7 +142,7 @@ database file when there's enough free space for the copy that takes, and
 empties its write-ahead log. If that fails, *Settings → System status* shows
 it under *Deleted clients* (and system alerts tell the team, when they're
 on), and the worker tries again every hour.
-If the client had the audit log add-on, its audit feed is stopped too. <!-- since 2.4.0 -->
+If the client had the audit log add-on, its audit feed is stopped too.
 **Backups made before the delete keep the data until they rotate out**: with
 the Docker setup's nightly jobs, after two weeks on the server, and after a
 year in off-site copies if you keep them.

@@ -194,10 +194,8 @@ them Office Sentry needs **Global Reader**, which can view but not change settin
 - **Mail rules and protection**: mail flow rules, connectors, and the anti-spam, anti-phishing and anti-malware
   policies.
 
-<!-- since 2.4.0 -->
 Mailboxes also reads whether the client's Microsoft 365 audit log is recording (`Get-AdminAuditLogConfig`), for
 the check *The Microsoft 365 audit log is on* and the **Audit log** column of the Onboarding list.
-<!-- /since -->
 
 In the client's tenant: *Microsoft Entra admin centre → Roles and admins →
 Global Reader → Add assignments*, then select the Office Sentry app (the name
@@ -265,7 +263,6 @@ bulk and following each one through consent.
 | Approved, re-checking | The client came back from Microsoft's page, and Office Sentry is reading which permissions the tenant now grants. | Nothing: reload the page in a minute. |
 | Connected | Consent and Global Reader in place, and no new permissions to approve. | Nothing. |
 
-<!-- since 2.4.0 -->
 The **Audit log** column says whether the client's Microsoft 365 audit log is recording, read from
 Exchange Online with each collection (`Get-AdminAuditLogConfig`, under Global Reader). **Off** means
 nobody can search who deleted or shared files, opened someone else's mailbox or created an inbox rule: the
@@ -278,7 +275,6 @@ While the [audit log add-on](audit-log-addon.md) is switched on, the column also
 with it (*Not asked*, *Sent*, *Approved, confirming* while Office Sentry hasn't signed in to confirm the approval
 yet, *Approved*, *On* or *Off*), linking to the client's **Audit log add-on** page once the client has
 consented. The add-on reads the audit log, so it has nothing to read while the log is off.
-<!-- /since -->
 
 Imported clients are ordinary clients: people whose role covers every client
 (Administrators and Team leaders) see them; everyone else only once they're
@@ -382,13 +378,11 @@ Errors start with the service, the HTTP status and Microsoft's error code, for
 example `Graph 403 Authorization_RequestDenied: …`. Where the text below comes
 from Microsoft rather than Office Sentry, it is marked *typically*.
 
-<!-- since 2.4.0 -->
 A run that failed because Microsoft was busy or out of reach (`Graph 429`, `503`,
 `network_error` and the like), or because the worker was restarted mid-run, is
 tried again by itself about 20 minutes later, and once more two hours after that.
 The *Data collection* page says when, and there is nothing to do unless the last
 try fails too.
-<!-- /since -->
 
 | Error | Cause and fix |
 |---|---|
@@ -400,7 +394,7 @@ try fails too.
 | `Exchange 401 …` or `Exchange 403 …` ending *Exchange refused access. In this tenant, assign the Global Reader role to the Office Sentry app …* | Only the six data sources that read Exchange Online (step 3). Assign Global Reader, and make sure consent included `Exchange.ManageAsApp`. |
 | `Graph 0 network_error: …` / `Exchange 0 network_error: …` | The Office Sentry server couldn't reach Microsoft after several retries. Check its internet access, proxy and DNS. |
 | `worker stopped before the run finished` | The worker was stopped or restarted mid-run. Refresh that data source. |
-| `The worker stopped before the run finished (a restart or an update).` | The worker was stopped or restarted mid-run. It's tried again by itself; Refresh the data source if you'd rather not wait. | <!-- since 2.4.0 -->
+| `The worker stopped before the run finished (a restart or an update).` | The worker was stopped or restarted mid-run. It's tried again by itself; Refresh the data source if you'd rather not wait. |
 | `unknown client or collector` | The run refers to a data source that no longer exists, usually after an upgrade. Safe to ignore. |
 | Any other `SomeError: …` | An unexpected error in Office Sentry. The run's log has the full details; report it with that log. |
 
@@ -467,7 +461,7 @@ On the **Manage** page, people who can manage clients can:
   and findings stay, and the client still shows (marked *Paused*) in lists and
   to its client users. Month-end names it under the queue instead, since
   nothing goes out for it. **Resume** picks up at the next nightly collection.
-- An emailed report that came due while the client was paused isn't sent the moment you resume it; the next one goes as usual, and a month-end month can still be approved and sent from **Month-end**. <!-- since 2.4.0 -->
+- An emailed report that came due while the client was paused isn't sent the moment you resume it; the next one goes as usual, and a month-end month can still be approved and sent from **Month-end**.
 - **Archive** a client you've stopped working with but who may come back. An
   archived client is also paused, and is hidden from the Clients page, All
   clients, What changed, the Reports page, digests and its client users.
@@ -489,7 +483,7 @@ walks through it:
    Properties → Delete*). The page has the steps, with the app's name in their
    tenant, as text to send the client; they're also in
    [What Office Sentry reads](what-office-sentry-reads.md#how-to-remove-access).
-   The steps also name the client sign-in app and the audit log add-on, deleted the same way, when the client may have approved them. <!-- since 2.4.0 -->
+   The steps also name the client sign-in app and the audit log add-on, deleted the same way, when the client may have approved them.
 3. **Check what will be deleted**: collection runs and stored data, findings
    (including accepted risks), emailed reports, alert emails, client contacts,
    email history, the files in the client's **Report history** (the reports

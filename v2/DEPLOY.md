@@ -142,13 +142,8 @@ start from there.
    and its backups, such as your password manager. `docker compose exec web cat /keys/secrets.json`
    prints it ([Where the keys are](#where-the-keys-are)). Without it, a backup can't be used on a new
    server.
-8. Set up the nightly backup and an off-site copy ([Backups](#backups)), so that losing the server doesn't
-   lose the data.
-
-   <!-- since 2.4.0 -->
-   From 2.4.0 the worker makes the nightly copy by itself, on the data volume, so what's left is a copy off
-   the server: the [off-site backup](#off-site-backups).
-   <!-- /since -->
+8. Set up an off-site copy ([Off-site backups](#off-site-backups)), so that losing the server doesn't lose
+   the data.
 
 When something doesn't work, [Troubleshooting](docs/troubleshooting.md) covers the usual causes, and
 [Getting help](docs/getting-help.md) says where to ask.
@@ -325,7 +320,7 @@ hosts (login.microsoftonline.us, graph.microsoft.us, outlook.office365.us for
 GCC High; login.microsoftonline.us, dod-graph.microsoft.us, webmail.apps.mil
 for DoD; login.chinacloudapi.cn, microsoftgraph.chinacloudapi.cn,
 partner.outlook.cn for China), so allow them if outbound traffic is filtered.
-The audit log add-on also reads manage.office365.us (GCC High) or manage.protection.apps.mil (DoD). <!-- since 2.4.0 -->
+The audit log add-on also reads manage.office365.us (GCC High) or manage.protection.apps.mil (DoD).
 
 Each of those clouds needs its own app registration, made in that cloud, and
 its own app connection in Office Sentry with the matching cloud: on **App connection**, open
@@ -348,14 +343,12 @@ each cloud.
 report go ahead of the nightly queue, so they don't wait for every client to
 be collected.
 
-<!-- since 2.4.0 -->
 A data source that failed for a reason that passes by waiting (Microsoft busy,
 throttling or out of reach, or the worker restarted mid-run, as an update does)
 is tried again by itself about 20 minutes later, and once more two hours after
 that. Its *Data collection* page says when, and a collection-failure alert waits
 for the last try. A failure someone has to fix first (a permission, a licence,
 the certificate) isn't tried again until the next night.
-<!-- /since -->
 
 Some cron examples: `0 2 * * *` nightly at 02:00, `0 2 * * 1-5` weeknights
 only, `30 1,13 * * *` twice a day at 01:30 and 13:30.
@@ -377,7 +370,7 @@ are overwritten in the database file where that costs no extra I/O
 | Activity history: every sign-in | **180 days** | 30 days to 10 years |
 | Activity history: daily sign-in summaries | **25 months** | 1 to 120 months, or forever |
 | Activity history: directory audit events | **7 years** | 1 year or more, or forever |
-| Activity history: files and mailbox events (the audit log add-on) | **2 years** | 6 months to 7 years, or forever | <!-- since 2.4.0 -->
+| Activity history: files and mailbox events (the audit log add-on) | **2 years** | 6 months to 7 years, or forever |
 | Resolved findings | forever | 30 days or more after they were resolved |
 | Run log info lines (warnings and errors always stay) | 90 days | 7 days or more, or forever |
 | Activity log | forever | 365 days or more |
@@ -420,7 +413,6 @@ what was typed.
 
 Everything is in the `officesentry-data` volume.
 
-<!-- since 2.4.0 -->
 The worker backs the database up by itself every night at 03:30 (in
 `OFFICESENTRY_TIMEZONE`): the same copy as the command below, into
 `/data/backups`, keeping the last 7. `OFFICESENTRY_BACKUP_CRON` in `.env`
@@ -432,7 +424,6 @@ copy goes, so there's still one copy a night. If that copy stops coming, the
 worker makes one an hour after it was due. The worker only ever deletes copies
 it made itself, so a job of yours that writes to `/data/backups` keeps as many
 as its `--keep` says.
-<!-- /since -->
 
 To save a safe copy of the database while it's running:
 
@@ -990,12 +981,12 @@ To take Office Sentry off a server for good, along with the access it was given:
    enterprise application ("Office Sentry (read-only)" unless you named it otherwise) in the Entra admin
    centre. They do the same for the sign-in app ("Office Sentry sign-in") if their people sign in to the portal
    with Microsoft.
-   They also delete the audit log add-on's app if they approved it. <!-- since 2.4.0 -->
+   They also delete the audit log add-on's app if they approved it.
    [What Office Sentry reads](docs/what-office-sentry-reads.md#how-to-remove-access) has the steps to send
    them.
 2. **Your own tenant.** Under *Entra admin centre → App registrations*, delete the app registrations
    Office Sentry made or you made for it: the read-only app, and the sign-in and mail apps if you have them.
-   The audit log add-on's app goes too. <!-- since 2.4.0 -->
+   The audit log add-on's app goes too.
 3. **The server.** In the folder with `docker-compose.yml`, run `docker compose down -v` (this deletes
    the database, the keys and every backup inside the volumes), take the Office Sentry lines out of the
    crontab (`crontab -e`), and delete the folder.

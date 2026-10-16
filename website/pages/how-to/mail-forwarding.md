@@ -27,10 +27,8 @@ Get-Mailbox -ResultSize Unlimited |
 mail contact in the directory, and a mail contact may be outside too. Compare the addresses with the
 tenant's own domains (`Get-AcceptedDomain`).
 
-<!-- since 2.4.0 -->
 If both are set, Exchange forwards to `ForwardingAddress` and ignores `ForwardingSmtpAddress`. Only an admin
 can set `ForwardingAddress`, but people can set `ForwardingSmtpAddress` themselves in Outlook on the web.
-<!-- /since -->
 
 ### 2. Inbox rules that forward or redirect
 

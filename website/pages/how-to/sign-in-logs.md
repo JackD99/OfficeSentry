@@ -68,8 +68,9 @@ is still there after Microsoft deletes its copy.
   sign-ins that needed only a password.
 
 The history starts on the day Office Sentry first reads a tenant, so it's worth adding clients early. Reading
-the sign-in log needs Entra ID P1 in the tenant. Office Sentry doesn't read the unified audit log (file and
-mailbox activity) today.
+the sign-in log needs Entra ID P1 in the tenant. File, sharing and mailbox activity from the unified audit
+log needs the optional audit log add-on: see
+[Find who deleted or shared a file, or opened someone's mailbox](audit-log.md).
 
 [Open the activity history in the demo](https://demo.officesentry.co.uk/tenants/1/activity) ·
 [Example PDF](../../../examples/sign-in-activity.pdf) ·

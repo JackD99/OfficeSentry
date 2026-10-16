@@ -320,7 +320,6 @@ GUIDES = "Guides"  # v2/docs/*.md not listed above
 WHATS_NEW = [
     {
         "version": "2.4.0",
-        # Working words until the release PR settles the heading, the chip and the order of the items.
         "title": "See who deleted, shared or opened what in your clients' Microsoft 365",  # the band's heading
         # a sentence under it
         "summary": "An optional audit log add-on keeps who deleted, downloaded or shared a file and who opened "
@@ -415,72 +414,6 @@ WHATS_NEW = [
             "the Update button installs only releases tagged on main",
             "Updates lists every release since yours, however far behind, and never says Up to date before it "
             "has checked",
-        ],
-    },
-    {
-        "version": "2.3.0",
-        "title": "Your clients sign in with Microsoft, and updates take one click",
-        "summary": "Your clients' people sign in with the account they already use, new releases install from the "
-        "portal, and each client's month-end report is yours to finish.",
-        "chip": "Client sign-in, one-click updates",
-        "items": [
-            {
-                "icon": "sign-in",
-                "title": "Clients sign in with their own Microsoft account",
-                "text": "Your clients' people use the work account they already have, under their own organisation's "
-                "MFA, and see only their own company's reports. Nobody is added to your tenant as a guest.",
-                "href": "/docs/client-sign-in/",
-                "link": "Client sign-in",
-            },
-            {
-                "icon": "update",
-                "title": "Update from the portal",
-                "text": "Settings → Updates lists each new release and what it asks of you first. With the optional "
-                "updater on, Update checks the release is genuine, installs it and goes back to the old version by "
-                "itself if the new one doesn't start.",
-                "href": "/docs/install/#the-update-button",
-                "link": "The Update button",
-            },
-            {
-                "icon": "review",
-                "title": "Each client's month-end report, your way",
-                "text": "Leave a check, a key figure or a whole part of the report out of one client's copy for one "
-                "month, with a preview of what they'll get beside you, and send failed emails again in one go.",
-                "href": "/docs/reference/#report-designs-your-own-client-reports",
-                "link": "Report designs and the review",
-            },
-            {
-                "icon": "device",
-                "title": "Intune policies and mail rules",
-                "text": "Two new reports: Intune policies, with platforms that have no compliance policy and paused "
-                "update rings, and Mail rules and protection, with rules that let mail skip the spam filter. Devices "
-                "shows which computers have their BitLocker key saved, without reading the key.",
-                "href": "/docs/reference/#reports",
-                "link": "See every report",
-            },
-            {
-                "icon": "project",
-                "title": "Projects you'd put on a quote",
-                "text": "Each proposal lists only the work that client's findings call for, and repairs such as a "
-                "stopped directory sync are quick fixes rather than something to sell.",
-            },
-            {
-                "icon": "table",
-                "title": "Reports that fit a laptop",
-                "text": "Wide reports open on the columns that matter, with the rest a click away, and the menu folds "
-                "away to its icons. Long lists fold into a short form you open in place, and All clients opens any "
-                "report from the All reports menu.",
-            },
-        ],
-        "also": [
-            "five more email checks",
-            "report designs previewed at the printed page's size, with undo and redo",
-            "setup notes for your team left out of the client's copy",
-            "release images with a signed build record you can check",
-            "roles limited to some clients stay within them everywhere",
-            "month-end emails sent at Microsoft's pace, however many go at once",
-            "PIM for groups in the Admins report",
-            "sign-in and sessions tested harder, on every page",
         ],
     },
 ]

@@ -22,7 +22,7 @@ resources:
 
 images:
   - name: ghcr.io/jackd99/officesentry
-    newTag: "2.3.1"
+    newTag: "2.4.0"
 
 configMapGenerator:
   - name: officesentry-settings

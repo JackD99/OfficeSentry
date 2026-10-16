@@ -97,7 +97,7 @@ registered in your **MSP's** tenant:
 - **Office Sentry sign-in**, if your MSP uses it, which people sign in to
   Office Sentry with. It can't read anything in your tenant: it only learns
   the name and sign-in address of whoever signs in with it.
-- **Office Sentry audit log add-on**, if your MSP uses it and you approve it ([below](#the-audit-log-add-on-if-you-approve-it)). <!-- since 2.4.0 -->
+- **Office Sentry audit log add-on**, if your MSP uses it and you approve it ([below](#the-audit-log-add-on-if-you-approve-it)).
 
 Your MSP may also send report emails through an app of their own that can
 send mail from their mailbox; it has no access to your tenant either.
@@ -143,14 +143,14 @@ built from the checks, so they use all of the information below.
 | `DeviceManagementConfiguration.Read.All` *(new in 2.2)* | Intune configuration and compliance policies, such as firewall, screen lock, encryption and update settings, and which devices they apply to. | To show what each compliance policy requires, which platforms have none, update rings and endpoint security policies, and who each applies to. | Intune policies; the compliance policy coverage check. Needs an Intune licence. |
 | `DeviceManagementApps.Read.All` *(new in 2.2)* | Intune app protection policies and the apps Intune deploys, with their versions. | To show whether company data in apps on phones (including personal ones) is protected by a PIN and kept inside managed apps. | Intune policies (app protection). Needs an Intune licence. |
 | `Sites.Read.All` on **Office 365 SharePoint Online** *(new in 2.2)* | SharePoint's own permission lists: who is in each SharePoint group and who has access to each site and list (it needs the app's certificate). Microsoft lists it under SharePoint, separately from Microsoft Graph's permission of the same name. **Not** what's inside the files. | Graph doesn't say who is in SharePoint's own groups, so without it "who has access to this site" is incomplete. | Site permissions; the guests with full control check. Until it's approved, Site permissions says it's waiting for it. |
-| `DeviceLocalCredential.ReadBasic.All` *(new in 2.4)* | Whether each computer backs up its local administrator password in Entra ID with Windows LAPS, when it last did and when the password next changes. **Never** the password itself. | A local admin password that's the same on every computer, or never changes, lets one leak open them all: computers without a backup are listed. | Devices (Local admin passwords); the Windows LAPS check. | <!-- since 2.4.0 -->
-| `SecurityAlert.Read.All` *(new in 2.4)* | Alerts Microsoft Defender raised: title, severity, status, who it's assigned to, which service raised it, when, what it turned out to be, and the accounts and devices it names. **Not** the emails, files or commands behind an alert. | So alerts nobody has looked at stand out, without signing in to the Defender portal. | Security alerts; the Defender alerts check. Not offered in Microsoft 365 operated by 21Vianet. | <!-- since 2.4.0 -->
-| `SecurityIncident.Read.All` *(new in 2.4)* | Defender's incidents, which group related alerts: name, severity, status, who it's assigned to and when. | So one attack shows once, with whoever is dealing with it. | Security alerts. Not offered in Microsoft 365 operated by 21Vianet. | <!-- since 2.4.0 -->
-| `ServiceHealth.Read.All` *(new in 2.4)* | Whether each Microsoft 365 service is working, and the outages and advisories Microsoft reports for your tenant: title, service, status and dates. | So a problem on Microsoft's side is known before anyone spends time troubleshooting it. | Service health. | <!-- since 2.4.0 -->
-| `ServiceMessage.Read.All` *(new in 2.4)* | Microsoft's message centre posts for your tenant: title, services, category, whether it's a major change and any date to act by. **Not** the post's text. | So a change with a deadline, such as a feature retiring, is seen before the deadline passes. | Service health. | <!-- since 2.4.0 -->
+| `DeviceLocalCredential.ReadBasic.All` *(new in 2.4)* | Whether each computer backs up its local administrator password in Entra ID with Windows LAPS, when it last did and when the password next changes. **Never** the password itself. | A local admin password that's the same on every computer, or never changes, lets one leak open them all: computers without a backup are listed. | Devices (Local admin passwords); the Windows LAPS check. |
+| `SecurityAlert.Read.All` *(new in 2.4)* | Alerts Microsoft Defender raised: title, severity, status, who it's assigned to, which service raised it, when, what it turned out to be, and the accounts and devices it names. **Not** the emails, files or commands behind an alert. | So alerts nobody has looked at stand out, without signing in to the Defender portal. | Security alerts; the Defender alerts check. Not offered in Microsoft 365 operated by 21Vianet. |
+| `SecurityIncident.Read.All` *(new in 2.4)* | Defender's incidents, which group related alerts: name, severity, status, who it's assigned to and when. | So one attack shows once, with whoever is dealing with it. | Security alerts. Not offered in Microsoft 365 operated by 21Vianet. |
+| `ServiceHealth.Read.All` *(new in 2.4)* | Whether each Microsoft 365 service is working, and the outages and advisories Microsoft reports for your tenant: title, service, status and dates. | So a problem on Microsoft's side is known before anyone spends time troubleshooting it. | Service health. |
+| `ServiceMessage.Read.All` *(new in 2.4)* | Microsoft's message centre posts for your tenant: title, services, category, whether it's a major change and any date to act by. **Not** the post's text. | So a change with a deadline, such as a feature retiring, is seen before the deadline passes. | Service health. |
 | `Exchange.ManageAsApp` | Lets the app use Exchange Online's admin commands. Office Sentry only runs the `Get-` commands listed above. | Mailbox forwarding, who has access to which mailbox, shared mailboxes, mailbox sizes, holds and archive mailboxes, which protocols each mailbox allows, phones and tablets syncing mail, distribution lists and how much mail they get, how much mail each domain sends and receives, organisation mail settings, whether the Microsoft 365 audit log is on, mail flow rules and connectors, and the spam, phishing and malware filtering policies. Works only with the Global Reader role (below). | Mail forwarding; Mailbox permissions; Shared mailboxes; Mailbox size; Mailbox size trend; Mailbox holds and archiving; Mobile devices; Distribution lists; Mail flow by domain; Mail rules and protection; Legacy sign-ins; email checks. |
 
-From Office Sentry 2.4, `Policy.Read.All` also reads the cross-tenant access settings (what other organisations' people can do in your tenant, and whether their MFA and devices are trusted) and Conditional Access named locations, for *Trusted organisations and locations*, and `DeviceManagementManagedDevices.Read.All` also reads which apps Intune has found on managed devices and how many devices have each, for *Installed apps*. No new permissions. <!-- since 2.4.0 -->
+From Office Sentry 2.4, `Policy.Read.All` also reads the cross-tenant access settings (what other organisations' people can do in your tenant, and whether their MFA and devices are trusted) and Conditional Access named locations, for *Trusted organisations and locations*, and `DeviceManagementManagedDevices.Read.All` also reads which apps Intune has found on managed devices and how many devices have each, for *Installed apps*. No new permissions.
 
 A few things Office Sentry checks come from the **public internet**, not from
 your tenant: the SPF, DKIM, DMARC, MTA-STS and TLS-RPT records of your email
@@ -162,7 +162,7 @@ these up; no permission is involved.
 Adding a new permission later means a Global Administrator must approve again,
 so the list is kept stable, and new permissions arrive together in one release.
 Office Sentry 2.2 added the ones marked *new in 2.2*.
-Office Sentry 2.4 added the ones marked *new in 2.4*. <!-- since 2.4.0 -->
+Office Sentry 2.4 added the ones marked *new in 2.4*.
 Until you approve them,
 everything else keeps working, and the reports that need them say they're
 waiting for your approval. Your MSP sends you the same approval link as before,
@@ -213,7 +213,6 @@ scheduled, it keeps when the reply runs, whether it also answers people outside
 the organisation, and the first 300 characters of its message, so your MSP can
 see what it tells people.
 
-<!-- since 2.4.0 -->
 ## The audit log add-on, if you approve it
 
 Your MSP may also ask you to approve a second, separate app, **Office Sentry
@@ -242,7 +241,6 @@ this page changes.
 
 It's removed the same way as the main app (see *How to remove access*,
 step 2), by deleting "Office Sentry audit log add-on" instead.
-<!-- /since -->
 
 ## Where the information is kept
 
@@ -274,7 +272,7 @@ data forever; ask them what they use.
   `AuditLog.Read.All` above): every sign-in for **180 days**, the daily
   sign-in summaries for **25 months** and every directory audit event for
   **7 years**.
-  If you approved the audit log add-on, the activities it keeps are kept for **2 years**. <!-- since 2.4.0 -->
+  If you approved the audit log add-on, the activities it keeps are kept for **2 years**.
 - **Detailed snapshots** (lists of users, mailboxes, policies and so on) are
   kept for the last 30 days, plus one per month for the last 12 months, and
   older ones are deleted automatically. The most recent collection of each
@@ -346,7 +344,7 @@ enterprise apps and roles).
    people can sign in to their reports with their Microsoft account (usually
    called "Office Sentry sign-in"; your MSP can confirm the name). After that
    they can't sign in with it.
-   Delete *Office Sentry audit log add-on* the same way, if you approved it. <!-- since 2.4.0 -->
+   Delete *Office Sentry audit log add-on* the same way, if you approved it.
 
 To see what you approved without removing it, open the same enterprise app
 and choose *Permissions*.
