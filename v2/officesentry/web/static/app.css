@@ -466,6 +466,7 @@ table.raw td { font-size: var(--fs-sm); max-width: 320px; overflow: hidden; text
 @media (max-width: 960px) { .grid-main { grid-template-columns: 1fr; } }
 .narrow-lg { max-width: 640px; }
 fieldset.choices { display: grid; gap: var(--space-1-5); padding: var(--space-2-5) var(--space-3); }
+.card fieldset.choices { border: 0; padding: 0; } /* a list of choices in a card is the card's content, not a box in a box */
 label.choice { display: flex; gap: var(--space-2-5); align-items: flex-start; margin: 0; padding: var(--space-2) var(--space-2-5); border-radius: var(--radius-sm); font-weight: 400; cursor: pointer; }
 label.choice:hover { background: var(--surface-2); }
 label.choice:has(input:checked) { background: var(--accent-soft); }
@@ -1085,7 +1086,7 @@ main[aria-busy="true"] .table-card, main[aria-busy="true"] .tiles { opacity: .7;
 .use-intro { color: var(--muted); margin: var(--space-1) 0 0; max-width: 720px; }
 .library { margin-top: 22px; }
 .lib-area { margin-bottom: 26px; }
-.lib-area h2 { display: flex; align-items: baseline; gap: var(--space-2); margin: 0 0 var(--space-2-5); font-family: var(--font); font-size: var(--fs-md); font-weight: 600; font-variant-caps: all-small-caps; letter-spacing: .06em; color: var(--muted); }
+.lib-area h2 { display: flex; align-items: baseline; gap: var(--space-2); margin: 0 0 var(--space-2-5); font-family: var(--font); font-size: var(--fs-md); font-weight: 600; font-variant-caps: all-small-caps; letter-spacing: .04em; color: var(--muted); }
 .lib-area h2 .n { font-size: var(--fs-xs); color: var(--faint); letter-spacing: 0; }
 .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: var(--space-3); }
 .lib-card { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s; }
@@ -1287,7 +1288,7 @@ textarea.commentary { width: 100%; min-height: 9em; }
 /* -- Recommended projects ----------------------------------------------------- */
 .project .card-head .meta { display: flex; gap: var(--space-1-5); align-items: center; flex-wrap: wrap; margin-top: var(--space-1); }
 .project-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); margin: var(--space-3) 0 var(--space-4); }
-.project-cols .col-title { font-size: var(--fs-sm); font-variant-caps: all-small-caps; letter-spacing: .06em; color: var(--muted); margin: 0 0 var(--space-1); }
+.project-cols .col-title { font-size: var(--fs-sm); font-variant-caps: all-small-caps; letter-spacing: .04em; color: var(--muted); margin: 0 0 var(--space-1); }
 .project-cols .list > li { gap: var(--space-2-5); }
 .project-cols .list .sevtext { flex: none; width: 84px; }
 .covers { margin: 0; padding-left: 18px; color: var(--text-2); }
