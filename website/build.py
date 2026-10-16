@@ -348,6 +348,7 @@ WHATS_NEW = [
         "also": [  # smaller changes, a few words each
             "a check that each client's Microsoft 365 audit log is switched on",
             "a month-end report changed after approval reaches the client only as a new version",
+            "month-end never sends a client the same month twice",
             "only staff who can open every report in a client's plan can add people to it",
             "the Update button installs only releases tagged on main",
             "Updates lists every release since yours, however far behind, and never says Up to date before it "
