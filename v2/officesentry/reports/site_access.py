@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from ..collectors.sharepoint_lookup import is_system_site
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import Chart, DataReport, Link, Rows, Section, Tile, _date, metric_trend
@@ -63,12 +64,25 @@ def _members(row: dict) -> str | int:
     return f"{plural(row.get('people') or 0, 'person')} recorded" if row.get("userList") else "Unknown"
 
 
-def _access_rows(row: dict) -> list[tuple[list, str | None]]:
+def _group_guests(row: dict, groups: dict) -> tuple[int | None, set[str]]:
+    """How many guests are members of the site's Microsoft 365 group, and their addresses, from the Groups
+    collection (the site's own guest list also holds guests given access on the site itself)."""
+    group = row.get("group") if isinstance(row.get("group"), dict) else None
+    found = groups.get((group or {}).get("id") or "")
+    if not isinstance(found, dict) or not found.get("examined"):
+        return None, set()
+    addresses = {g.lower() for g in found.get("guests") or [] if isinstance(g, str)}
+    count = found.get("guestCount")
+    return (count if isinstance(count, int) else len(addresses)), addresses
+
+
+def _access_rows(row: dict, groups: dict) -> list[tuple[list, str | None]]:
     """What the site grants and to whom, from the default library, the group and the site's user list."""
     rows: list[tuple[list, str | None]] = []
     seen: set[tuple[str, str]] = set()
     site = _site_cell(row)
     group = row.get("group") if isinstance(row.get("group"), dict) else None
+    group_guests, in_group = _group_guests(row, groups)
     if group and row.get("ownerSource") == "group":
         owners = _owners(row)
         rows.append(
@@ -84,11 +98,11 @@ def _access_rows(row: dict) -> list[tuple[list, str | None]]:
             )
         )
         members = row.get("memberCount")
-        guests = row.get("guestCount") or 0
+        guests = group_guests or 0
         if members is not None:
             text = f"Members of {group.get('name') or 'the Microsoft 365 group'}: {plural(members, 'person')}"
             if guests:
-                text += f", {plural(guests, 'guest')}"
+                text += f", {guests:,} of them {'a guest' if guests == 1 else 'guests'}"
             rows.append(([site, text, "Microsoft 365 group", "Edit", guests > 0], "low" if guests else None))
     for a in row.get("access") or []:
         if not isinstance(a, dict):
@@ -105,7 +119,7 @@ def _access_rows(row: dict) -> list[tuple[list, str | None]]:
         rows.append(([site, who, "Everyone", "Given access on the site", row["everyone"] == "all"], None))
     listed = {r[0][1] for r in rows}
     for g in row.get("guests") or []:
-        if isinstance(g, str) and g not in listed:
+        if isinstance(g, str) and g not in listed and g.lower() not in in_group:  # group guests are counted above
             rows.append(([site, g, "Guest", "Given access on the site", True], "low"))
     return rows
 
@@ -135,7 +149,12 @@ def site_access(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
             "to accept."
         )
         return
-    rows = [r for r in snap.objects("site_access", "site") or [] if isinstance(r, dict)]
+    rows = [
+        r
+        for r in snap.objects("site_access", "site") or []
+        if isinstance(r, dict) and not is_system_site(r.get("url"), r.get("template"))  # collected before 2.4.0
+    ]
+    groups = {g["_id"]: g for g in snap.objects("groups", "group") or [] if isinstance(g, dict) and g.get("_id")}
     usage = {(s.get("url") or "").lower(): s for s in snap.objects("sharepoint_usage", "site") or [] if s.get("url")}
 
     def activity(r):
@@ -274,20 +293,18 @@ def site_access(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
         filter_columns=("How",),
     )
     for r in sorted(rows, key=lambda r: (r.get("name") or "").lower()):
-        for cells, flag in _access_rows(r):
+        for cells, flag in _access_rows(r, groups):
             access.add(cells, flag)
 
     by_guest: dict[str, dict] = {}
     for r in rows:
-        group_guests = {g.lower() for g in (r.get("group") and r.get("guests")) or [] if isinstance(g, str)}
+        _, in_group = _group_guests(r, groups)
         for g in r.get("guests") or []:
             if not isinstance(g, str):
                 continue
             entry = by_guest.setdefault(g, {"sites": [], "how": set()})
             entry["sites"].append(r.get("name") or r.get("url") or "?")
-            entry["how"].add(
-                "Member of the site's group" if r.get("group") and g in group_guests else "Given access on the site"
-            )
+            entry["how"].add("Member of the site's group" if g.lower() in in_group else "Given access on the site")
     guest_table = Section(
         "Guests and the sites they can reach",
         ["Guest", "Sites", "Which sites", "How"],

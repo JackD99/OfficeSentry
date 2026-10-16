@@ -53,4 +53,8 @@ def guest_address(login_value: str, email: str | None) -> str:
     if email and "@" in email:
         return email.lower()
     local = login_value.split("#ext#", 1)[0]
-    return local.replace("_", "@", 1).lower() if "_" in local and "@" not in local else local.lower()
+    if "_" in local and "@" not in local:
+        # Microsoft turns the "@" into the last underscore (a domain has none): jo_smith_supplier.com.
+        name, domain = local.rsplit("_", 1)
+        local = f"{name}@{domain}"
+    return local.lower()

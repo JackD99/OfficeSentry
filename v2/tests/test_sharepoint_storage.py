@@ -123,6 +123,15 @@ def test_site_limit_and_nearly_full_tenant(db, two_tenants):
     assert result.findings[1].subject == sd.FINANCE and "40.0 GB in the recycle bin" in result.findings[1].detail
 
 
+def test_tenant_over_its_storage(db, two_tenants):
+    alpha, _ = two_tenants
+    quota = {"site-fin": {"used": 1200 * GB, "deleted": 0, "total": 1300 * GB, "state": "critical"}}
+    seed_tenant(db, alpha, sharepoint_kw={"site_quota": quota})
+    free = {t.label: t for t in _report(db, alpha).tiles}["Free space"]  # 1,200 GB and more of 1,124 GB
+    assert free.value == "None" and free.tone == "bad" and free.foot.startswith("About 7")
+    assert free.foot.endswith(" GB over; Microsoft can make sites read-only until there's room")
+
+
 def test_check_passes_and_waits_for_data(db, two_tenants):
     alpha, bravo = two_tenants
     seed_tenant(db, alpha)

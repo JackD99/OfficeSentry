@@ -26,7 +26,7 @@ from ..text import plural
 from .base import Collector, RunContext, register
 from .sharepoint import PERMISSION_FIELDS
 from .sharepoint_logins import classify_login, guest_address
-from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups
+from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups, is_system_site
 
 # The hidden list SharePoint keeps on every site of everyone it has resolved there: people given access
 # (or who opened something), SharePoint groups, Microsoft 365 group claims and the "Everyone" claims.
@@ -242,7 +242,11 @@ class SiteAccess(Collector):
         }
 
         team_sites = [
-            s for s in sites if not s.get("isPersonalSite") and "-my.sharepoint." not in (s.get("webUrl") or "")
+            s
+            for s in sites
+            if not s.get("isPersonalSite")
+            and "-my.sharepoint." not in (s.get("webUrl") or "")
+            and not is_system_site(s.get("webUrl"), (usage.get((s.get("webUrl") or "").lower()) or {}).get("template"))
         ]
         pages = 0
         unreadable = 0

@@ -15,6 +15,7 @@ collector. Everything here is GET only.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlsplit
 
 from .. import store
 from ..graph import GraphError, PermissionMissing
@@ -30,6 +31,39 @@ ISO = "%Y-%m-%dT%H:%M:%SZ"
 # sharepoint_storage needs quota. Asking for the union costs nothing extra and lets every lookup be reused.
 SITE_FIELDS = "id,displayName,webUrl,isPersonalSite,root"
 DRIVE_FIELDS = "id,name,webUrl,driveType,owner,quota"
+# rootWebTemplate values (from the usage report) for sites Microsoft creates for itself.
+SYSTEM_TEMPLATES = {
+    "Compliance Policy Center",
+    "Basic Search Center",
+    "Search Center",
+    "Enterprise Search Center",
+    "My Site Host",
+    "Tenant Admin Site",
+    "SharePoint Online Tenant Fundamental Site",
+    "Redirect Site",
+    "App Catalog Site",
+    "Point Publishing Hub",
+    "Point Publishing Personal",
+    "Point Publishing Topic",
+}
+# Where Microsoft puts its own sites in every tenant, for when the template isn't known (the site list from
+# Graph has none, and the usage report hides addresses by default): the search centre, the content type hub
+# and the old publishing portals.
+SYSTEM_PATHS = ("/search", "/sites/contenttypehub", "/portals/")
+
+
+def is_system_site(url: str | None, template: str | None = None) -> bool:
+    """Whether a site is one Microsoft keeps for itself (search, content types, the admin site) rather than one
+    the client's people use, by its template where known, else by its address."""
+    if template in SYSTEM_TEMPLATES:
+        return True
+    if not isinstance(url, str) or not url:
+        return False
+    parts = urlsplit(url)
+    path = parts.path.rstrip("/").lower()
+    return "-admin." in parts.netloc.lower() or any(
+        path == p.rstrip("/") or path.startswith(p if p.endswith("/") else p + "/") for p in SYSTEM_PATHS
+    )
 
 
 def _covers(stored: str | None, needed: str) -> bool:

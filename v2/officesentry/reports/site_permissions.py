@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ..collectors.sharepoint_lookup import DENIED_TEXT
+from ..collectors.sharepoint_lookup import DENIED_TEXT, is_system_site
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import DataReport, Link, Rows, Section, Tile, metric_trend
@@ -199,7 +199,11 @@ def site_permissions(snap: TenantSnapshot, now: datetime, report: DataReport) ->
         )
         return
     rows = sorted(
-        (r for r in snap.objects("site_permissions", "site") or [] if isinstance(r, dict)),
+        (
+            r
+            for r in snap.objects("site_permissions", "site") or []
+            if isinstance(r, dict) and not is_system_site(r.get("url"))  # collected before 2.4.0
+        ),
         key=lambda r: (r.get("name") or "").lower(),
     )
     directory = _Directory(snap)

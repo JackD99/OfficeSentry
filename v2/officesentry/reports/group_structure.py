@@ -89,9 +89,19 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         ids = (source or {}).get("memberIds" if g.get("kind") == "microsoft365" else "userIds")
         return [i for i in ids if isinstance(i, str)] if isinstance(ids, list) else []
 
-    def owner_names(gid: str) -> list[str]:
-        owners = (m365.get(gid) or {}).get("owners")
-        return [o.get("name") or o.get("upn") or "?" for o in owners if isinstance(o, dict)] if owners else []
+    def owner_names(gid: str) -> list[str] | str:
+        # A security group's owners are read only when it can be given admin roles (since 2.4.0).
+        owners = next(
+            (
+                o
+                for o in ((m365.get(gid) or {}).get("owners"), (by_id.get(gid) or {}).get("owners"))
+                if isinstance(o, list)
+            ),
+            None,
+        )
+        if owners is None:
+            return "Not read"
+        return [o.get("name") or o.get("upn") or "?" for o in owners if isinstance(o, dict)] or "None"
 
     def members(gid: str) -> int | None:
         g = by_id.get(gid) or {}

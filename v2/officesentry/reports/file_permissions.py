@@ -35,13 +35,14 @@ def _grants(item: dict) -> list[dict]:
 
 
 def _days_left(expires: str | None, now: datetime) -> int | None:
+    """Calendar days until the expiry date, as people count them: a link ending tomorrow morning has 1."""
     when = parse_ts(expires)
-    return None if when is None else (when - now).days
+    return None if when is None else (when.date() - now.date()).days
 
 
 def _expired(g: dict, now: datetime) -> bool:
-    days = _days_left(g.get("expires"), now)
-    return days is not None and days < 0
+    when = parse_ts(g.get("expires"))
+    return when is not None and when < now
 
 
 def _shared_with(item: dict) -> list[str]:
@@ -109,13 +110,16 @@ def file_permissions(snap: TenantSnapshot, now: datetime, report: DataReport) ->
         return i.get("sharedAt") or i.get("firstSeen")
 
     new = [i for i in items if (shared_on(i) or "") >= new_since]
-    expiring: list[tuple[dict, dict, int]] = []
+    # One row per link (or direct grant) with an expiry, however many people it was sent to.
+    ends: dict[tuple, tuple[dict, dict, int, list[str]]] = {}
     for i in items:
         for g in _grants(i):
             days = _days_left(g.get("expires"), now)
             if days is not None and days <= EXPIRING_DAYS:
-                expiring.append((i, g, days))
-    expired = [e for e in expiring if e[2] < 0]
+                key = (i.get("_id") or i.get("webUrl") or i.get("path"), g.get("how"), g.get("can"), g["expires"])
+                ends.setdefault(key, (i, g, days, []))[3].append(g["who"])
+    expiring = list(ends.values())
+    expired = [e for e in expiring if _expired(e[1], now)]
     report.tiles = [
         Tile(
             "Files and folders with their own permissions",
@@ -191,18 +195,19 @@ def file_permissions(snap: TenantSnapshot, now: datetime, report: DataReport) ->
         empty=f"No sharing expires in the next {EXPIRING_DAYS} days.",
         filter_columns=("Status",),
     )
-    for i, g, days in sorted(expiring, key=lambda e: (e[2], e[0].get("path") or "")):
+    for i, g, days, people in sorted(expiring, key=lambda e: (e[2], e[0].get("path") or "")):
+        gone = _expired(g, now)
         ending.add(
             [
                 _item_cell(i),
                 _location(i),
-                g["who"],
+                people,
                 g.get("can") or "",
                 _date(g.get("expires")),
-                days,
-                "Expired" if days < 0 else "Expires soon",
+                max(days, 0),
+                "Expired" if gone else "Expires soon",
             ],
-            "low" if days < 0 else None,
+            "low" if gone else None,
         )
 
     who = Section(
