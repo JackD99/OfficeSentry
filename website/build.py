@@ -376,7 +376,9 @@ WHATS_NEW = [
                 "icon": "search",
                 "title": "Quicker to get around",
                 "text": "Switch client, beside every client's name, opens the page you're on for another client, "
-                "Settings sit in four areas, and / jumps to search from any page.",
+                "Settings sit in four areas, and / jumps to search from any page. Every person, mailbox, group and "
+                "site page links back to its list, a person's page puts their open findings beside their account, and "
+                "month-end names the months either side.",
                 "href": "/docs/reference/#managing-clients",
                 "link": "Managing clients",
             },
@@ -390,6 +392,8 @@ WHATS_NEW = [
             "removing something asks first in the portal's own dialog, light or dark like the page",
             "a pressed Save, Send now or Approve shows it's working and can't send twice",
             "every message after an action carries an icon as well as its colour",
+            "the Activity log spells out access changes and evidence answers, and offboarding names every app to "
+            "delete",
             "a client whose sign-in breaks keeps its last good data, and its findings aren't marked fixed",
             "a month-end report changed after approval reaches the client only as a new version",
             "month-end never sends a client the same month twice",

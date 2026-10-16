@@ -836,6 +836,7 @@ and follows it through consent, Global Reader and its first collection.
   client and everything stored for it after you type its name, optionally with
   client accounts that had no other client. `python -m officesentry
   delete-tenant <id>` does the same from the server.
+  The client's side also names the client sign-in app and the audit log add-on, deleted the same way, when the client may have approved them. <!-- since 2.4.0 -->
 
 ## National clouds (GCC High, DoD, China)
 
