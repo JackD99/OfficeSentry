@@ -452,3 +452,74 @@ def sparkline(values: list[float], *, label: str, width: int = 72, height: int =
         f'<circle class="spark-end" cx="{pad + step * (len(values) - 1):.1f}" cy="{py(last):.1f}" r="2.5" '
         f'fill="#2a78d6"/></svg>'
     )
+
+
+def month_line(
+    months: list[date], values: list[float | None], *, label: str, unit: str = "", width: int = 300, height: int = 48
+) -> str:
+    """A sparkline with a tick per month: one value at each month's end, oldest first, ``None`` where nothing
+    was captured. The line breaks at a gap rather than bridging it, and a month on its own is a dot. The
+    latest point is in the accent colour and each month has a <title> for hover. Fewer than two values draw
+    nothing (the caller says there isn't enough history yet).
+    """
+    known = [v for v in values if v is not None]
+    if len(known) < 2 or len(months) != len(values):
+        return ""
+    lo, hi = min(known), max(known)
+    floor = 0.2 * max(abs(lo), abs(hi))  # a small wobble shouldn't fill the height (as ``sparkline``)
+    if hi - lo < floor:
+        mid = (hi + lo) / 2
+        lo, hi = mid - floor / 2, mid + floor / 2
+    span = (hi - lo) or 1
+    pad_x, pad_t, pad_b = 4, 5, 9  # room for the end dot, and the month ticks under the line
+    step = (width - 2 * pad_x) / max(len(values) - 1, 1)
+
+    def px(i):
+        return pad_x + step * i
+
+    def py(v):
+        return pad_t + (height - pad_t - pad_b) * (1 - (v - lo) / span)
+
+    parts = [
+        f'<svg class="spark trend" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" '
+        f'aria-label="{escape(label)}" xmlns="http://www.w3.org/2000/svg"><title>{escape(label)}</title>'
+    ]
+    tick_top, tick_bottom = height - pad_b + 3, height - 1
+    for i, m in enumerate(months):
+        tall = m.month == 1  # January's tick is taller, so a year boundary shows without a label
+        parts.append(
+            f'<line class="spark-tick" x1="{px(i):.1f}" x2="{px(i):.1f}" y1="{tick_top - (2 if tall else 0)}" '
+            f'y2="{tick_bottom}" {GRID}/>'
+        )
+    run: list[tuple[int, float]] = []
+    runs: list[list[tuple[int, float]]] = []
+    for i, v in enumerate(values):
+        if v is None:
+            if run:
+                runs.append(run)
+            run = []
+        else:
+            run.append((i, v))
+    if run:
+        runs.append(run)
+    for run in runs:
+        if len(run) == 1:
+            i, v = run[0]
+            parts.append(f'<circle class="spark-dot" cx="{px(i):.1f}" cy="{py(v):.1f}" r="1.5" fill="#98a2b3"/>')
+            continue
+        path = " ".join(f"{'M' if n == 0 else 'L'}{px(i):.1f},{py(v):.1f}" for n, (i, v) in enumerate(run))
+        parts.append(
+            f'<path class="spark-line" d="{path}" fill="none" stroke="#98a2b3" stroke-width="1.5" '
+            f'stroke-linejoin="round" stroke-linecap="round"/>'
+        )
+    for i, (m, v) in enumerate(zip(months, values, strict=True)):
+        text = f"{m:%B %Y}: " + (f"{v:g}{escape(unit)}" if v is not None else "nothing captured")
+        parts.append(
+            f'<rect class="hit" x="{px(i) - step / 2:.1f}" y="0" width="{step:.1f}" height="{height}" fill="#000" '
+            f'fill-opacity="0"><title>{text}</title></rect>'
+        )
+    last = max(i for i, v in enumerate(values) if v is not None)
+    parts.append(
+        f'<circle class="spark-end" cx="{px(last):.1f}" cy="{py(values[last]):.1f}" r="2.5" fill="#2a78d6"/></svg>'
+    )
+    return "".join(parts)

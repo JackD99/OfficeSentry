@@ -87,3 +87,12 @@ def to_xlsx(tables: list[Table], cover=None, accent: str = "") -> bytes:
 
 def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", str(text).lower()).strip("-") or "report"
+
+
+def filename(*parts, on=None) -> str:
+    """A download's name without its extension: the slug of each part that isn't empty, joined with "-"
+    (``filename("admins", "Alpha Ltd")`` is ``admins-alpha-ltd``), then the day the data was shown as it
+    was on, when there is one. Every download is named here, so they all read the same way: the report's
+    key, the table's name when the report has several, then the client (or ``all-clients``)."""
+    name = "-".join(slug(p) for p in parts if p) or "report"
+    return f"{name}-{on.isoformat()}" if on else name

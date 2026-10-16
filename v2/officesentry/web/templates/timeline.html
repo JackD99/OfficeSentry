@@ -1,0 +1,95 @@
+{#- A client's timeline (reports/timeline.py): the year month by month, under the Changes tab, with the
+    measures at each month's end beside it. Staff only; each person sees what they open on this client. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, tenant_header, downloads, page_link with context %}
+{% block title %}Timeline · {{ tenant.name }}{% endblock %}
+{% block content %}
+{{ tenant_header(tenant, 'timeline') }}
+
+<div class="toolbar report-title">
+  <div>
+    <h2 class="section-title">What happened at {{ tenant.name }}</h2>
+    <p class="muted small m0">{{ period }}, newest first, from what Office Sentry keeps about this client. Each month opens What changed for its dates.</p>
+  </div>
+  {% if not tl.empty %}
+  <div class="toolbar-actions">
+    {{ downloads([('PDF', url_for('timeline.pdf', tenant_id=tenant.id, **query), 'This timeline as a document, month by month'),
+                  ('XLSX', url_for('timeline.download', tenant_id=tenant.id, ext='xlsx', **query), 'Every entry, each month\'s summary and the measures by month'),
+                  ('CSV', url_for('timeline.download', tenant_id=tenant.id, ext='csv', **query), 'Every entry in one table')]) }}
+  </div>
+  {% endif %}
+</div>
+
+{% if tl.empty %}
+<div class="card empty"><h3>Nothing recorded yet</h3>
+  <p>The timeline fills as Office Sentry collects from this client: findings found and fixed, admin changes, reports sent, notes and the numbers at each month's end.</p>
+  {% if can_open('tenants.collection', tenant_id=tenant.id) %}<a class="btn" href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">{{ icon('refresh') }} Data collection</a>{% endif %}</div>
+{% else %}
+
+<div class="toolbar story-filters">
+  <nav class="subtabs m0" aria-label="Show">
+    {% for label, href, count, active in show_links %}<a href="{{ href }}"{% if active %} class="active" aria-current="page"{% endif %}>{{ label }} <span class="count-badge">{{ count }}</span></a>{% endfor %}
+  </nav>
+  <nav class="subtabs m0" aria-label="Period">
+    {% for label, href, active in period_links %}<a href="{{ href }}"{% if active %} class="active" aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+  </nav>
+</div>
+
+{% if tl.left_out %}<div class="callout warn">{{ icon('alert') }}<div>Left out, since you can't open them for this client: {{ tl.left_out|join(', ') }}.</div></div>{% endif %}
+
+<div class="grid-main">
+  <section class="card flush story">
+    <div class="card-head"><h2>Month by month</h2><span class="meta">Kept since {{ tl.kept_text }}</span></div>
+    {% if tl.months %}
+    <ol class="months">
+      {% for m in tl.months %}
+      <li class="month" id="m-{{ m.key }}">
+        <div class="month-band">
+          <h3>{{ page_link(changed[m.key], m.label, title='What changed in ' ~ m.label) }}</h3>
+          {% if m.summary %}<p class="sum">{{ m.summary|join(' · ') }}</p>{% endif %}
+        </div>
+        {% if m.entries %}
+        <ul class="entries">
+          {% for e in m.entries %}
+          <li class="entry">
+            <span class="when">{{ e.when }}</span>
+            <div class="what">
+              <div class="line"><span class="kind">{{ e.label }}</span>{% if e.word %} <span class="sevtext {{ e.level }}">{{ e.word }}</span>{% endif %} {% if e.href %}{{ page_link(e.href, e.title) }}{% else %}{{ e.title }}{% endif %}</div>
+              {% if e.detail %}<div class="detail">{{ e.detail }}</div>{% endif %}
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% elif show %}<p class="entry-none">No {{ groups|selectattr(0, 'equalto', show)|map(attribute=1)|first|lower }} this month.</p>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}<div class="empty compact"><p>Nothing in this period.</p></div>{% endif %}
+    {% if tl.truncated %}<p class="footnote pad">The oldest {{ tl.truncated|plural('entry', 'entries') }} are left off this page. The downloads carry every entry.</p>{% endif %}
+    {% if tl.quiet %}<p class="footnote pad">Nothing recorded in {{ tl.quiet_text }}.</p>{% endif %}
+  </section>
+
+  <section class="card flush measures-card">
+    <div class="card-head"><h2>By month</h2><span class="meta">At each month's end</span></div>
+    {% if tl.measures %}
+    <ul class="measures">
+      {% for x in tl.measures %}
+      <li>
+        <div class="measure-head">
+          <span class="label">{{ x.label }}</span>
+          <span class="value">{{ x.text(x.latest) }}{% if x.delta %} <span class="delta {{ x.trend }}">{{ '%+g'|format(x.delta) }}{{ ' pts' if x.unit == '%' }}</span>{% endif %}</span>
+        </div>
+        {% if x.svg %}{{ x.svg|safe }}
+        <div class="foot">{{ x.text(x.first) }} in {{ x.since }}{% if x.delta %}, {{ x.text(x.latest) }} now{% else %}, unchanged since{% endif %}</div>
+        {% else %}<div class="foot">Not enough history yet: it needs two months of data.</div>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="footnote pad">Each point is the last value captured in the month; a tick with no point is a month nothing was captured. Open findings are the critical and high findings not fixed or accepted at the month's end.</p>
+    {% else %}<div class="empty compact"><p>Left out: you can't open the reports these come from for this client.</p></div>{% endif %}
+  </section>
+</div>
+
+<p class="footnote">{{ tl.sources }}</p>
+{% endif %}
+{% endblock %}
