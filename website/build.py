@@ -361,6 +361,14 @@ WHATS_NEW = [
                 "href": "/docs/reference/#reports",
                 "link": "Reports",
             },
+            {
+                "icon": "search",
+                "title": "Quicker to get around",
+                "text": "Switch client, beside every client's name, opens the page you're on for another client, "
+                "Settings sit in four areas, and / jumps to search from any page.",
+                "href": "/docs/reference/#managing-clients",
+                "link": "Managing clients",
+            },
         ],
         "also": [  # smaller changes, a few words each
             "a check that each client's Microsoft 365 audit log is switched on",
