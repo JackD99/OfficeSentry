@@ -133,14 +133,14 @@
     <div class="form-actions wrap">
       {% if unlock %}<button form="unlock-user">Unlock now</button>{% endif %}
       {% if sessions %}<button formaction="{{ url_for('admin.sign_out_user', user_id=user.id) }}">Sign out everywhere{{ ' else' if user.id == current_user.id else '' }}</button>{% endif %}
-      {% if user.totp_enabled_at %}<button formaction="{{ url_for('admin.reset_two_step', user_id=user.id) }}" data-confirm="Reset two-step sign-in for {{ user.username }}? They'll be signed out and set it up again with their new phone.">Reset two-step sign-in</button>{% endif %}
+      {% if user.totp_enabled_at %}<button formaction="{{ url_for('admin.reset_two_step', user_id=user.id) }}" data-confirm="Reset two-step sign-in for {{ user.username }}? They'll be signed out and set it up again with their new phone." data-danger>Reset two-step sign-in</button>{% endif %}
     </div>
   </form>
   {% elif unlock %}
   <div class="form-actions wrap"><button form="unlock-user">Unlock now</button></div>
   {% endif %}
   {% if user.entra_oid %}<form method="post" action="{{ url_for('sso.admin_disconnect', user_id=user.id) }}" class="form-actions wrap">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button data-confirm="Disconnect {{ user.username }} from Microsoft? They'll sign in with a password.">Disconnect Microsoft account</button></form>{% endif %}
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button data-confirm="Disconnect {{ user.username }} from Microsoft? They'll sign in with a password." data-danger>Disconnect Microsoft account</button></form>{% endif %}
   <p class="footnote">Lost phone? Reset two-step sign-in. They'll set it up again with the new phone when they next sign in.</p>
 </section>
 {% endif %}
@@ -157,9 +157,6 @@
 {% endblock %}
 {% block scripts %}
 <script nonce="{{ csp_nonce }}">
-document.querySelectorAll('[data-confirm]').forEach(function (b) {
-  b.addEventListener('click', function (e) { if (!confirm(b.dataset.confirm)) e.preventDefault(); });
-});
 (function () {
   var radios = document.querySelectorAll('[data-roles] input[type=radio]');
   var staffOnly = document.querySelectorAll('[data-staff-only]');

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, ts, csrf, tenant_header with context %}
-{% from "_email.html" import people, schedule_item, deliveries_table, contact_checks, next_tile, busy_script with context %}
+{% from "_email.html" import people, schedule_item, deliveries_table, contact_checks, next_tile with context %}
 {% block title %}Emailed reports · {{ tenant.name }}{% endblock %}
 {% block content %}
 {{ tenant_header(tenant, 'schedules') }}
@@ -103,7 +103,7 @@
     <ul class="list compact contacts">
       {% for c in contacts %}
       <li><div class="grow"><div class="title">{{ c.name or c.email }}</div>{% if c.name %}<div class="desc">{{ c.email }}</div>{% endif %}</div>
-        {% if manages %}<form method="post" action="{{ url_for('email.delete_contact', contact_id=c.id) }}" data-confirm="Remove {{ c.name or c.email }} from every email for {{ tenant.name }}?">{{ csrf() }}<button class="sm ghost" aria-label="Remove {{ c.email }}">Remove</button></form>{% endif %}</li>
+        {% if manages %}<form method="post" action="{{ url_for('email.delete_contact', contact_id=c.id) }}" data-confirm="Remove {{ c.name or c.email }} from every email for {{ tenant.name }}?" data-danger>{{ csrf() }}<button class="sm ghost" aria-label="Remove {{ c.email }}">Remove</button></form>{% endif %}</li>
       {% endfor %}
     </ul>
     {% elif manages and adds_contacts %}<p class="muted small">Add the people at {{ tenant.name }} who should get reports.</p>
@@ -127,4 +127,3 @@
 {% endif %}
 </div>
 {% endblock %}
-{% block scripts %}{{ busy_script() }}{% endblock %}

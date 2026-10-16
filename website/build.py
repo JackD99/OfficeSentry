@@ -337,6 +337,16 @@ WHATS_NEW = [
                 "link": "The audit log add-on",
             },
             {
+                "icon": "alert",
+                "title": "Defender alerts and Microsoft's own outages",
+                "text": "Two new reports: Security alerts, with each client's open Defender incidents and alerts and "
+                "who has picked them up, and Service health, with Microsoft 365 outages and the message centre "
+                "changes to act on by a date. Devices shows which computers back up their local admin password with "
+                "Windows LAPS, never the password itself. Each client approves the new read-only permissions once.",
+                "href": "/docs/what-it-reads/",
+                "link": "What Office Sentry reads",
+            },
+            {
                 "icon": "review",
                 "title": "Clients read one story",
                 "text": "Their home page, the report email and the PDFs all show the month you approved, lead with "
@@ -372,6 +382,7 @@ WHATS_NEW = [
         ],
         "also": [  # smaller changes, a few words each
             "a check that each client's Microsoft 365 audit log is switched on",
+            "a client's What's new page lists every permission it hasn't approved, from any release",
             "a new look, with serif titles and figures, ruled sections and one bottle green",
             "each person picks light, dark or their device's setting, and staff one of five colours",
             "a client whose sign-in breaks keeps its last good data, and its findings aren't marked fixed",
