@@ -836,7 +836,7 @@ td.tenant-col { min-width: 190px; max-width: 20em; } /* a long client name wraps
 .toolbar.report-title > div:first-child { flex: 1 1 auto; min-width: 0; max-width: 760px; }
 .toolbar.report-title .toolbar-actions { flex: none; justify-content: flex-end; padding-top: var(--space-0-5); }
 .toolbar.report-title > div:first-child > p { max-width: 70ch; }
-.report-main > .callout > div, .report-main > .card.empty > p { max-width: 70ch; }
+.report-main > .callout:not(.verdict-callout) > div, .report-main > .card.empty > p { max-width: 70ch; }
 .report-main > .card.empty > p { margin-left: auto; margin-right: auto; }
 /* Headline figures sit in one row beside the picker, so the table starts higher. */
 .report-main .tiles { grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); margin-bottom: var(--space-4); }
