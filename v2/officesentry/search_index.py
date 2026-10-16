@@ -45,6 +45,7 @@ class Kind:
     kind: str
     values: Callable[[dict], Iterable]
     ip: bool = False  # values are IP addresses: matched by prefix, and only for an IP-like query
+    each: bool = False  # each value is a thing of its own (an organisation's domains): a result per value matched
 
 
 def _rule_targets(r: dict) -> list[str]:
@@ -86,9 +87,10 @@ KINDS: tuple[Kind, ...] = (
     Kind("registration", "app_consents", "application", lambda a: (a.get("displayName"), a.get("appId"))),
     Kind("managed_device", "devices", "managed_device", lambda d: (d.get("deviceName"),)),
     Kind("entra_device", "devices", "entra_device", lambda d: (d.get("displayName"),)),
-    Kind("domain", "tenant_profile", "organization", _domain_names),
+    Kind("domain", "tenant_profile", "organization", _domain_names, each=True),
 )
 BY_KEY = {k.key: k for k in KINDS}
+IP_KINDS = tuple(k.key for k in KINDS if k.ip)
 COLLECTORS = tuple(dict.fromkeys(k.collector for k in KINDS))
 
 
@@ -171,18 +173,32 @@ def current(conn, tenants) -> set[int]:
 
 def find(conn, tenant_ids: list[int], q: str, ip: bool) -> dict[int, list[tuple[str, int, str, str]]]:
     """Index rows matching ``q`` (lower case) for the tenants given: tenant id -> [(kind key, run id,
-    object id, value)] in result order. ``ip`` matches the start of the value, else anywhere in it."""
+    object id, value)] in result order. Values match ``q`` anywhere in them, as a scan matches; when ``q`` looks
+    like an IP address (``ip``), IP addresses match from the start instead."""
     out: dict[int, list] = {}
+    kinds = ",".join("?" * len(IP_KINDS))
     for start in range(0, len(tenant_ids), CHUNK):
         chunk = tenant_ids[start : start + CHUNK]
         marks = ",".join("?" * len(chunk))
-        if ip:  # a range the index on value answers
-            sql = f"SELECT * FROM search_index WHERE value >= ? AND value < ? AND tenant_id IN ({marks}) ORDER BY rowid"
-            args = (q, q[:-1] + chr(ord(q[-1]) + 1), *chunk)
+        if ip:  # a range the index on value answers, for the addresses; "cafe.de" is still found in a name
+            queries = [
+                (
+                    f"SELECT rowid, * FROM search_index WHERE value >= ? AND value < ? AND tenant_id IN ({marks})"
+                    f" AND kind IN ({kinds})",
+                    (q, q[:-1] + chr(ord(q[-1]) + 1), *chunk, *IP_KINDS),
+                ),
+                (
+                    f"SELECT rowid, * FROM search_index WHERE instr(value, ?) > 0 AND tenant_id IN ({marks})"
+                    f" AND kind NOT IN ({kinds})",
+                    (q, *chunk, *IP_KINDS),
+                ),
+            ]
         else:
-            sql = f"SELECT * FROM search_index WHERE instr(value, ?) > 0 AND tenant_id IN ({marks}) ORDER BY rowid"
-            args = (q, *chunk)
-        for r in conn.execute(sql, args):
+            queries = [
+                (f"SELECT rowid, * FROM search_index WHERE instr(value, ?) > 0 AND tenant_id IN ({marks})", (q, *chunk))
+            ]
+        found = sorted((r for sql, args in queries for r in conn.execute(sql, args)), key=lambda r: r["rowid"])
+        for r in found:
             out.setdefault(r["tenant_id"], []).append((r["kind"], r["run_id"], r["object_id"], r["value"]))
     return out
 

@@ -506,10 +506,13 @@ def _history(m: Mailbox) -> tuple[list[Event], str | None]:
         events += [Event(day, "Access", f"Send on behalf removed from {w}") for w in sorted(before - after)]
 
     def seen_by_run(collector: str, kind: str, field: str, area: str, label) -> None:
-        """Events for rows naming the mailbox appearing in or vanishing from one collection to the next."""
+        """Events for rows naming the mailbox appearing in or vanishing from one collection to the next. A run
+        that read nothing counts (the tenant's last inbox rule removed), one whose snapshot retention removed
+        doesn't."""
         runs = conn.execute(
             "SELECT id, finished_at FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded',"
-            " 'partial') AND EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id) ORDER BY finished_at, id",
+            " 'partial') AND (object_count = 0 OR EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id))"
+            " ORDER BY finished_at, id",
             (tid, collector),
         ).fetchall()
         if len(runs) < 2:

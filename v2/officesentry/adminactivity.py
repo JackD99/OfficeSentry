@@ -318,3 +318,11 @@ def from_history(conn, tenant_id: int, start, end) -> tuple[list[dict], object] 
     keep = lambda category, activity: kind_of({"category": category, "activityDisplayName": activity})  # noqa: E731
     found = [normalise(e) for e in events.audits_between(conn, tenant_id, start, end, keep=keep)]
     return found, cov
+
+
+def with_snapshot(history: tuple[list[dict], object], snapshot: list[dict] | None) -> list[dict]:
+    """``from_history``'s changes, then the snapshot's from before the history starts (newest first): a past
+    day from before Office Sentry kept the tenant's audit log has them only in that day's snapshot."""
+    found, cov = history
+    older = [e for e in snapshot or [] if (at := parse_ts(e.get("time"))) and at.timestamp() < cov.detailed_from]
+    return found + sorted(older, key=lambda e: e["time"], reverse=True)
