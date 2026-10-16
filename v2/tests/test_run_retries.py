@@ -48,6 +48,7 @@ def test_a_run_microsoft_was_too_busy_for_is_tried_twice_more_then_left(db, two_
     assert store.queue_retries(db, now + timedelta(minutes=21)) == 1
     assert store.queue_retries(db, now + timedelta(minutes=22)) == 0  # queued once
     second, _ = _collect(db, _raises(BUSY))
+    later = datetime.now(UTC)
     # The retry is the same night's run, behind anyone waiting on a page.
     assert (second["retry_of"], second["trigger"], second["scheduled_for"]) == (
         first["id"],
@@ -55,7 +56,8 @@ def test_a_run_microsoft_was_too_busy_for_is_tried_twice_more_then_left(db, two_
         first["scheduled_for"],
     )
     assert second["priority"] == store.PRIORITY_NIGHTLY
-    assert timedelta(hours=1, minutes=59) < _when(second) - now <= timedelta(hours=2)
+    # Two hours from when it failed, which was after `now` (to the second, so maybe the next whole one).
+    assert now + timedelta(hours=1, minutes=59) < _when(second) <= later + timedelta(hours=2)
 
     assert store.queue_retries(db, now + timedelta(hours=3)) == 1
     third, _ = _collect(db, _raises(BUSY))
