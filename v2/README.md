@@ -101,10 +101,13 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   person's or object's page, or the detail report filtered to that row, and it
   only finds what you can open.
   Press `/` (or Ctrl+K, ⌘K on a Mac) on any page to start typing in it.
-- **Home pages** (staff): **Today** (`/today`, for technicians) lists the
-  clients that need someone today and why: critical and high findings new in
-  the last day, collections that failed or are out of date, access not granted
-  yet, and Coming up items due within a week. **Accounts** (`/clients`, for
+- **Home pages** (staff): **Today** (`/today`, for technicians) is a ledger of
+  what happened across your clients, one line per thing, worst first, each with
+  the time it happened: critical and high findings first seen or back,
+  collections that failed or are out of date, access not granted yet, Coming up
+  items due within a week, and the critical and high findings a collection no
+  longer saw. What's new since yesterday sits above a line; what you'd seen
+  before and is still open sits below it. **Accounts** (`/clients`, for
   account managers) shows each client's licence waste, renewals in the next 30
   days, this month's month-end reports to approve and projects to propose. Each
   opens with one sentence saying what needs attention. Pick yours on the
