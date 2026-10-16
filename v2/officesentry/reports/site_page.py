@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from .. import store
+from ..collectors.sharepoint import anyone_can_edit, org_can_edit, outside_can_edit
 from ..devices import parse_day, parse_ts
 from ..snapshot import TenantSnapshot
 from ..text import fold, plural
@@ -397,15 +398,15 @@ def sharing_part(s: Site) -> Part:
                     Link(text, i["webUrl"]) if _text(i.get("webUrl")) else text,
                     _text(i.get("library")),
                     _shared_with(i),
-                    "Yes" if i.get("editable") else "No",
+                    "Yes" if outside_can_edit(i) or org_can_edit(i) else "No",
                     _day(_text(i.get("lastModified"))) if i.get("lastModified") else "",
                 ],
-                "high" if exposure == "anyone" and i.get("editable") else ("medium" if exposure == "anyone" else None),
+                "high" if anyone_can_edit(i) else ("medium" if exposure == "anyone" else None),
             )
         result.tables.append(table)
         if len(items) > SHARED_ROWS:
             result.note = f"The first {SHARED_ROWS} of {len(items):,} shared items; the Shared files report has all."
-        editable = [i for i in items if i.get("exposure") == "anyone" and i.get("editable")]
+        editable = [i for i in items if anyone_can_edit(i)]
         if editable:
             s.flag(
                 "high",

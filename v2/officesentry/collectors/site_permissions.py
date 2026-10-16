@@ -25,7 +25,7 @@ from ..text import plural
 from .base import Collector, RunContext, register
 from .connection import granted
 from .sharepoint_logins import classify_login, guest_address
-from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups
+from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups, is_system_site
 
 ROLE_PARAMS = {"$expand": "Member,RoleDefinitionBindings"}
 WEB_PARAMS = {
@@ -172,6 +172,7 @@ class SitePermissions(Collector):
                 and isinstance(s.get("webUrl"), str)
                 and ctx.graph.cloud.is_sharepoint(host_of(s["webUrl"]))
                 and not host_of(s["webUrl"]).split(".", 1)[0].endswith("-my")
+                and not is_system_site(s["webUrl"])
             ),
             key=lambda s: s["webUrl"].lower(),
         )

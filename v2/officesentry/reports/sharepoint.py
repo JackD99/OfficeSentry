@@ -9,7 +9,8 @@ from __future__ import annotations
 import math
 from datetime import date, datetime, timedelta
 
-from ..collectors.sharepoint_lookup import DENIED_TEXT
+from ..collectors.sharepoint import anyone_can_edit, outside_can_edit
+from ..collectors.sharepoint_lookup import DENIED_TEXT, is_system_site
 from ..devices import parse_day
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
@@ -29,21 +30,6 @@ CONCEALED_NOTICE = (
     'reports" and save. Names appear after the next collection.'
 )
 
-# rootWebTemplate values for sites Microsoft creates for itself.
-SYSTEM_TEMPLATES = {
-    "Compliance Policy Center",
-    "Basic Search Center",
-    "Search Center",
-    "Enterprise Search Center",
-    "My Site Host",
-    "Tenant Admin Site",
-    "SharePoint Online Tenant Fundamental Site",
-    "Redirect Site",
-    "App Catalog Site",
-    "Point Publishing Hub",
-    "Point Publishing Personal",
-    "Point Publishing Topic",
-}
 TEMPLATES = {
     "Group": "Group or Team site",
     "Team Site": "Team site (no group)",
@@ -84,7 +70,7 @@ def _days_since(value: str | None, now: datetime) -> int | None:
 
 def site_type(row: dict) -> str:
     template = row.get("template") or ""
-    if template in SYSTEM_TEMPLATES:
+    if is_system_site(row.get("url"), template):
         return "System"
     return TEMPLATES.get(template, template or "Unknown")
 
@@ -116,15 +102,20 @@ def _objects_before(snap: TenantSnapshot, collector: str, kind: str, before: dat
 
 
 def storage_points(snap: TenantSnapshot, area: str) -> list[tuple[date, float]]:
-    """Daily storage in bytes: Office Sentry's own history, then Microsoft's last 180 days on top."""
-    points: dict[date, float] = {}
-    for captured, value in snap.history(f"{area}.storage_bytes"):
-        points[date.fromisoformat(captured[:10])] = value
+    """Daily storage in bytes: Microsoft's own daily figures (its last 180 days) where it has them, and Office
+    Sentry's history from before they start. The two are counted differently (Office Sentry's leaves out deleted
+    sites and OneDrives, and the demo's are its own), so taking them day by day in turn made steps that read as
+    growth."""
+    own = {date.fromisoformat(captured[:10]): value for captured, value in snap.history(f"{area}.storage_bytes")}
+    microsoft: dict[date, float] = {}
     for h in snap.objects("sharepoint_usage", "storage_history") or []:
         if h["_id"] == area:
             for day, value in h.get("points") or []:
-                points[date.fromisoformat(day)] = value
-    return sorted(points.items())
+                microsoft[date.fromisoformat(day)] = value
+    if len(microsoft) < 2:
+        return sorted({**own, **microsoft}.items())
+    start = min(microsoft)
+    return sorted({**{d: v for d, v in own.items() if d < start}, **microsoft}.items())
 
 
 def storage_chart(
@@ -447,6 +438,8 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     if shared is not None:
         per: dict[str, dict] = {}
         for s in personal:
+            if not s.get("exposure"):  # shared only with named colleagues, kept for the File permissions report
+                continue
             p = per.setdefault(
                 (s.get("owner") or s.get("site") or "?").lower(), {"anyone": 0, "external": set(), "org": 0, "items": 0}
             )
@@ -603,9 +596,6 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         "the same way."
     )
 
-    def flagged(i, base):
-        return "high" if i.get("editable") else base
-
     a = Section(
         "Shared with anyone",
         ["File or folder", "Location", "Access", "Expires", "Password", "Last modified"],
@@ -613,7 +603,7 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         "Remove the link, or set an expiry date and view-only.",
         empty="Nothing is shared with an anyone link.",
     )
-    for i in sorted(anyone, key=lambda i: (not i.get("editable"), _location(i), i.get("path") or "")):
+    for i in sorted(anyone, key=lambda i: (not anyone_can_edit(i), _location(i), i.get("path") or "")):
         lk = [x for x in i["links"] if x.get("scope") == "anonymous"]
         expires = [x["expires"] for x in lk if x.get("expires")]
         a.add(
@@ -625,7 +615,8 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
                 bool(lk) and all(x.get("password") for x in lk),
                 _date(i.get("lastModified")),
             ],
-            flagged(i, "medium"),  # as the anyone-links check rates it: an expiry date doesn't stop forwarding
+            # As the anyone-links check rates it: an expiry date doesn't stop forwarding.
+            "high" if anyone_can_edit(i) else "medium",
         )
 
     b = Section(
@@ -635,9 +626,10 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         empty="Nothing is shared with people outside the organisation.",
     )
     for i in sorted(outside, key=lambda i: (_location(i), i.get("path") or "")):
+        edit = outside_can_edit(i)
         b.add(
-            [_item_cell(i), _location(i), i["externalPeople"], i.get("editable"), _date(i.get("lastModified"))],
-            flagged(i, "low"),
+            [_item_cell(i), _location(i), i["externalPeople"], edit, _date(i.get("lastModified"))],
+            "high" if anyone_can_edit(i) else ("medium" if edit else "low"),
         )
 
     c = Section(

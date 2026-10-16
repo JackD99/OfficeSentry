@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from ...collectors.sharepoint import anyone_can_edit, org_can_edit, outside_can_edit
 from ...text import plural as _plural
 from ..data_reports import Link, Section
 from .base import Part, Person, _day, part
+
+# Whether the people in the "Shared with" column can edit, by the widest way the item is shared.
+CAN_EDIT = {"anyone": anyone_can_edit, "external": outside_can_edit, "organization": org_can_edit}
 
 
 def _size_text(n) -> str:
@@ -72,7 +76,7 @@ def onedrive_part(p: Person) -> Part:
                 [
                     Link(text, s["webUrl"]) if s.get("webUrl") else text,
                     who,
-                    bool(s.get("editable")),
+                    CAN_EDIT.get(s.get("exposure"), outside_can_edit)(s),
                     ("Never" if not all(expires) else _day(min(expires))) if expires else "",
                 ],
                 {"anyone": "high", "external": "medium"}.get(s.get("exposure")),

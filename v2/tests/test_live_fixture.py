@@ -230,6 +230,9 @@ def test_sharepoint_storage_on_real_data(db, live):
     assert libraries.rows and not any("Events" in str(r[0]) for r in libraries.rows)
     assert {t.label for t in report.tiles} >= {"Storage used", "Older versions", "Recycle bins"}
     assert "(estimated)" in report.tiles[0].foot
+    # Files saved once (Microsoft's own, in the search centre's Style Library) have no version history to list.
+    history = next(s for s in report.sections if s.title == "Files with the most version history")
+    assert history.rows and "0 bytes" not in [r[2] for r in history.rows]
 
 
 def test_monthly_review_and_evidence_export(db, live):
@@ -376,17 +379,19 @@ def test_teams_on_real_data(db, live):
 
 
 def test_site_access_on_real_data(db, live):
-    # Three sites with no Microsoft 365 group. SharePoint lists both "Everyone" claims in each one's user list
-    # though nothing grants them, and the sites' administrators are the Global and SharePoint Administrator
-    # roles, not people. Their owners groups need SharePoint's own permission, which the tenant hasn't approved.
+    # One site of the tenant's own, with no Microsoft 365 group; Microsoft's search centre (/search) and content
+    # type hub (/sites/contentTypeHub, named "Team Site") are left out. SharePoint lists both "Everyone" claims in
+    # the user list though nothing grants them, and the site's administrators are the Global and SharePoint
+    # Administrator roles, not people. Its owners group needs SharePoint's own permission, which the tenant hasn't
+    # approved.
     sites = TenantSnapshot(db, live).objects("site_access", "site")
-    assert len(sites) == 3 and not any(s["group"] for s in sites)
+    assert [s["url"] for s in sites] == ["https://sentrytest3.sharepoint.com/"] and not sites[0]["group"]
     assert all(s["everyone"] is None and s["everyoneKnown"] is False for s in sites)
     assert all(s["ownerCount"] is None and not s["admins"] for s in sites)
     report = data_reports.build(db, live, "site-access", RECORDED)
     tiles = {t.label: (t.value, t.foot) for t in report.tiles}
-    assert tiles["Sites with no owner"][0] == 0 and tiles["Sites"] == (3, "Owners unknown for 3 sites")
-    assert tiles["Open to everyone in the organisation"] == (0, "Not known for 3 sites yet")
+    assert tiles["Sites with no owner"][0] == 0 and tiles["Sites"] == (1, "Owners unknown for 1 site")
+    assert tiles["Open to everyone in the organisation"] == (0, "Not known for 1 site yet")
     every = _tables(report)["Who can access each site"]
     assert {r[6] for r in every.rows} == {"Unknown"}
 

@@ -11,11 +11,12 @@ from openpyxl import load_workbook
 
 from officesentry import state_history, store
 from officesentry.collectors import sharepoint
-from officesentry.collectors.sharepoint import concealed, describe_permissions
+from officesentry.collectors.sharepoint import anyone_can_edit, concealed, describe_permissions, outside_can_edit
+from officesentry.collectors.sharepoint_lookup import is_system_site
 from officesentry.graph import GraphClient
 from officesentry.reports import data_reports
 from officesentry.reports.data_reports import Link
-from officesentry.reports.sharepoint import nice_max, size
+from officesentry.reports.sharepoint import nice_max, size, storage_points
 from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
 from officesentry.worker import execute_run
@@ -102,7 +103,7 @@ def test_shared_files_collector(db, two_tenants):
     # deleted items aren't stored; a file shared with colleagues only is, for the permissions report.
     assert set(items) == SHARED
     clients = items["Clients"]
-    assert clients["exposure"] == "anyone" and clients["editable"] and clients["neverExpires"]
+    assert clients["exposure"] == "anyone" and anyone_can_edit(clients) and clients["neverExpires"]
     assert clients["folder"] and clients["library"] == "Documents" and not clients["personal"]
     assert clients["sharedBy"] == "ann@x.com" and clients["sharedAt"] == "2026-08-20T10:00:00Z"
     assert clients["grants"] == [
@@ -268,6 +269,17 @@ def test_describe_permissions_treats_guest_logins_as_external():
         )["exposure"]
         is None
     )
+
+
+def test_microsofts_own_sites_are_system_sites():
+    assert is_system_site("https://x.sharepoint.com/search") and is_system_site("https://x.sharepoint.com/search/")
+    assert is_system_site("https://x.sharepoint.com/sites/contentTypeHub")
+    assert is_system_site("https://x.sharepoint.com/portals/hub") and is_system_site("https://x-admin.sharepoint.com/")
+    assert is_system_site(None, "Basic Search Center")
+    assert not is_system_site("https://x.sharepoint.com/sites/search") and not is_system_site(
+        "https://x.sharepoint.com/"
+    )
+    assert not is_system_site("https://x.sharepoint.com/searching") and not is_system_site(None, "Team Site")
 
 
 def _calls(db, alpha, collector: str = "shared_files") -> list[str]:
@@ -476,6 +488,18 @@ def test_site_growth_reads_the_daily_history_once_that_snapshot_is_pruned(db, tw
     assert row[4] == "+1.0 GB"
 
 
+def test_storage_history_takes_microsofts_figures_where_it_has_them():
+    class Snap:
+        def history(self, key):
+            return [("2026-03-01T09:00:00Z", 900), ("2026-09-02T09:00:00Z", 5000), ("2026-09-04T09:00:00Z", 5000)]
+
+        def objects(self, collector, kind):
+            return [{"_id": "onedrive", "points": [["2026-09-01", 1000], ["2026-09-03", 1010], ["2026-09-05", 1020]]}]
+
+    days = [(str(d), v) for d, v in storage_points(Snap(), "onedrive")]
+    assert days == [("2026-03-01", 900), ("2026-09-01", 1000), ("2026-09-03", 1010), ("2026-09-05", 1020)]
+
+
 def test_onedrive_report(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
@@ -485,6 +509,17 @@ def test_onedrive_report(db, two_tenants):
     sharing = _section(report, "Sharing by person")
     assert sharing.rows == [["ann@x.com", 1, "None", 0, 1]] and sharing.flags == ["high"]
     assert {t.label: t.value for t in report.tiles}["Files shared outside"] == 1
+
+
+def test_sharing_by_person_leaves_out_sharing_with_colleagues(db, two_tenants, monkeypatch):
+    alpha, _ = two_tenants
+    monkeypatch.setitem(
+        sd.PERMISSIONS, "it-holiday", [{"id": "p5", "roles": ["read"], "grantedToV2": {"user": {"email": "bob@x.com"}}}]
+    )
+    seed_tenant(db, alpha)
+    report = _report(db, alpha, "onedrive")
+    assert _section(report, "Sharing by person").rows == []
+    assert {t.label: t.value for t in report.tiles}["Files shared outside"] == 0
 
 
 def test_shared_files_report(db, two_tenants):
@@ -501,6 +536,45 @@ def test_shared_files_report(db, two_tenants):
     assert "Scanned 7 files and folders in 2 libraries" in report.footnote
     assert _section(report, "Shared with the whole organisation").rows[0][1] == "Finance / Documents"
     assert "Scanned 7 files and folders in 2 libraries" in report.footnote
+
+
+def test_who_can_edit_follows_each_link(db, two_tenants, monkeypatch):
+    """An edit link sent to someone outside lets them edit; an organisation edit link beside an anyone view
+    link doesn't let anyone with the link edit."""
+    alpha, _ = two_tenants
+    monkeypatch.setitem(
+        sd.PERMISSIONS,
+        "it-budget",
+        [
+            {
+                "id": "p2",
+                "roles": ["write"],
+                "link": {"scope": "users", "type": "edit"},
+                "grantedToIdentitiesV2": [{"user": {"email": "partner@other.com"}}],
+            }
+        ],
+    )
+    monkeypatch.setitem(
+        sd.PERMISSIONS,
+        "it-holiday",
+        [
+            {"id": "p5", "roles": ["read"], "link": {"scope": "anonymous", "type": "view"}},
+            {"id": "p6", "roles": ["write"], "link": {"scope": "organization", "type": "edit"}},
+        ],
+    )
+    seed_tenant(db, alpha)
+    items = {i["name"]: i for i in _snap(db, alpha).objects("shared_files", "shared_item")}
+    assert outside_can_edit(items["Budget.xlsx"]) and not anyone_can_edit(items["Budget.xlsx"])
+    assert not anyone_can_edit(items["holiday.jpg"]) and not outside_can_edit(items["holiday.jpg"])
+    report = _report(db, alpha, "shared-files")
+    outside = _section(report, "Shared with people outside the organisation")
+    assert outside.rows[0][2] == "partner@other.com" and outside.rows[0][3] == "Yes"
+    assert outside.flags == ["medium"]
+    anyone = _section(report, "Shared with anyone")
+    assert [r[2] for r in anyone.rows] == ["Edit", "View"] and anyone.flags == ["high", "medium"]
+    findings = {f.subject.split(" (")[0]: f for f in _results(db, alpha)["anyone_links"].findings}
+    assert findings["holiday.jpg"].severity == "medium"
+    assert findings["holiday.jpg"].detail == "Anyone can view, link never expires"
 
 
 def test_reports_before_collection(db, two_tenants):

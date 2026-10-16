@@ -107,7 +107,7 @@ def test_report(db, two_tenants):
     ending = _section(report, "Links expiring")
     assert _column(ending, "Who") == ["old@other.com", "partner@other.com"]  # expired first
     assert _column(ending, "Status") == ["Expired", "Expires soon"] and ending.flags == ["low", None]
-    assert ending.rows[0][5] < 0 < ending.rows[1][5]  # days left
+    assert [r[5] for r in ending.rows] == [0, 10]  # days left, by date: the link ends in 10 days' time at midnight
 
     who = _section(report, "Who can access what")
     assert who.group == "Location"
@@ -203,3 +203,15 @@ def test_page_and_exports(client, db, two_tenants):
     assert client.get(f"/tenants/{bravo}/data/file-permissions").status_code == 200  # empty state renders
     wb = load_workbook(io.BytesIO(client.get(f"/tenants/{alpha}/data/file-permissions.xlsx").data))
     assert wb.sheetnames[:3] == ["Summary", "Newly shared", "Links expiring"]
+
+
+def test_a_link_sent_to_several_people_expires_once(db, two_tenants, monkeypatch):
+    alpha, _ = two_tenants
+    link = dict(sd.PERMISSIONS["it-budget"][0])
+    link["grantedToIdentitiesV2"] = [{"user": {"email": "partner@other.com"}}, {"user": {"email": "ally@other.com"}}]
+    monkeypatch.setitem(sd.PERMISSIONS, "it-budget", [link])
+    seed_tenant(db, alpha)
+    report = _report(db, alpha)
+    ending = _section(report, "Links expiring")
+    assert ending.rows[0][2] == "partner@other.com, ally@other.com" and len(ending.rows) == 1
+    assert {t.label: t.value for t in report.tiles}["Expiring in 30 days"] == 1
