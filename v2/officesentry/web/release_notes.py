@@ -1,6 +1,6 @@
 """Release notes on the Updates page: the little Markdown CHANGELOG.md uses, drawn safely.
 
-Paragraphs, bullet lists, pipe tables, ``code``, **bold**, *italic* and links. Everything is escaped
+Paragraphs, bullet and numbered lists, pipe tables, ``code``, **bold**, *italic* and links. Everything is escaped
 first, links only go to https addresses, and a link relative to the repository (``v2/DEPLOY.md#updating``)
 opens that file on GitHub as it was in the release. Anything else shows as plain text.
 """
@@ -14,10 +14,11 @@ from markupsafe import Markup, escape
 from ..updates import REPOSITORY
 
 BULLET = re.compile(r"^\s*[-*]\s+(.*)$")
+NUMBERED = re.compile(r"^\s*\d{1,3}[.)]\s+(.*)$")
 HEADING = re.compile(r"^#{1,6}\s+(.*)$")
 TABLE_RULE = re.compile(r"^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$")
 CODE = re.compile(r"`([^`]+)`")
-LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+LINK = re.compile(r"\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)")  # a target may hold a pair of brackets
 BOLD = re.compile(r"\*\*(.+?)\*\*")
 ITALIC = re.compile(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])")
 
@@ -63,13 +64,15 @@ def render(text: str, version: str) -> Markup:
     paragraph: list[str] = []
     items: list[list[str]] = []
     rows: list[list[str]] = []
+    tag = ["ul"]  # of the list being read: "ul", or "ol" for a numbered one
 
     def close() -> None:
         if paragraph:
             out.append(f"<p>{inline(' '.join(paragraph), version)}</p>")
             paragraph.clear()
         if items:
-            out.append("<ul>" + "".join(f"<li>{inline(' '.join(i), version)}</li>" for i in items) + "</ul>")
+            lis = "".join(f"<li>{inline(' '.join(i), version)}</li>" for i in items)
+            out.append(f"<{tag[0]}>{lis}</{tag[0]}>")
             items.clear()
         if rows:
             head, *body = rows
@@ -91,10 +94,12 @@ def render(text: str, version: str) -> Markup:
         elif HEADING.match(line):
             close()
             out.append(f"<p><strong>{inline(HEADING.match(line)[1], version)}</strong></p>")
-        elif BULLET.match(line):
-            if paragraph or rows:
+        elif item := BULLET.match(line) or NUMBERED.match(line):
+            kind = "ul" if item.re is BULLET else "ol"
+            if paragraph or rows or (items and tag[0] != kind):
                 close()
-            items.append([BULLET.match(line)[1]])
+            tag[0] = kind
+            items.append([item[1]])
         elif items and line.startswith((" ", "\t")):
             items[-1].append(line.strip())
         else:
