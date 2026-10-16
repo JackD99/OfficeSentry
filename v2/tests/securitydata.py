@@ -177,7 +177,7 @@ HEALTH = [
 ]
 
 
-def _issue(id_, title, service, classification, status, start, end=None, **extra) -> dict:
+def _issue(id_, title, service, classification, status, start, end=None, *, impact, **extra) -> dict:
     return {
         "id": id_,
         "title": title,
@@ -186,7 +186,7 @@ def _issue(id_, title, service, classification, status, start, end=None, **extra
         "featureGroup": "Group",
         "classification": classification,
         "status": status,
-        "impactDescription": f"Users may be affected by {title.lower()}.",
+        "impactDescription": impact,
         "isResolved": end is not None,
         "origin": "microsoft",
         "startDateTime": start,
@@ -198,8 +198,24 @@ def _issue(id_, title, service, classification, status, start, end=None, **extra
 
 
 ISSUES = [
-    _issue("EX1001", "Delayed mail delivery", "Exchange Online", "incident", "serviceDegradation", days_ago(1)),
-    _issue("TM2002", "Some users can't join meetings", "Microsoft Teams", "Advisory", "investigating", days_ago(2)),
+    _issue(
+        "EX1001",
+        "Delayed mail delivery",
+        "Exchange Online",
+        "incident",
+        "serviceDegradation",
+        days_ago(1),
+        impact="Users may see delays when receiving email from outside the organisation.",
+    ),
+    _issue(
+        "TM2002",
+        "Some users can't join meetings",
+        "Microsoft Teams",
+        "Advisory",
+        "investigating",
+        days_ago(2),
+        impact="Some users may be unable to join Teams meetings from the desktop app.",
+    ),
     _issue(
         "SP3003",
         "Sites slow to load",
@@ -208,18 +224,30 @@ ISSUES = [
         "ServiceRestored",
         days_ago(7),
         days_ago(5),
+        impact="Users may have found that SharePoint Online sites were slow to load.",
     ),
-    _issue("OD4004", "Old advisory", "OneDrive for Business", "advisory", "resolved", days_ago(70), days_ago(60)),
+    _issue(
+        "OD4004",
+        "Old advisory",
+        "OneDrive for Business",
+        "advisory",
+        "resolved",
+        days_ago(70),
+        days_ago(60),
+        impact="Users may have been unable to sync some files.",
+    ),
 ]
 
 
-def _message(id_, title, start, *, act_by=None, end=None, major=False, category="planForChange") -> dict:
+def _message(
+    id_, title, start, *, act_by=None, end=None, major=False, category="planForChange", services=("Exchange Online",)
+) -> dict:
     return {
         "id": id_,
         "title": title,
         "category": category,
         "severity": "normal",
-        "services": ["Exchange Online"],
+        "services": list(services),
         "tags": ["Admin impact"],
         "isMajorChange": major,
         "actionRequiredByDateTime": act_by,
@@ -232,9 +260,17 @@ def _message(id_, title, start, *, act_by=None, end=None, major=False, category=
 
 MESSAGES = [
     _message("MC1001", "Basic authentication retires for SMTP", days_ago(20), act_by=days_ago(-10), major=True),
-    _message("MC1002", "Update your Teams Rooms devices", days_ago(15), act_by=days_ago(-60)),
+    _message(
+        "MC1002", "Update your Teams Rooms devices", days_ago(15), act_by=days_ago(-60), services=("Microsoft Teams",)
+    ),
     _message("MC1003", "New Outlook becomes the default", days_ago(5), major=True),
-    _message("MC1004", "New reports in the admin centre", days_ago(3), category="stayInformed"),
+    _message(
+        "MC1004",
+        "New reports in the admin centre",
+        days_ago(3),
+        category="stayInformed",
+        services=("Microsoft 365 suite",),
+    ),
     _message("MC1005", "An older post still current", days_ago(200), category="stayInformed"),
     _message("MC1006", "A post that has ended", days_ago(100), end=days_ago(10)),
     _message("MC1007", "Past its deadline", days_ago(40), act_by=days_ago(10)),
