@@ -1,5 +1,6 @@
 """Risky users (Entra ID Protection): collector, report, check and the account page."""
 
+import re
 from urllib.parse import parse_qs, urlsplit
 
 import responses
@@ -138,6 +139,7 @@ def test_report_and_check_with_entra_p2(client, db, two_tenants):
         ("high", "bob@x.com", "u2"),
         ("medium", "ann@x.com", "u1"),
     ]
+    assert all(re.search(r" since \d{1,2} [A-Z][a-z]{2} 20\d\d$", f.detail) for f in result.findings)  # a day, not ISO
 
     make_user(db, "admin")
     login(client, "admin")

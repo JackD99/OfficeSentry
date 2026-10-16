@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ..licences import last_sign_in, sku_name
+from ..licences import last_sign_in, never_signed_in, sku_name
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import DataReport, Rows, Section, Tile, _date
@@ -37,7 +37,7 @@ def _sign_in(u: dict) -> str:
     if not u.get("signInActivityAvailable"):
         return "Not checked"
     last = last_sign_in(u)
-    return last.date().isoformat() if last else "Never"
+    return last.date().isoformat() if last else never_signed_in(u)
 
 
 @report(

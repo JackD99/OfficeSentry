@@ -87,7 +87,7 @@ def mail_protection(snap: TenantSnapshot, now: datetime, out: DataReport) -> Non
 
     rules = Section(
         RULES,
-        ["Rule", "On", "Priority", "If", "Then", "Except if", "Last changed"],
+        ["Rule", "On", "Priority", "If", "Then", "Except if", "Sends outside", "Last changed"],
         intro="Exchange's mail flow (transport) rules, in the order they run. Rules testing without acting "
         "(test mode) show as Testing.",
         empty="No mail flow rules." if parts.get("rules") == "read" else _unread(parts.get("rules"), "Mail flow rules"),
@@ -100,7 +100,8 @@ def mail_protection(snap: TenantSnapshot, now: datetime, out: DataReport) -> Non
             needs.append(([r.get("Name"), "Mail flow rule", text], severity))
         live = mp.is_live(r)
         skipping += live and mp.skips_spam_filter(r)
-        sending += live and bool(mp.external_copies(r, domains))
+        outside = live and bool(mp.external_copies(r, domains))
+        sending += outside
         state = "Testing" if r.get("State") == "Enabled" and not live else ("Yes" if live else "No")
         rules.add(
             [
@@ -110,6 +111,7 @@ def mail_protection(snap: TenantSnapshot, now: datetime, out: DataReport) -> Non
                 mp.conditions(r),
                 mp.actions(r),
                 mp.exceptions(r),
+                outside,
                 _day(r.get("WhenChanged")),
             ],
             _worst(problems),
@@ -224,7 +226,7 @@ def mail_protection(snap: TenantSnapshot, now: datetime, out: DataReport) -> Non
             sending if rules_read else "Not read",
             "Redirect or copy to outside addresses" if rules_read else "See the collection's log",
             ("bad" if sending else "ok") if rules_read else None,
-            Rows(ATTENTION, {"Kind": "Mail flow rule"}),
+            Rows(RULES, {"Sends outside": "Yes"}),
         ),
         Tile(
             "Allowed sender domains",

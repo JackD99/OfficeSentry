@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from ... import events as events_store
 from ... import identity_protection, signins
-from ...licences import last_sign_in
+from ...licences import last_sign_in, never_signed_in
 from ...text import plural as _plural
 from ..data_reports import Section
 from ..identity_reports import P1
@@ -25,7 +25,7 @@ def activity_part(p: Person) -> Part:
         ):
             result.facts.append((label, _when(u.get(key), p.now) or ("None recorded" if last_sign_in(u) else "Never")))
         last = last_sign_in(u)
-        result.summary = _when(last, p.now).split(" (")[-1].rstrip(")").capitalize() if last else "Never"
+        result.summary = _when(last, p.now).split(" (")[-1].rstrip(")").capitalize() if last else never_signed_in(u)
     else:
         result.facts.append(("Last sign-in", f"Not checked: sign-in dates need {P1}"))
 

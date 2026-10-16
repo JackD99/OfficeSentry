@@ -35,6 +35,10 @@ def test_catalogue_finds_the_collectors_a_check_reads():
     assert {"mailboxes", "inbox_rules", "tenant_profile"} <= set(gen.collectors_read(checks["external_forwarding"]))
     assert gen.licence_notes(checks["stale_users"]) == ["Sign-in activity needs Entra ID P1"]
     assert gen.licence_notes(checks["licensed_disabled"]) == []
+    # Said once, not again as the start of a longer reason.
+    assert gen.licence_notes(checks["intune_compliance_coverage"]) == [
+        "The tenant has no Intune licence, or Intune isn't readable"
+    ]
 
 
 def test_catalogue_is_deterministic():

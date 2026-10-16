@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from ..licences import last_sign_in
+from ..licences import last_sign_in, never_signed_in
 from ..mailflow import inbox_rule_risk, is_external, tenant_domains
 from ..snapshot import TenantSnapshot
+from ..text import plural, verb
 from .data_reports import (
     Chart,
     DataReport,
@@ -27,6 +28,12 @@ from .registry import report
 
 NOT_COLLECTED = "Mailbox data hasn't been collected yet. Refresh Mailboxes on the client page."
 RESOURCE_TYPES = {"SharedMailbox": "Shared", "RoomMailbox": "Room", "EquipmentMailbox": "Equipment"}
+# Teams Rooms licences: a room with one has a Teams Rooms device that signs in with the room's account.
+TEAMS_ROOMS_SKUS = {"MEETING_ROOM", "MEETING_ROOM_NOAUDIOCONF", "MTR_PREM"}
+
+
+def _teams_room_licence(part: str | None) -> bool:
+    return bool(part) and (part.upper() in TEAMS_ROOMS_SKUS or part.upper().startswith("MICROSOFT_TEAMS_ROOMS"))
 
 
 def _no_exchange(snap: TenantSnapshot) -> bool:
@@ -322,7 +329,7 @@ def mailbox_permissions(snap: TenantSnapshot, now: datetime, report: DataReport)
     "shared-mailboxes",
     "Shared mailboxes",
     "Shared, room and equipment mailboxes that can be signed in to, and who uses them.",
-    ("mailboxes", "users", "mailbox_usage"),
+    ("mailboxes", "users", "mailbox_usage", "tenant_profile"),
     group="email",
     order=40,
     keywords="rooms equipment sign-in",
@@ -341,10 +348,15 @@ def shared_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) ->
     for _box, box_label, person, _, right in _grants(snap, d):
         access.setdefault(box_label.lower(), {}).setdefault(right, []).append(person)
     sizes = {s.get("mailboxId"): s for s in snap.objects("mailbox_usage", "mailbox_size") or []}
+    rooms_skus = {
+        s["skuId"]
+        for s in snap.objects("tenant_profile", "subscribed_sku") or []
+        if s.get("skuId") and _teams_room_licence(s.get("skuPartNumber"))
+    }
     recent = now - timedelta(days=30)
 
     rows = [m for m in boxes if m.get("RecipientTypeDetails") in RESOURCE_TYPES]
-    open_ = 0
+    open_ = unknown = teams_rooms = 0
     section = Section(
         "Shared and resource mailboxes",
         ["Mailbox", "Type", "Sign-in allowed", "Last sign-in", "Licensed", "Full access", "Send as", "Size"],
@@ -360,16 +372,21 @@ def shared_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) ->
         user = users.get(m.get("ExternalDirectoryObjectId"))
         enabled = user.get("accountEnabled") if user else None
         last = last_sign_in(user) if user and user.get("signInActivityAvailable") else None
-        if enabled:
+        device = m.get("RecipientTypeDetails") == "RoomMailbox" and user and rooms_skus & set(user.get("skuIds") or [])
+        unknown += user is None
+        teams_rooms += bool(enabled and device)
+        if enabled and not device:
             open_ += 1
-        flag = ("high" if last and last >= recent else "medium") if enabled else None
+        flag = ("high" if last and last >= recent else "medium") if enabled and not device else None
         who = access.get(_text(m.get("PrimarySmtpAddress")).lower(), {})
         section.add(
             [
                 m.get("PrimarySmtpAddress"),
                 RESOURCE_TYPES[m["RecipientTypeDetails"]],
                 "Unknown" if user is None else enabled,
-                last.date().isoformat() if last else ("Never" if user and user.get("signInActivityAvailable") else ""),
+                last.date().isoformat()
+                if last
+                else (never_signed_in(user) if user and user.get("signInActivityAvailable") else ""),
                 user.get("licensed") if user else "",
                 who.get("Full access") or "",
                 who.get("Send as") or "",
@@ -377,18 +394,29 @@ def shared_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) ->
             ],
             flag,
         )
+    unmatched = (
+        f" {plural(unknown, 'mailbox')} couldn't be matched to an account, so whether they can is unknown."
+        if unknown
+        else ""
+    )
+    rooms = (
+        f" {plural(teams_rooms, 'room')} with a Teams Rooms licence {verb(teams_rooms, 'is', 'are')} left out: "
+        "the room's device signs in with its account."
+        if teams_rooms
+        else ""
+    )
     section.intro = (
-        f"{open_} of {len(rows)} can be signed in to directly. These accounts don't need a password; "
-        "an open one usually has no MFA and nobody watching it. Block sign-in in the Microsoft 365 "
+        f"{open_} of {len(rows)} can be signed in to directly.{unmatched}{rooms} These accounts don't need a "
+        "password; an open one usually has no MFA and nobody watching it. Block sign-in in the Microsoft 365 "
         "admin centre (Users > Active users > the mailbox > Block sign-in). People keep their access."
     )
     report.highlights = [
         Highlight(
             "Can be signed in to",
             f"{open_} of {len(rows)}",
-            "Should be none",
-            "bad" if open_ else "ok",
-            Rows(section.title, {"Sign-in allowed": "Yes"}),
+            f"{unknown} not matched to an account" if unknown else "Should be none",
+            "bad" if open_ else (None if unknown else "ok"),
+            Rows(section.title, {"Sign-in allowed": "Yes"}, flagged=True),
         ),
         Highlight(
             "Shared mailboxes",

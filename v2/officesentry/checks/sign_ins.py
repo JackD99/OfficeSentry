@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from .. import signins
+from ..formatting import day
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .base import Finding, _unavailable, rule
@@ -44,7 +45,7 @@ def risky_sign_ins(snap: TenantSnapshot, now: datetime):
     for user, hits in by_account.items():
         severity = "high" if any(s == "high" for s, _ in hits) else "medium"
         latest = max((r for _, r in hits), key=lambda r: r.get("time") if isinstance(r.get("time"), str) else "")
-        when = latest.get("time")[:10] if isinstance(latest.get("time"), str) else ""
+        when = day(latest.get("time"))
         level = latest.get("level") if isinstance(latest.get("level"), str) else "unknown"
         state = signins.RISK_STATES.get(latest.get("state") if isinstance(latest.get("state"), str) else "", "")
         detail = (

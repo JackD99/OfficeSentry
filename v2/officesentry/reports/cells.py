@@ -13,10 +13,10 @@ from datetime import date, datetime
 
 from markupsafe import Markup, escape
 
-# 2026-08-20 | 2026-08-20 22:42 | 2026-08-20T22:42:05Z, optionally followed by " (45d)" or " (expired)".
+# 2026-08-20 | 2026-08-20 22:42 | 2026-08-20T22:42:05Z, optionally followed by " (45d)", " (expired)" or " (today)".
 DATE_CELL = re.compile(
     r"^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?Z?)?"
-    r"(?: \((\d+)d\)| \((expired)\))?$"
+    r"(?: \((\d+)d\)| \((expired|today)\))?$"
 )
 # 6 Feb 2026, as identity reports and account pages write dates.
 PROSE_DATE = re.compile(r"^(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4})$")
@@ -34,7 +34,7 @@ WBR = Markup("<wbr>")
 
 
 def parse_date(value) -> tuple[date | datetime, str] | None:
-    """``(when, suffix)`` for a date-shaped string, else None. ``suffix`` is "", "45" (days) or "expired"."""
+    """``(when, suffix)`` for a date-shaped string, else None. ``suffix`` is "", "45" (days), "expired" or "today"."""
     if not isinstance(value, str) or len(value) > 40:
         return None
     if m := PROSE_DATE.match(value):
@@ -66,8 +66,8 @@ def display(value) -> str:
         return "" if value is None else str(value)
     when, suffix = parsed
     text = f"{_day(when)}, {when:%H:%M}" if isinstance(when, datetime) else _day(when)
-    if suffix == "expired":
-        return f"{text} (expired)"
+    if suffix in ("expired", "today"):
+        return f"{text} ({suffix})"
     if suffix and int(suffix):  # "(0d)" is under a day: the date says enough
         n = int(suffix)
         return f"{text} ({'1 day ago' if n == 1 else f'{n} days ago'})"

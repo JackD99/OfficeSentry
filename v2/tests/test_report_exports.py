@@ -27,6 +27,9 @@ def test_cells_read_as_words_in_pdfs_and_as_values_in_spreadsheets():
     assert cells.display("2026-10-03 (0d)") == "3 Oct 2026"
     assert cells.display("2026-10-01 22:42") == "1 Oct 2026, 22:42"
     assert cells.display("2025-01-01 (expired)") == "1 Jan 2025 (expired)"
+    # A device seen today (data_reports._seen) reads like one seen days ago, not as the raw date.
+    assert cells.display("2026-10-15 (today)") == "15 Oct 2026 (today)"
+    assert cells.xlsx_value("2026-10-15 (today)") == date(2026, 10, 15)
     assert cells.display("Windows 10") == "Windows 10" and cells.display(None) == ""
     assert cells.xlsx_value("2026-08-20 (45d)") == date(2026, 8, 20)
     assert cells.xlsx_value("2026-10-01T22:42:05Z") == datetime(2026, 10, 1, 22, 42, 5)

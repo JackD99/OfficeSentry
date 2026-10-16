@@ -1,8 +1,9 @@
-"""Mailbox holds and archiving: which mailboxes keep mail (litigation hold, archive) and which should.
+"""Mailbox holds and archiving: which mailboxes keep mail (litigation hold, retention policies, archive) and
+which should.
 
-Reads the mailbox rows from ``collectors/exchange.py`` (ArchiveStatus, LitigationHoldEnabled) and the
-sizes from ``collectors/mail_usage.py``. Nothing new is collected: retention policies, hold dates and
-archive sizes aren't read yet, so they aren't shown.
+Reads the mailbox rows from ``collectors/exchange.py`` (ArchiveStatus, LitigationHoldEnabled, InPlaceHolds),
+the organisation's retention policies (its InPlaceHolds) and the sizes from ``collectors/mail_usage.py``. Hold
+dates, policy names and archive sizes aren't read, so they aren't shown.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from datetime import datetime
 
 from ..collectors.exchange import SYSTEM_MAILBOX_TYPES
 from ..licences import last_sign_in
+from ..mailflow import org_holds, retention_hold
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from .data_reports import DataReport, Rows, Section, Tile, _type
@@ -92,7 +94,7 @@ def holds(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
 
     every = Section(
         EVERY,
-        ["Mailbox", "Type", "Account", "Litigation hold", "Archive", "Mailbox size"],
+        ["Mailbox", "Type", "Account", "Litigation hold", "Retention or eDiscovery hold", "Archive", "Mailbox size"],
         empty="No mailboxes.",
         drifts=("Mailbox size",),
     )
@@ -100,7 +102,7 @@ def holds(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         LEAVERS,
         ["Mailbox", "Type", "Why it looks like a leaver", "Archive", "Mailbox size"],
         drifts=("Mailbox size",),
-        empty="Every leaver's mailbox is on litigation hold, or there are no leavers.",
+        empty="Every leaver's mailbox is on hold, or there are no leavers.",
     )
     large = Section(
         LARGE,
@@ -108,12 +110,17 @@ def holds(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         drifts=("Mailbox size", "Used"),
         empty="No mailbox without an archive is close to its quota.",
     )
-    held = archived = 0
+    org = org_holds(snap)
+    held = kept = archived = 0
+    read_holds = False
     for m in sorted(boxes, key=lambda m: _text(m.get("PrimarySmtpAddress")).lower()):
         size = sizes.get(m["_id"]) or {}
         user = users.get(m.get("ExternalDirectoryObjectId"))
         hold, archive = _on_hold(m, size), _archive_on(m, size)
+        policy = retention_hold(m, org)
         held += hold
+        kept += bool(policy)
+        read_holds |= policy is not None
         archived += archive
         address, kind, total = (
             m.get("PrimarySmtpAddress"),
@@ -121,9 +128,13 @@ def holds(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             _size(size.get("totalBytes")),
         )
         why = _leaver(m, user)
-        if why and not hold:
+        unheld = why and not hold and not policy
+        if unheld:
             leavers.add([address, kind, why, archive, total], "medium")
-        every.add([address, kind, _account(user), hold, archive, total], "medium" if why and not hold else None)
+        every.add(
+            [address, kind, _account(user), hold, "Not read" if policy is None else policy, archive, total],
+            "medium" if unheld else None,
+        )
         big, used = _large(size)
         if big and not archive:
             large.add(
@@ -138,13 +149,17 @@ def holds(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             )
 
     n = len(boxes)
+    retention = (
+        f", {kept} {verb(kept, 'is', 'are')} kept by a retention policy or eDiscovery hold," if read_holds else ""
+    )
     every.intro = (
-        f"{held} of {plural(n, 'mailbox')} {verb(held, 'is', 'are')} on litigation hold and "
+        f"{held} of {plural(n, 'mailbox')} {verb(held, 'is', 'are')} on litigation hold{retention} and "
         f"{archived} {verb(archived, 'has', 'have')} an archive turned on."
     )
     leavers.intro = (
         f"{plural(len(leavers.rows), 'mailbox')} of people who seem to have left "
-        f"{verb(len(leavers.rows), 'is', 'are')} not on litigation hold. A hold keeps every message, "
+        f"{verb(len(leavers.rows), 'is', 'are')} on no hold: not litigation hold, and no retention policy "
+        "or eDiscovery hold that keeps mail. A hold keeps every message, "
         "including deleted ones, after the leaver's licence is removed or the mailbox is converted; "
         "without one, mail can be deleted and is gone for good once the licence goes. If the client "
         "needs to keep a leaver's mail, put the mailbox on hold (Exchange admin centre, Recipients > "
@@ -176,7 +191,7 @@ def holds(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Tile(
             "Leavers' mailboxes without a hold",
             len(leavers.rows),
-            "Blocked or converted, not on hold",
+            "Blocked or converted, on no hold",
             "warn" if leavers.rows else "ok",
             Rows(LEAVERS),
         ),

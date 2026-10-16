@@ -263,7 +263,9 @@ def test_report_compares_the_methods_policy_with_advice(db, tenant):
 def test_report_password_hygiene(db, tenant):
     report = data_reports.build(db, tenant, "auth-methods", NOW)
     figures = {h.label: h.value for h in report.highlights}
-    assert figures["Password never expires"] == 1
+    # x.com's policy is Microsoft's default, never, so its cloud-only accounts count as well as the one set to
+    # never expire.
+    assert figures["Password never expires"] == 6
     assert figures["Password over a year old"] == 2  # Breakglass and Carl
     assert figures["Never signed in, old password"] == 1
     passwords = _rows(_sections(report)["Password age"])

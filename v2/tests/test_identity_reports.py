@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from io import BytesIO
+from unittest.mock import patch
 
 import pytest
 import responses
@@ -192,9 +193,46 @@ def test_admin_mfa_unknown_registration_is_not_a_failure(db, two_tenants):
 
     alpha, _ = two_tenants
     registered = [dict(r, isMfaRegistered=True) for r in gd.REGISTRATION_DETAILS if r["id"] == "u1"]
-    seed_tenant(db, alpha, registration=registered)  # bg@x.com and the guest admin aren't in the data
+    # bg@x.com, the guest admin and Eve (Global Administrator through PIM) aren't in the data.
+    seed_tenant(db, alpha, registration=registered)
     r = {r.key: r for r in evaluate(TenantSnapshot(db, store.get_tenant(db, alpha)), NOW)}["admin_mfa"]
-    assert r.status == "unavailable" and "isn't known for 2 admins" in r.summary
+    assert r.status == "unavailable" and "isn't known for 3 admins" in r.summary
+
+
+def test_eligible_admins_count_and_mfa_means_a_method_the_policy_allows(db, two_tenants):
+    """Eve can activate Global Administrator through PIM: whoever sets up MFA on her account first can, so her
+    missing MFA counts. Ann registered only a phone after texts were turned off: registered, but can't do MFA."""
+    from officesentry.rules import evaluate
+
+    alpha, _ = two_tenants
+    eve = dict(gd.REGISTRATION_DETAILS[1], id="u5", userPrincipalName="eve@x.com", userDisplayName="Eve")
+    ann = dict(gd.REGISTRATION_DETAILS[0], isMfaCapable=False, methodsRegistered=["mobilePhone"])
+    eve_user = dict(CARL, id="u5", displayName="Eve", userPrincipalName="eve@x.com")
+    seed_tenant(db, alpha, users=USERS + [CARL, eve_user], registration=[ann, eve] + gd.REGISTRATION_DETAILS[1:])
+    tenant = store.get_tenant(db, alpha)
+    r = {r.key: r for r in evaluate(TenantSnapshot(db, tenant), NOW)}["admin_mfa"]
+    assert r.summary.startswith("3 admins without MFA (1 through PIM)")
+    assert {f.subject: f.detail for f in r.findings}["eve@x.com"] == (
+        "Global Administrator (eligible) with no MFA method registered"
+    )
+    report = build(db, tenant, "mfa", NOW)
+    gaps = {row[0]: row for row in sections(report)["Accounts with a gap"].rows}
+    assert gaps["eve@x.com"][1] == "Global Administrator (eligible)" and gaps["ann@x.com"][3] == "No"
+    assert sorted(opened(report, "Admins with a gap")) == ["ann@x.com", "eve@x.com"]
+    assert figures(report)["Admins with a gap"] == 2
+
+
+def test_unread_per_user_mfa_is_unknown_not_no_mfa(db, free_tenant):
+    read = TenantSnapshot.objects
+
+    def carls_read_failed(snap, collector, kind):
+        rows = read(snap, collector, kind)
+        return [r for r in rows if r["_id"] != "u6"] if kind == "per_user_mfa" and rows else rows
+
+    with patch.object(TenantSnapshot, "objects", carls_read_failed):
+        report = build(db, free_tenant, "mfa", NOW)
+    carl = next(r for r in sections(report)["Accounts with a gap"].rows if r[0] == "carl@x.com")
+    assert carl[2:5] == ["Unknown", "No", "Not read"]
 
 
 def test_mfa_coverage_with_security_defaults(db, two_tenants):
@@ -327,6 +365,41 @@ def test_inactive_never_signed_in_wording(db, two_tenants):
     seed_tenant(db, alpha, users=USERS + [new])
     rows = sections(build(db, store.get_tenant(db, alpha), "inactive", NOW))["Inactive members"].rows
     assert rows[0][1] == "Never signed in" and rows[0][2] == "Never" and rows[0][3] == 62
+
+
+def test_failed_sign_in_attempts_dont_make_an_account_active(db, two_tenants):
+    """Microsoft's last sign-in times move on failed attempts too: a password spray on a dormant account mustn't
+    take it off the list. Successes from before Microsoft recorded them (December 2023) still count."""
+    alpha, _ = two_tenants
+    sprayed = dict(
+        CARL,
+        id="u7",
+        userPrincipalName="sprayed@x.com",
+        signInActivity={
+            "lastSignInDateTime": "2026-09-30T03:00:00Z",
+            "lastNonInteractiveSignInDateTime": None,
+            "lastSuccessfulSignInDateTime": "2026-01-10T09:00:00Z",
+        },
+    )
+    never = dict(
+        CARL,
+        id="u8",
+        userPrincipalName="never@x.com",
+        signInActivity={"lastSignInDateTime": "2026-09-30T03:00:00Z", "lastSuccessfulSignInDateTime": None},
+    )
+    old = dict(
+        CARL,
+        id="u9",
+        userPrincipalName="old@x.com",
+        signInActivity={"lastSignInDateTime": "2023-06-01T09:00:00Z", "lastSuccessfulSignInDateTime": None},
+    )
+    seed_tenant(db, alpha, users=USERS + [sprayed, never, old])
+    rows = {
+        r[0]: r[1:4] for r in sections(build(db, store.get_tenant(db, alpha), "inactive", NOW))["Inactive members"].rows
+    }
+    assert rows["sprayed@x.com"] == ["6 to 12 months", "10 Jan 2026", 264]
+    assert rows["never@x.com"][:2] == ["Never signed in", "Failed attempts only"]
+    assert rows["old@x.com"][:2] == ["Over a year", "1 Jun 2023"]
 
 
 def test_inactive_without_p1_lists_only_what_it_can(db, free_tenant):

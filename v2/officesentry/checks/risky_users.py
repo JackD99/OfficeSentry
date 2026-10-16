@@ -6,6 +6,7 @@ from datetime import datetime
 
 from .. import clouds
 from .. import identity_protection as ip
+from ..formatting import day
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .base import Finding, _unavailable, rule
@@ -36,7 +37,7 @@ def risky_users(snap: TenantSnapshot, now: datetime):
     for r in ip.rows(snap):
         if not ip.open_risk(r) or r.get("deleted") is True:
             continue
-        when = r.get("updated")[:10] if isinstance(r.get("updated"), str) else ""
+        when = day(r.get("updated"))
         detail = f"{ip.level(r)} risk, {ip.state(r).lower()}" + (f" since {when}" if when else "")
         user = r.get("user") if isinstance(r.get("user"), str) else "Unknown account"
         findings.append(Finding(ip.severity(r), user, detail, r.get("userId") or user))
