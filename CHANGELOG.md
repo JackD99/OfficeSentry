@@ -99,9 +99,6 @@ approved before the update show the month as it is now, as before, until they're
   deleting the newest one took its id, and with it the deleted client's rows in the **Activity log**, its
   name and domain included, for anyone granted the new client. Rows from before a client was added no longer
   show as its own, so an id already reused this way stops showing the old client's history too.
-
-### Security
-
 - **After approval, the client keeps the approved month-end report until a new version is issued.** Commentary,
   recommendations and client-visible notes changed after a month was approved used to show on the client's live
   report straight away. The client now sees what was approved (the same as their PDF), the review screen says the

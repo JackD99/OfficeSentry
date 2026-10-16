@@ -242,6 +242,13 @@ def login(client, username, password=PASSWORD):
     return client.post("/login", data={"username": username, "password": password})
 
 
+def forged(signed: str) -> str:
+    """A signed value (``itsdangerous``) with its signature changed. The signature's first character is changed:
+    the last one's lowest bits are dropped on decoding, so changing that one leaves it valid now and then."""
+    value, signature = signed.rsplit(".", 1)
+    return f"{value}.{'B' if signature[0] == 'A' else 'A'}{signature[1:]}"
+
+
 @pytest.fixture
 def connection_id(db, vault):
     cid = store.create_connection(
