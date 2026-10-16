@@ -1858,6 +1858,7 @@ a.sheet-link[aria-current] { color: var(--text); }
   .sheet .kv dt { margin-top: var(--space-1-5); }
   .sheet .kv dt:first-child { margin-top: 0; }
   table.stack-sm td.row-action a.sheet-link { margin-right: var(--space-2); }
+}
 
 /* -- A client's timeline (timeline.html): months as bands, dated entries under each, the measures beside --- */
 .story-filters { gap: var(--space-2) var(--space-5); }
