@@ -183,6 +183,8 @@ together ran every test.
   the `backup` command made in the last 25 hours, wherever it wrote (the
   command's record in `backup-status.json`, or the backups folder), and
   makes one itself if no newer copy comes `nightly_backup.LATE` after it.
+  It only deletes its own copies (`nightly_backup.MINE`), never one a
+  server's job made in the same folder.
 <!-- /since -->
 
 ## Signing off your commits

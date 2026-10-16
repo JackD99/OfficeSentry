@@ -424,7 +424,9 @@ how many it keeps. If something else already runs the `backup` command every
 night (the crontab line below, the [off-site job](#off-site-backups), or a
 scheduled task of your own), the worker leaves the night to it, wherever that
 copy goes, so there's still one copy a night. If that copy stops coming, the
-worker makes one an hour after it was due.
+worker makes one an hour after it was due. The worker only ever deletes copies
+it made itself, so a job of yours that writes to `/data/backups` keeps as many
+as its `--keep` says.
 <!-- /since -->
 
 To save a safe copy of the database while it's running:
