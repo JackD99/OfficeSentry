@@ -512,8 +512,17 @@ def _upn(t: dict, who: str) -> str:
     return f"{_local(t['people'][who])}@{t['base']}.{t['tld']}"
 
 
+SHARED_MAILBOXES = (  # id, alias, display name, kind, size in GB
+    ("u7", "info", "Info", "SharedMailbox", 6.4),
+    ("x-rec", "reception", "Reception", "SharedMailbox", 18.9),
+    ("x-acc", "accounts", "Accounts", "SharedMailbox", 44.8),
+    ("x-room", "boardroom", "Boardroom", "RoomMailbox", 0.1),
+)
+
+
 def exchange(t: dict, users: list[dict], first: bool, rng: random.Random) -> dict:
-    """Get-* results for every licensed account plus shared mailboxes: forwarding, delegates, sizes, protocols."""
+    """Get-* results for every licensed account plus shared mailboxes: forwarding, delegates, sizes, protocols,
+    holds (a few mailboxes on litigation hold or an eDiscovery hold, the leaver on neither)."""
     domain, quota = f"{t['base']}.{t['tld']}", "49.5 GB (53,150,220,288 bytes)"
     boxes, stats, cas, perms, send_as = [], {}, [], {}, []
     people = [u for u in users if u["userType"] == "Member" and u.get("assignedLicenses")]
@@ -532,6 +541,9 @@ def exchange(t: dict, users: list[dict], first: bool, rng: random.Random) -> dic
             "GrantSendOnBehalfTo": [],
             "ProhibitSendQuota": quota,
             "ArchiveStatus": "Active" if i % 4 == 0 else "None",
+            "LitigationHoldEnabled": i % 9 == 4 and u["id"] != "u2",
+            # An eDiscovery hold names the mailbox; retention policies for everyone are the organisation's.
+            "InPlaceHolds": [f"UniH{zlib.crc32(u['id'].encode()):032x}"] if i % 13 == 7 and u["id"] != "u2" else [],
         }
         if u["id"] == "u1":
             box.update(
@@ -568,12 +580,7 @@ def exchange(t: dict, users: list[dict], first: bool, rng: random.Random) -> dic
             }
         )
     staff_upns = [u["userPrincipalName"] for u in people if u["id"].startswith("d") and u["accountEnabled"]]
-    for sid, alias, display, kind, size in (
-        ("u7", "info", "Info", "SharedMailbox", 6.4),
-        ("x-rec", "reception", "Reception", "SharedMailbox", 18.9),
-        ("x-acc", "accounts", "Accounts", "SharedMailbox", 44.8),
-        ("x-room", "boardroom", "Boardroom", "RoomMailbox", 0.1),
-    ):
+    for sid, alias, display, kind, size in SHARED_MAILBOXES:
         guid, addr = f"g-{sid}", f"{alias}@{domain}"
         boxes.append(
             {
@@ -587,6 +594,8 @@ def exchange(t: dict, users: list[dict], first: bool, rng: random.Random) -> dic
                 "RecipientTypeDetails": kind,
                 "ProhibitSendQuota": quota,
                 "GrantSendOnBehalfTo": [t["people"]["ann"]] if alias == "info" else [],
+                "LitigationHoldEnabled": alias == "accounts",
+                "InPlaceHolds": [],
             }
         )
         stats[guid] = [
@@ -616,6 +625,7 @@ def exchange(t: dict, users: list[dict], first: bool, rng: random.Random) -> dic
     return {
         **graphdata.EXCHANGE,
         "Get-AcceptedDomain": [{"DomainName": domain, "DomainType": "Authoritative", "Default": True}],
+        "Get-OrganizationConfig": [{**graphdata.EXCHANGE["Get-OrganizationConfig"][0], "InPlaceHolds": []}],
         "Get-Mailbox": boxes,
         "Get-MailboxPermission": perms,
         "Get-MailboxStatistics": stats,
@@ -951,6 +961,12 @@ def replies(t: dict, users: list[dict], now: datetime, first: bool) -> dict:
             end=now + timedelta(days=18),
         )
         out["u2"] = on(f"{t['people']['bob']} has left the company. Please contact {_upn(t, 'ann')} instead.")
+    # Every other mailbox answers with replies turned off, as Graph does. The test mock answers 404 for a mailbox
+    # it has no entry for, which would leave the collection partial and the report saying it checked 4 mailboxes.
+    for u in users:
+        out.setdefault(u["id"], {"status": "disabled"})
+    for sid, *_ in SHARED_MAILBOXES:
+        out.setdefault(sid, {"status": "disabled"})
     return out
 
 
