@@ -51,7 +51,7 @@
     <td align="right" style="padding:8px 6px;border-top:1px solid #e5e7eb;{% if r.counts.high %}color:#c2410c;font-weight:700;{% else %}color:#9ca3af;{% endif %}">{{ r.counts.high }}</td>
     <td align="right" style="padding:8px 6px;border-top:1px solid #e5e7eb;{% if not r.new_severe %}color:#9ca3af;{% endif %}">{{ r.new_severe }}</td>
     <td align="right" style="padding:8px 6px;border-top:1px solid #e5e7eb;{% if r.fixed %}color:#15803d;{% else %}color:#9ca3af;{% endif %}">{{ r.fixed }}</td>
-    <td align="right" style="padding:8px 0 8px 6px;border-top:1px solid #e5e7eb;white-space:nowrap;">{% if score.value is not none %}{{ '{:g}'.format(score.value) }}%{% if score.delta %} <span style="color:{{ '#15803d' if score.delta > 0 else '#b91c1c' }};font-size:12px;">{{ '{:+g}'.format(score.delta) }}</span>{% endif %}{% else %}<span style="color:#9ca3af;">–</span>{% endif %}</td>
+    <td align="right" style="padding:8px 0 8px 6px;border-top:1px solid #e5e7eb;white-space:nowrap;">{% if score.value is not none %}{{ '{:g}'.format(score.value) }}%{% if score.delta %} <span style="color:{{ '#15803d' if score.delta > 0 else '#b91c1c' }};font-size:12px;">{{ '{:+g}'.format(score.delta) }} pts</span>{% endif %}{% else %}<span style="color:#9ca3af;">–</span>{% endif %}</td>
   </tr>
   {% endfor %}
 </table>

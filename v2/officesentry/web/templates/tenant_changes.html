@@ -57,7 +57,7 @@
       {% for f in report.figures %}
       <tr><td>{{ f.label }}</td>
         <td class="num" data-label="{{ report.since|day }}">{% if f.before is not none %}{{ '%g'|format(f.before) }}{{ f.unit }}{% else %}<span class="faint">–</span>{% endif %}</td>
-        <td class="num" data-label="{{ report.until|day if period and period.end else 'Now' }}">{{ '%g'|format(f.after) }}{{ f.unit }}{% if f.delta %} <span class="delta {{ f.trend }} tiny">{{ '%+g'|format(f.delta) }}</span>{% endif %}</td></tr>
+        <td class="num" data-label="{{ report.until|day if period and period.end else 'Now' }}">{{ '%g'|format(f.after) }}{{ f.unit }}{% if f.delta %} <span class="delta {{ f.trend }} tiny">{{ '%+g'|format(f.delta) }}{{ ' pts' if f.unit == '%' }}</span>{% endif %}</td></tr>
       {% endfor %}
       </tbody>
     </table>
