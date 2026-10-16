@@ -102,8 +102,9 @@ with [ShellCheck](https://www.shellcheck.net) at its strictest level:
 `shellcheck --severity=style <file>` (`tests/test_deploy_hardening.py` runs it
 too when it's installed).
 
-CI runs the same on Python 3.12 for every pull request, with a Docker image
-build, a dependency audit (`pip-audit`) and a subset on Windows, and on 3.11
+CI runs the same on Python 3.12 for every pull request, with the Docker image
+built as a release builds it (with its SBOM and build provenance), a
+dependency audit (`pip-audit`) and a subset on Windows, and on 3.11
 and 3.13 too once it's merged (and on a pull request that changes the
 dependencies or the CI workflow). Changes that only touch Markdown, `docs/`,
 `examples/` or `website/` skip the tests, and the **CI passed** check sums it
@@ -142,11 +143,14 @@ together ran every test.
   the label `refresh-baselines` to the pull request: a workflow retakes the
   screenshots in the pinned browser and redraws the PDF pages (from your
   branch merged with main, as the checks compare them), commits what
-  changed to the branch, takes the label off and starts the checks again.
-  It only works for branches of this repository, never main or a fork. From
-  a fork, retake them with `--update` as `v2/tests/browser/README.md` and
-  `v2/tests/nightly/README.md` say, and commit them. Look at the new images
-  in the pull request before merging.
+  changed to the branch, takes the label off and compares the new images
+  again. GitHub holds the pull request's checks for that commit until
+  someone with write access approves them ("Approve workflows to run" on
+  the pull request), so approve them or push once more before it can
+  merge. It only works for branches of this repository, never main or a
+  fork. From a fork, retake them with `--update` as
+  `v2/tests/browser/README.md` and `v2/tests/nightly/README.md` say, and
+  commit them. Look at the new images in the pull request before merging.
 - Mock Microsoft Graph at the HTTP layer with `responses`, never by
   replacing the client class. `tests/seed.py` answers every list a page at
   a time with a next link, as Microsoft does, so a collector that reads one

@@ -293,31 +293,47 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      # The base image by its digest, from the first registry that gives it: the Dockerfile's (AWS's copy of
-      # Docker Hub's official images), then Google's copy, then Docker Hub. Runners share addresses and each
-      # registry limits what one address pulls anonymously; on 15 October AWS's answered 429 ("Data limit
-      # exceeded") before anything was built. The digest names the bytes, so the image built is the same
-      # whichever answers, and it's built from the Dockerfile with only that line changed.
+      # Built the way release.yml builds it (BuildKit and its SBOM scanner from Google's copy of Docker Hub,
+      # the base image from the first registry that gives it), so a release builds the way every pull request
+      # did; release.yml only adds the arm64 build, pushing and signing.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+      # By its digest, from AWS, then Google's copy of Docker Hub, then Docker Hub (the script says why).
       - name: Fetch the base image
-        run: |
-          from=$(sed -n 's/^FROM //p' Dockerfile)
-          digest=${from##*@}
-          repository=${from%%:*}
-          library=${repository#public.ecr.aws/docker/}
-          for source in "$repository" "mirror.gcr.io/$library" "docker.io/$library"; do
-            if docker pull -q "$source@$digest"; then
-              sed "s|^FROM .*|FROM $source@$digest|" Dockerfile > "$RUNNER_TEMP/Dockerfile"
-              exit 0
-            fi
-            echo "::warning::$source didn't give the base image; trying the next registry"
-          done
-          exit 1
+        id: base
+        run: ../.github/scripts/base_image.sh Dockerfile
       - name: Build the image (not pushed)
-        run: docker build -f "$RUNNER_TEMP/Dockerfile" -t officesentry:ci .
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: v2
+          build-contexts: ${{ steps.base.outputs.context }}
+          load: true
+          tags: officesentry:ci
+      # The same build with the SBOM and build provenance a release attaches, written to a file on the runner
+      # (BuildKit reuses the layers above). The provenance must name the registry the base image came from,
+      # so it's known BuildKit built from that one.
+      - name: Build it again with a release's SBOM and provenance
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: v2
+          build-contexts: ${{ steps.base.outputs.context }}
+          outputs: type=oci,dest=${{ runner.temp }}/release.tar
+          sbom: true
+          provenance: mode=max
+      - name: Check the SBOM and provenance are attached
+        env:
+          CONTEXT: ${{ steps.base.outputs.context }}
+        run: |
+          set -o pipefail
+          python3 ../.github/scripts/check_attestations.py "$RUNNER_TEMP/release.tar" "$CONTEXT" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Start the portal and wait until it's healthy
         run: |
           docker run -d --name portal -e OFFICESENTRY_BASE_URL=https://sentry.example officesentry:ci
-          for i in $(seq 30); do
+          for _ in $(seq 30); do
             docker exec portal python -m officesentry healthcheck web && break
             sleep 2
           done
