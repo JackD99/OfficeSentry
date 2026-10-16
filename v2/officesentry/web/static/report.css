@@ -7,7 +7,7 @@
 @import url("tokens.css");
 
 :root {
-  --brand: #2557d6; --brand-ink: #2557d6; --on-brand: #fff; --brand-soft: #f0f4fd; --brand-line: #becdf3; --brand-cover-2: #1c41a1;
+  --brand: #1d5c4b; --brand-ink: #1d5c4b; --on-brand: #fff; --brand-soft: #edf2f1; --brand-line: #bbcec9; --brand-cover-2: #164538;
 }
 
 * { box-sizing: border-box; }

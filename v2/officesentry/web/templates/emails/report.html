@@ -5,36 +5,36 @@
     them) are the month's from month_end.report_context, empty until it's approved where approval is needed. -#}
 {%- set total = failing|length + more -%}
 {%- set es = summary.monthly(review) -%}
-{%- set TONE = {'critical': ('#fef2f2', '#b91c1c'), 'high': ('#fff7ed', '#c2410c'), 'medium': ('#fffbeb', '#a16207'), 'ok': ('#ecfdf3', '#15803d')} -%}
+{%- set TONE = {'critical': ('#fdecea', '#b42318'), 'high': ('#fdf0e6', '#b54708'), 'medium': ('#fdf6e1', '#8a5a00'), 'ok': ('#ecfdf3', '#15803d')} -%}
 {%- set tone = TONE.get(es.verdict.tone, TONE['medium']) -%}
 {% block preheader %}{{ es.verdict.headline }}{% if review.new_count %} {{ review.new_count }} new{% endif %}{% if review.resolved %}, {{ review.resolved|length }} fixed{% endif %}.{% endblock %}
 {% block kicker %}{{ frequency|capitalize }} security report{% endblock %}
 {% block body %}
-<h1 style="margin:0 0 4px;font-size:22px;line-height:1.3;color:#111827;">{{ tenant.name }}</h1>
-<div style="color:#6b7280;margin-bottom:18px;">Security report for {{ label }}</div>
+<h1 style="margin:0 0 4px;font-size:22px;line-height:1.3;color:#17201c;">{{ tenant.name }}</h1>
+<div style="color:#56625c;margin-bottom:18px;">Security report for {{ label }}</div>
 
 {% if message %}
-<div style="margin:0 0 20px;padding:12px 14px;background:#f1f5f9;border-radius:6px;color:#374151;white-space:pre-line;">{{ message }}</div>
+<div style="margin:0 0 20px;padding:12px 14px;background:#eceeea;border-radius:6px;color:#303b36;white-space:pre-line;">{{ message }}</div>
 {% endif %}
 
 {#- The answer first: how it's going, and does anything need doing? -#}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-<td bgcolor="{{ tone[0] }}" style="padding:14px 16px;border-radius:8px;background:{{ tone[0] }};border-left:4px solid {{ tone[1] }};color:#111827;">
+<td bgcolor="{{ tone[0] }}" style="padding:14px 16px;border-radius:8px;background:{{ tone[0] }};border-left:4px solid {{ tone[1] }};color:#17201c;">
   <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:{{ tone[1] }};">{{ es.verdict.label }}</div>
   <div style="font-weight:600;font-size:15px;line-height:1.4;margin-top:2px;">{{ es.verdict.headline }}</div>
-  {% if es.verdict.detail %}<div style="font-size:14px;color:#374151;margin-top:4px;">{{ es.verdict.detail }}</div>{% endif %}
+  {% if es.verdict.detail %}<div style="font-size:14px;color:#303b36;margin-top:4px;">{{ es.verdict.detail }}</div>{% endif %}
   {% if total %}
   {%- set parts = [] %}{% for s in ('critical', 'high', 'medium', 'low') %}{% if by_check[s] %}{% set _ = parts.append(by_check[s] ~ ' ' ~ s) %}{% endif %}{% endfor %}
-  <div style="font-size:13px;color:#374151;margin-top:4px;">{{ total|plural('check') }} need{{ 's' if total == 1 }} attention{% if parts %} ({{ parts|join(', ') }}){% endif %}.</div>
+  <div style="font-size:13px;color:#303b36;margin-top:4px;">{{ total|plural('check') }} need{{ 's' if total == 1 }} attention{% if parts %} ({{ parts|join(', ') }}){% endif %}.</div>
   {% endif %}
   {%- set changes = [] %}{% if review.new_count %}{% set _ = changes.append(review.new_count ~ ' new') %}{% endif %}{% if review.resolved %}{% set _ = changes.append(review.resolved|length ~ ' fixed') %}{% endif %}
-  {% if changes %}<div style="font-size:13px;color:#374151;margin-top:2px;">{{ changes|join(' and ')|capitalize }} in the last 4 weeks.</div>{% endif %}
+  {% if changes %}<div style="font-size:13px;color:#303b36;margin-top:2px;">{{ changes|join(' and ')|capitalize }} in the last 4 weeks.</div>{% endif %}
 </td></tr></table>
 
 {% if commentary %}
-<div style="margin:16px 0 0;padding:12px 14px;border:1px solid #e5e7eb;border-radius:8px;">
-  <div style="font-size:12px;font-weight:600;color:#6b7280;">From {{ msp_name }}</div>
-  {% for p in commentary %}<p style="margin:6px 0 0;color:#111827;white-space:pre-line;">{{ p }}</p>{% endfor %}
+<div style="margin:16px 0 0;padding:12px 14px;border:1px solid #dfe3dd;border-radius:8px;">
+  <div style="font-size:12px;font-weight:600;color:#56625c;">From {{ msp_name }}</div>
+  {% for p in commentary %}<p style="margin:6px 0 0;color:#17201c;white-space:pre-line;">{{ p }}</p>{% endfor %}
 </div>
 {% endif %}
 
@@ -44,7 +44,7 @@
 {% for k in kpis %}
   {% set value = k.value|money(review.currency, 2) if k.unit == 'currency' else ('{:g}'.format(k.value) ~ k.unit) %}
   {% if k.delta %}{% set change = ('{:+g}'.format(k.delta) ~ (' pts' if k.unit == '%' else '') ~ ' in 4 weeks') if k.unit != 'currency' else ((k.delta|abs)|money(review.currency, 2) ~ (' more' if k.delta > 0 else ' less') ~ ' than 4 weeks ago') %}{% else %}{% set change = k.note %}{% endif %}
-  {% set colour = '#15803d' if k.trend == 'better' and k.better != 'none' else ('#b91c1c' if k.trend == 'worse' and k.better != 'none' else '#6b7280') %}
+  {% set colour = '#15803d' if k.trend == 'better' and k.better != 'none' else ('#b91c1c' if k.trend == 'worse' and k.better != 'none' else '#56625c') %}
   {% set _ = items.append((k.label, value, change, colour)) %}
 {% endfor %}
 {{ tiles(items) }}
@@ -55,31 +55,31 @@
 {{ heading('What we recommend next') }}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
   {% for a in planned %}
-  <tr><td valign="top" width="28" style="padding:10px 0;border-top:1px solid #e5e7eb;font-weight:700;color:#111827;">{{ loop.index }}.</td>
-    <td valign="top" style="padding:10px 0 10px 4px;border-top:1px solid #e5e7eb;">
-      <div style="font-weight:600;color:#111827;">{{ a.title }}</div>
-      {% if a.detail %}<div style="font-size:13px;color:#4b5563;">{{ a.detail }}</div>{% endif %}
-      <div style="font-size:12px;color:#6b7280;margin-top:2px;">{{ a.status_label }}{% if a.target_label %} · Target: {{ a.target_label }}{% endif %}</div>
+  <tr><td valign="top" width="28" style="padding:10px 0;border-top:1px solid #dfe3dd;font-weight:700;color:#17201c;">{{ loop.index }}.</td>
+    <td valign="top" style="padding:10px 0 10px 4px;border-top:1px solid #dfe3dd;">
+      <div style="font-weight:600;color:#17201c;">{{ a.title }}</div>
+      {% if a.detail %}<div style="font-size:13px;color:#56625c;">{{ a.detail }}</div>{% endif %}
+      <div style="font-size:12px;color:#56625c;margin-top:2px;">{{ a.status_label }}{% if a.target_label %} · Target: {{ a.target_label }}{% endif %}</div>
     </td></tr>
   {% endfor %}
 </table>
-{% if more_planned %}<div style="font-size:13px;color:#6b7280;margin-top:4px;">And {{ more_planned }} more in the full report.</div>{% endif %}
+{% if more_planned %}<div style="font-size:13px;color:#56625c;margin-top:4px;">And {{ more_planned }} more in the full report.</div>{% endif %}
 {% elif failing %}
 {{ heading('What needs attention') }}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
   {% for r in failing %}
-  <tr><td valign="top" width="78" style="padding:10px 0;border-top:1px solid #e5e7eb;">{{ sev(r.severity or 'info') }}</td>
-    <td valign="top" style="padding:10px 0 10px 8px;border-top:1px solid #e5e7eb;">
-      <div style="font-weight:600;color:#111827;">{{ r.summary|trim('.') }}</div>
-      <div style="font-size:13px;color:#4b5563;">{{ r.action }}.</div>
+  <tr><td valign="top" width="78" style="padding:10px 0;border-top:1px solid #dfe3dd;">{{ sev(r.severity or 'info') }}</td>
+    <td valign="top" style="padding:10px 0 10px 8px;border-top:1px solid #dfe3dd;">
+      <div style="font-weight:600;color:#17201c;">{{ r.summary|trim('.') }}</div>
+      <div style="font-size:13px;color:#56625c;">{{ r.action }}.</div>
     </td></tr>
   {% endfor %}
 </table>
-{% if more %}<div style="font-size:13px;color:#6b7280;margin-top:4px;">And {{ more }} more in the full report.</div>{% endif %}
+{% if more %}<div style="font-size:13px;color:#56625c;margin-top:4px;">And {{ more }} more in the full report.</div>{% endif %}
 {% endif %}
 
 {% if stale %}
-<div style="margin-top:18px;padding:10px 14px;border-radius:6px;background:#fff7ed;color:#92400e;font-size:13px;">Some of your organisation's data is more than 36 hours old, so a few figures may be out of date.</div>
+<div style="margin-top:18px;padding:10px 14px;border-radius:6px;background:#fff7ed;color:#b45309;font-size:13px;">Some of your organisation's data is more than 36 hours old, so a few figures may be out of date.</div>
 {% endif %}
 
 <div style="margin-top:24px;">{{ button(link('reports.tenant_report', tenant_id=tenant.id), 'Open the full report') }}</div>
@@ -88,7 +88,7 @@
 {{ heading('Attached') }}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
   {% for title, name in files %}
-  <tr><td style="padding:6px 0;border-top:1px solid #e5e7eb;font-size:13px;"><span style="color:#111827;font-weight:600;">{{ title }}</span><br><span style="color:#6b7280;">{{ name }}</span></td></tr>
+  <tr><td style="padding:6px 0;border-top:1px solid #dfe3dd;font-size:13px;"><span style="color:#17201c;font-weight:600;">{{ title }}</span><br><span style="color:#56625c;">{{ name }}</span></td></tr>
   {% endfor %}
 </table>
 {% endif %}
