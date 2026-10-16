@@ -352,13 +352,28 @@ WHATS_NEW = [
                 "href": "/docs/install/#backups",
                 "link": "Backups",
             },
+            {
+                "icon": "table",
+                "title": "Every report leads with its numbers",
+                "text": "Nine more detail reports, Devices, Guests and Conditional Access among them, open with "
+                "headline figures that each open the rows they count, and All clients compares them across "
+                "every client.",
+                "href": "/docs/reference/#reports",
+                "link": "Reports",
+            },
         ],
         "also": [  # smaller changes, a few words each
             "a check that each client's Microsoft 365 audit log is switched on",
             "a client whose sign-in breaks keeps its last good data, and its findings aren't marked fixed",
             "a month-end report changed after approval reaches the client only as a new version",
             "month-end never sends a client the same month twice",
+            "month-end never approves an empty report, and a paused client gets no email",
+            "pausing a client mid-collection sends no alerts",
+            "a SharePoint network failure no longer reads as awaiting approval",
+            "percentage changes read in points everywhere, and the Overview no longer shows more licensed users in red",
+            "search lists every matching domain, and a mailbox's last inbox rule shows as removed",
             "only staff who can open every report in a client's plan can add people to it",
+            "every page links only to what the viewer can open and shows only the buttons they can use",
             "the Update button installs only releases tagged on main",
             "Updates lists every release since yours, however far behind, and never says Up to date before it "
             "has checked",
