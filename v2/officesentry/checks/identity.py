@@ -241,7 +241,7 @@ def _roles_text(assignments: list[dict]) -> str:
     "admin_mfa",
     "Every admin has MFA registered",
     "Admins",
-    "Have each listed admin register a strong method (Authenticator or a FIDO2 key), or remove the role. "
+    "Have every admin without MFA register a strong method (Authenticator or a FIDO2 key), or remove their role. "
     "Break-glass accounts should use FIDO2 keys kept offline.",
 )
 def admin_mfa(snap: TenantSnapshot, now: datetime):
@@ -412,7 +412,7 @@ def users_mfa_registered(snap: TenantSnapshot, now: datetime):
     "No inactive accounts",
     "Accounts",
     "Disable accounts that haven't signed in for 90 days, or were created over 30 days ago and never used "
-    "(after checking with the client), then remove their licences. Inactive accounts are a common foothold "
+    "(after checking with their manager), then remove their licences. Inactive accounts are a common foothold "
     "for attackers.",
 )
 def stale_users(snap: TenantSnapshot, now: datetime):

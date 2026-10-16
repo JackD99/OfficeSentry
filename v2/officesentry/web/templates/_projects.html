@@ -12,8 +12,12 @@
 <span class="pill {{ STATUS_TONE.get(rec.status, '') }}"{% if rec.updated_by %} title="{{ rec.updated_by }}, {{ rec.updated_at|when }}"{% endif %}>{{ rec.status_label }}</span>
 {%- endmacro %}
 
-{# Status picker. back='all' returns to the All tenants list (keeping its project filter). #}
+{# Status picker. back='all' returns to the All tenants list (keeping its project filter). For someone who
+   can't change it, the status (where the page doesn't already show it) and the team's note. #}
 {% macro status_form(tenant, rec, statuses, back='tenant', project='', note=True) -%}
+{% if not can_open('projects.set_status', tenant_id=tenant.id, key=rec.project.key) %}
+{% if not note %}{{ status_pill(rec) }}{% elif rec.note %}<p class="small">Note: {{ rec.note }}</p>{% endif %}
+{% else %}
 <form method="post" action="{{ url_for('projects.set_status', tenant_id=tenant.id, key=rec.project.key) }}" class="project-status">
   {{ csrf() }}<input type="hidden" name="back" value="{{ back }}">{% if project %}<input type="hidden" name="project" value="{{ project }}">{% endif %}
   <label class="inline-label"><span class="sr-only">Status of {{ rec.project.title }} for {{ tenant.name }}</span>
@@ -22,4 +26,5 @@
   {% else %}<input type="hidden" name="note" value="{{ rec.note }}">{% endif %}
   <button class="sm">Save</button>
 </form>
+{% endif %}
 {%- endmacro %}

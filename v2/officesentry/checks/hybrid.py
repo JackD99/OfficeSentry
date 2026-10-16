@@ -26,7 +26,7 @@ def _sync_on(snap: TenantSnapshot):
     "Hybrid identity",
     "Check the Entra Connect server: that it is up, the Microsoft Azure AD Sync service is running and "
     "Synchronization Service Manager shows no errors. Until sync runs, accounts disabled or removed in Active "
-    "Directory keep working in Microsoft 365. If the client has moved to cloud-only, turn directory sync off.",
+    "Directory keep working in Microsoft 365. If the organisation has moved to cloud-only, turn directory sync off.",
 )
 def directory_sync_running(snap: TenantSnapshot, now: datetime):
     status, reason = _sync_on(snap)

@@ -8,8 +8,10 @@ What it is and isn't:
 
 - It's about who signs in to the portal. Office Sentry's read-only connection to your clients' tenants
   doesn't change, and no new permissions are asked of any client.
-- It uses a small, separate app registration in **your own** tenant ("Office Sentry sign-in") with no API
-  permissions at all. Office Sentry only asks Microsoft who signed in.
+- It uses a small, separate app registration in **your own** tenant ("Office Sentry sign-in"). It has no
+  application permissions and reads no data: it only asks for the standard sign-in scopes `openid`, `profile`
+  and `email`, so Office Sentry learns who signed in (their name and sign-in address) and nothing else. The
+  setup wizard grants admin consent for those three for your tenant, so nobody is asked to accept them.
 - Roles come from Entra: the app has an app role for each Office Sentry role, and you assign people (or a
   group) to one in the Entra admin centre. Which clients someone sees is still granted in Office Sentry, so
   tenant isolation works exactly as before.
@@ -23,7 +25,11 @@ What it is and isn't:
 2. Press **Sign in to Microsoft**. The page shows a code and a link to Microsoft's sign-in page.
 3. Open the link, enter the code and sign in as a Global Administrator of your own (the MSP's) tenant.
    Microsoft may ask you to let *Microsoft Graph Command Line Tools* (Microsoft's own app) manage apps for
-   you; accept. Office Sentry uses this sign-in once and keeps nothing from it.
+   you; accept. This sign-in asks for three delegated Microsoft Graph permissions, used once, to create the
+   app, and Office Sentry keeps nothing from it:
+   - `Application.ReadWrite.All`, to create the app registration and its enterprise app.
+   - `AppRoleAssignment.ReadWrite.All`, to assign you the app's Admin role.
+   - `DelegatedPermissionGrant.ReadWrite.All`, to grant admin consent for the sign-in scopes.
 4. Come back to Office Sentry. Within a few seconds it has created the sign-in app, assigned you its Admin
    role and turned Microsoft sign-in on.
 5. Press **Connect my Microsoft account** on the same page and sign in, so your existing admin account is
@@ -78,7 +84,9 @@ with a role:
 
 What each role can do is under **Settings → Users → Roles**. Someone assigned more than one gets the first in
 this table. A role change applies at the person's next sign-in, and someone removed from the app can't sign
-in with Microsoft any more. The role on their user page follows Entra, so change it there.
+in with Microsoft any more, unless you let people with no role in (see
+[People in your tenant with no Office Sentry role](#people-in-your-tenant-with-no-office-sentry-role)). The role
+on their user page follows Entra, so change it there.
 
 **Custom roles** (made under *Settings → Users → Roles*) are reached the same way: create an app role on the
 sign-in app (*App registrations → Office Sentry sign-in → App roles*) with a value such as `ServiceDesk`, then
@@ -107,6 +115,24 @@ the same on their Account page.
 Signing in with Microsoft never asks for Office Sentry's own two-step sign-in, whatever
 `OFFICESENTRY_REQUIRE_MFA` says: it relies on Entra's MFA and Conditional Access, so require MFA for the
 sign-in app there.
+
+### People in your tenant with no Office Sentry role
+
+The **Settings** card on **Settings → Microsoft sign-in** says what happens to someone in your own tenant who
+signs in with Microsoft but holds no app role on the sign-in app, under *People in your tenant with no Office
+Sentry role*:
+
+- **Can't sign in** (the default, and the recommended choice): only people assigned a role in Entra get in.
+  Office Sentry turns anyone else away and tells them to ask an admin to assign them a role.
+- **Second line, with no clients until an admin grants some**: anyone in your tenant who can reach the sign-in
+  app gets in as Second line. A new account sees no clients until you grant some on its user page. An account
+  that already exists becomes Second line the same way when its person has no app role (or loses theirs in
+  Entra), and keeps the clients it was granted.
+
+The second choice only works when Entra lets unassigned people reach the app. The setup wizard (and step 5 of
+*Setting it up by hand*) sets *Assignment required* to **Yes** on the enterprise app, so Microsoft turns away
+anyone without a role before Office Sentry sees them (AADSTS50105). To let them in, also set *Assignment
+required* to **No** under *Enterprise applications → Office Sentry sign-in → Properties*.
 
 ## Confirming a change without a password
 

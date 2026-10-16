@@ -289,5 +289,5 @@ def test_month_columns_draws_two_columns_a_month_with_counts_and_no_data_tracks(
     assert svg.count('class="nodata"') == 1 and "August 2026: no data yet" in svg
     assert svg.count('class="part tone-2"') == 1 and svg.count('class="part tone-1"') == 2  # a zero draws no column
     assert svg.count('class="count"') == 4 and "September 2026: 3 found, 1 fixed" in svg
-    assert ">Aug 26<" in svg and ">Sep<" in svg and ">Oct<" in svg
+    assert ">Aug 2026<" in svg and ">Sep<" in svg and ">Oct<" in svg
     assert month_columns([], label="x") == ""

@@ -14,7 +14,7 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 from .. import clouds, lifecycle, store, tenant_groups, tenant_health
 from ..db import audit
 from ..discovery import tenant_id_for_domain
-from ..text import plural
+from ..text import one_line, plural
 from .access import can, manages_groups, needs, refused, tenant_or_404, visible_tenants
 from .groups import group_aware, scope
 from .tenants import DOMAIN_RE, GUID_RE, _cfg, _consent_link, cloud_mismatch, not_connected
@@ -86,7 +86,7 @@ def manage(tenant_id: int):
         connections=store.list_connections(g.db),
         consent_link=_consent_link(t, connection),
         redirect_uri=_cfg().base_url + url_for("tenants.consent_callback"),
-        can_check=_check_problem(t) is None,
+        can_check=_check_problem(t) is None and can("collect", t["id"]),
         check_problem=_check_problem(t),
         notes_max=NOTES_MAX,
         groups=tenant_groups.all_groups(g.db) if manages_groups() else [],
@@ -139,7 +139,7 @@ def check_connection(tenant_id: int):
 @needs("clients.manage")
 def edit(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    name = request.form.get("name", "").strip()
+    name = one_line(request.form.get("name", ""))
     ref = request.form.get("tenant_ref", "").strip().lower()
     notes = request.form.get("notes", "").strip()
     conn_id = request.form.get("connection_id", type=int)
@@ -250,7 +250,7 @@ def resume(tenant_id: int):
     if t["archived_at"]:
         flash("Restore the client before resuming it.", "error")
     elif not t["enabled"]:
-        lifecycle.resume(g.db, t, g.user["username"])
+        lifecycle.resume(g.db, t, g.user["username"], _cfg().timezone)
         flash(
             f"Resumed {t['name']}. It's collected at the next nightly run; use Refresh all data to collect now.",
             "success",

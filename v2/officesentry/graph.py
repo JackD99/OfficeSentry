@@ -136,6 +136,9 @@ class GraphClient:
         self.telemetry = telemetry or Telemetry()
         self.app, self.tenant = app, tenant  # who the limiter's app-wide and per-tenant buckets belong to
         self._token_provider = token_provider
+        # Why signing in failed, once it has: a collector that reads item by item carries on past a failed
+        # item, so the worker fails the run with this rather than store what such a run read (nothing).
+        self.sign_in_error: GraphError | None = None
         self._session = session or requests.Session()
         self._max_retries = max_retries
         self._timeout = timeout
@@ -193,7 +196,7 @@ class GraphClient:
         while True:
             waited = self.limiter.acquire(taken) if self.limiter else 0.0
             hdrs = {
-                "Authorization": f"Bearer {self._token_provider()}",
+                "Authorization": f"Bearer {self._token()}",
                 "Accept": "application/json",
                 "User-Agent": USER_AGENT,
             }
@@ -232,6 +235,17 @@ class GraphClient:
             if not resp.ok:
                 raise _parse_error(resp)
             return resp.json()
+
+    def _token(self) -> str:
+        """A token for the next request. Once signing in has failed, every later request fails the same way
+        without asking Microsoft again: the run is failed with it anyway."""
+        if self.sign_in_error is not None:
+            raise self.sign_in_error
+        try:
+            return self._token_provider()
+        except GraphError as exc:
+            self.sign_in_error = exc
+            raise
 
     def _backoff(self, attempt: int) -> float:
         """Exponential backoff with "equal jitter": between half and all of 2**attempt (max 60s)."""

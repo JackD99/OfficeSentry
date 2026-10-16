@@ -4,7 +4,9 @@ Signed in as every built-in role and as a custom role limited to two clients (ea
 or taken away on one client, as people's access is in practice), the portal is crawled from the landing
 page and the main pages, following every same-site link and frame, and every link must open for the person
 it was drawn for: a 403 (or a 500) fails, naming the page that offered it. ``web.access.can_open`` is what
-templates ask, from the same checks the routes make; the unit tests below pin it down.
+templates ask, from the same checks the routes make; the unit tests below pin it down. A page's buttons
+(its POST forms) aren't pressed, since that would change what the next walker sees: each must go to an
+address whose checks let the person through, as ``can_open`` answers for it on the page's client.
 
 The crawl opens a few URLs of each kind (the same route on the same client for the same report), so it
 stays quick; downloads are fetched once per kind, with PDFs as the page they're made from.
@@ -72,6 +74,7 @@ class _Links(HTMLParser):
     def __init__(self):
         super().__init__()
         self.links: list[str] = []
+        self.forms: list[str] = []  # where each button (a POST form) sends
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
@@ -79,12 +82,14 @@ class _Links(HTMLParser):
             self.links.append(a["href"])
         elif tag == "iframe" and a.get("src"):
             self.links.append(a["src"])
+        elif tag == "form" and (a.get("method") or "").lower() == "post":
+            self.forms.append(a.get("action") or "")
 
 
-def links_on(page: str) -> list[str]:
+def links_on(page: str) -> _Links:
     parser = _Links()
     parser.feed(page)
-    return parser.links
+    return parser
 
 
 @pytest.fixture(scope="module")
@@ -239,10 +244,10 @@ def _start(ids: dict) -> list[str]:
     return pages
 
 
-def _kind(app, path: str):
+def _kind(app, path: str, method: str = "GET"):
     """Which route on which client for which report: URLs of one kind open alike (or None: no route)."""
     try:
-        endpoint, args = app.url_map.bind("localhost").match(unquote(path), method="GET")
+        endpoint, args = app.url_map.bind("localhost").match(unquote(path), method=method)
     except RequestRedirect:
         return ("redirect", path)
     except HTTPException:
@@ -257,14 +262,24 @@ def _local(url) -> str | None:
     return url.path + (f"?{url.query}" if url.query else "")
 
 
-def crawl(app, client, ids: dict) -> tuple[list[tuple[str, int, str]], int]:
+def _client_of(app, path: str) -> int | None:
+    """The client a page's URL names, if it names one."""
+    try:
+        return app.url_map.bind("localhost").match(unquote(path), method="GET")[1].get("tenant_id")
+    except (HTTPException, RequestRedirect):
+        return None
+
+
+def crawl(app, client, ids: dict) -> tuple[list[tuple[str, int, str]], int, list[tuple[str, str]]]:
     """Every link reachable from the start pages: (url, status, the page that linked it) for one link of
-    each kind on each kind of page that answered 403 or 500, and how many URLs were opened. Once a few URLs
-    of a kind are opened, the rest of that kind answer as they did."""
+    each kind on each kind of page that answered 403 or 500, how many URLs were opened, and one button of
+    each kind on each client (where it sends, the page it's on). Once a few URLs of a kind are opened, the
+    rest of that kind answer as they did."""
     queue = deque((url, None) for url in _start(ids))
     answered: dict[str, int] = {}  # every URL opened, and its status
     kinds: dict[tuple, list[int]] = {}  # what each kind of URL answered
     bad: dict[tuple, tuple[str, int, str]] = {}
+    buttons: dict[tuple, tuple[str, str]] = {}
     while queue and len(answered) < MAX_PAGES:
         target, parent = queue.popleft()
         path = urlsplit(target).path
@@ -294,11 +309,16 @@ def crawl(app, client, ids: dict) -> tuple[list[tuple[str, int, str]], int]:
             continue
         if status != 200 or download or "text/html" not in resp.headers.get("Content-Type", ""):
             continue
-        for href in links_on(resp.get_data(as_text=True)):
+        page = links_on(resp.get_data(as_text=True))
+        for href in page.links:
             if not href.startswith(("#", "mailto:", "tel:", "javascript:", "data:")):
                 if (link := _local(urlsplit(urljoin("http://localhost" + target, href)))) is not None:
                     queue.append((link, target))
-    return list(bad.values()), len(answered)
+        for action in page.forms:
+            if (sends := _local(urlsplit(urljoin("http://localhost" + target, action)))) is not None:
+                kind = _kind(app, urlsplit(sends).path, "POST") or ("nowhere", sends)
+                buttons.setdefault((kind, _client_of(app, path)), (sends, target))
+    return list(bad.values()), len(answered), list(buttons.values())
 
 
 @pytest.mark.parametrize("walker", WALKERS)
@@ -307,10 +327,23 @@ def test_no_page_offers_a_link_that_answers_403(world, walker, _pdf_as_page):
     client = app.test_client()
     assert login(client, walker).status_code == 302
     with responses.RequestsMock():  # no page reaches Microsoft (or anywhere) while it's opened
-        bad, count = crawl(app, client, ids)
+        bad, count, buttons = crawl(app, client, ids)
     assert count > 60, count  # the crawl reached the portal, not just the sign-in page
     assert not bad, f"{walker} was offered {len(bad)} link(s) that don't open:\n" + "\n".join(
         f"  {status} {url}  (on {parent})" for url, status, parent in bad
+    )
+    refused = []
+    with signed_in(app, db, walker):
+        for sends, page in buttons:
+            try:
+                endpoint, values = app.url_map.bind("localhost").match(unquote(urlsplit(sends).path), method="POST")
+            except HTTPException:
+                refused.append((sends, page))  # a button that goes nowhere
+                continue
+            if not can_open(endpoint, tenant=_client_of(app, urlsplit(page).path), **values):
+                refused.append((sends, page))
+    assert not refused, f"{walker} was offered {len(refused)} button(s) that answer 403:\n" + "\n".join(
+        f"  {sends}  (on {page})" for sends, page in refused
     )
 
 

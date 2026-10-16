@@ -21,7 +21,9 @@
     <tr>
       <td><a class="strong" href="{{ url_for('reporting.edit_plan', plan_id=p.id) }}">{{ p.name }}</a>
         <span class="sub">{{ deliveries[p.delivery] }}</span></td>
-      <td data-label="Reports" class="wrap small">{{ titles(p)|join(' + ') }}</td>
+      {% set names = titles(p) %}
+      <td data-label="Reports" class="wrap small">{% if names %}{{ names|join(' + ') }}{% else %}<span class="pill bad">No reports</span>
+        <span class="sub">Nothing is approved or sent until you choose one.</span>{% endif %}</td>
       <td data-label="When" class="small">{{ describe(p) }}</td>
       <td data-label="Mode"><span class="pill {{ 'info' if p.mode == 'approval' or p.delivery == 'portal' else '' }}">{{ modes['approval'] if p.delivery == 'portal' else modes[p.mode] }}</span></td>
       <td data-label="Clients" class="num">{{ p.tenants }}</td>

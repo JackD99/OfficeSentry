@@ -343,6 +343,15 @@ each cloud.
 report go ahead of the nightly queue, so they don't wait for every client to
 be collected.
 
+<!-- since 2.4.0 -->
+A data source that failed for a reason that passes by waiting (Microsoft busy,
+throttling or out of reach, or the worker restarted mid-run, as an update does)
+is tried again by itself about 20 minutes later, and once more two hours after
+that. Its *Data collection* page says when, and a collection-failure alert waits
+for the last try. A failure someone has to fix first (a permission, a licence,
+the certificate) isn't tried again until the next night.
+<!-- /since -->
+
 Some cron examples: `0 2 * * *` nightly at 02:00, `0 2 * * 1-5` weeknights
 only, `30 1,13 * * *` twice a day at 01:30 and 13:30.
 
@@ -404,8 +413,21 @@ what was typed.
 
 ## Backups
 
-Everything is in the `officesentry-data` volume. To save a safe copy of the
-database while it's running:
+Everything is in the `officesentry-data` volume.
+
+<!-- since 2.4.0 -->
+The worker backs the database up by itself every night at 03:30 (in
+`OFFICESENTRY_TIMEZONE`): the same copy as the command below, into
+`/data/backups`, keeping the last 7. `OFFICESENTRY_BACKUP_CRON` in `.env`
+changes when (cron, as for collections, or `off`) and `OFFICESENTRY_BACKUP_KEEP`
+how many it keeps. If something else already runs the `backup` command every
+night (the crontab line below, the [off-site job](#off-site-backups), or a
+scheduled task of your own), the worker leaves the night to it, wherever that
+copy goes, so there's still one copy a night. If that copy stops coming, the
+worker makes one an hour after it was due.
+<!-- /since -->
+
+To save a safe copy of the database while it's running:
 
 ```bash
 docker compose exec web python -m officesentry backup
@@ -473,7 +495,7 @@ isn't alerted on.
 secrets and mail passwords. Docker keeps it in a volume of its own,
 `officesentry-keys` (`/keys/secrets.json`), so the data volume and every
 backup made from it hold no key: someone who gets a backup can't read the
-certificates in it. An install from before October 2026 kept it in the data
+certificates in it. An install from before 2.1.0 kept it in the data
 volume; the portal moves it to `/keys` the first time it starts on this
 version and logs **Moved the key file**.
 
@@ -536,10 +558,13 @@ To set it up:
    AWS_SECRET_ACCESS_KEY='the applicationKey'
    ```
 
-5. Copy `deploy/jobs.sh` from the release's source next to it as
-   `deploy/jobs.sh`, then run `OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh schedule`
+5. Put `jobs.sh` in a `deploy` folder next to it: from 2.4.0 it's one of the
+   release's files (`mkdir -p deploy && curl -fsSL -o deploy/jobs.sh
+   https://github.com/JackD99/OfficeSentry/releases/download/v<version>/jobs.sh`,
+   with the version you run); before that, copy `v2/deploy/jobs.sh` from the
+   release's source. Then run `OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh schedule`
    in that folder (as a user who can run `docker`) to add the nightly and
-   weekly lines to your crontab.
+   weekly lines to your crontab. Its log is `jobs.log` in the same folder.
 6. Run `OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh now`: the first run sets up
    the storage and ends with a line like `snapshot 1a2b3c4d saved`. Then run
    it with `drill` instead of `now` ([below](#restore-drill)). When that

@@ -309,8 +309,16 @@ def _parts_note(then: dict[str, str], now: dict[str, str]) -> str:
 
 
 def compare_report(
-    conn, tenant, key: str, since: datetime, now: datetime, old_snap: TenantSnapshot, new_snap: TenantSnapshot
+    conn,
+    tenant,
+    key: str,
+    since: datetime,
+    now: datetime,
+    old_snap: TenantSnapshot,
+    new_snap: TenantSnapshot,
+    built: dict | None = None,
 ) -> ReportChanges:
+    """``built`` holds reports already built from ``new_snap`` by key, and gets the ones built here."""
     title, _description, collectors, _builder = data_reports.REPORTS[key]
     result = ReportChanges(key, title)
     old_runs = [old_snap.runs.get(c) for c in collectors]
@@ -341,7 +349,11 @@ def compare_report(
         )
         return result
     old = data_reports.build(conn, tenant, key, as_of=since, snap=old_snap)
-    new = data_reports.build(conn, tenant, key, now=now, snap=new_snap)
+    new = built.get(key) if built is not None else None
+    if new is None:
+        new = data_reports.build(conn, tenant, key, now=now, snap=new_snap)
+        if built is not None:
+            built[key] = new
     if old.unavailable or new.unavailable:
         # Why it can't be built now still holds; why it couldn't be then (waiting for a permission the client
         # has since approved, say) doesn't.
@@ -406,9 +418,11 @@ def build(
     now: datetime | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
+    current: Current | None = None,
 ) -> TenantChanges:
     """What changed over the last ``days``, or between ``since`` and ``until``: any two dates, the end one read
-    as the data stood then (``TenantSnapshot(as_of=until)``)."""
+    as the data stood then (``TenantSnapshot(as_of=until)``). ``current`` shares the tenant's data as it stands
+    now, and every report built from it, between calls (``precomputed.refresh``)."""
     now = until or now or datetime.now(UTC)
     since = since or now - timedelta(days=days)
     since_iso = since.strftime(ISO)
@@ -417,7 +431,8 @@ def build(
     notes = []
 
     old_snap = TenantSnapshot(conn, tenant, as_of=since)
-    new_snap = TenantSnapshot(conn, tenant, as_of=until)
+    shared = current if until is None else None
+    new_snap = shared.snap if shared else TenantSnapshot(conn, tenant, as_of=until)
     finished = [r["finished_at"] for r in old_snap.runs.values() if r["finished_at"]]
     baseline = min(finished) if finished else None
 
@@ -446,7 +461,9 @@ def build(
         if key in hide:
             continue
         try:
-            reports.append(compare_report(conn, tenant, key, since, now, old_snap, new_snap))
+            reports.append(
+                compare_report(conn, tenant, key, since, now, old_snap, new_snap, shared.reports if shared else None)
+            )
         except Exception as exc:
             logging.getLogger(__name__).exception("Comparing %s failed for tenant %s", key, tenant["id"])
             reports.append(
@@ -642,6 +659,15 @@ def narrowed(s: Summary, opens: Callable[[str], bool]) -> Summary:
     )
 
 
+@dataclass
+class Current:
+    """One tenant's data as it stands now (``snap``) and the reports built from it so far, by key: the worker
+    builds the three periods' rows and every rollup's from one of each (``precomputed.refresh``)."""
+
+    snap: TenantSnapshot
+    reports: dict = field(default_factory=dict)
+
+
 def across(
     conn,
     tenants,
@@ -649,6 +675,7 @@ def across(
     now: datetime | None = None,
     rebuild: bool = False,
     opens: Callable[[int], Callable[[str], bool]] | None = None,
+    current: Current | None = None,
 ) -> list[Summary]:
     """Every tenant's summary, most important first.
 
@@ -664,7 +691,7 @@ def across(
     out = []
     for t in tenants:
         try:
-            summary = _summary(conn, t, days, now, stored)
+            summary = _summary(conn, t, days, now, stored, current if len(tenants) == 1 else None)
         except Exception as exc:
             logging.getLogger(__name__).exception("Change report failed for tenant %s", t["id"])
             summary = Summary(dict(t), 0, 0, 0, 0, {}, False, [], error=type(exc).__name__)
@@ -673,14 +700,14 @@ def across(
     return out
 
 
-def _summary(conn, tenant, days: int, now: datetime, stored: Rows | None) -> Summary:
+def _summary(conn, tenant, days: int, now: datetime, stored: Rows | None, current: Current | None = None) -> Summary:
     if stored is None:
         return summarise(build(conn, tenant, days, now))
     since = now - timedelta(days=days)
     fingerprint = stored.fingerprint(tenant, since)
     data = stored.get(tenant, fingerprint)
     if data is None:
-        summary = summarise(build(conn, tenant, days, now))
+        summary = summarise(build(conn, tenant, days, now, current=current))
         stored.save(
             tenant,
             fingerprint,

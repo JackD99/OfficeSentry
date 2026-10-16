@@ -4,7 +4,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Search Ideas first and add a 👍 if it's already here: votes decide what's built first.
+        Search Ideas first and add a 👍 if it's already here: votes help decide what's built first.
         Office Sentry is read-only reporting. Changes in tenants, remediation, reading mail or chat content, an on-premises agent and GDAP management are out of scope ([roadmap](https://github.com/JackD99/OfficeSentry/blob/main/ROADMAP.md)).
   - type: textarea
     id: question

@@ -27,7 +27,7 @@
 {% for s in failing %}{% set d = last.get(s.id) %}
 <div class="callout bad">{{ icon('alert') }}<div class="grow"><strong>{{ tenants[s.tenant_id].name ~ ': ' if s.tenant_id }}“{{ s.titles|join(' + ') }}” didn't send{% if d %} {{ ts(d.created_at) }}{% endif %}.</strong>
   {% if d and d.error %}<div class="small">{{ d.error }}</div>{% endif %}</div>
-  {% if d %}<form method="post" action="{{ url_for('email.retry', delivery_id=d.id) }}" data-busy="Sending…">{{ csrf() }}<input type="hidden" name="from" value="overview"><button class="sm">{{ icon('refresh') }} Retry</button></form>{% endif %}
+  {% if d and can_open('email.retry', delivery_id=d.id, tenant=d.tenant_id) %}<form method="post" action="{{ url_for('email.retry', delivery_id=d.id) }}" data-busy="Sending…">{{ csrf() }}<input type="hidden" name="from" value="overview"><button class="sm">{{ icon('refresh') }} Retry</button></form>{% endif %}
 </div>
 {% endfor %}
 
@@ -48,7 +48,7 @@
 
   <section class="card flush">
     <div class="card-head toolbar"><h2>Delivery history</h2>{% if deliveries %}<span class="meta">Last {{ deliveries|length }}</span>{% endif %}</div>
-    {% if deliveries %}{{ deliveries_table(deliveries, True, 'overview') }}
+    {% if deliveries %}{{ deliveries_table(deliveries, True, 'overview', stale) }}
     {% else %}<div class="empty compact"><p>Nothing has been sent yet.</p></div>{% endif %}
   </section>
 </div>

@@ -10,6 +10,7 @@ from datetime import timedelta
 from flask import Flask, g, render_template, request
 from flask_wtf.csrf import CSRFError, CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.routing import IntegerConverter
 
 from .. import __version__, logs, system_alerts, system_health, totp, worker
 from .. import sso as staff_sign_in
@@ -73,11 +74,23 @@ log = logging.getLogger(__name__)
 # restore, a backup or an erase's VACUUM, which no wait of a few seconds outlasts.
 WEB_BUSY_TIMEOUT_MS = 5_000
 
+# The largest integer SQLite stores. Python's are unbounded, and a bigger one stops the query with OverflowError.
+SQLITE_MAX_INT = 2**63 - 1
+
+
+class _Id(IntegerConverter):
+    """Every ``<int:...>`` in a route: a number SQLite can't hold is a 404, like any other unknown id."""
+
+    def __init__(self, map, *args, **kwargs):
+        kwargs.setdefault("max", SQLITE_MAX_INT)
+        super().__init__(map, *args, **kwargs)
+
 
 def create_app(cfg: Config | None = None) -> Flask:
     cfg = cfg or load_config()
     logs.setup(cfg.data_dir, "web")
     app = Flask(__name__)
+    app.url_map.converters["int"] = _Id  # before any route is added
     app.config.update(
         SECRET_KEY=cfg.secret_key,
         # "__Host-" makes browsers insist on Secure, path=/ and no Domain, so a
@@ -272,6 +285,14 @@ def create_app(cfg: Config | None = None) -> Flask:
             "Wait a moment, then try again.",
         )
         return page, 503, {"Retry-After": "10"}
+
+    @app.errorhandler(OverflowError)
+    def _too_big(exc):
+        # A number in the address or a form (?page=, a client or role picked) past what SQLite stores: the
+        # request is wrong, not the portal. Any other overflow stays a 500.
+        if "SQLite INTEGER" not in str(exc):
+            raise exc
+        return _error(400, "A number in that request is too big.", "Go back and try again.")
 
     @app.errorhandler(403)
     def _forbidden(_e):
