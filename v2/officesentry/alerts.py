@@ -369,11 +369,13 @@ def after_run(conn, alerting: Alerting | None, run_id: int, status: str) -> bool
         if s["alerts.enabled"] != "1" or not s["alerts.url_enc"] or s["alerts.on_failures"] != "1":
             return None
         run = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
-        if run is None:
-            return None
+        if run is None or (status == "failed" and run["retry_at"]):
+            return None  # it's tried again by itself (store.plan_retry): the alert waits for the last try
+        # Failures that were tried again never alerted, so a run is compared with the one before them.
         previous = conn.execute(
             "SELECT status FROM runs WHERE tenant_id = ? AND collector = ? AND id < ?"
-            " AND status IN ('succeeded', 'partial', 'failed') ORDER BY id DESC LIMIT 1",
+            " AND status IN ('succeeded', 'partial', 'failed') AND NOT (status = 'failed' AND retry_at IS NOT NULL)"
+            " ORDER BY id DESC LIMIT 1",
             (run["tenant_id"], run["collector"], run_id),
         ).fetchone()
         if previous is None:

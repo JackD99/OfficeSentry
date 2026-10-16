@@ -132,6 +132,8 @@ class ExchangeClient:
         self.app = app
         self.tenant_id = tenant_id
         self._token_provider = token_provider
+        # Why signing in failed, once it has, for the worker to fail the run with (``GraphClient.sign_in_error``).
+        self.sign_in_error: ExchangeError | None = None
         self._session = session or requests.Session()
         self._max_retries = max_retries
         self._timeout = timeout
@@ -156,6 +158,15 @@ class ExchangeClient:
 
         return cls(tenant_ref, token, cloud=cloud, app=client_id, **kwargs)
 
+    def _token(self) -> str:
+        if self.sign_in_error is not None:
+            raise self.sign_in_error
+        try:
+            return self._token_provider()
+        except ExchangeError as exc:
+            self.sign_in_error = exc
+            raise
+
     @property
     def url(self) -> str:
         return f"{self.root}/adminapi/beta/{self.tenant_id}/InvokeCommand"
@@ -170,7 +181,7 @@ class ExchangeClient:
             waited = self.limiter.acquire(taken) if self.limiter else 0.0
             headers = {
                 "User-Agent": USER_AGENT,
-                "Authorization": f"Bearer {self._token_provider()}",
+                "Authorization": f"Bearer {self._token()}",
                 "Accept": "application/json",
                 "Content-Type": "application/json",
                 "X-AnchorMailbox": f"APP:SystemMailbox{{bb558c35-97f1-4cb9-8ff7-d53741dc928c}}@{self.tenant_id}",

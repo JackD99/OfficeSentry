@@ -162,6 +162,32 @@ def backup(db_path: Path, folder: Path, keep: int) -> tuple[Path, list[Path]]:
     return dest, removed
 
 
+class BackupFailed(Exception):
+    """A backup that didn't work, in words for people (already recorded in ``backup-status.json``)."""
+
+
+def backup_and_record(data_dir: Path, db_path: Path, folder: Path, keep: int) -> tuple[Path, list[Path]]:
+    """``backup``, with its outcome recorded as the ``local`` job for System status and the "backup failed"
+    alert: the ``backup`` command and the worker's nightly backup (``nightly_backup.py``). Raises
+    ``BackupFailed``, or the original error for a damaged database."""
+    try:
+        dest, old = backup(db_path, folder, keep)
+    except BackupIncomplete as exc:
+        # The database copy is sound, but the backup as a whole isn't: the alert should say exactly that.
+        error = f"The database was copied to {exc.dest.name}, but {exc}."
+        record_status(data_dir, "local", False, error)
+        raise BackupFailed(error) from exc
+    except OSError as exc:
+        error = f"No backup made: {exc.strerror or exc}."
+        record_status(data_dir, "local", False, error)
+        raise BackupFailed(error) from exc
+    except Exception as exc:  # a damaged database, say: record it, then fail loudly
+        record_status(data_dir, "local", False, f"No backup made: {type(exc).__name__}: {exc}")
+        raise
+    record_status(data_dir, "local", True, file=dest)
+    return dest, old
+
+
 # -- Activity history -----------------------------------------------------------------------------
 #
 # The activity history (events.py) is a folder of monthly SQLite files beside the database. A closed month

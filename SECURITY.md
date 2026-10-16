@@ -16,6 +16,17 @@ with "Security" in the subject and no details. We'll reply with a private way
 to send them.
 
 We aim to acknowledge reports within 48 hours and give an initial assessment within 7 days.
+Please give us time to release a fix before you talk about the problem in public; we'll agree a
+date with you. The fix's GitHub security advisory says what was wrong and, if you'd like, credits you.
+
+**In scope:** the code in this repository, the published images at `ghcr.io/jackd99/officesentry`, and the
+public demo. For example: seeing a client you weren't given, reaching a secret or private key, changing
+anything in a Microsoft 365 tenant, getting round sign-in or two-step sign-in, or changing anything on
+the demo.
+
+**Not in scope:** how one installation is set up (its server, its proxy, or a setting the docs warn
+against), problems in Microsoft 365 itself (report those to Microsoft), and the demo's data being readable
+by anyone: it's made up, and meant to be seen.
 
 ## Supported versions
 
@@ -52,10 +63,12 @@ little as possible with that access. Details and code references are in
   other than GET appears outside a short list of named exceptions, and runs
   a full collection to check every request is a read. The exceptions are the
   mail app, Exchange's `Get-` cmdlets, alert webhooks, the live test's
-  recording (which passes on a GET), and three that only touch the MSP's own
-  tenant: creating the app, adding a release's new permissions to it, and
-  sign-in with Microsoft (its token request, creating its sign-in app, and
-  letting that app accept other organisations' accounts for client sign-in).
+  recording (which passes on a GET), the updater's calls to the server's own
+  Docker engine, and three that only touch the MSP's own tenant: creating the
+  app, adding a release's new permissions to it, and sign-in with Microsoft
+  (its token request, creating its sign-in app, and letting that app accept
+  other organisations' accounts for client sign-in).
+  The audit log add-on adds one more: starting and stopping a client's audit feed (below). <!-- since 2.4.0 -->
   `tests/test_isolation_walk.py` opens every tenant-scoped route with
   another client's IDs, as staff and as a client, and expects a refusal.
   `tests/test_roles.py` opens every route as every built-in role and expects
@@ -66,6 +79,7 @@ little as possible with that access. Details and code references are in
   page asks the admin to limit it to the one sending mailbox and shows a
   warning until they confirm it, because without that limit a leaked
   credential could send as anyone in the MSP's company.
+- **The audit log add-on is its own app, with one permission.** It's off until an admin turns it on, and each client approves it separately. Its app has only `ActivityFeed.Read` on the Office 365 Management APIs and its own certificate, and Office Sentry keeps only a fixed list of file, sharing and mailbox events from it, without email subjects. Its only requests other than GET start and stop a client's audit feed: they tell Microsoft whether to make that client's audit records available to the add-on, and change nothing in the tenant. <!-- since 2.4.0 -->
 - **Bound consent links.** The admin-consent link's signed state carries a
   one-time nonce, stored server-side with the admin and the signed-in
   browser that opened it, and expires after an hour. A client added by
@@ -83,7 +97,7 @@ little as possible with that access. Details and code references are in
 | Approved reports | Once a month's report is approved, its client sees that approved copy. Commentary, recommendations and notes changed afterwards reach them only with a new version. | <!-- since 2.4.0 -->
 | Sign in with Microsoft | Optional, off until an admin sets it up. OpenID Connect against a single-tenant app in the MSP's own tenant with no API permissions, authorization code with PKCE, a certificate-signed client assertion (`private_key_jwt`; the private key is encrypted in the database) and the ID token verified against the tenant's published keys: signature, audience, issuer, tenant, lifetime and nonce. Roles are app roles assigned in Entra (one per built-in role, and values an admin gives custom roles) and read at every sign-in; client access is still granted in Office Sentry. Passwords stay as the break-glass route until an admin signed in with Microsoft turns them off; `python -m officesentry staff-sign-in --passwords on` turns them back on from the server. An account with no password confirms a security change by signing in to Microsoft again (`prompt=login`, the same Microsoft account), which counts for ten minutes on that session. |
 | Client sign-in with Microsoft | Optional, off until an admin turns it on. The same sign-in app accepts other organisations' accounts (`AzureADMultipleOrgs`; changed in the MSP's tenant only, by device sign-in with `Application.ReadWrite.All` or by hand), and the button signs in through `organizations`. The ID token's issuer must be the tenant in its own `tid`. A token from the MSP's tenant takes the staff path above; any other tenant can only reach an existing client account, matched on the token's `tid` and `oid` together and never on `preferred_username` or `email`, and only when the account is granted (directly, never through a group) a client whose Directory ID is that `tid`, in the sign-in app's cloud and not archived. Staff connect a client's person to their object ID when they add them, from the client's directory as Office Sentry last collected it (members only, not guests). Accounts are never created this way, a client's account never becomes staff (nor a staff account a client's), the same object ID from another tenant is refused, and app roles in a client's token are ignored. A client account connected this way only ever sees clients whose Directory ID is its own tenant's, whatever it is granted; disconnecting it removes its grants of clients in any other organisation, and staff limited to some clients can't change an account that holds a client outside them, even one it can't see now. Microsoft sign-in, staff or client, doesn't ask for Office Sentry's own two-step code, whatever `OFFICESENTRY_REQUIRE_MFA` says; it relies on Entra's MFA and Conditional Access. Refusals don't say whether an account exists, and strangers' sign-ins are counted per address without their names. A client's administrator can approve the sign-in scopes (`openid profile email`, no API permissions) from a signed link; its public return page records nothing for the client (the approval is noted at the first sign-in from that client's tenant) and never shows Microsoft's text. |
-| Two-step sign-in | Authenticator-app codes (TOTP) with ten one-time recovery codes. New installs require it for everyone; installs from before October 2026 keep requiring it for staff (everyone but client accounts) until `OFFICESENTRY_REQUIRE_MFA=all` is set (the Users page recommends it). A code or recovery code works once, even when sent twice at the same moment. Recovery codes are stored as an HMAC under a random key that is itself encrypted with the encryption key, so a copy of the database alone can't be used to guess them; codes made before 2.2.0 (a plain SHA-256) are put under the key when the portal starts. Adding an authenticator from the account page, turning it off and replacing recovery codes ask for the password, and an admin resetting someone else's password, two-step sign-in or sessions gives their own password too. |
+| Two-step sign-in | Authenticator-app codes (TOTP) with ten one-time recovery codes. New installs require it for everyone; installs made before the first release (2.0.0) keep requiring it for staff (everyone but client accounts) until `OFFICESENTRY_REQUIRE_MFA=all` is set (the Users page recommends it). A code or recovery code works once, even when sent twice at the same moment. Recovery codes are stored as an HMAC under a random key that is itself encrypted with the encryption key, so a copy of the database alone can't be used to guess them; codes made before 2.2.0 (a plain SHA-256) are put under the key when the portal starts. Adding an authenticator from the account page, turning it off and replacing recovery codes ask for the password, and an admin resetting someone else's password, two-step sign-in or sessions gives their own password too. |
 | Passwords | At least 12 characters, not one of the 20,000 most commonly used passwords of that length (from the public list of 10 million leaked passwords), and not containing the username or the product's name; scrypt hash (Werkzeug). A password an admin set (new user or reset) has to be replaced at the next sign-in. |
 | Sign-in limits | Wrong passwords never lock an account. They slow down the address they come from: 5 per username or 20 in all per 15 minutes, counted before the password is checked so parallel requests can't get past them. A spread-out attack on one account slows only addresses that haven't signed in to it before. Five wrong two-step codes lock that step for 15 minutes. Five wrong passwords where a signed-in browser is asked for it again sign that browser out, and never lock the account, so a stolen session can't keep its owner from signing in to end it. The client address comes from `X-Forwarded-For` only behind `OFFICESENTRY_TRUSTED_PROXIES`. |
 | Sessions | Server-side: the cookie holds a random token, stored as a hash. 2 hours idle and 8 hours in total by default (`OFFICESENTRY_SESSION_IDLE_MINUTES`, `OFFICESENTRY_SESSION_HOURS`); ended on sign-out, disable, delete, role, password or two-step change. `__Host-` cookie, HttpOnly, SameSite=Lax, Secure over HTTPS. Same-site redirects only. |
@@ -98,14 +112,22 @@ little as possible with that access. Details and code references are in
 ### Data retention
 
 Admins choose how long personal data is kept under *Settings → Data
-retention*: snapshots, sign-in detail (IP addresses and locations), resolved
-findings, run logs, the activity log and issued reports. Defaults keep
-everything as before (sign-in detail lasts as long as monthly snapshots,
-about 13 months; findings, the activity log and issued reports are kept
-forever), so set shorter periods to match your own policy. Neither the
-activity log nor issued reports can be set below 365 days. The
-worker deletes once a day in small batches with `secure_delete`; changes to
-the settings are audited. Details in `v2/DEPLOY.md`.
+retention*. By default:
+
+- snapshots: one a day for 30 days, then one a month for 12 months, with the
+  sign-in detail in them (IP addresses and locations);
+- the daily history of how each item changed: 25 months;
+- the activity history: every sign-in for 180 days, daily sign-in summaries
+  for 25 months and directory audit events for 7 years;
+- the audit log add-on's file and mailbox events: 2 years; <!-- since 2.4.0 -->
+- run logs: 90 days, after which only their warnings and errors stay;
+- resolved findings, the activity log and issued reports: until an admin
+  sets a period.
+
+Set shorter periods to match your own policy. Neither the activity log nor
+issued reports can be set below 365 days. The worker deletes once a day in
+small batches with `secure_delete`; changes to the settings are audited.
+Details in `v2/DEPLOY.md`.
 
 ### Offboarding a client
 
@@ -118,8 +140,11 @@ in the background: it removes the client's activity history, compacts the
 database file when there's enough free space for the copy that takes, and
 empties its write-ahead log. If that fails, *Settings → System status* shows
 it under *Deleted clients* (and system alerts tell the team, when they're
-on), and the worker tries again every hour. **Backups made before the delete keep the data until
-they rotate out** (the last 7 by default), as do copies taken off the server.
+on), and the worker tries again every hour.
+If the client had the audit log add-on, its audit feed is stopped too. <!-- since 2.4.0 -->
+**Backups made before the delete keep the data until they rotate out**: with
+the Docker setup's nightly jobs, after two weeks on the server, and after a
+year in off-site copies if you keep them.
 
 ### What should never be committed
 

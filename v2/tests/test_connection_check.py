@@ -248,6 +248,61 @@ def test_a_provider_kept_between_runs_signs_in_once_microsoft_answers_again():
         assert provider() == "tok"
 
 
+APP_NOT_FOUND = {
+    "error": "unauthorized_client",
+    "error_description": "AADSTS700016: Application with identifier 'app' was not found in the directory 'Alpha Ltd'."
+    " This can happen if the application has not been installed by the administrator of the tenant. Trace ID: x",
+}
+
+
+def _open_findings(db, tenant_id) -> set[tuple[str, str]]:
+    rows = db.execute(
+        "SELECT rule_key, object_id FROM findings WHERE tenant_id = ? AND resolved_at IS NULL", (tenant_id,)
+    )
+    return {(r[0], r[1]) for r in rows}
+
+
+def test_a_collection_that_cant_sign_in_fails_and_leaves_findings_open(db, two_tenants, vault, monkeypatch):
+    # Collectors that read mailbox by mailbox count a refused request as one mailbox they couldn't read and
+    # carry on. When signing in itself failed (the client removed the app), that finished as partial with
+    # nothing read, so the inbox rule and mailbox checks passed and their findings were marked fixed.
+    from officesentry import findings
+    from officesentry.worker import default_exchange_factory, default_graph_factory
+
+    monkeypatch.setattr(msauth, "_PROVIDERS", type(msauth._PROVIDERS)())
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    findings.sync(db, store.get_tenant(db, alpha))
+    open_before = _open_findings(db, alpha)
+    assert {"suspicious_inbox_rules", "external_forwarding"} <= {rule for rule, _ in open_before}
+
+    collectors = ("inbox_rules", "auto_replies", "mailboxes", "mailbox_usage", "mobile_devices")
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        _tenant_lookup(
+            rsps,
+            json={
+                "token_endpoint": f"{LOGIN}/alpha.onmicrosoft.com/oauth2/v2.0/token",
+                "authorization_endpoint": f"{LOGIN}/alpha.onmicrosoft.com/oauth2/v2.0/authorize",
+                "issuer": f"{LOGIN}/alpha.onmicrosoft.com/v2.0",
+            },
+        )
+        token = rsps.post(f"{LOGIN}/alpha.onmicrosoft.com/oauth2/v2.0/token", status=400, json=APP_NOT_FOUND)
+        for key in collectors:
+            store.enqueue_run(db, alpha, key)
+            run = store.claim_next_run(db)
+            assert execute_run(db, run, default_graph_factory(vault), default_exchange_factory(vault)) == "failed"
+        # Once Microsoft refused, a run doesn't ask again for every mailbox.
+        assert token.call_count <= 2 * len(collectors)
+
+    for key in collectors:
+        error = db.execute(
+            "SELECT error FROM runs WHERE tenant_id = ? AND collector = ? ORDER BY id DESC LIMIT 1", (alpha, key)
+        ).fetchone()[0]
+        assert error.startswith("Sign-in failed: "), (key, error)
+    open_after = _open_findings(db, alpha)
+    assert open_after == open_before
+
+
 def test_a_collection_that_cant_reach_microsoft_fails_as_a_network_error(db, two_tenants, vault, monkeypatch):
     from officesentry.worker import default_graph_factory
 

@@ -39,21 +39,28 @@ def _factory(tenant, connection):
     return GraphClient(lambda: "t", sleep=lambda s: None)
 
 
-def _round(db, tenant_id) -> tuple[dict, dict]:
-    """Run the three per-mailbox collectors once. Returns each one's run and the mailboxes it asked about."""
+def _round(db, tenant_id, failing=()) -> tuple[dict, dict]:
+    """Run the three per-mailbox collectors once, with Microsoft failing every request about the ``failing``
+    mailboxes. Returns each one's run and the mailboxes it asked about."""
     asked = {c: [] for c in COLLECTORS}
     answer = exchange_callback(EXCHANGE)
+    broken = json.dumps({"error": {"code": "InternalServerError", "message": "Something went wrong"}})
 
     def exchange(request):
         body = json.loads(request.body)["CmdletInput"]
         who = {"Get-MailboxPermission": "mailboxes", "Get-MailboxStatistics": "mailbox_usage"}.get(body["CmdletName"])
         if who:
-            asked[who].append(body["Parameters"]["Identity"].removeprefix("g-"))
+            uid = body["Parameters"]["Identity"].removeprefix("g-")
+            asked[who].append(uid)
+            if uid in failing:
+                return 500, {}, broken
         return answer(request)
 
     def rules(request):
         uid = request.path_url.split("/")[3]
         asked["inbox_rules"].append(uid)
+        if uid in failing:
+            return 503, {}, broken
         return 200, {}, json.dumps({"value": [{"id": "r1", "displayName": f"rule of {uid}"}]})
 
     runs = {}
@@ -134,6 +141,37 @@ def test_over_the_limit_warning_says_what_was_covered(db, two_tenants, monkeypat
         f"every 3 runs); showing earlier results for 2 mailboxes, last checked on {day}; 1 mailbox not checked yet"
     )
     assert runs["mailbox_usage"]["error"].startswith("Checked mailbox sizes for 2 of 5 mailboxes this run")
+
+
+def test_a_mailbox_microsoft_fails_to_answer_about_keeps_its_earlier_results(db, two_tenants):
+    # Losing a mailbox's rows because one request failed would mark its inbox rule or delegate fixed.
+    alpha, _ = two_tenants
+    first, _ = _round(db, alpha)
+    runs, asked = _round(db, alpha, failing={"u2"})
+    assert all("u2" in asked[c] for c in COLLECTORS)
+    assert _covered(db, runs) == {c: sorted(IDS) for c in COLLECTORS}
+    rules = {r["mailboxId"]: r for r in store.run_objects(db, runs["inbox_rules"]["id"], "inbox_rule")}
+    assert rules["u2"]["displayName"] == "rule of u2"
+    assert runs["inbox_rules"]["status"] == "partial"
+    assert runs["inbox_rules"]["error"] == (
+        "Could not read inbox rules for 1 of 5 mailboxes; showing their earlier results for 1 mailbox"
+    )
+    assert runs["mailboxes"]["error"] == (
+        "Could not read permissions on 1 mailbox; showing their earlier results for 1 mailbox"
+    )
+    # It keeps the time it was last read, so a mailbox that keeps failing is read first and shows its age.
+    earlier = store.run_objects(db, first["inbox_rules"]["id"], "inbox_rule_coverage")[0]["checkedAt"]
+    later = store.run_objects(db, runs["inbox_rules"]["id"], "inbox_rule_coverage")[0]["checkedAt"]
+    assert later["u2"] == earlier["u2"] and later["u0"] > earlier["u0"]
+
+
+def test_a_mailbox_never_read_before_has_nothing_to_keep(db, two_tenants):
+    alpha, _ = two_tenants
+    runs, _ = _round(db, alpha, failing={"u2"})
+    assert _covered(db, runs) == {c: ["u0", "u1", "u3", "u4"] for c in COLLECTORS}
+    assert runs["inbox_rules"]["error"] == "Could not read inbox rules for 1 of 5 mailboxes"
+    coverage = store.run_objects(db, runs["inbox_rules"]["id"], "inbox_rule_coverage")[0]["checkedAt"]
+    assert "u2" not in coverage
 
 
 @pytest.mark.parametrize("collector", COLLECTORS)
