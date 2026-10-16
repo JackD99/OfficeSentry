@@ -249,6 +249,7 @@ five minutes from your clock. In Python:
 ```python
 import hashlib, hmac, time
 
+
 def genuine(headers, body: bytes, secret: str) -> bool:
     stamp = headers.get("X-OfficeSentry-Timestamp", "")
     if not stamp.isdigit() or abs(time.time() - int(stamp)) > 300:
