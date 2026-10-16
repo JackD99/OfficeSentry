@@ -320,7 +320,7 @@ EXAMPLES = {
     ),
     "quarterly-review.pdf": (
         "/tenants/{t}/designs/1.pdf",
-        "The Quarterly review design from the report designer: three months of score and findings, what was "
+        "The Quarterly review custom report, built from blocks: three months of score and findings, what was "
         "fixed, projects, licence spend and what's coming up.",
     ),
     "insurance-evidence-pack.pdf": (

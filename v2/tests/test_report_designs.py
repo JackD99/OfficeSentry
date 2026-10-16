@@ -218,7 +218,8 @@ def test_commentary_and_curated_actions_come_from_month_end(client, db, two_tena
 def test_designs_are_made_edited_duplicated_and_removed(client, db, two_tenants):
     alpha, _ = two_tenants
     _staff(client, db, "admin")
-    assert "No designs yet" in _text(client.get("/reporting/designs"))
+    page = _text(client.get("/reporting/designs"))
+    assert "No custom reports yet" in page and "Report designs" not in page  # one name everywhere
     resp = client.post("/reporting/designs", data={"name": "QBR pack", "starter": "executive"})
     did = int(resp.headers["Location"].rsplit("/", 1)[1])
     row = designs.get(db, did)
@@ -338,7 +339,7 @@ def test_tenant_reports_tab_lists_designs(client, db, two_tenants):
     alpha, _ = two_tenants
     _staff(client, db)
     page = _text(client.get(f"/tenants/{alpha}/designs"))
-    assert "No report designs yet" in page
+    assert "No custom reports yet" in page and "New custom report" in page and "Report designs" not in page
     did = designs.create(db, "Board pack", "test", designs.STARTERS["executive"][2])
     page = _text(client.get(f"/tenants/{alpha}/designs"))
     assert "Board pack" in page and f"/tenants/{alpha}/designs/{did}.pdf" in page

@@ -7,13 +7,14 @@ from datetime import UTC, date, datetime, timedelta
 
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
-from .. import findings, store, usage
+from .. import delivery, findings, store, usage
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
 from ..permissions import SUMMARY_CAPABILITY, area_capability
 from ..reports import (
     branding,
     data_reports,
+    designs,
     evidence_answers,
     export,
     findings_report,
@@ -28,6 +29,7 @@ from . import finding as finding_pages
 from .access import (
     by_report,
     can,
+    can_open,
     is_staff,
     login_required,
     needs,
@@ -81,6 +83,73 @@ def report_groups(tenant_id: int | None = None) -> list:
     return [gr for gr in data_reports.grouped(hidden_reports(tenant_id)) if can(area_capability(gr.key), tenant_id)]
 
 
+def custom_reports(tenant_id: int | None = None) -> list[dict]:
+    """The MSP's custom reports (``reports/designs.py``), for the report menus and the Reports page: each with
+    where it opens for this client (without one, the first client the person opens reports on), the editor
+    for someone who may edit it, and how many plans and schedules send it. Staff only, and only where the
+    person opens the security review, which every block reads."""
+    if not is_staff() or (tenant_id is not None and not can("reports.security", tenant_id)):
+        return []
+    rows = designs.list_designs(g.db)
+    if not rows:
+        return []
+    if tenant_id is None:
+        first = next((t for t in visible_tenants(g.db, g.user) if can("reports.security", t["id"])), None)
+        tenant_id = first["id"] if first else None
+    used = designs.usage(g.db)
+    return [
+        {
+            "id": r["id"],
+            "key": designs.key_of(r["id"]),
+            "name": r["name"],
+            "description": r["description"] or "",
+            "href": url_for("designs.tenant_design", tenant_id=tenant_id, design_id=r["id"]) if tenant_id else "",
+            "edit": url_for("designs.edit", design_id=r["id"], tenant=tenant_id)
+            if can_open("designs.edit", design_id=r["id"])
+            else "",
+            "sent_by": used.get(r["id"], 0),
+            "changed": r["updated_at"] or r["created_at"],
+            "search": f"{r['name']} {r['description'] or ''} custom report design".lower(),
+        }
+        for r in rows
+    ]
+
+
+def my_views(tenant_id: int | None = None) -> list[dict]:
+    """The signed-in person's saved views (``web/saved_views.py``) that open here: on this client, each on its
+    report with the view applied; without a client, on the All clients "Every row" page of its report (the
+    Findings pages have none). Each with the report it belongs to."""
+    titles = {k: v[0] for k, v in data_reports.REPORTS.items()} | findings_report.TITLES
+    rows = g.db.execute(
+        "SELECT * FROM saved_views WHERE user_id = ? ORDER BY name COLLATE NOCASE", (g.user["id"],)
+    ).fetchall()
+    hidden = hidden_reports(tenant_id)
+    out = []
+    for v in rows:
+        key = v["report_key"]
+        if key not in titles or key in hidden:
+            continue
+        if tenant_id is not None:
+            page = page_url(key, tenant_id)
+        elif delivery.can_schedule_view(key, across=True):
+            page = url_for("across.rows_index", key=key)
+        else:
+            continue
+        if not can_open(page):
+            continue
+        out.append(
+            {
+                "id": v["id"],
+                "key": key,
+                "name": v["name"],
+                "report": titles[key],
+                "href": f"{page}?{v['query']}",
+                "search": f"{v['name']} {titles[key]} saved view".lower(),
+            }
+        )
+    return out
+
+
 def _library_href(entry: library.Entry, tenant_id: int | None) -> str:
     if tenant_id is None:  # across every tenant
         if entry.kind == "changes":
@@ -115,10 +184,6 @@ def overview():
         for e in area.entries:
             e.href = _library_href(e, tenant["id"] if tenant else None) if tenants else ""
             e.across = _library_href(e, None) if staff and tenant else ""
-    saved = g.db.execute(
-        "SELECT * FROM saved_views WHERE user_id = ? ORDER BY report_key, name COLLATE NOCASE", (g.user["id"],)
-    ).fetchall()
-    titles = {k: v[0] for k, v in data_reports.REPORTS.items()} | findings_report.TITLES
     settings = [(url_for(ep), title, words) for ep, title, words in SETTINGS_PAGES] if can("settings.manage") else []
     return render_template(
         "library.html",
@@ -130,9 +195,8 @@ def overview():
         uses=library.uses(),
         total=library.count(),
         settings=settings,
-        saved=[v for v in saved if v["report_key"] in titles],
-        titles=titles,
-        saved_view_url=page_url,
+        custom=custom_reports(tenant["id"] if tenant else None) if tenants and not use else [],
+        saved=my_views(tenant["id"] if tenant else None) if tenants and not use else [],
     )
 
 
@@ -262,7 +326,9 @@ def evidence_download(tenant_id: int, ext: str):
 @bp.get("/tenants/<int:tenant_id>/data")
 @needs()
 def data_index(tenant_id: int):
-    """The Reports tab, and the report picker on phones: ``?key=`` or the first report."""
+    """The Reports tab, and the report picker on phones: ``?key=`` or the first report. A key can also name a
+    custom report (``design:<id>``) or one of the person's saved views (``view:<id>``), as the picker lists
+    them."""
     t = tenant_or_404(tenant_id)
     key = request.args.get("key", "")
     if key == "review":
@@ -271,6 +337,15 @@ def data_index(tenant_id: int):
         return redirect(url_for("reports.evidence_pack", tenant_id=t["id"]))
     if key == "designs":
         return redirect(url_for("designs.tenant_designs", tenant_id=t["id"]))
+    if (design_id := designs.id_of(key)) is not None:
+        if any(c["id"] == design_id for c in custom_reports(t["id"])):
+            return redirect(url_for("designs.tenant_design", tenant_id=t["id"], design_id=design_id))
+        abort(404)
+    if key.startswith("view:"):
+        view = next((v for v in my_views(t["id"]) if f"view:{v['id']}" == key), None)
+        if view is None:
+            abort(404)
+        return redirect(view["href"])
     groups = report_groups(t["id"])
     if not exists(key, t["id"]) or not can(report_capability(key), t["id"]):
         if not groups:
