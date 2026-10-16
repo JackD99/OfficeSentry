@@ -119,7 +119,7 @@ def test_a_run_the_worker_stopped_during_is_tried_again(app, db, vault, cfg, two
     slot = schedule.iso(schedule.previous_fire(cfg.collect_cron, cfg.timezone, due))
     store.enqueue_run(db, alpha, "users", trigger="schedule", scheduled_for=slot)
     store.claim_next_run(db)
-    assert store.expire_run_leases(db, now + store.LEASE + timedelta(seconds=1)) == 1  # an update restarted it
+    assert store.expire_run_leases(db, datetime.now(UTC) + store.LEASE + timedelta(seconds=1)) == 1
     run = db.execute("SELECT * FROM runs").fetchone()
     assert run["error"] == store.WORKER_STOPPED and store.retry_pending(run) and _when(run) <= due
     # The worker's housekeeping queues it once it's due.
