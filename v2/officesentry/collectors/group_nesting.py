@@ -3,14 +3,15 @@
 Groups and Teams reads the owners and members of teams and Microsoft 365 groups, which can't contain other
 groups. This reads the other groups' members: how many there are and which of them are groups, so the
 report can show empty groups and groups inside groups. Members are object IDs only; nothing about the
-people is kept.
+people is kept. Groups that can be given admin roles also have their owners read, since an owner can add
+anyone to them.
 """
 
 from __future__ import annotations
 
 from ..graph import GraphError, PermissionMissing
 from .base import Collector, RunContext, register
-from .groups import group_kind
+from .groups import OWNER_FIELDS, OWNERS_KEPT, _owner, group_kind
 
 GROUP_FIELDS = (
     "id,displayName,groupTypes,mailEnabled,securityEnabled,membershipRule,membershipRuleProcessingState,"
@@ -62,6 +63,14 @@ class GroupNesting(Collector):
         for gid in others[:GROUP_LIMIT]:
             try:
                 rows[gid].update(self._members(ctx, gid))
+                if rows[gid]["roleAssignable"]:  # its owners can make anyone an admin; there are only a few
+                    owners = [
+                        _owner(o)
+                        for o in ctx.graph.get_all(
+                            f"/groups/{gid}/owners", params={"$select": OWNER_FIELDS, "$top": "999"}
+                        ).items
+                    ]
+                    rows[gid].update(owners=owners[:OWNERS_KEPT], ownerCount=len(owners))
             except PermissionMissing as exc:
                 ctx.warn(f"Group members weren't readable: {exc.message}")
                 break

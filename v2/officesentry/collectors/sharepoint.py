@@ -348,11 +348,36 @@ def describe_permissions(perms: list[dict], domains: set[str], now: datetime | N
         ),
         "anyoneLinks": len(anyone),
         "orgLinks": len(org),
-        "editable": any(lk["type"] == "edit" for lk in anyone + org)
-        or any("write" in p["roles"] for p in people if p["external"]),
         "neverExpires": any(not lk["expires"] for lk in anyone),
         "expires": min(expiries) if expiries else None,
     }
+
+
+def _links(item: dict) -> list[dict]:
+    return [lk for lk in item.get("links") or [] if isinstance(lk, dict)]
+
+
+def anyone_can_edit(item: dict) -> bool:
+    """Whether an anyone link on a shared item (from ``describe_permissions``) lets whoever has it edit."""
+    return any(lk.get("scope") == "anonymous" and lk.get("type") == "edit" for lk in _links(item))
+
+
+def outside_can_edit(item: dict) -> bool:
+    """Whether someone outside the organisation can edit the item: by an anyone edit link, an edit link sent to
+    them, or access given to them directly."""
+    return (
+        anyone_can_edit(item)
+        or any(lk.get("type") == "edit" and lk.get("external") for lk in _links(item))
+        or any(
+            isinstance(p, dict) and p.get("external") and "write" in (p.get("roles") or [])
+            for p in item.get("people") or []
+        )
+    )
+
+
+def org_can_edit(item: dict) -> bool:
+    """Whether an organisation-wide link on the item lets everyone in the organisation edit."""
+    return any(lk.get("scope") == "organization" and lk.get("type") == "edit" for lk in _links(item))
 
 
 def _shared_by(item: dict) -> tuple[str | None, str | None]:

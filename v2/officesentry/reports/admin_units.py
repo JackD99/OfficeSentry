@@ -175,6 +175,10 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             kind = r.get("principalType")
             if kind == "servicePrincipal":
                 type_, sign_in, flag = "App", "", "low"
+            elif kind == "group":  # a role-assignable group: its members hold the role
+                type_, sign_in, flag = "Group", "", None
+                group = by_group.get(r.get("principalId")) or {}
+                account = {"userPrincipalName": group.get("mail"), "displayName": group.get("displayName")}
             else:
                 guest = (account or {}).get("userType") == "Guest" or r.get("userType") == "Guest"
                 enabled = account.get("accountEnabled") if account else r.get("accountEnabled")

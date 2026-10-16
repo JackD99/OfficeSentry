@@ -49,6 +49,7 @@ def test_classify_logins():
     assert classify_login("") == ("unknown", "") and classify_login(None) == ("unknown", "")
     assert guest_address("pat_supplier.com#ext#@x.onmicrosoft.com", None) == "pat@supplier.com"
     assert guest_address("pat_supplier.com#ext#@x.onmicrosoft.com", "Pat@Supplier.com") == "pat@supplier.com"
+    assert guest_address("jo_smith_supplier.com#ext#@x.onmicrosoft.com", None) == "jo_smith@supplier.com"
 
 
 def test_describe_grant_reads_every_identity_shape():
@@ -189,7 +190,7 @@ def test_report(db, two_tenants):
     access = _section(report, "Access by site")
     fin = [r[1:] for r in access.rows if str(r[0]) == "Finance"]
     assert fin[0] == ["Owners of Sales: Ann, Eve", "Microsoft 365 group", "Full control", "No"]
-    assert fin[1] == ["Members of Sales: 3 people, 1 guest", "Microsoft 365 group", "Edit", "Yes"]
+    assert fin[1] == ["Members of Sales: 3 people, 1 of them a guest", "Microsoft 365 group", "Edit", "Yes"]
     assert fin[-2:] == [
         ["pat@supplier.com", "Guest", "View", "Yes"],
         ["Everyone in the organisation", "Everyone", "Given access on the site", "No"],  # through Sales Visitors
@@ -204,6 +205,24 @@ def test_report(db, two_tenants):
     admins = _section(report, "Site administrators")
     assert [(str(r[0]), r[1]) for r in admins.rows] == [("ann@x.com", 1), ("bob@x.com", 1)]
     assert "2 sites" in report.footnote
+
+
+def test_guests_given_access_on_the_site_are_not_counted_as_the_groups(db, two_tenants, monkeypatch):
+    """A guest given access on a group's site is in the site's guest list but not the group: the group's row counts
+    only its own guests, and the guest is listed as given access on the site."""
+    alpha, _ = two_tenants
+    lee = sd._uil(
+        "Lee Contractor", "i:0#.f|membership|lee_contract.com#ext#@x.onmicrosoft.com", email="lee@contract.com"
+    )
+    monkeypatch.setitem(sd.USER_INFO, "site-fin", [*sd.USER_INFO["site-fin"], lee])
+    seed_tenant(db, alpha)
+    report = _report(db, alpha)
+    fin = [r[1:] for r in _section(report, "Access by site").rows if str(r[0]) == "Finance"]
+    assert fin[1] == ["Members of Sales: 3 people, 1 of them a guest", "Microsoft 365 group", "Edit", "Yes"]
+    assert ["lee@contract.com", "Guest", "Given access on the site", "Yes"] in fin
+    assert not [r for r in fin if r[0] == "pat@supplier.com" and r[2] == "Given access on the site"]
+    guests = {str(r[0]): str(r[3]) for r in _section(report, "Guests and the sites they can reach").rows}
+    assert guests == {"pat@supplier.com": "Member of the site's group", "lee@contract.com": "Given access on the site"}
 
 
 def test_sharepoint_groups_note_says_waiting_only_while_the_client_is_to_approve(db, two_tenants):

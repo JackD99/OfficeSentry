@@ -63,8 +63,9 @@ def _location(r: dict):
 
 
 def _top(snap: TenantSnapshot, kind: str, key: str, limit: int) -> list[dict]:
-    rows = snap.objects("sharepoint_storage", kind) or []
-    return sorted(rows, key=lambda r: (-(r.get(key) or 0), str(r.get("path") or r.get("name"))))[:limit]
+    """The largest by ``key``, leaving out those with nothing to count (a file with no older versions)."""
+    rows = [r for r in snap.objects("sharepoint_storage", kind) or [] if (r.get(key) or 0) > 0]
+    return sorted(rows, key=lambda r: (-r[key], str(r.get("path") or r.get("name"))))[:limit]
 
 
 def _older(r: dict) -> str:
@@ -142,9 +143,17 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                 SPACE,
             )
         )
-        report.tiles.append(
-            Tile("Free space", size(max(quota.total - used, 0)), _months_left(quota.total - used, growth), rows=SPACE)
-        )
+        if used > quota.total:
+            free = Tile(
+                "Free space",
+                "None",
+                f"About {size(used - quota.total)} over; Microsoft can make sites read-only until there's room",
+                "bad",
+                SPACE,
+            )
+        else:
+            free = Tile("Free space", size(quota.total - used), _months_left(quota.total - used, growth), rows=SPACE)
+        report.tiles.append(free)
     else:
         report.tiles.append(
             Tile("Storage used", size(used), "No SharePoint licence found to size the quota", rows=SPACE)

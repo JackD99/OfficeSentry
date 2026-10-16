@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from ..collectors.sharepoint import anyone_can_edit
+from ..collectors.sharepoint_lookup import is_system_site
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
 from ..text import plural
@@ -32,9 +34,9 @@ def anyone_links(snap: TenantSnapshot, now: datetime):
         items = [i for i in snap.objects("shared_files", "shared_item") or [] if i.get("exposure") == "anyone"]
         findings = [
             Finding(
-                "high" if i.get("editable") else "medium",
+                "high" if anyone_can_edit(i) else "medium",
                 _where(i),
-                ("Anyone can edit" if i.get("editable") else "Anyone can view")
+                ("Anyone can edit" if anyone_can_edit(i) else "Anyone can view")
                 + (", link never expires" if i.get("neverExpires") else ""),
                 i["_id"],
             )
@@ -120,7 +122,11 @@ def site_owners(snap: TenantSnapshot, now: datetime):
             if status.get("reason") == "no_sharepoint"
             else "Office Sentry can't read this tenant's sites yet (Sites.Read.All)"
         )
-    sites = [s for s in snap.objects("site_access", "site") or [] if isinstance(s, dict)]
+    sites = [
+        s
+        for s in snap.objects("site_access", "site") or []
+        if isinstance(s, dict) and not is_system_site(s.get("url"), s.get("template"))
+    ]
     findings = []
     for s in sites:
         count = s.get("ownerCount")
@@ -177,7 +183,11 @@ def site_guest_full_control(snap: TenantSnapshot, now: datetime):
             if status.get("reason") == "consent"
             else "Office Sentry can't read this tenant's SharePoint permissions yet"
         )
-    sites = [s for s in snap.objects("site_permissions", "site") or [] if isinstance(s, dict)]
+    sites = [
+        s
+        for s in snap.objects("site_permissions", "site") or []
+        if isinstance(s, dict) and not is_system_site(s.get("url"))
+    ]
     if not sites and status.get("unreadable"):
         return _unavailable("No site's permissions could be read on the last collection")
     findings = []

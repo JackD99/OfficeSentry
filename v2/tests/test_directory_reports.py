@@ -248,6 +248,7 @@ def test_group_structure_shows_expiring_role_assignable_and_blocked_members(db, 
     alpha, _ = two_tenants
     now = datetime.now(UTC)
     monkeypatch.setitem(grp.MEMBERS, "s4", [grp._member("u1"), grp._member("u3"), grp._member("u2")])
+    monkeypatch.setitem(grp.OWNERS, "s4", [grp.ANN])  # read for a role-assignable group, though it's no team
     monkeypatch.setitem(grp.MEMBERS, "m1", [*grp.MEMBERS["m1"], grp._member("u2")])
     seed_tenant(db, alpha, groups=_expiring_groups(now))
     report = build(db, store.get_tenant(db, alpha), "group-structure", now)
@@ -264,7 +265,8 @@ def test_group_structure_shows_expiring_role_assignable_and_blocked_members(db, 
 
     role = _rows(s["Role-assignable groups"])
     assert list(role) == ["Helpdesk admins"]
-    assert role["Helpdesk admins"][0][1:5] == ["Security group", 3, 1, ""] and role["Helpdesk admins"][1] == "medium"
+    assert role["Helpdesk admins"][0][1:4] == ["Security group", 3, 1] and role["Helpdesk admins"][1] == "medium"
+    assert role["Helpdesk admins"][0][4].parts == ("Ann",)
 
     blocked = _rows(s["Blocked members"])
     assert list(blocked) == ["Finance alerts", "Helpdesk admins", "Project Phoenix"]

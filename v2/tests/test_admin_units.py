@@ -154,6 +154,22 @@ def test_admin_units_report_lists_units_scoped_admins_and_members(db, two_tenant
     assert tiles["No scoped admin"].value == 1 and tiles["No scoped admin"].rows.where == {"Scoped admins": 0}
 
 
+def test_a_group_with_a_scoped_role_is_shown_as_a_group(db, two_tenants, monkeypatch):
+    alpha, _ = two_tenants
+    group = {
+        "id": "a8",
+        "roleDefinitionId": gd.GROUPS_ADMIN,
+        "principalId": "g1",
+        "directoryScopeId": "/administrativeUnits/au-sales",
+        "principal": {"@odata.type": "#microsoft.graph.group", "id": "g1", "displayName": "Sales"},
+    }
+    monkeypatch.setattr(gd, "ROLE_ASSIGNMENTS", [*gd.ROLE_ASSIGNMENTS, group])
+    seed_tenant(db, alpha)
+    admins = _rows(_sections(build(db, store.get_tenant(db, alpha), "admin-units"))["Scoped admins"])
+    row, flag = admins["g1@x.com"]
+    assert row[1:7] == ["Sales", "Groups Administrator", "Sales", "Active", "", "Group"] and flag is None
+
+
 def test_admin_units_report_before_roles_and_users_are_collected(db, two_tenants):
     alpha, _ = two_tenants
     tenant = store.get_tenant(db, alpha)
