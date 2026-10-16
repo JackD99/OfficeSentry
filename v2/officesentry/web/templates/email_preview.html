@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, csrf %}
-{% from "_email.html" import people, when_local, busy_script with context %}
+{% from "_email.html" import people, when_local with context %}
 {% block title %}Preview · Office Sentry{% endblock %}
 {% block content %}
 {% set back = url_for('email.tenant_emails', tenant_id=tenant.id) if tenant else url_for('email.overview') %}
@@ -53,7 +53,6 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
-{{ busy_script() }}
 <script nonce="{{ csp_nonce }}">
 // The email can't run scripts (sandbox and its own CSP); the page only measures it to show it in full.
 var frame = document.getElementById('email-frame');

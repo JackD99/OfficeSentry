@@ -52,6 +52,103 @@
   });
 })();
 
+/* Forms. A form or submit button with data-confirm="What happens?" asks first, in the portal's own dialog:
+ * the first question is the heading and the rest the words under it (data-confirm-title names the heading
+ * instead), the button says what the submit button says (or data-confirm-action), in red when that button
+ * is .danger or the form or button has data-danger. The cursor starts on Cancel.
+ * Then every form that posts shows its button busy (a spinner, or the form's data-busy words: "Sending…")
+ * and ignores further presses until the next page arrives; the browser's Back button finds it as it was.
+ * data-no-busy leaves a form out (one that downloads a file and stays on the page). */
+(function () {
+  var dialog = null, pending = null;
+  function build() {
+    dialog = document.createElement('dialog');
+    dialog.className = 'confirm-dialog';
+    dialog.setAttribute('aria-labelledby', 'confirm-title');
+    dialog.setAttribute('aria-describedby', 'confirm-text');
+    dialog.innerHTML = '<form method="dialog"><h2 id="confirm-title"></h2><p id="confirm-text"></p>' +
+      '<div class="confirm-actions"><button value="cancel" class="confirm-cancel">Cancel</button><button value="ok" class="confirm-ok"></button></div></form>';
+    dialog.addEventListener('close', function () {
+      var go = dialog.returnValue === 'ok' && pending;
+      var form = pending && pending.form, submitter = pending && pending.submitter;
+      pending = null;
+      if (go) send(form, submitter);
+    });
+    document.body.appendChild(dialog);
+  }
+  function send(form, submitter) {
+    form.dataset.confirmed = '1';
+    if (form.requestSubmit) form.requestSubmit(submitter || undefined);
+    else if (submitter) submitter.click();
+    else form.submit();
+  }
+  function submitButton(form) {
+    return form.querySelector('button:not([type=button]), input[type=submit]');
+  }
+  function ask(form, submitter, holder) {
+    if (!dialog) build();
+    var words = holder.getAttribute('data-confirm');
+    var title = holder.getAttribute('data-confirm-title') || form.getAttribute('data-confirm-title');
+    var text = words;
+    if (!title) {  // "Delete Gold? Its clients are kept." is a heading and a line under it
+      var cut = words.indexOf('? ');
+      title = cut === -1 ? words : words.slice(0, cut + 1);
+      text = cut === -1 ? '' : words.slice(cut + 2);
+    }
+    var button = submitter || submitButton(form);
+    var label = holder.getAttribute('data-confirm-action') || form.getAttribute('data-confirm-action') ||
+      (button && (button.tagName === 'INPUT' ? button.value : button.textContent.trim())) || 'Continue';
+    var danger = (button && button.classList.contains('danger')) || holder.hasAttribute('data-danger') || form.hasAttribute('data-danger');
+    dialog.querySelector('h2').textContent = title;
+    var p = dialog.querySelector('p');
+    p.textContent = text;
+    p.hidden = !text;
+    var ok = dialog.querySelector('.confirm-ok');
+    ok.textContent = label;
+    ok.className = 'confirm-ok ' + (danger ? 'danger' : 'primary');
+    pending = { form: form, submitter: submitter };
+    dialog.returnValue = '';
+    dialog.showModal();
+    dialog.querySelector('.confirm-cancel').focus();
+  }
+  // In the capture phase, so the question comes before any page's own handling of the submit.
+  document.addEventListener('submit', function (e) {
+    var form = e.target, submitter = e.submitter || null;
+    if (form.method === 'dialog') return;
+    var holder = submitter && submitter.hasAttribute('data-confirm') ? submitter : form.hasAttribute('data-confirm') ? form : null;
+    if (holder && form.dataset.confirmed !== '1') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (typeof HTMLDialogElement === 'function') ask(form, submitter, holder);
+      else if (window.confirm(holder.getAttribute('data-confirm'))) send(form, submitter);
+      return;
+    }
+    delete form.dataset.confirmed;
+    if (form.dataset.sending === '1') { e.preventDefault(); e.stopImmediatePropagation(); return; }
+    if (form.method !== 'post' || form.hasAttribute('data-no-busy') || form.target) return;
+    // Once every handler has had its say: a page that sends the form itself (fetch) has cancelled it.
+    setTimeout(function () {
+      if (e.defaultPrevented) return;
+      form.dataset.sending = '1';
+      var b = submitter || submitButton(form);
+      if (!b) return;
+      b.setAttribute('aria-busy', 'true');
+      b.setAttribute('aria-disabled', 'true');
+      if (form.dataset.busy && b.tagName === 'BUTTON') { b.dataset.label = b.innerHTML; b.textContent = form.dataset.busy; }
+    }, 0);
+  }, true);
+  // Back to a page the browser kept: its buttons work again.
+  window.addEventListener('pageshow', function (e) {
+    if (!e.persisted) return;
+    document.querySelectorAll('form[data-sending]').forEach(function (f) { delete f.dataset.sending; });
+    document.querySelectorAll('button[aria-busy="true"], input[aria-busy="true"]').forEach(function (b) {
+      if (b.dataset.label !== undefined) { b.innerHTML = b.dataset.label; delete b.dataset.label; }
+      b.removeAttribute('aria-busy');
+      b.removeAttribute('aria-disabled');
+    });
+  });
+})();
+
 (function () {
   function focusable() {
     document.querySelectorAll('.scroll-x, .table-scroll').forEach(function (box) {

@@ -83,7 +83,7 @@
   {% if role.built_in %}
   <h2>Back to default</h2>
   <p class="muted small">Put {{ role.name }} back to what it ships with{% if not role.changed_from_template %} (it's there now){% endif %}.</p>
-  <form method="post" action="{{ url_for('roles.reset', role_id=role.id) }}">{{ csrf() }}<button{% if not role.changed_from_template %} disabled{% endif %} data-confirm="Put {{ role.name }} back to its default? Everyone holding it will sign in again.">Reset to default</button></form>
+  <form method="post" action="{{ url_for('roles.reset', role_id=role.id) }}">{{ csrf() }}<button{% if not role.changed_from_template %} disabled{% endif %} data-confirm="Put {{ role.name }} back to its default? Everyone holding it will sign in again." data-danger>Reset to default</button></form>
   {% else %}
   <h2>Delete role</h2>
   <p class="muted small">Only a role nobody holds can be deleted. Move people to another role first.</p>
@@ -114,9 +114,6 @@
   }
   boxes.forEach(function (b) { b.addEventListener('change', show); });
   show();
-  document.querySelectorAll('[data-confirm]').forEach(function (b) {
-    b.addEventListener('click', function (e) { if (!confirm(b.dataset.confirm)) e.preventDefault(); });
-  });
 })();
 </script>
 {% endblock %}
