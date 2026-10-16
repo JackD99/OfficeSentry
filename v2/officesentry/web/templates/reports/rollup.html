@@ -40,7 +40,7 @@
 <section class="doc-section">
   <h2>{{ rollup.title }} <span class="count">{{ whole.rows|length }}</span></h2>
   {% if rollup.rows %}
-  <div class="table-wrap"><table class="data">
+  <div class="table-wrap{{ ' keep whole' if rollup.rows|length <= 8 }}"><table class="data">
     <thead><tr><th>Client</th>{% for c in rollup.columns %}<th class="{{ 'num' if c.kind in ('num', 'pct', 'money') }}">{{ c.label }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for row in rollup.rows %}
