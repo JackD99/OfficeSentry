@@ -77,6 +77,19 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   default): how far back each is detailed, the last 30 days, sign-ins per day,
   each month with a CSV of every sign-in, and admin changes worth a second
   look. Each person's page shows their sign-ins by month from it.
+<!-- since 2.5.0 -->
+- **Timeline** (`/tenants/<id>/timeline`, a client's *Changes → Timeline*,
+  staff only): the client's year month by month, for a review meeting. Each
+  month opens with a one-line summary (findings found and fixed, Secure Score
+  and MFA then and now, admin changes, reports sent, failed nights) over its
+  dated entries: findings found, fixed, come back or accepted, admin changes
+  from the activity history, reports sent and approved, month-end notes and
+  next steps, failed collections and the client's own milestones. Beside it,
+  Secure Score, MFA, open critical and high findings and unassigned paid
+  licences at each month's end over twelve months. Filter by kind, look back
+  12 or 24 months or everything kept, and download it as PDF, XLSX or CSV.
+  Each person sees only the parts whose report they open on that client.
+<!-- /since -->
 - **Coming up** (`/upcoming`): what falls due in the next 90 days across your
   clients, sorted into now, 30, 60 and 90 days and no date: subscription
   renewals and trials (lapsing ones need attention now), client app secrets and

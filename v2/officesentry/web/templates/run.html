@@ -1,14 +1,12 @@
 {% extends "base.html" %}
-{% from "_macros.html" import ts, status, icon %}
+{% from "_macros.html" import ts, status, icon, tenant_header with context %}
 {% block title %}Run {{ run.id }} · {{ tenant.name }}{% endblock %}
 {% block content %}
 {% set title = collectors[run.collector].title if run.collector in collectors else run.collector %}
-<div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">Clients</a><span>/</span>
-  <a href="{{ url_for('tenants.tenant', tenant_id=tenant.id) }}">{{ tenant.name }}</a><span>/</span>
-  <a href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection</a></div>
+{{ tenant_header(tenant, 'collection', back=('Data collection', url_for('tenants.collection', tenant_id=tenant.id))) }}
 <div class="page-head">
   <div>
-    <h1>{{ title }} {{ status(run.status) }}</h1>
+    <h2 class="page-title">{{ title }} {{ status(run.status) }}</h2>
     <div class="sub">Run {{ run.id }} · queued {{ ts(run.created_at) }}{% if run.finished_at %} · finished {{ ts(run.finished_at) }}{% endif %}{% if run.requested_by %} · by {{ run.requested_by }}{% endif %}{% if run.retry_of %} · tried again after <a href="{{ url_for('tenants.run', run_id=run.retry_of) }}">run {{ run.retry_of }}</a> failed{% endif %}{% if run.truncated %} · <strong>truncated</strong>{% endif %}</div>
   </div>
 </div>
