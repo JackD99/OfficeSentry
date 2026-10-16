@@ -106,6 +106,7 @@ License), so pages and PDFs set text the same way and nothing is fetched from el
 | `--fs-2xl` | 28px | page titles (serif) |
 | `--fs-figure` | 30px | headline figures (serif) |
 | `--fs-3xl` | 32px | the largest figure on a page |
+| `--fs-lead` | 38px | the lead figure of a statement line |
 
 Rules:
 
@@ -135,21 +136,32 @@ Rules:
 `/styleguide` shows each one; `v2/officesentry/web/templates/_macros.html` builds most of them.
 
 - **Headline figures** (`.tiles`): one statement line. The figures sit side by side, separated by thin
-  rules, closed underneath by a double rule in `--rule`; the first figure is the lead and is set largest.
-  Labels in small capitals above, the change since last time below.
+  rules, an ink rule above and a double rule in `--rule` beneath; the first figure is the lead, set in
+  `--fs-lead`, so put the figure that answers the page's question first. Labels in small capitals above,
+  the change since last time below. Inside a card, a few figures (`.mini-stats`) are the same line without
+  the double rule: never boxes inside a box.
 - **Cards** (`.card`): a ruled section with a serif title, a border and no shadow.
 - **Tables**: headings in small capitals on the surface, with a `--rule` line under them; tabular figures;
-  a row's flag is a key at its left edge, not a coloured band.
+  a flagged row carries its severity (key and word) beside its first value, and a thin band in the same
+  colour down its left edge so a long table can be scanned.
 - **Tabs** (`.tabs`, and the settings tabs): the current tab is underlined in `--rule` and set at 600.
 - **Severity**: one shape everywhere, a small square key in the severity colour followed by its word in
-  small capitals (Critical, High, Medium, Low). Counts by severity use the same key.
+  small capitals (Critical, High, Medium, Low), the key and the word in the level's text colour.
+  Counts by severity (`.sev`) are the same square holding the number, in a fixed order: critical, high,
+  medium, low.
 - **Pills and tags**: each has one job and one look. Counts are plain tabular figures beside their label;
   states (Paused, Archived) are soft tags; NEW and FIXED are small-capital tags; downloads (PDF, XLSX) are
-  buttons, not pills.
+  buttons, not pills. Tags and chips have square corners (`--radius-xs`, `--radius-sm`); only a progress
+  bar is round-ended.
 - **Buttons**: one primary action per area in `--accent`; the rest are outlined. Danger actions say so in
   `--bad` and ask before they act.
 - **Icons**: one set, drawn on a 24px grid with round ends, in `_macros.html` (`icon()`). They sit beside a
   word, never alone without a label or a tooltip.
+- **The mark**: the shield with its tick, white on the bottle-green gradient (`--logo-from` to `--logo-to`),
+  in the menu, the browser tab (`v2/officesentry/web/static/favicon.svg`, also the sign-in page's logo when
+  the MSP has none) and the website (`website/assets/`: `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`
+  and the link preview `social-card.png`). Change them together. An MSP's own logo replaces it in the portal,
+  never on the website.
 
 ## Checking a change
 
