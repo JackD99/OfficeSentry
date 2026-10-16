@@ -551,7 +551,7 @@ ul.ticks li { margin: 3px 0; }
 .answer-main .ref { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; margin-right: var(--space-0-5); }
 .answer-main .autofail { margin-left: var(--space-1); vertical-align: 1px; }
 .paste { display: flex; gap: var(--space-2); align-items: flex-start; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--space-2-5) var(--space-2-5) var(--space-2-5) var(--space-3-5); margin: var(--space-1) 0; }
-.paste-text { flex: 1; min-width: 0; margin: 0; line-height: 1.55; white-space: pre-line; }
+.paste-text { flex: 1; min-width: 0; margin: 0; line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere; }
 .paste .copy { flex: none; }
 .paste .copy.copied, .copy-bar button.copied { color: var(--ok); }
 mark.blank { background: var(--warn-soft); color: var(--text); border-radius: 3px; padding: 0 2px; }
