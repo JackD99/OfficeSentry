@@ -114,14 +114,16 @@ def test_a_retry_gives_way_to_a_newer_run_and_a_paused_client(db, two_tenants):
 def test_a_run_the_worker_stopped_during_is_tried_again(app, db, vault, cfg, two_tenants):
     alpha, _ = two_tenants
     now = datetime.now(UTC)
-    slot = schedule.iso(schedule.previous_fire(cfg.collect_cron, cfg.timezone, now + timedelta(hours=1)))
+    due = now + store.RETRY_DELAYS[0] + timedelta(minutes=1)
+    # The night's run is still the latest slot's then, so the schedule queues no newer one for the retry to give way to.
+    slot = schedule.iso(schedule.previous_fire(cfg.collect_cron, cfg.timezone, due))
     store.enqueue_run(db, alpha, "users", trigger="schedule", scheduled_for=slot)
     store.claim_next_run(db)
     assert store.expire_run_leases(db, now + store.LEASE + timedelta(seconds=1)) == 1  # an update restarted it
     run = db.execute("SELECT * FROM runs").fetchone()
-    assert run["error"] == store.WORKER_STOPPED and store.retry_pending(run)
+    assert run["error"] == store.WORKER_STOPPED and store.retry_pending(run) and _when(run) <= due
     # The worker's housekeeping queues it once it's due.
-    housekeeping(app, db, vault, cfg, _when(run) + timedelta(seconds=1))
+    housekeeping(app, db, vault, cfg, due)
     retry = db.execute("SELECT * FROM runs WHERE retry_of = ?", (run["id"],)).fetchone()
     assert retry["status"] == "queued" and retry["collector"] == "users"
 
