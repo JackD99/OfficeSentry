@@ -113,7 +113,7 @@
    stays pinned to the top of the window as the page scrolls, with the tenant's name in it (app.js).
    Staff who see more than one client get a switcher beside the name: this page for another client
    (web/switcher.py), with a filter box like the report picker's. #}
-{% macro tenant_header(tenant, active, title=None, counts=None, pin=true) -%}
+{% macro tenant_header(tenant, active, title=None, counts=None, pin=true, back=None) -%}
 {% set staff = current_user.role != 'client' %}
 {% set tid = tenant.id %}
 {% set others = client_switch(tenant.id) if staff else [] %}
@@ -190,7 +190,10 @@
 </nav>
 {% endif %}
 {#- The client's name is every client page's heading; a page the tabs don't name (Recommended projects,
-    Report history) gives its own title under them, as a report does under its picker. -#}
+    Report history, a run) says which page it was opened from (back: (label, href), drawn as "← Data
+    collection" the way a person's page shows "← People") and gives its own title under them, as a report
+    does under its picker. -#}
+{% if back %}<div class="crumbs"><a href="{{ back[1] }}">&larr; {{ back[0] }}</a></div>{% endif %}
 {% if title %}<h2 class="section-title page-title">{{ title }}</h2>{% endif %}
 {%- endmacro %}
 
