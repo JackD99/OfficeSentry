@@ -165,7 +165,7 @@ def test_windows_summary_names_the_computers_reaching_end_of_support_too(client,
     login(client, "admin")
     page = client.get(f"/tenants/{alpha}").get_data(as_text=True)
     row = page.split(f'<div class="title">{r.summary}</div>')[1].split("</li>")[0]
-    assert '<span class="pill" title="Accounts or items affected">3</span>' in row
+    assert '<span class="count-badge" title="Accounts or items affected">3</span>' in row
     # Past it, nothing to come: the summary says only that.
     monkeypatch.setattr(dd, "MANAGED_DEVICES", [bob, phone])
     seed_tenant(db, alpha)
