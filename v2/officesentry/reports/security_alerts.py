@@ -97,6 +97,7 @@ def security_alerts_report(snap: TenantSnapshot, now: datetime, out: DataReport)
         intro="Defender groups related alerts into an incident, so one attack shows once. Work through these "
         "from the most severe: assign each to someone, and close it in Defender with what it turned out to be.",
         empty="No incidents are open." if parts.get("incidents") == "read" else missing("incidents", "Incidents"),
+        optional_across=("Last updated (UTC)",),
     )
     for i in (i for i in incidents if d.incident_open(i)):
         incident_table.add(
