@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, csrf %}
+{% from "_macros.html" import icon, csrf, tenant_header with context %}
 {% from "_email.html" import contact_checks with context %}
 {% set digest = s.kind == 'digest' %}
 {% set coming_up = digest and 'upcoming' in s.reports %}
@@ -36,13 +36,12 @@
 {% endif %}
 {%- endmacro %}
 {% block content %}
-<div class="crumbs">
-  {% if tenant %}<a href="{{ url_for('tenants.dashboard') }}">Clients</a><span>/</span>
-  <a href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}">{{ tenant.name }}</a><span>/</span><span>Emailed reports</span>
-  {% else %}<a href="{{ url_for('email.overview') }}">Email reports</a>{% endif %}
-</div>
+{#- A client's email is a page of its Emails tab; the team's digests are pages under Email reports. -#}
+{% if tenant %}{{ tenant_header(tenant, 'schedules', back=('Emailed reports', url_for('email.tenant_emails', tenant_id=tenant.id))) }}
+{% else %}<div class="crumbs"><a href="{{ url_for('email.overview') }}">Email reports</a><span>/</span><span>{{ heading }}</span></div>{% endif %}
+{% set tag = 'h2' if tenant else 'h1' %}
 <div class="page-head">
-  <div><h1>{{ heading }}</h1>
+  <div><{{ tag }}{% if tenant %} class="page-title"{% endif %}>{{ heading }}</{{ tag }}>
     <div class="sub">{% if coming_up %}One email to your team of what falls due in the next 90 days, across every client.{% elif views_email %}Your saved views of a report, with every client's rows (or one group's), for your team.{% elif digest %}One email to your team summarising every client, or one group of them.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
 </div>
 
