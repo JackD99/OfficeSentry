@@ -624,5 +624,5 @@ def test_xlsx_keeps_links(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     wb = load_workbook(io.BytesIO(data_reports.to_xlsx(_report(db, alpha, "shared-files"))))
-    cell = wb["Shared with anyone"]["A2"]
+    cell = wb["Shared with anyone"]["B2"]  # after the flag column
     assert cell.value == "Clients (folder)" and cell.hyperlink.target == "https://x/Clients"
