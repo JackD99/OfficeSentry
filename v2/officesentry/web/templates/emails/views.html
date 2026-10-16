@@ -5,36 +5,36 @@
 {% block preheader %}{{ d.views|length|plural('saved view') }} across {{ d.tenants|plural('client') }} · {{ total.rows|plural('row') }}.{% endblock %}
 {% block kicker %}{{ frequency|capitalize }} saved views{% endblock %}
 {% block body %}
-<h1 style="margin:0 0 4px;font-size:22px;line-height:1.3;color:#17201c;">Saved views: {{ d.label }}</h1>
-<div style="color:#56625c;margin-bottom:18px;">{{ label[:1]|upper ~ label[1:] }} · {{ d.tenants|plural('client') }}</div>
+<h1 style="margin:0 0 4px;font-size:22px;line-height:1.3;color:#1c1e20;">Saved views: {{ d.label }}</h1>
+<div style="color:#5a5f64;margin-bottom:18px;">{{ label[:1]|upper ~ label[1:] }} · {{ d.tenants|plural('client') }}</div>
 
 {% if message %}
-<div style="margin:0 0 20px;padding:12px 14px;background:#eceeea;border-radius:6px;color:#303b36;white-space:pre-line;">{{ message }}</div>
+<div style="margin:0 0 20px;padding:12px 14px;background:#ececea;border-radius:6px;color:#34383b;white-space:pre-line;">{{ message }}</div>
 {% endif %}
 
 {% if d.views %}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
   {% for r in d.views %}
-  <tr><td style="padding:12px 0;border-top:1px solid #dfe3dd;">
-    <div style="font-weight:600;color:#17201c;"><a href="{{ link('across.rows', key=r.view.report_key, table=r.table) }}{{ '?' ~ r.view.query if r.view.query }}" style="color:#17201c;text-decoration:none;">{{ r.view.name }}</a></div>
-    <div style="font-size:12px;color:#56625c;margin-bottom:4px;">{{ r.view.report_title }}</div>
+  <tr><td style="padding:12px 0;border-top:1px solid #e0e1df;">
+    <div style="font-weight:600;color:#1c1e20;"><a href="{{ link('across.rows', key=r.view.report_key, table=r.table) }}{{ '?' ~ r.view.query if r.view.query }}" style="color:#1c1e20;text-decoration:none;">{{ r.view.name }}</a></div>
+    <div style="font-size:12px;color:#5a5f64;margin-bottom:4px;">{{ r.view.report_title }}</div>
     {% for line in r.lines %}
-    <div style="font-size:13px;color:#303b36;">{{ line }}</div>
+    <div style="font-size:13px;color:#34383b;">{{ line }}</div>
     {% endfor %}
     {% if r.report.notice %}<div style="font-size:12px;color:#b45309;margin-top:4px;">{{ r.report.notice }}</div>{% endif %}
-    {% if r.without %}<div style="font-size:12px;color:#56625c;margin-top:2px;">{{ r.without|plural('client') }} had no data for this report.</div>{% endif %}
+    {% if r.without %}<div style="font-size:12px;color:#5a5f64;margin-top:2px;">{{ r.without|plural('client') }} had no data for this report.</div>{% endif %}
   </td></tr>
   {% endfor %}
 </table>
 {% else %}
-<p style="color:#56625c;">No saved views are chosen for this email any more. Edit it in Office Sentry to pick one.</p>
+<p style="color:#5a5f64;">No saved views are chosen for this email any more. Edit it in Office Sentry to pick one.</p>
 {% endif %}
 
 {% if files %}
 {{ heading('Attached') }}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;">
   {% for title, name in files %}
-  <tr><td style="padding:6px 0;border-top:1px solid #dfe3dd;"><span style="color:#17201c;">{{ name }}</span><br><span style="color:#56625c;font-size:12px;">{{ title }}</span></td></tr>
+  <tr><td style="padding:6px 0;border-top:1px solid #e0e1df;"><span style="color:#1c1e20;">{{ name }}</span><br><span style="color:#5a5f64;font-size:12px;">{{ title }}</span></td></tr>
   {% endfor %}
 </table>
 {% endif %}

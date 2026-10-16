@@ -2210,7 +2210,7 @@ def populate(
     vault,
     *,
     msp: str = "Harbour IT",
-    accent: str = "#0d7a5f",
+    accent: str = "#2b4a6b",
     contact: str = "help@harbourit.example · 0161 496 0000",
 ) -> list[int]:
     """Add the demo tenants, their history, prices and MSP branding to a migrated database."""

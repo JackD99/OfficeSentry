@@ -1,5 +1,5 @@
 {%- macro logo() -%}
-<svg class="logo-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+<svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="4.5"/><path fill-rule="evenodd" transform="translate(16 16.2) scale(1.12) translate(-12 -12.9)" d="M6.2 4.5H17.8C18.46 4.5 19 5.04 19 5.7V11.4C19 16.1 16.1 19.6 12 21.3C7.9 19.6 5 16.1 5 11.4V5.7C5 5.04 5.54 4.5 6.2 4.5ZM7.858 13.042L10.258 15.442A1.05 1.05 0 0 0 11.75 15.434L16.35 10.699A1.05 1.05 0 0 0 14.85 9.301L11.01 13.225L9.342 11.558A1.05 1.05 0 0 0 7.858 13.042Z"/></svg>
 {%- endmacro -%}
 {%- macro nav_link(href, label, unless='') -%}
 <a href="{{ href }}"{% if path.startswith(href) and not (unless and path.startswith(unless)) %} aria-current="page"{% endif %}>{{ label }}</a>
@@ -24,7 +24,8 @@
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Office Sentry: free Microsoft 365 reporting for MSPs, beside a client's overview page">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="theme-color" content="#12302a">
+  <meta name="theme-color" content="#f4f4f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111214" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="/favicon.ico" sizes="48x48">
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">

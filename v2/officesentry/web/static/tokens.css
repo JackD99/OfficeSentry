@@ -15,6 +15,7 @@
    - Dark mode follows the system unless <html data-theme="light">, which PDFs and print pages set, or the
      person chose Light or Dark under Account, Appearance (data-theme on the portal's pages).
    - A colour theme (themes.css, staff pages only) changes only the Accent and Sidebar groups.
+   - Paper and ink are plain greys; colour is kept for links and buttons (the accent), status and severity.
    - Brand colours (--brand, --brand-ink, ...) are the MSP's and come from /brand.css, not from here. */
 
 /* Source Sans 3 for everything people read and use; Source Serif 4 (its Subhead size) for page and card
@@ -28,13 +29,13 @@
 @font-face { font-family: "Source Serif 4"; font-weight: 700; font-style: normal; font-display: swap; src: url("fonts/SourceSerif4Subhead-Bold.woff2") format("woff2"); }
 
 :root {
-  /* Surfaces and text: stone paper and green-black ink */
-  --bg: #f3f4f1; --surface: #ffffff; --surface-2: #f8f9f7; --sunken: #eceeea;
-  --text: #17201c; --text-2: #303b36; --muted: #56625c; --faint: #5b6660; --decor: #a3aca6;
-  --border: #dfe3dd; --border-strong: #c6ccc5;
-  --rule: #17201c; /* the ink rule: under table headings, the current tab, and closing headline figures */
-  /* Accent (links, primary buttons, focus) */
-  --accent: #1d5c4b; --accent-hover: #154638; --accent-soft: #e5efea; --accent-text: #ffffff;
+  /* Surfaces and text: plain paper and ink */
+  --bg: #f4f4f2; --surface: #ffffff; --surface-2: #f9f9f8; --sunken: #ececea;
+  --text: #1c1e20; --text-2: #34383b; --muted: #5a5f64; --faint: #5d6267; --decor: #a5a8ab;
+  --border: #e0e1df; --border-strong: #c8cac7;
+  --rule: #1c1e20; /* the ink rule: under table headings, the current tab, and closing headline figures */
+  /* Accent (links, primary buttons, focus): a blue-black ink */
+  --accent: #2b4a6b; --accent-hover: #203853; --accent-soft: #e8edf3; --accent-text: #ffffff;
   /* Status */
   --ok: #15803d; --ok-soft: #ecfdf3; --ok-fill: #0ca30c;
   --warn: #b45309; --warn-soft: #fff7ed;
@@ -50,10 +51,10 @@
   /* Charts (reports/charts.py writes the same light values into the SVG for PDFs). Series take the
      categorical order series, 2, 3 (validated for colour blindness against both surfaces); never more. */
   --chart-series: #2a78d6; --chart-2: #eb6834; --chart-3: #1baf7a; --chart-grid: #e3e6eb; --chart-track: #e8ebf0;
-  /* Sidebar (dark in both themes): the bottle-green rail */
-  --sidebar: #12302a; --sidebar-text: #cfdcd5; --sidebar-muted: #93aaa0; --sidebar-active: #1c4238;
-  --sidebar-strong: #ffffff; --sidebar-line: #224a3f; --sidebar-marker: #9fd8bf;
-  --logo-from: #2f7d66; --logo-to: #1d5c4b;
+  /* Sidebar: a paper menu that steps back from the page (a colour theme may make it dark) */
+  --sidebar: #e9eae7; --sidebar-text: #303438; --sidebar-muted: #5a5f64; --sidebar-active: #ffffff;
+  --sidebar-strong: #1c1e20; --sidebar-line: #d3d5d2; --sidebar-marker: #2b4a6b;
+  --logo-from: #2b4a6b; --logo-to: #2b4a6b; --logo-text: #ffffff; /* the mark: a white shield on its tile */
 
   /* Type: bundled, so PDFs match the page. The body is 15px (--fs-base); nothing is smaller than 12px. */
   --font: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -80,9 +81,10 @@
   --radius: 4px; --radius-sm: 3px; --radius-xs: 2px; --radius-pill: 999px;
   --shadow: none;        /* cards and tiles: their border is their edge */
   --shadow-hover: none;  /* a card or tile under the pointer changes its background instead */
-  --shadow-menu: 0 10px 28px rgba(18, 48, 42, .16);  /* menus that drop over the page */
-  --shadow-lg: 0 6px 20px rgba(18, 48, 42, .25);     /* floating notices */
-  --scroll-shade: rgba(18, 48, 42, .16);              /* the shaded edge of a table with more to the side */
+  --shadow-menu: 0 10px 28px rgba(28, 30, 32, .16);  /* menus that drop over the page */
+  --shadow-lg: 0 6px 20px rgba(28, 30, 32, .25);     /* floating notices */
+  --scroll-shade: rgba(28, 30, 32, .16);              /* the shaded edge of a table with more to the side */
+  --scrim: rgba(28, 30, 32, .45);                     /* behind a dialog */
 
   /* Layout */
   --sidebar-w: 232px; --sidebar-w-folded: 64px;  /* the menu, open and folded to its icons */
@@ -91,21 +93,23 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e1412; --surface: #141c19; --surface-2: #18211e; --sunken: #0b110f;
-    --text: #e7ede9; --text-2: #c9d3ce; --muted: #98a8a0; --faint: #8a9a92; --decor: #44554c;
-    --border: #24322c; --border-strong: #33453c; --rule: #c9d3ce;
-    --accent: #79c9aa; --accent-hover: #9edbc3; --accent-soft: #16302a; --accent-text: #0e1412;
+    --bg: #111214; --surface: #17191b; --surface-2: #1b1d20; --sunken: #0d0e10;
+    --text: #e8e9ea; --text-2: #cdd0d2; --muted: #9ea2a6; --faint: #909498; --decor: #474b4f;
+    --border: #282b2e; --border-strong: #373b3f; --rule: #cdd0d2;
+    --accent: #9fb8d4; --accent-hover: #bccde1; --accent-soft: #1b2430; --accent-text: #111214;
     --ok: #4ade80; --ok-soft: #0f2a1b; --warn: #fbbf24; --warn-soft: #2c2110;
     --bad: #f87171; --bad-soft: #2d1416; --info: #94a3b8; --info-soft: #1a2433;
     --sev-critical: #f97066; --sev-critical-soft: #3a1d1d;
     --sev-high: #f79a5c; --sev-high-soft: #3a2618;
     --sev-medium: #fdb022; --sev-medium-soft: #36290f;
     --sev-low: #a6b0c0; --sev-low-soft: #242c38;
-    --on-sev: #0e1412;
-    --chart-series: #3987e5; --chart-2: #d95926; --chart-3: #199e70; --chart-grid: #24322c; --chart-track: #24322c;
-    --sidebar: #0a1613; --sidebar-active: #15302a; --sidebar-line: #18332c;
+    --on-sev: #111214;
+    --chart-series: #3987e5; --chart-2: #d95926; --chart-3: #199e70; --chart-grid: #282b2e; --chart-track: #282b2e;
+    --sidebar: #0b0c0d; --sidebar-text: #cdd0d2; --sidebar-muted: #9ea2a6; --sidebar-active: #1d2023;
+    --sidebar-strong: #ffffff; --sidebar-line: #24272a; --sidebar-marker: #9fb8d4;
     --shadow-menu: 0 12px 32px rgba(0, 0, 0, .5);
     --scroll-shade: rgba(0, 0, 0, .6);
+    --scrim: rgba(0, 0, 0, .6);
     color-scheme: dark;
   }
 }
@@ -113,20 +117,22 @@
 /* Dark for someone who chose it under Account, Appearance, whatever their device says: the block above,
    word for word (tests/test_appearance.py checks). */
 :root[data-theme="dark"] {
-  --bg: #0e1412; --surface: #141c19; --surface-2: #18211e; --sunken: #0b110f;
-  --text: #e7ede9; --text-2: #c9d3ce; --muted: #98a8a0; --faint: #8a9a92; --decor: #44554c;
-  --border: #24322c; --border-strong: #33453c; --rule: #c9d3ce;
-  --accent: #79c9aa; --accent-hover: #9edbc3; --accent-soft: #16302a; --accent-text: #0e1412;
+  --bg: #111214; --surface: #17191b; --surface-2: #1b1d20; --sunken: #0d0e10;
+  --text: #e8e9ea; --text-2: #cdd0d2; --muted: #9ea2a6; --faint: #909498; --decor: #474b4f;
+  --border: #282b2e; --border-strong: #373b3f; --rule: #cdd0d2;
+  --accent: #9fb8d4; --accent-hover: #bccde1; --accent-soft: #1b2430; --accent-text: #111214;
   --ok: #4ade80; --ok-soft: #0f2a1b; --warn: #fbbf24; --warn-soft: #2c2110;
   --bad: #f87171; --bad-soft: #2d1416; --info: #94a3b8; --info-soft: #1a2433;
   --sev-critical: #f97066; --sev-critical-soft: #3a1d1d;
   --sev-high: #f79a5c; --sev-high-soft: #3a2618;
   --sev-medium: #fdb022; --sev-medium-soft: #36290f;
   --sev-low: #a6b0c0; --sev-low-soft: #242c38;
-  --on-sev: #0e1412;
-  --chart-series: #3987e5; --chart-2: #d95926; --chart-3: #199e70; --chart-grid: #24322c; --chart-track: #24322c;
-  --sidebar: #0a1613; --sidebar-active: #15302a; --sidebar-line: #18332c;
+  --on-sev: #111214;
+  --chart-series: #3987e5; --chart-2: #d95926; --chart-3: #199e70; --chart-grid: #282b2e; --chart-track: #282b2e;
+  --sidebar: #0b0c0d; --sidebar-text: #cdd0d2; --sidebar-muted: #9ea2a6; --sidebar-active: #1d2023;
+  --sidebar-strong: #ffffff; --sidebar-line: #24272a; --sidebar-marker: #9fb8d4;
   --shadow-menu: 0 12px 32px rgba(0, 0, 0, .5);
   --scroll-shade: rgba(0, 0, 0, .6);
+  --scrim: rgba(0, 0, 0, .6);
   color-scheme: dark;
 }

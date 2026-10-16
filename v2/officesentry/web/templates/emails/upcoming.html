@@ -2,31 +2,31 @@
     next 30, 60 and 90 days, soonest first. Two columns per item (when, what), so it reads on a phone. -#}
 {% extends "emails/_layout.html" %}
 {% from "emails/_parts.html" import button, heading, tiles with context %}
-{% set TONE = {'high': '#b42318', 'medium': '#8a5a00', 'low': '#303b36'} %}
+{% set TONE = {'high': '#b42318', 'medium': '#8a5a00', 'low': '#34383b'} %}
 {% block preheader %}{{ counts[w.NOW] }} need{{ 's' if counts[w.NOW] == 1 }} attention now · {{ counts[w.DAYS_30] }} due within 30 days · {{ counts[w.DAYS_60] + counts[w.DAYS_90] }} in 31 to 90 days.{% endblock %}
 {% block kicker %}{{ frequency|capitalize }} · next 90 days{% endblock %}
 {% block body %}
-<h1 style="margin:0 0 4px;font-size:22px;line-height:1.3;color:#17201c;">Coming up</h1>
-<div style="color:#56625c;margin-bottom:18px;">{{ label[:1]|upper ~ label[1:] }} · {{ up.tenants|plural('client') }}</div>
+<h1 style="margin:0 0 4px;font-size:22px;line-height:1.3;color:#1c1e20;">Coming up</h1>
+<div style="color:#5a5f64;margin-bottom:18px;">{{ label[:1]|upper ~ label[1:] }} · {{ up.tenants|plural('client') }}</div>
 
 {% if message %}
-<div style="margin:0 0 20px;padding:12px 14px;background:#eceeea;border-radius:6px;color:#303b36;white-space:pre-line;">{{ message }}</div>
+<div style="margin:0 0 20px;padding:12px 14px;background:#ececea;border-radius:6px;color:#34383b;white-space:pre-line;">{{ message }}</div>
 {% endif %}
 
 {% set first = up.soonest %}
 {% if first %}
-<div style="margin:0 0 18px;padding:12px 14px;border-radius:6px;background:{{ '#fef2f2' if first.window == w.NOW else ('#fff7ed' if first.window == w.DAYS_30 else '#eceeea') }};color:#17201c;">
+<div style="margin:0 0 18px;padding:12px 14px;border-radius:6px;background:{{ '#fef2f2' if first.window == w.NOW else ('#fff7ed' if first.window == w.DAYS_30 else '#ececea') }};color:#1c1e20;">
   <strong>{% if counts[w.NOW] %}{{ counts[w.NOW]|plural('item') }} {{ 'needs' if counts[w.NOW] == 1 else 'need' }} attention now.{% else %}Next up {{ first.when }}, on {{ first.due.isoformat()|day }}.{% endif %}</strong>
   {{ first.tenant_name }}: {{ first.title }}.
 </div>
 {% else %}
-<div style="margin:0 0 18px;padding:12px 14px;border-radius:6px;background:#ecfdf3;color:#17201c;"><strong>Nothing is due in the next 90 days.</strong></div>
+<div style="margin:0 0 18px;padding:12px 14px;border-radius:6px;background:#ecfdf3;color:#1c1e20;"><strong>Nothing is due in the next 90 days.</strong></div>
 {% endif %}
 
 {{ tiles([
-  ('Needs attention now', counts[w.NOW], 'expired, lapsing or nearly full', '#b91c1c' if counts[w.NOW] else '#56625c'),
-  ('Next 30 days', counts[w.DAYS_30], 'due within a month', '#b45309' if counts[w.DAYS_30] else '#56625c'),
-  ('31 to 90 days', counts[w.DAYS_60] + counts[w.DAYS_90], counts[w.DAYS_60] ~ ' in 31 to 60, ' ~ counts[w.DAYS_90] ~ ' in 61 to 90', '#56625c'),
+  ('Needs attention now', counts[w.NOW], 'expired, lapsing or nearly full', '#b91c1c' if counts[w.NOW] else '#5a5f64'),
+  ('Next 30 days', counts[w.DAYS_30], 'due within a month', '#b45309' if counts[w.DAYS_30] else '#5a5f64'),
+  ('31 to 90 days', counts[w.DAYS_60] + counts[w.DAYS_90], counts[w.DAYS_60] ~ ' in 31 to 60, ' ~ counts[w.DAYS_90] ~ ' in 61 to 90', '#5a5f64'),
 ]) }}
 
 {% for window, items in windows %}
@@ -34,23 +34,23 @@
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
   {% for i in items[:shown] %}
   <tr>
-    <td valign="top" width="76" style="padding:10px 10px 10px 0;border-top:1px solid #dfe3dd;white-space:nowrap;">
-      {% if i.due %}<div style="font-weight:700;color:{{ TONE.get(i.severity, '#303b36') }};">{{ i.due.day }} {{ i.due.strftime('%b') }}</div>
-      <div style="font-size:12px;color:#56625c;">{{ i.when }}</div>
-      {% else %}<div style="font-weight:700;color:{{ TONE.get(i.severity, '#303b36') }};">{{ 'Now' if window == w.NOW else 'Any time' }}</div>{% endif %}
+    <td valign="top" width="76" style="padding:10px 10px 10px 0;border-top:1px solid #e0e1df;white-space:nowrap;">
+      {% if i.due %}<div style="font-weight:700;color:{{ TONE.get(i.severity, '#34383b') }};">{{ i.due.day }} {{ i.due.strftime('%b') }}</div>
+      <div style="font-size:12px;color:#5a5f64;">{{ i.when }}</div>
+      {% else %}<div style="font-weight:700;color:{{ TONE.get(i.severity, '#34383b') }};">{{ 'Now' if window == w.NOW else 'Any time' }}</div>{% endif %}
     </td>
-    <td valign="top" style="padding:10px 0;border-top:1px solid #dfe3dd;">
-      <div style="font-size:12px;color:#56625c;">{{ (i.tenant.name ~ ' · ') if i.tenant }}{{ i.type }}</div>
-      <div style="font-weight:600;color:#17201c;">{% if i.href %}<a href="{{ base_url ~ i.href }}" style="color:#17201c;text-decoration:none;">{{ i.title }}</a>{% else %}{{ i.title }}{% endif %}</div>
-      <div style="font-size:13px;color:#56625c;">{{ i.detail }}</div>
+    <td valign="top" style="padding:10px 0;border-top:1px solid #e0e1df;">
+      <div style="font-size:12px;color:#5a5f64;">{{ (i.tenant.name ~ ' · ') if i.tenant }}{{ i.type }}</div>
+      <div style="font-weight:600;color:#1c1e20;">{% if i.href %}<a href="{{ base_url ~ i.href }}" style="color:#1c1e20;text-decoration:none;">{{ i.title }}</a>{% else %}{{ i.title }}{% endif %}</div>
+      <div style="font-size:13px;color:#5a5f64;">{{ i.detail }}</div>
     </td>
   </tr>
   {% endfor %}
 </table>
-{% if items|length > shown %}<div style="font-size:13px;color:#56625c;margin-top:4px;">And {{ items|length - shown }} more on the <a href="{{ link('upcoming.index') }}" style="color:#1d5c4b;">Coming up page</a>.</div>{% endif %}
+{% if items|length > shown %}<div style="font-size:13px;color:#5a5f64;margin-top:4px;">And {{ items|length - shown }} more on the <a href="{{ link('upcoming.index') }}" style="color:#2b4a6b;">Coming up page</a>.</div>{% endif %}
 {% endfor %}
 
 <div style="margin-top:24px;">{{ button(link('upcoming.index'), 'Open Coming up') }}</div>
-{% if files %}<div style="margin-top:16px;font-size:13px;color:#56625c;">Attached: {% for title, name in files %}{{ name }} ({{ title|lower }}){% endfor %}</div>{% endif %}
+{% if files %}<div style="margin-top:16px;font-size:13px;color:#5a5f64;">Attached: {% for title, name in files %}{{ name }} ({{ title|lower }}){% endfor %}</div>{% endif %}
 {% endblock %}
 {% block footer %}Your {{ frequency }} Coming up email from Office Sentry, sent to {{ msp_name }}'s team only. Renewal dates come from Microsoft; check whether a subscription renews automatically in the Microsoft 365 admin center or Partner Center.{% endblock %}

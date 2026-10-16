@@ -14,16 +14,18 @@ MODES = {
     "dark": ("Dark", ""),
 }
 # Colour themes, in the order the Account page offers them; the first is the default. Each is a block in
-# themes.css, and only the accent and the menu change.
+# themes.css, and only the accent and the menu change. "green" (the column's default, and 2.4.0's default
+# theme) is no longer a key, so a row that still says it gets the default; Bottle green is "bottle".
 THEMES = {
-    "green": "Bottle green",
+    "ink": "Ink",
+    "bottle": "Bottle green",
     "navy": "Navy",
     "claret": "Claret",
     "graphite": "Graphite",
     "plum": "Plum",
 }
 DEFAULT_MODE = "system"
-DEFAULT_THEME = "green"
+DEFAULT_THEME = "ink"
 
 
 @dataclass(frozen=True)
