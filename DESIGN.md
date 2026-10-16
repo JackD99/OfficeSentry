@@ -46,7 +46,7 @@ checks). The values below are light / dark.
 | Lines | `--border`, `--border-strong`, `--decor` | pale green-greys; `--decor` is for lines and icons only, never text |
 | The ink rule | `--rule` | `#17201c` / `#c9d3ce`: under table headings, the current tab, and closing a row of figures |
 | Accent | `--accent`, `--accent-hover`, `--accent-soft`, `--accent-text` | bottle green `#1d5c4b` / mint `#79c9aa` |
-| Menu | `--sidebar*`, `--logo-from`, `--logo-to` | `#12302a` / `#0a1613`, dark in both themes |
+| Menu | `--sidebar*`, `--logo-from`, `--logo-to` | `#12302a` / `#0a1613`, dark in light and dark mode |
 | Status | `--ok`, `--warn`, `--bad`, `--info` (and `-soft`) | for states: collected, failing, paused |
 | Severity | `--sev-critical`, `--sev-high`, `--sev-medium`, `--sev-low` (and `-soft`, `-fill`) | for findings only |
 | Charts | `--chart-series`, `--chart-2`, `--chart-3`, `--chart-grid`, `--chart-track` | three series at most, in that order |
@@ -57,7 +57,8 @@ Rules:
 - Severity text (`--sev-*`) is for words; `--sev-*-fill` is for bars, dots and chart segments.
 - Every text colour meets 4.5:1 on `--bg`, `--surface`, `--surface-2` and `--sunken` in both themes
   (`v2/tests/test_ux_fixes.py` measures them). A new text colour gets measured the same way.
-- Dark mode follows the system. PDFs and print pages set `<html data-theme="light">`.
+- Dark mode follows the device unless the person chose Light or Dark on their Account page
+  (`data-theme` on `<html>`). PDFs and print pages always set `<html data-theme="light">`.
 - `reports/charts.py` writes the light chart and severity colours into the SVG for PDFs; change both
   together (`test_styleguide.py` checks they match).
 
@@ -70,6 +71,19 @@ own colour.
 
 Client reports and their PDFs also keep Source Sans 3 for their titles and headline figures: they are the
 MSP's documents, and the serif is Office Sentry's own voice, kept for the portal.
+
+### Colour themes
+
+Staff can pick a colour for their own screen on the Account page: bottle green (the default), navy, claret,
+graphite or plum (`web/appearance.py`, `static/themes.css`). A theme changes only the Accent and Menu tokens;
+paper, ink, lines, status and severity stay the same, so a finding reads the same in every theme. Each
+theme meets the same contrast rules in light and dark (`v2/tests/test_appearance.py` measures them). A
+theme is never loaded by `report.css`, so it never reaches a client report, a PDF or an email, and client
+accounts only choose light or dark.
+
+To add a theme: a block per mode in `themes.css` (light, dark when the device is dark, dark when the person
+chose it), an entry in `appearance.THEMES`, and a look at the menu, a primary button and a selected tab in
+both modes.
 
 ## Type
 

@@ -26,6 +26,7 @@ ANYONE = {
     "auth.end_session",
     "auth.end_other_sessions",
     "auth.account",
+    "auth.choose_appearance",
     "auth.change_password",
     "auth.two_step_setup",
     "auth.two_step_off",
