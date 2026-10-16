@@ -6,6 +6,7 @@ from datetime import datetime
 
 from .. import clouds
 from .. import defender as d
+from ..formatting import day
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .base import Finding, _unavailable, rule
@@ -21,7 +22,7 @@ def _detail(alert: dict) -> str:
         who = f"in progress with {owner}" if owner else "in progress"
     else:
         who = f"assigned to {owner}"
-    since = f", since {alert['created'][:10]}" if isinstance(alert.get("created"), str) else ""
+    since = f", since {created}" if (created := day(alert.get("created"))) else ""
     names = [*(alert.get("users") or []), *(alert.get("devices") or [])][:3]
     return f"{source}, {who}{since}" + (f"; names {', '.join(names)}" if names else "")
 
