@@ -55,7 +55,7 @@ def _privileged_people(snap: TenantSnapshot) -> dict[str, tuple[str, list[str]]]
     "admin_phishing_resistant",
     "Admins use phishing-resistant sign-in methods",
     "Admins",
-    "Have each listed admin register a passkey (in Microsoft Authenticator or on a security key) or Windows Hello "
+    "Have every admin register a passkey (in Microsoft Authenticator or on a security key) or Windows Hello "
     "for Business, then require the Phishing-resistant MFA authentication strength for admin roles in "
     "Conditional Access. Codes and push approvals can be relayed by a fake sign-in page; these can't.",
 )

@@ -60,7 +60,7 @@
 {%- endmacro %}
 
 {% set KINDS = {'report': 'Report', 'digest': 'Digest', 'alert': 'Alert', 'test': 'Test'} %}
-{% macro deliveries_table(rows, staff=True, origin='tenant') -%}
+{% macro deliveries_table(rows, staff=True, origin='tenant', stale=()) -%}
 <table class="stack-sm deliveries">
   <thead><tr><th>Email</th><th>To</th><th>Result</th><th>When</th>{% if staff %}<th></th>{% endif %}</tr></thead>
   <tbody>
@@ -72,7 +72,7 @@
     <td data-label="To" class="wrap small">{{ d.recipients }}{% if staff and d.bcc %}<span class="sub">Hidden copy: {{ d.bcc }}</span>{% endif %}</td>
     <td data-label="Result" class="wrap">{% if d.status == 'sent' %}<span class="pill ok">Sent</span>{% else %}<span class="pill bad">Failed</span>{% if staff and d.error %}<span class="sub bad-text">{{ d.error }}</span>{% endif %}{% endif %}</td>
     <td data-label="When" class="nowrap">{{ ts(d.created_at) }}</td>
-    {% if staff %}<td class="num">{% if d.status == 'failed' and d.kind != 'test' %}
+    {% if staff %}<td class="num">{% if d.status == 'failed' and d.kind != 'test' and d.id not in stale %}
       <form method="post" action="{{ url_for('email.retry', delivery_id=d.id) }}" data-busy="Sending…">{{ csrf() }}<input type="hidden" name="from" value="{{ origin }}"><button class="sm">{{ icon('refresh') }} Retry</button></form>
     {% endif %}</td>{% endif %}
   </tr>

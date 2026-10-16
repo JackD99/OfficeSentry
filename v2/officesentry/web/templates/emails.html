@@ -48,7 +48,7 @@
 
   <section class="card flush">
     <div class="card-head toolbar"><h2>Delivery history</h2>{% if deliveries %}<span class="meta">Last {{ deliveries|length }}</span>{% endif %}</div>
-    {% if deliveries %}{{ deliveries_table(deliveries, True, 'overview') }}
+    {% if deliveries %}{{ deliveries_table(deliveries, True, 'overview', stale) }}
     {% else %}<div class="empty compact"><p>Nothing has been sent yet.</p></div>{% endif %}
   </section>
 </div>

@@ -121,10 +121,13 @@ class Context:
         brand=None,
         month_end: dict | None = None,
         opens: Callable[[str], bool] | None = None,
+        by_quarter: bool = False,
     ):
         self.conn = conn
         self.tenant = tenant
         self.now = now or datetime.now(UTC)
+        # A quarterly review compares with the start of its quarter, not four weeks ago (``QUARTER_BLOCKS``).
+        self.by_quarter = by_quarter
         self.brand = brand
         self.month_end = month_end or {}  # month_end.report_context(...)["month_end"], client-safe
         # What the month-end reviewer left out of this client's copy (checks, figures, blocks, setup notes).
@@ -140,7 +143,9 @@ class Context:
     @property
     def review(self) -> monthly_review.Report:
         if self._review is None:
-            self._review = monthly_review.leave_out(monthly_review.build(self.conn, self.tenant, self.now), self.hidden)
+            since = quarterly.start(self.now) if self.by_quarter else None
+            built = monthly_review.build(self.conn, self.tenant, self.now, since=since)
+            self._review = monthly_review.leave_out(built, self.hidden)
         return self._review
 
     @property
@@ -359,6 +364,10 @@ def b_evidence(ctx: Context, s: dict) -> dict:
     return {"answers": answers, "more": max(0, len(pack.answers) - len(answers))}
 
 
+# A design with any of these is a quarterly review: its figures and changes are since the quarter began.
+QUARTER_BLOCKS = ("quarter_trend", "quarter_fixed")
+
+
 def b_quarter_trend(ctx: Context, s: dict) -> dict:
     q = ctx.quarter
     if all(m.found is None and m.score is None for m in q.months):
@@ -369,7 +378,7 @@ def b_quarter_trend(ctx: Context, s: dict) -> dict:
 def b_quarter_fixed(ctx: Context, s: dict) -> dict:
     q = ctx.quarter
     if not q.fixed:
-        return {"empty": f"Nothing was fixed between {q.label}."}
+        return {"empty": f"Nothing was fixed from {q.label}."}
     limit = int(s.get("max") or 10)
     return {
         "quarter": q,
@@ -434,7 +443,8 @@ def b_contact(ctx: Context, s: dict) -> dict:
 
 def b_about(ctx: Context, s: dict) -> dict:
     fresh = [(f.title, f.finished_at) for f in ctx.review.freshness if not f.stale]
-    return {"fresh": fresh, "stale": [f for f in ctx.review.freshness if f.stale]}
+    stale = [f for f in ctx.review.freshness if f.stale]
+    return {"fresh": fresh, "stale": stale, "quarter_since": ctx.since if ctx.by_quarter else ""}
 
 
 WIDGETS: dict[str, Widget] = {
@@ -1084,7 +1094,8 @@ def context(
     preview), where the PDF itself always is one. ``opens`` leaves out tables of detail reports the person
     viewing can't open (``Context.opens``)."""
     doc = document(row)
-    ctx = Context(conn, tenant, now, brand=brand, month_end=month_end, opens=opens)
+    by_quarter = any(b["kind"] in QUARTER_BLOCKS for b in doc["blocks"])
+    ctx = Context(conn, tenant, now, brand=brand, month_end=month_end, opens=opens, by_quarter=by_quarter)
     rows = render(ctx, doc, row["id"])
     settings = doc["settings"]
     return {

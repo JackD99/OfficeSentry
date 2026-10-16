@@ -7,7 +7,9 @@ Those answers are in the client's Microsoft 365 unified audit log, which the mai
 read. The add-on reads it, for the clients you choose and who approve it.
 
 It's off until you set it up, and nothing about it shows anywhere (clients' Settings tabs, the onboarding
-tracker, the reports) until then.
+tracker, the reports) until then. It's only for clients already connected to the main app
+([Onboarding a client](onboarding-a-client.md)). What the client is told about it, in their words, is in
+[What Office Sentry reads](what-office-sentry-reads.md#the-audit-log-add-on-if-you-approve-it).
 
 ## What it is
 
@@ -54,11 +56,12 @@ Application Administrator or Cloud Application Administrator.
    on. That only adds an **Audit log add-on** page to each client's Settings tab; nothing is read from any
    client yet.
 
-If your Conditional Access blocks device sign-in, open **Create the app by hand instead** on the same page:
-generate the add-on's certificate there, create the app in the Entra admin centre as the page describes
-(multi-tenant, the redirect URI it shows, the .cer file, `ActivityFeed.Read` under *Office 365 Management
-APIs → Application permissions* and nothing else), then paste its client ID into its card on **App
-connection**.
+If your Conditional Access blocks device sign-in, open **Create the app by hand instead** on the same page and
+press **Generate certificate**. Office Sentry takes you to the add-on's card under **Audit log add-on** on the
+**App connection** page, where **Download .cer** saves the certificate's `.cer` file. Create the app in the Entra
+admin centre as the page describes (multi-tenant, the redirect URI it shows, the `.cer` file, `ActivityFeed.Read`
+under *Office 365 Management APIs → Application permissions* and nothing else), then paste its client ID into
+the same card on **App connection**. Saving it switches the add-on on.
 
 The add-on's certificate appears on **App connection** beside the shared app's, with the same expiry
 warnings, and is replaced the same way. Its test only signs in; it reads nothing. Changing the add-on
@@ -68,22 +71,45 @@ until you send them the link again.
 Microsoft doesn't offer the feed in China (21Vianet). For GCC High or DoD clients, create the app in that
 cloud too (**More options** before signing in).
 
+The add-on reads Microsoft's activity feed, a host of its own (`manage.office.com` in the commercial cloud), so if
+your server's outbound traffic is limited, allow it as well as the others in
+[What every platform needs](deploy/README.md#what-every-platform-needs).
+
 ## 2. Ask a client
 
-1. Open the client, then **Settings → Audit log add-on**.
-2. Send their Global Administrator the add-on link, with the email text and the one-page pack from the same
-   page (the pack says what the add-on reads and never reads, how long it's kept, and how they remove it).
+1. Open the client, then **Settings → Audit log add-on**. The page says why if the client can't be asked yet:
+   it isn't connected to the main app, or no add-on app is set up for its Microsoft cloud.
+2. Send their Global Administrator the add-on link, with the email text and the **Add-on pack PDF** from the
+   same page (the pack says what the add-on reads and never reads, how long it's kept, and how they remove it).
    Press **Mark as sent**.
 3. The client approves on Microsoft's consent page and lands on the thank-you page.
 4. Office Sentry confirms the approval by signing in as the add-on app and reading the client's feed
-   subscriptions (one GET), checking every hour until it can, or now with **Check now**. Once it's
-   confirmed, it starts the feed and queues the first collection. A paused client isn't signed in to until
-   it's resumed.
+   subscriptions (one GET). Once it's confirmed, it starts the feed and queues the first collection.
 
-The onboarding tracker's **Audit log** column says whether each client's audit log is recording at all,
-and under it where the client has got with the add-on (Not asked, Sent, Approved, On, Off; *Approved,
-confirming* while Office Sentry hasn't signed in yet). If the audit log is off, the add-on has nothing to
-read, so have the client turn it on in Microsoft Purview first.
+**Mark as sent** does two things: it records that the link went out, and it records that you want the add-on on
+for this client. That second part is what lets Office Sentry start the feed by itself once the approval is
+confirmed. If the client approves without it (you sent the link but never pressed **Mark as sent**, say),
+Office Sentry still confirms the approval, but the client stays *Approved* and nothing is read until an admin
+presses **Switch on** on the client's **Audit log add-on** page. Until the approval is confirmed, **Mark as not
+sent** takes both back.
+
+Office Sentry checks for the approval by signing in as the add-on:
+
+- As soon as the client's administrator comes back from Microsoft's page, then every 2 minutes for an hour, then
+  every 30 minutes for 7 days.
+- Every hour for 30 days after you press **Mark as sent**, while nobody has come back through the link.
+- Straight away when you press **Check now** on the client's page.
+
+A link that isn't marked as sent, and that nobody has come back through, isn't checked. Once an approval is
+confirmed, a feed that Microsoft wouldn't start is tried again every 20 minutes for 7 days. A paused client
+isn't signed in to, and its feed isn't started, until it's resumed.
+
+The **Audit log** column of the onboarding tracker
+([Onboarding a client](onboarding-a-client.md#onboarding-many-clients)) says whether each client's audit log is
+recording at all, and under it where the client has got with the add-on (Not asked, Sent, Approved, On, Off;
+*Approved, confirming* while Office Sentry hasn't signed in to confirm it yet). If the audit log is off, the
+add-on has nothing to read, so have the client turn it on in Microsoft Purview first. The check *The Microsoft
+365 audit log is on* ([check catalogue](checks.md)) fails for every client whose audit log is off.
 
 Microsoft can take up to 12 hours after the feed starts to make the first records available, and doesn't
 give the past through the feed: the report fills from the day the feed started.
@@ -145,7 +171,7 @@ The client's **Audit log add-on** page says what Microsoft answered, in words. T
 
 | What it says | What to do |
 |---|---|
-| The client hasn't approved the add-on yet, or has removed it from their tenant | Send the link again, or wait for the hourly check if they've only just approved |
+| The client hasn't approved the add-on yet, or has removed it from their tenant | Send the link again. If they've only just approved, wait for the next check or press **Check now** |
 | Microsoft's audit log feed refused, and Office Sentry tries again in 20 minutes | Usually nothing. If it keeps happening, check the tracker's **Audit log** column: Microsoft won't start a feed for a client whose audit log is off, so have them turn it on in Microsoft Purview (*Audit → Start recording user and admin activity*), which can take a few hours to take effect |
 | Office Sentry couldn't reach Microsoft's audit log feed | Nothing: it tries again shortly |
 | A problem with the add-on app's certificate | Replace the certificate on **App connection**, as for the shared app |
