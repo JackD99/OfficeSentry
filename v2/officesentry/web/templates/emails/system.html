@@ -3,9 +3,9 @@
 {% block preheader %}{{ text }}{% endblock %}
 {% block kicker %}{{ 'Resolved' if action == 'resolved' else 'Action needed' }}{% endblock %}
 {% block body %}
-<h1 style="margin:0 0 8px;font-size:20px;line-height:1.3;color:#111827;">{{ title }}</h1>
-<p style="margin:0 0 12px;color:#374151;">{% if action == 'resolved' %}{{ text }}{% else %}<strong>{{ text }}</strong>{% endif %}</p>
-{% if fix %}<p style="margin:0 0 16px;color:#374151;">{{ fix }}</p>{% endif %}
+<h1 style="margin:0 0 8px;font-size:20px;line-height:1.3;color:#17201c;">{{ title }}</h1>
+<p style="margin:0 0 12px;color:#303b36;">{% if action == 'resolved' %}{{ text }}{% else %}<strong>{{ text }}</strong>{% endif %}</p>
+{% if fix %}<p style="margin:0 0 16px;color:#303b36;">{{ fix }}</p>{% endif %}
 {{ button(href, 'Open System status') }}
 {% endblock %}
 {% block footer %}Office Sentry tells {{ msp_name }}'s team when it needs attention itself: once when a problem starts, daily while it lasts and once when it's fixed. Turn these off under Settings → Alerts.{% endblock %}

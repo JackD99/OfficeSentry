@@ -3,39 +3,39 @@
 {% block preheader %}{{ d.urgent }} of {{ d.tenants }} clients need attention · {{ d.new_severe }} new critical or high, {{ d.fixed }} fixed.{% endblock %}
 {% block kicker %}{{ frequency|capitalize }} digest{% endblock %}
 {% block body %}
-<h1 style="margin:0 0 4px;font-size:22px;line-height:1.3;color:#111827;">Client digest{% if d.group %}: {{ d.group }}{% endif %}</h1>
-<div style="color:#6b7280;margin-bottom:18px;">{{ label[:1]|upper ~ label[1:] }} · since {{ d.since|day }}</div>
+<h1 style="margin:0 0 4px;font-size:22px;line-height:1.3;color:#17201c;">Client digest{% if d.group %}: {{ d.group }}{% endif %}</h1>
+<div style="color:#56625c;margin-bottom:18px;">{{ label[:1]|upper ~ label[1:] }} · since {{ d.since|day }}</div>
 
 {% if message %}
-<div style="margin:0 0 20px;padding:12px 14px;background:#f1f5f9;border-radius:6px;color:#374151;white-space:pre-line;">{{ message }}</div>
+<div style="margin:0 0 20px;padding:12px 14px;background:#eceeea;border-radius:6px;color:#303b36;white-space:pre-line;">{{ message }}</div>
 {% endif %}
 
 {{ tiles([
-  ('Need attention', d.urgent ~ ' of ' ~ d.tenants, 'critical or high findings', '#6b7280'),
-  ('New critical or high', d.new_severe, 'since ' ~ (d.since|day), '#b91c1c' if d.new_severe else '#6b7280'),
-  ('Fixed', d.fixed, 'since ' ~ (d.since|day), '#15803d' if d.fixed else '#6b7280'),
+  ('Need attention', d.urgent ~ ' of ' ~ d.tenants, 'critical or high findings', '#56625c'),
+  ('New critical or high', d.new_severe, 'since ' ~ (d.since|day), '#b91c1c' if d.new_severe else '#56625c'),
+  ('Fixed', d.fixed, 'since ' ~ (d.since|day), '#15803d' if d.fixed else '#56625c'),
   ('Average Secure Score', ('{:g}%'.format(d.avg_score)) if d.avg_score is not none else '–', '', ''),
-  ('Out-of-date data', d.stale, 'clients with data over 36 hours old' if d.stale else 'all clients up to date', '#c2410c' if d.stale else '#15803d'),
+  ('Out-of-date data', d.stale, 'clients with data over 36 hours old' if d.stale else 'all clients up to date', '#b45309' if d.stale else '#15803d'),
 ]) }}
 
 {% if d.new_findings %}
 {{ heading('New critical and high findings') }}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
   {% for f in d.new_findings[:10] %}
-  <tr><td valign="top" width="78" style="padding:9px 0;border-top:1px solid #e5e7eb;">{{ sev(f.severity) }}</td>
-    <td valign="top" style="padding:9px 0 9px 8px;border-top:1px solid #e5e7eb;">
-      <div style="font-weight:600;color:#111827;">{{ f.tenant_name }}: {{ titles.get(f.rule_key, f.rule_key) }}</div>
-      <div style="font-size:13px;color:#4b5563;">{{ f.subject }}{% if f.detail %} · {{ f.detail }}{% endif %}</div>
+  <tr><td valign="top" width="78" style="padding:9px 0;border-top:1px solid #dfe3dd;">{{ sev(f.severity) }}</td>
+    <td valign="top" style="padding:9px 0 9px 8px;border-top:1px solid #dfe3dd;">
+      <div style="font-weight:600;color:#17201c;">{{ f.tenant_name }}: {{ titles.get(f.rule_key, f.rule_key) }}</div>
+      <div style="font-size:13px;color:#56625c;">{{ f.subject }}{% if f.detail %} · {{ f.detail }}{% endif %}</div>
     </td></tr>
   {% endfor %}
 </table>
-{% if d.new_severe > 10 %}<div style="font-size:13px;color:#6b7280;margin-top:4px;">And {{ d.new_severe - 10 }} more. Each client's findings are in Office Sentry.</div>{% endif %}
+{% if d.new_severe > 10 %}<div style="font-size:13px;color:#56625c;margin-top:4px;">And {{ d.new_severe - 10 }} more. Each client's findings are in Office Sentry.</div>{% endif %}
 {% endif %}
 
 {{ heading('Clients, worst first') }}
 {% if d.rows %}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;">
-  <tr style="color:#6b7280;font-size:12px;">
+  <tr style="color:#56625c;font-size:12px;">
     <td style="padding:6px 0;">Client</td>
     <td align="right" style="padding:6px 6px;">Critical</td>
     <td align="right" style="padding:6px 6px;">High</td>
@@ -46,20 +46,20 @@
   {% for r in d.rows %}
   {% set score = r.kpis['secure_score.pct'] %}
   <tr>
-    <td style="padding:8px 0;border-top:1px solid #e5e7eb;"><a href="{{ link('tenants.tenant', tenant_id=r.tenant.id) }}" style="color:#111827;font-weight:600;text-decoration:none;">{{ r.tenant.name }}</a>{% if r.stale_data %}<br><span style="color:#c2410c;font-size:12px;">Data out of date</span>{% endif %}</td>
-    <td align="right" style="padding:8px 6px;border-top:1px solid #e5e7eb;{% if r.counts.critical %}color:#b91c1c;font-weight:700;{% else %}color:#9ca3af;{% endif %}">{{ r.counts.critical }}</td>
-    <td align="right" style="padding:8px 6px;border-top:1px solid #e5e7eb;{% if r.counts.high %}color:#c2410c;font-weight:700;{% else %}color:#9ca3af;{% endif %}">{{ r.counts.high }}</td>
-    <td align="right" style="padding:8px 6px;border-top:1px solid #e5e7eb;{% if not r.new_severe %}color:#9ca3af;{% endif %}">{{ r.new_severe }}</td>
-    <td align="right" style="padding:8px 6px;border-top:1px solid #e5e7eb;{% if r.fixed %}color:#15803d;{% else %}color:#9ca3af;{% endif %}">{{ r.fixed }}</td>
-    <td align="right" style="padding:8px 0 8px 6px;border-top:1px solid #e5e7eb;white-space:nowrap;">{% if score.value is not none %}{{ '{:g}'.format(score.value) }}%{% if score.delta %} <span style="color:{{ '#15803d' if score.delta > 0 else '#b91c1c' }};font-size:12px;">{{ '{:+g}'.format(score.delta) }} pts</span>{% endif %}{% else %}<span style="color:#9ca3af;">–</span>{% endif %}</td>
+    <td style="padding:8px 0;border-top:1px solid #dfe3dd;"><a href="{{ link('tenants.tenant', tenant_id=r.tenant.id) }}" style="color:#17201c;font-weight:600;text-decoration:none;">{{ r.tenant.name }}</a>{% if r.stale_data %}<br><span style="color:#b45309;font-size:12px;">Data out of date</span>{% endif %}</td>
+    <td align="right" style="padding:8px 6px;border-top:1px solid #dfe3dd;{% if r.counts.critical %}color:#b42318;font-weight:700;{% else %}color:#5b6660;{% endif %}">{{ r.counts.critical }}</td>
+    <td align="right" style="padding:8px 6px;border-top:1px solid #dfe3dd;{% if r.counts.high %}color:#b54708;font-weight:700;{% else %}color:#5b6660;{% endif %}">{{ r.counts.high }}</td>
+    <td align="right" style="padding:8px 6px;border-top:1px solid #dfe3dd;{% if not r.new_severe %}color:#5b6660;{% endif %}">{{ r.new_severe }}</td>
+    <td align="right" style="padding:8px 6px;border-top:1px solid #dfe3dd;{% if r.fixed %}color:#15803d;{% else %}color:#5b6660;{% endif %}">{{ r.fixed }}</td>
+    <td align="right" style="padding:8px 0 8px 6px;border-top:1px solid #dfe3dd;white-space:nowrap;">{% if score.value is not none %}{{ '{:g}'.format(score.value) }}%{% if score.delta %} <span style="color:{{ '#15803d' if score.delta > 0 else '#b91c1c' }};font-size:12px;">{{ '{:+g}'.format(score.delta) }} pts</span>{% endif %}{% else %}<span style="color:#5b6660;">–</span>{% endif %}</td>
   </tr>
   {% endfor %}
 </table>
 {% else %}
-<p style="color:#6b7280;">No clients yet.</p>
+<p style="color:#56625c;">No clients yet.</p>
 {% endif %}
 
 <div style="margin-top:24px;">{{ button(link('tenants.dashboard'), 'Open Office Sentry') }}</div>
-{% if files %}<div style="margin-top:16px;font-size:13px;color:#6b7280;">Attached: {% for title, name in files %}{{ name }} ({{ title|lower }}){% endfor %}</div>{% endif %}
+{% if files %}<div style="margin-top:16px;font-size:13px;color:#56625c;">Attached: {% for title, name in files %}{{ name }} ({{ title|lower }}){% endfor %}</div>{% endif %}
 {% endblock %}
 {% block footer %}Your {{ frequency }} digest from Office Sentry, sent to {{ msp_name }}'s team only.{% endblock %}
