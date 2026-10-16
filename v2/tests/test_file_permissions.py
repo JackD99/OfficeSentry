@@ -107,7 +107,8 @@ def test_report(db, two_tenants):
     ending = _section(report, "Links expiring")
     assert _column(ending, "Who") == ["old@other.com", "partner@other.com"]  # expired first
     assert _column(ending, "Status") == ["Expired", "Expires soon"] and ending.flags == ["low", None]
-    assert [r[5] for r in ending.rows] == [0, 10]  # days left, by date: the link ends in 10 days' time at midnight
+    # Days left, by date: an expired link has none to show; the other ends in 10 days' time at midnight.
+    assert [r[5] for r in ending.rows] == ["", 10]
 
     who = _section(report, "Who can access what")
     assert who.group == "Location"

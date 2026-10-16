@@ -204,7 +204,7 @@ def file_permissions(snap: TenantSnapshot, now: datetime, report: DataReport) ->
                 people,
                 g.get("can") or "",
                 _date(g.get("expires")),
-                max(days, 0),
+                "" if gone else max(days, 0),  # an expired link has no days left, rather than 0
                 "Expired" if gone else "Expires soon",
             ],
             "low" if gone else None,
@@ -261,9 +261,10 @@ def file_permissions(snap: TenantSnapshot, now: datetime, report: DataReport) ->
             p["places"].add(_location(i))
     people = Section(
         "Access by person",
-        ["Person or group", "Type", "Files and folders", "Can edit", "Where"],
-        intro="Everyone with item-level access, outside people first. Someone who's left or a guest whose "
-        "work is done shouldn't still be here.",
+        ["Person or group", "Type", "Files and folders", "Of them, can edit", "Where"],
+        intro="Everyone with item-level access, outside people first, with how many files and folders each "
+        "can open and how many of those they can edit. Someone who's left or a guest whose work is done "
+        "shouldn't still be here.",
         empty="Nobody has item-level access.",
         filter_columns=("Type",),
     )
