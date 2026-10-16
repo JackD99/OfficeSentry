@@ -39,6 +39,7 @@ from werkzeug.security import generate_password_hash  # noqa: E402
 from officesentry import projects, store  # noqa: E402
 from officesentry.certs import generate_certificate  # noqa: E402
 from officesentry.db import utcnow  # noqa: E402
+from officesentry.devices import parse_ts  # noqa: E402
 from officesentry.reports import designs  # noqa: E402
 from tests import (  # noqa: E402  # noqa: E402
     adminactivitydata,
@@ -191,6 +192,19 @@ OUTSIDE_DOMAINS = {
     "partner.org": "consultants.example",
     "parked.com": "parked.example",
 }
+# The fixtures' guest (an outside consultant who was made an Exchange admin), as an invited guest looks:
+# their own address, and the sign-in name Entra gives a guest in this tenant.
+GUEST_MAIL = "sam.carter@consultants.example"
+GUEST_UPN = "sam.carter_consultants.example#EXT#@{base}.onmicrosoft.com"
+# The outside people the SharePoint sites share with (``OUTSIDE_GUESTS``), by name.
+GUEST_NAMES = {
+    "accounts@hollis-partners.example": "Hollis & Partners (accounts)",
+    "j.okafor@brightpath-consulting.example": "Jide Okafor",
+    "lab@dentlab-uk.example": "DentLab UK",
+    "d.mason@mason-legal.example": "Dana Mason",
+}
+# Where sign-ins from outside the UK come from.
+ABROAD = {"FR": "Paris", "IE": "Dublin", "US": "New York"}
 
 # Monthly prices (GBP) the MSP has entered, so licence waste shows money.
 PRICES = {
@@ -200,13 +214,15 @@ PRICES = {
     "EXCHANGESTANDARD": 3.30,
     "EXCHANGEENTERPRISE": 6.60,
     "ENTERPRISEPACK": 18.10,
+    "AAD_PREMIUM_P2": 7.40,
 }
 
 TENANTS = [
     # name, domain base, top-level domain, staff, share of staff with MFA (first collection, now),
     # inactive staff, Secure Score (5 weeks ago, now), SharePoint storage used as a share of the tenant's quota
-    # (5 weeks ago, now), the kind of SharePoint sites, mailboxes forwarding outside, the fixture people's new
-    # names. Every domain is under .example, so nothing points at a real organisation.
+    # (5 weeks ago, now), the kind of SharePoint sites, mailboxes forwarding outside, the cities its people sign
+    # in from, the fixture people's new names, and whether it has Entra ID P2. Every domain is under .example,
+    # so nothing points at a real organisation.
     dict(
         name="Northwind Traders",
         base="northwindtraders",
@@ -217,6 +233,7 @@ TENANTS = [
         score=(38.0, 47.5),
         storage=(0.38, 0.41),
         forwards=1,
+        cities=("London", "Reading"),
         people={
             "ann": "Ann Patel",
             "bob": "Robert Hughes",
@@ -239,6 +256,7 @@ TENANTS = [
         storage=(0.84, 0.88),
         sites="dental",
         forwards=2,
+        cities=("Manchester", "Leeds"),
         people={
             "ann": "Anna Kowalski",
             "bob": "Ben Okafor",
@@ -260,6 +278,8 @@ TENANTS = [
         score=(61.0, 68.0),
         storage=(0.27, 0.28),
         forwards=0,
+        cities=("London", "Birmingham"),
+        p2=True,  # an Entra ID P2 add-on, so Identity Protection (Risky users) has something to show
         people={
             "ann": "Annabel Fraser",
             "bob": "Bobby Marsh",
@@ -287,6 +307,7 @@ def renamer(t: dict):
     subs += [(re.compile(rf"\b{uid}(?=@x\.)"), _local(t["people"][who])) for uid, who in FIXTURE_IDS.items()]
     subs += [(re.compile(rf"\b{gid}(?=@x\.)"), slug) for gid, slug in GROUP_MAILS.items()]
     subs += [
+        (re.compile(r"\bg#EXT#@x\.com\b"), GUEST_UPN.format(base=t["base"])),  # wherever the guest appears
         (re.compile(r"\bbg(?=@x\.)"), "breakglass"),
         (re.compile(r"\bboss(?=@x\.)"), "office.manager"),
         (re.compile(r"\bx-com\b"), f"{t['base']}-{t['tld']}"),
@@ -305,6 +326,7 @@ def renamer(t: dict):
     subs += [
         (re.compile(r"^Breakglass$"), "Emergency access"),
         (re.compile(r"^Guest$"), "Sam Carter (guest)"),
+        (re.compile(r"^Some app$"), "Backup connector"),  # the service principal holding an admin role
         (re.compile(r"^OLD$"), "VISIOCLIENT"),
     ]  # the fixtures' lapsed subscription gets a real product name
 
@@ -370,6 +392,18 @@ def staff(t: dict, rng: random.Random, now: datetime, mfa_share: float, joined_r
             days=rng.randint(95, 300) if inactive else rng.choice([0, 0, 0, 1, 1, 2, 3, 6, 12]), hours=rng.randint(0, 9)
         )
         sku = "sku-bp" if i % 5 else "sku-basic"
+        # Joined before they last signed in (long before, for the people who've gone quiet), the two newest in
+        # the last month; passwords changed since, a few more than a year ago. Arithmetic rather than rng, so
+        # the people stay the same.
+        if inactive:
+            created = last - timedelta(days=400 + 53 * i)
+            changed = last - timedelta(days=20 + 11 * i)
+        elif i >= t["staff"] - 2:
+            created = now - timedelta(days=5 + 9 * (i % 3))
+            changed = created
+        else:
+            created = now - timedelta(days=30 + 37 * i)
+            changed = now - timedelta(days=(23 + 29 * i) % 430)
         # The first person in each department heads it and reports to Ann; everyone else reports to their head.
         department = DEPARTMENTS[i % len(DEPARTMENTS)]
         head = users[i % len(DEPARTMENTS)] if i >= len(DEPARTMENTS) else None
@@ -401,8 +435,9 @@ def staff(t: dict, rng: random.Random, now: datetime, mfa_share: float, joined_r
                 "jobTitle": JOB_TITLES[department] if head else f"Head of {department}",
                 "department": department,
                 "manager": manager,
-                "createdDateTime": (now - timedelta(days=30 + 37 * i)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "signInActivity": {"lastSignInDateTime": last.strftime("%Y-%m-%dT%H:%M:%SZ")},
+                "createdDateTime": _iso(created),
+                "lastPasswordChangeDateTime": _iso(changed),
+                "signInActivity": {"lastSignInDateTime": _iso(last)},
             }
         )
         registered = rng.random() < mfa_share and not inactive
@@ -445,7 +480,7 @@ def staff(t: dict, rng: random.Random, now: datetime, mfa_share: float, joined_r
     return users, registration, active, apps
 
 
-def skus(t: dict, assigned_bp: int, assigned_basic: int) -> list[dict]:
+def skus(t: dict, assigned_bp: int, assigned_basic: int, assigned_p2: int = 0) -> list[dict]:
     bp = dict(fixture_users.SKUS[0], prepaidUnits={"enabled": assigned_bp + 3}, consumedUnits=assigned_bp)
     basic = {
         "skuId": "sku-basic",
@@ -456,7 +491,99 @@ def skus(t: dict, assigned_bp: int, assigned_basic: int) -> list[dict]:
         "consumedUnits": assigned_basic,
         "servicePlans": [{"servicePlanName": "EXCHANGE_S_STANDARD", "provisioningStatus": "Success"}],
     }
-    return [bp, basic, fixture_users.SKUS[1]]
+    p2 = {
+        "skuId": "sku-p2",
+        "skuPartNumber": "AAD_PREMIUM_P2",
+        "appliesTo": "User",
+        "capabilityStatus": "Enabled",
+        "prepaidUnits": {"enabled": assigned_p2 + 1},
+        "consumedUnits": assigned_p2,
+        "servicePlans": [{"servicePlanName": "AAD_PREMIUM_P2", "provisioningStatus": "Success"}],
+    }
+    return [bp, basic, fixture_users.SKUS[1]] + ([p2] if t.get("p2") else [])
+
+
+def fixture_people(t: dict, now: datetime) -> list[dict]:
+    """The fixtures' own accounts, with the guest's address, invitation date and state (the fixtures leave
+    them out)."""
+    people = []
+    for u in fixture_users.USERS:
+        u = dict(u)
+        if u.get("userType") == "Guest":
+            u.update(
+                mail=GUEST_MAIL,
+                createdDateTime=_iso(now - timedelta(days=410)),
+                externalUserState="Accepted",
+                externalUserStateChangeDateTime=_iso(now - timedelta(days=409)),
+            )
+        people.append(u)
+    return people
+
+
+def password_aged(u: dict, now: datetime) -> dict:
+    """The account with a password age, as every real member account has (the fixtures and the mailbox
+    accounts carry none, so Authentication methods said "Unknown"): a month after it was created, or three
+    months ago."""
+    if u.get("userType") == "Guest" or u.get("lastPasswordChangeDateTime"):
+        return u
+    created = parse_ts(u.get("createdDateTime"))
+    changed = (
+        created + timedelta(days=30) if created and created < now - timedelta(days=30) else now - timedelta(days=90)
+    )
+    return dict(u, lastPasswordChangeDateTime=_iso(changed))
+
+
+def guests(t: dict, now: datetime) -> list[dict]:
+    """Guest accounts for the outside people the SharePoint sites share with (``site_people``), so the Guests
+    report lists the same people as Site access: an accepted guest who signs in, one who hasn't for months,
+    and an invitation nobody accepted (one outside lab, for a dental practice)."""
+    outside = [OUTSIDE_GUESTS[2]] if t.get("sites") == "dental" else [OUTSIDE_GUESTS[i] for i in (0, 1, 3)]
+    rows = []
+    for n, address in enumerate(outside):
+        local = address.split("@")[0]
+        invited, last = [(300, 4), (160, 120), (38, None)][n] if len(outside) > 1 else (220, 9)
+        row = {
+            "id": "gx-" + re.sub(r"[^a-z0-9]", "", local),  # the id the sites' group members carry
+            "displayName": GUEST_NAMES.get(address, local),
+            "userPrincipalName": address.replace("@", "_") + f"#EXT#@{t['base']}.onmicrosoft.com",
+            "mail": address,
+            "userType": "Guest",
+            "accountEnabled": True,
+            "assignedLicenses": [],
+            "licenseAssignmentStates": [],
+            "usageLocation": None,
+            "createdDateTime": _iso(now - timedelta(days=invited)),
+            "externalUserState": "Accepted" if last is not None else "PendingAcceptance",
+        }
+        if last is not None:
+            row["externalUserStateChangeDateTime"] = _iso(now - timedelta(days=invited - 1))
+            row["signInActivity"] = {"lastSignInDateTime": _iso(now - timedelta(days=last, hours=3))}
+        rows.append(row)
+    return rows
+
+
+def deleted_people(t: dict, now: datetime) -> list[dict]:
+    """The recycle bin's people with names of their own (the fixtures' "Dan Leaver" and "Old Guest" would come
+    out as "Dan Whitaker Leaver"): a leaver whose licence is still assigned, a guest, and the fixtures' Eve,
+    deleted three days ago."""
+    domain = f"{t['base']}.{t['tld']}"
+    eve = t["people"]["eve"]
+    named = {
+        "du1": ("Marcus Webb", f"marcus.webb@{domain}", f"marcus.webb@{domain}"),
+        "du2": (
+            "Tom Reid (guest)",
+            f"tom.reid_oldpartner.example#EXT#@{t['base']}.onmicrosoft.com",
+            "tom.reid@oldpartner.example",
+        ),
+        "du3": (eve, f"{_local(eve)}@{domain}", f"{_local(eve)}@{domain}"),
+    }
+    rows = []
+    for u in graphdata.DELETED_USERS:
+        u = dict(u)
+        if u.get("id") in named:
+            u["displayName"], u["userPrincipalName"], u["mail"] = named[u["id"]]
+        rows.append(u)
+    return rows
 
 
 def secure_scores(start: float, end: float, now: datetime, days: int = 70) -> list[dict]:
@@ -1936,8 +2063,20 @@ def breakglass(t: dict, now: datetime) -> dict:
         "licenseAssignmentStates": [],
         "usageLocation": "GB",
         "createdDateTime": "2024-03-04T09:00:00Z",
+        "lastPasswordChangeDateTime": _iso(now - timedelta(days=130)),
         "signInActivity": {"lastSignInDateTime": _iso(now - timedelta(days=12))},
     }
+
+
+def with_p2(u: dict, now: datetime) -> dict:
+    """The account with the Entra ID P2 add-on assigned directly, beside its other licences."""
+    u = dict(u, assignedLicenses=list(u.get("assignedLicenses") or []) + [{"skuId": "sku-p2"}])
+    if isinstance(u.get("licenseAssignmentStates"), list):
+        u["licenseAssignmentStates"] = [
+            *u["licenseAssignmentStates"],
+            {"skuId": "sku-p2", "state": "Active", "lastUpdatedDateTime": _iso(now - timedelta(days=200))},
+        ]
+    return u
 
 
 def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> None:
@@ -1949,10 +2088,15 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> 
         # The same seed both times: the same people, two of whom join after the first collection.
         rng = random.Random(t["name"])  # noqa: S311 (demo data, not security)
         users, registration, active, apps = staff(t, rng, now, t["mfa"][0 if first else 1], joined_recently=not first)
-        everyone = fixture_users.USERS + [breakglass(t, now)] + users
+        everyone = fixture_people(t, now) + [breakglass(t, now)] + users
+        if t.get("p2"):  # the P2 add-on on every licensed member
+            everyone = [
+                with_p2(u, now) if u["userType"] == "Member" and u.get("assignedLicenses") else u for u in everyone
+            ]
         bp = sum(1 for u in everyone if {"skuId": "sku-bp"} in u.get("assignedLicenses", []))
         basic = sum(1 for u in everyone if {"skuId": "sku-basic"} in u.get("assignedLicenses", []))
-        tenant_skus = skus(t, bp, basic)
+        p2 = sum(1 for u in everyone if {"skuId": "sku-p2"} in u.get("assignedLicenses", []))
+        tenant_skus = skus(t, bp, basic, p2)
         rng = random.Random(t["name"] + "extras")  # noqa: S311
         entra, managed = devices(everyone, rng)
         keys = recovery_keys(managed)
@@ -1987,7 +2131,8 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> 
                 db,
                 tenant_id,
                 dns=graphdata.fake_dns,
-                users=everyone,
+                users=[password_aged(u, now) for u in everyone] + guests(t, now),
+                deleted_users=deleted_people(t, now),
                 ca=seed.pop("ca", None) or ca_policies(t),
                 skus=tenant_skus,
                 registration=graphdata.REGISTRATION_DETAILS + registration,
@@ -2027,6 +2172,7 @@ def activity_history(db, tenant_id: int, t: dict, now: datetime, days: int = 120
                 when = day + timedelta(hours=rng.randint(7, 18), minutes=rng.randint(0, 59))
                 code = rng.choices([0, 50074, 50126, 50140], [86, 7, 4, 3])[0]
                 country = "GB" if rng.random() > 0.03 else rng.choice(["FR", "IE", "US"])
+                cities = t.get("cities") or ("London",)
                 rows.append(
                     graphdata._signin(
                         len(rows),
@@ -2044,6 +2190,7 @@ def activity_history(db, tenant_id: int, t: dict, now: datetime, days: int = 120
                         ),
                         ip=f"203.0.113.{10 + i % 40}",
                         country=country,
+                        city=cities[i % len(cities)] if country == "GB" else ABROAD[country],
                         mfa=rng.random() < mfa_share,
                     )
                 )
