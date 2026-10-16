@@ -104,11 +104,11 @@ def test_failing_checks_lead_with_the_problem(client, db, two_tenants):
     page = client.get(f"/tenants/{alpha}").get_data(as_text=True)
     attention = page.split("<h2>Needs attention</h2>")[1].split("</section>")[0]
     assert '<div class="title">1 admin without MFA' in attention
-    assert "Have each listed admin register a strong method." in attention
+    assert "Have every admin without MFA register a strong method." in attention
     assert "Every admin has MFA registered" not in attention
     review = client.get(f"/tenants/{alpha}/report").get_data(as_text=True)
     steps = review.split('<ol class="actions">')[1].split("</ol>")[0]
-    assert "Have each listed admin register a strong method" in steps and "Every admin has" not in steps
+    assert "Have every admin without MFA register a strong method" in steps and "Every admin has" not in steps
 
 
 def test_tenants_page_explains_the_coloured_counts(client, db, two_tenants):

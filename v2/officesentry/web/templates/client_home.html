@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, ts %}
 {% block title %}Your reports · Office Sentry{% endblock %}
+{% set VERDICT_TONE = {'ok': 'ok', 'medium': 'warn', 'high': 'bad', 'critical': 'bad'} %}
 {% block content %}
 <div class="page-head"><div><h1>{{ rows[0].tenant.name if rows|length == 1 else 'Your Microsoft 365 reports' }}</h1>
   <div class="sub">Read-only reports on your Microsoft 365 security and licences{% if brand.name %} from {{ brand.name }}{% endif %}, updated every night.</div></div></div>
@@ -10,17 +11,50 @@
   {#- An admin can take a report area away from someone on a client: then its parts stay off this page. -#}
   {% set security = can('reports.security', t.id) %}
 
-  {#- Latest report: the monthly review, first thing a client sees. -#}
+  {#- Where they stand, first: the verdict from the client's copy of this month's review, their MSP's note
+      once the month is approved, and the review itself. -#}
+  {% if security %}{% set v = row.verdict %}
+  <div class="callout verdict-callout client-latest {{ VERDICT_TONE.get(v.tone, 'warn') }}" role="status">
+    <div class="grow">
+      <span class="pill {{ VERDICT_TONE.get(v.tone, 'warn') }}">{{ v.label }}</span>
+      <p class="m0 headline">{{ v.headline }}</p>
+      {% if v.detail %}<p class="m0 verdict-detail">{{ v.detail }}</p>{% endif %}
+      {% if row.commentary %}
+      <div class="client-note"><div class="note-from">From {{ brand.display_name }}</div>{% for p in row.commentary %}<p>{{ p }}</p>{% endfor %}</div>
+      {% endif %}
+      <div class="actions">
+        <a class="btn primary" href="{{ url_for('reports.tenant_report', tenant_id=t.id) }}">Open your monthly review</a>
+        {% if can('export', t.id) %}<a class="btn" href="{{ url_for('reports.tenant_report_pdf', tenant_id=t.id) }}">Download PDF</a>
+        <a class="btn" href="{{ url_for('reports.tenant_report_pdf', tenant_id=t.id, appendix=0) }}" title="The two summary pages">Two-page summary</a>{% endif %}
+      </div>
+      <p class="small muted m0">Based on data collected {{ ts(row.data_as_of) }}.</p>
+    </div>
+  </div>
+  {% endif %}
+
+  {#- What to do next: the MSP's own recommendations for the month when it has them, else what the checks
+      found, worst first, then accepted risks. Read-only. -#}
   {% if security %}
-  <div class="card client-latest">
-    <div>
-      <h2>Monthly review</h2>
-      <div class="muted small">Your security and licensing summary, with what to fix first. Based on data collected {{ ts(row.data_as_of) }}.</div>
-    </div>
-    <div class="actions">
-      <a class="btn primary" href="{{ url_for('reports.tenant_report', tenant_id=t.id) }}">Open report</a>
-      {% if can('export', t.id) %}<a class="btn" href="{{ url_for('reports.tenant_report_pdf', tenant_id=t.id) }}">Download PDF</a>{% endif %}
-    </div>
+  <div class="card client-recs">
+    <h2>{{ 'What we recommend next' if row.from_msp else 'What needs attention' }}</h2>
+    {% if row.recommendations %}
+    <ol>
+      {% for rec in row.recommendations %}
+      <li>
+        <div class="rec-body">
+          <div class="rec-title">{{ rec.title }}</div>
+          {% if rec.action %}<div class="rec-action">{{ rec.action }}</div>{% endif %}
+          {% if rec.target %}<div class="small muted">Target: {{ rec.target }}</div>{% endif %}
+        </div>
+        {% if rec.severity and rec.severity != 'info' %}<span class="sevtext {{ rec.severity }}">{{ rec.severity }}</span>{% endif %}
+        <span class="pill {{ rec.tone }}">{{ rec.status }}</span>
+      </li>
+      {% endfor %}
+    </ol>
+    {% if row.more_recommendations %}<p class="small">{% if row.from_msp %}<a href="{{ url_for('reports.tenant_report', tenant_id=t.id) }}#all-recommendations">{{ row.more_recommendations|plural('more recommendation') }} in your monthly review &rarr;</a>{% else %}<a href="{{ url_for('reports.tenant_findings', tenant_id=t.id) }}">{{ row.more_recommendations|plural('more item') }} in Findings &rarr;</a>{% endif %}</p>{% endif %}
+    {% else %}
+    <p class="muted">Nothing open right now. Every check that could run passed.</p>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -28,38 +62,13 @@
   {% set ss = row.kpis['secure_score.pct'] %}{% set mfa = row.kpis['mfa.registered_pct'] %}
   <div class="tiles">
     {% if can('reports.tenant', t.id) %}<div class="tile"><div class="label">Microsoft Secure Score</div><div class="value">{{ '%g%%'|format(ss.value) if ss.value is not none else '–' }}</div>
-      <div class="foot">{% if ss.delta %}<span class="delta {{ ss.trend }}">{{ '%+g'|format(ss.delta) }}%</span> in 4 weeks{% else %}&nbsp;{% endif %}</div></div>{% endif %}
+      <div class="foot">{% if ss.delta %}<span class="delta {{ ss.trend }}">{{ '%+g'|format(ss.delta) }} pts</span> in 4 weeks{% else %}&nbsp;{% endif %}</div></div>{% endif %}
     {% if can('reports.identity', t.id) %}<div class="tile"><div class="label">Users with MFA</div><div class="value">{{ '%g%%'|format(mfa.value) if mfa.value is not none else '–' }}</div>
-      <div class="foot">{% if mfa.delta %}<span class="delta {{ mfa.trend }}">{{ '%+g'|format(mfa.delta) }}%</span> in 4 weeks{% else %}&nbsp;{% endif %}</div></div>{% endif %}
-    {% if security %}<div class="tile"><div class="label">Checks needing attention</div><div class="value">{{ row.failing }}</div>
-      <div class="foot">{% if row.counts.critical or row.counts.high %}<span class="bad-text">{{ row.counts.critical + row.counts.high }} critical or high</span>{% else %}none critical or high{% endif %}</div></div>
+      <div class="foot">{% if mfa.delta %}<span class="delta {{ mfa.trend }}">{{ '%+g'|format(mfa.delta) }} pts</span> in 4 weeks{% else %}&nbsp;{% endif %}</div></div>{% endif %}
+    {% if security %}{% set urgent = row.counts.critical + row.counts.high %}<div class="tile"><div class="label">Checks needing attention</div><div class="value">{{ row.failing }}</div>
+      <div class="foot">{% if urgent %}<span class="bad-text">{{ urgent }} critical or high</span>{% else %}none critical or high{% endif %}</div></div>
     <div class="tile"><div class="label">Fixed in the last 4 weeks</div><div class="value">{{ row.resolved }}</div><div class="foot">&nbsp;</div></div>{% endif %}
   </div>
-
-  {#- Open recommendations (read-only): the failing checks from the report, then accepted risks. -#}
-  {% if security %}
-  <div class="card client-recs">
-    <h2>Recommendations</h2>
-    {% if row.recommendations %}
-    <ol>
-      {% for rec in row.recommendations %}
-      <li>
-        <div class="rec-body">
-          <div class="rec-title">{{ rec.title }}</div>
-          <div class="small">{{ rec.summary }}</div>
-          {% if rec.action %}<div class="rec-action">{{ rec.action }}</div>{% endif %}
-        </div>
-        {% if rec.severity and rec.severity != 'info' %}<span class="sevtext {{ rec.severity }}">{{ rec.severity }}</span>{% endif %}
-        <span class="pill {{ rec.tone }}">{{ rec.status }}</span>
-      </li>
-      {% endfor %}
-    </ol>
-    {% if row.more_recommendations %}<p class="small"><a href="{{ url_for('reports.tenant_findings', tenant_id=t.id) }}">{{ row.more_recommendations|plural('more recommendation') }} in Findings &rarr;</a></p>{% endif %}
-    {% else %}
-    <p class="muted">Nothing open right now. Every check that could run passed.</p>
-    {% endif %}
-  </div>
-  {% endif %}
 
   {#- Other reports. -#}
   <div class="report-links">

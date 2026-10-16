@@ -23,7 +23,7 @@ def _exchange_missing(snap: TenantSnapshot):
     "external_forwarding",
     "No mail is forwarded outside the organisation",
     "Email",
-    "Remove forwarding to outside addresses unless the client has a documented business reason. "
+    "Remove forwarding to outside addresses unless there's a documented business reason. "
     "Forwarding is the most common way attackers keep reading a mailbox after a password reset.",
 )
 def external_forwarding(snap: TenantSnapshot, now: datetime):
@@ -339,7 +339,7 @@ def mail_rule_spam_bypass(snap: TenantSnapshot, now: datetime):
     "mail_rule_external_copy",
     "No mail flow rule sends mail outside the organisation",
     "Email",
-    "Check each rule that redirects mail or sends copies to an outside address with the client, and remove it "
+    "Check each rule that redirects mail or sends copies to an outside address, and remove it "
     "unless there's a documented reason (a journaling or archiving service). Attackers with admin access add "
     "these rules to read a whole organisation's mail.",
 )
