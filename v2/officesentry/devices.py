@@ -212,12 +212,19 @@ def has_recovery_key(device_id, keys: dict[str, dict]) -> bool:
     return bool(found and found.get("osVolume"))
 
 
+# Join types (Entra ``trustType``) whose computers can save their BitLocker recovery key in Entra ID: Entra joined
+# and hybrid joined. Registered personal devices ("Workplace") can't. Hybrid joined computers often save theirs in
+# on-premises Active Directory instead, which Office Sentry can't see.
+SAVES_KEYS = ("AzureAd", "ServerAd")
+HYBRID = "ServerAd"
+
+
 def escrows_keys(device: dict, now: datetime) -> bool:
     """A Windows computer joined to Entra ID (or hybrid joined), enabled and seen recently: the devices that
     save their BitLocker recovery key in Entra ID. Registered personal devices don't."""
     return (
-        (device.get("operatingSystem") or "").lower().startswith("windows")
-        and device.get("trustType") in ("AzureAd", "ServerAd")
+        is_windows(device)  # not Windows Server, which isn't on the Windows PC list
+        and device.get("trustType") in SAVES_KEYS
         and bool(device.get("accountEnabled"))
         and (days_since(device.get("approximateLastSignInDateTime"), now) or 0) <= STALE_DAYS
     )

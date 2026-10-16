@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .licences import FREE_UNIT_THRESHOLD
+from .licences import FREE_UNIT_THRESHOLD, working_units
 from .snapshot import TenantSnapshot
 from .text import nouns
 
@@ -37,7 +37,7 @@ def tenant_quota(skus: list[dict] | None) -> TenantQuota | None:
     """Estimated SharePoint storage from the subscriptions, or None without SharePoint licences."""
     licences = extra = 0
     for s in skus or []:
-        units = (s.get("prepaidUnits") or {}).get("enabled") or 0
+        units = working_units(s)
         if units <= 0 or units >= FREE_UNIT_THRESHOLD or s.get("capabilityStatus") not in (None, "Enabled", "Warning"):
             continue
         if s.get("skuPartNumber") in EXTRA_STORAGE_SKUS:

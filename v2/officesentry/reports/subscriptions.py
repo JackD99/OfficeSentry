@@ -188,12 +188,15 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
 
 
 def _next_dates(subs: list[dict], now: datetime) -> dict[str, datetime]:
-    """The earliest renewal or end date of each SKU's subscriptions that haven't ended."""
+    """The earliest renewal or end date of each SKU's subscriptions that haven't ended: its paid ones', when it has
+    any, since a trial added beside them ending doesn't end what was bought."""
+    live = [s for s in subs if _status(s.get("status")) != "Ended" and isinstance(s.get("skuId"), str)]
+    paid = {s["skuId"] for s in live if s.get("isTrial") is not True}
     out: dict[str, datetime] = {}
-    for s in subs:
+    for s in live:
         when = parse_ts(s.get("nextLifecycleDateTime"))
-        sid = s.get("skuId")
-        if when and isinstance(sid, str) and _status(s.get("status")) != "Ended":
+        sid = s["skuId"]
+        if when and (s.get("isTrial") is not True or sid not in paid):
             out[sid] = min(out.get(sid, when), when)
     return out
 
@@ -242,8 +245,9 @@ def _subscriptions(skus, subs, names, prices, currency, now):
             else:
                 priced = True
                 cost += paid * price
-            if per_user and status not in LAPSING[1:]:  # suspended licences aren't in use
-                assigned, bought = assigned + used, bought + purchased + grace
+            if per_user and status not in LAPSING[1:] and paid + grace:  # suspended licences aren't in use
+                # Paid licences only: a trial's may never be bought.
+                assigned, bought = assigned + min(used, paid + grace), bought + paid + grace
         when = next_dates.get(sid)
         days = (when - now).days if when else None
         flag = None

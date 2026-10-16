@@ -10,13 +10,13 @@ from __future__ import annotations
 from collections import Counter
 from datetime import date, datetime
 
-from .. import usage
+from .. import devices, usage
 from ..licences import is_stale, load_prices, sku_name
 from ..snapshot import TenantSnapshot
-from ..text import plural
+from ..text import plural, verb
 from ..usage import ACTIVE_DAYS, APPS, PLATFORMS, SERVICES
 from .charts import line_chart
-from .data_reports import DataReport, Highlight, Section, Tile
+from .data_reports import DataReport, Highlight, Rows, Section, Tile
 from .identity_reports import Money, _day, _parse
 from .monthly_review import setting
 from .registry import report
@@ -108,7 +108,7 @@ def active_points(snap: TenantSnapshot) -> list[tuple[date, float]]:
     "usage",
     "Microsoft 365 usage",
     "Who actually uses email, Teams, OneDrive, SharePoint and the Office apps, and when each person was last active.",
-    ("m365_usage",),
+    ("m365_usage", "users"),
     group="tenant",
     order=50,
     keywords="adoption activity active users teams onedrive outlook office apps copilot",
@@ -119,6 +119,15 @@ def usage_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         return
     status, rows = loaded
     read = status.get("read") or {}
+    blocked = usage.blocked(snap)
+    left_out = sum(1 for upn, r in rows.items() if upn in blocked and usage.licensed(r))
+    rows = {upn: r for upn, r in rows.items() if upn not in blocked}
+    if left_out:
+        report.notes.append(
+            f"{plural(left_out, 'disabled account')} still holding licences {verb(left_out, 'is', 'are')} left "
+            f"out, as nobody can sign in to {verb(left_out, 'it', 'them')}. Licence waste counts "
+            f"{verb(left_out, 'its', 'their')} licences."
+        )
     licensed = [r for r in rows.values() if usage.licensed(r)]
     active = [r for r in licensed if usage.any_activity(r)]
     report.tiles.append(
@@ -143,13 +152,14 @@ def usage_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         if key != "office":
             report.tiles.append(Tile(name, _share(used, len(holders)), f"{used} of {len(holders)} licensed"))
     if (status.get("read") or {}).get("apps"):
-        desktop = [r for r in licensed if r.get("platforms") is not None and _office_licensed(r)]
+        # Only plans with the desktop apps: Business Basic, E1 and F3 people can't install them.
+        desktop = [r for r in licensed if r.get("platforms") is not None and usage.desktop_licensed(r)]
         on_desktop = sum(1 for r in desktop if usage.desktop_use(r))
         report.tiles.append(
             Tile(
                 "Desktop Office apps",
                 _share(on_desktop, len(desktop)),
-                f"{on_desktop} of {len(desktop)} with Office used Windows or Mac apps",
+                f"{on_desktop} of {len(desktop)} with the desktop apps in their plan used them",
             )
         )
 
@@ -251,7 +261,7 @@ def usage_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
     "licence-rightsizing",
     "Licence right-sizing",
     "People who could move to a cheaper licence, and services people are licensed for but don't use.",
-    ("m365_usage", "users", "tenant_profile", "mailbox_usage"),
+    ("m365_usage", "users", "tenant_profile", "mailbox_usage", "devices", "admin_roles"),
     group="tenant",
     order=40,
     keywords="licenses downgrade cheaper plan savings cost copilot business basic standard e1 e3",
@@ -271,6 +281,17 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
     by_mail = {(b.get("mailbox") or "").lower(): b for b in boxes or []}
     prices = load_prices(snap.conn)
     currency = setting(snap.conn, "currency", "GBP")
+    # People who rely on a security suite's Intune and Entra ID P1: a device Intune manages, or an admin role.
+    managed = {
+        d["userPrincipalName"].lower()
+        for d in devices.objects(snap, "managed_device") or []
+        if isinstance(d.get("userPrincipalName"), str)
+    }
+    admins = {
+        r.get("principalId")
+        for r in snap.objects("admin_roles", "role_assignment") or []
+        if r.get("principalType") == "user"
+    }
 
     if users is None or skus is None:
         report.notes.append(
@@ -287,7 +308,9 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
         "Could move to a cheaper licence",
         ["Person", "Has", f"Used in the last {ACTIVE_DAYS} days", "Could move to", "Saving / month", "Why"],
         intro="People whose use of Microsoft 365 fits a cheaper licence. Accounts that are disabled or "
-        "haven't signed in for 90 days are in Licence waste instead, so they aren't counted twice.",
+        "haven't signed in for 90 days are in Licence waste instead, so they aren't counted twice. Someone with "
+        "a device Intune manages or an admin role keeps a plan with Intune and Entra ID P1, and a mailbox that's "
+        "large, archived or on hold keeps a plan that holds it.",
         empty="Everyone uses what their licence is for.",
     )
     unused = Section(
@@ -314,7 +337,8 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
         who = usage.label(r)
         uses = ", ".join(usage.used_services(r)) or "Nothing"
         box = (by_id.get(user["_id"]) if user is not None else None) or by_mail.get(upn)
-        suggestions = usage.rightsize(r, holder.parts, box)
+        secured = upn in managed or (user is not None and user.get("_id") in admins)
+        suggestions = usage.rightsize(r, holder.parts, box, relies_on_security=secured)
         if r.get("concealed"):
             # A hidden name can't be matched to its account, so a disabled account or a leaver, whose licences
             # Licence waste already counts, can't be told apart: removing a licence would count it twice.
@@ -323,6 +347,8 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
             suggestions = kept
         for s in suggestions:
             saving = s.saving(prices)
+            if saving == 0 and s.target:
+                continue  # the cheaper plan isn't cheaper at these prices
             if saving is None and s.target is not None:
                 unpriced.update(p for p in (s.current, s.target) if p and p not in prices)
             people_moving.add(upn)
@@ -371,17 +397,20 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
             Money(total, currency) if priced or not found else "Not priced",
             "From the suggestions below, at your prices",
             "warn" if total else None,
+            Rows(moves.title),
         ),
         Highlight(
             "Saving / year",
             Money(total * 12, currency) if priced or not found else "Not priced",
             "If every suggestion is taken",
+            rows=Rows(moves.title),
         ),
         Highlight(
             "People who could move",
             len(people_moving),
             "To a cheaper licence, or none",
             "warn" if people_moving else "ok",
+            Rows(moves.title),
         ),
-        Highlight("Not using a service", len(unused.rows), f"In the last {ACTIVE_DAYS} days"),
+        Highlight("Not using a service", len(unused.rows), f"In the last {ACTIVE_DAYS} days", rows=Rows(unused.title)),
     ]

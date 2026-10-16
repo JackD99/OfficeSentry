@@ -214,6 +214,12 @@ class Count:
     assigned: int
     paid: int  # bought, less active trials' licences, which cost nothing yet
     trial: bool = False  # every licence bought is an active trial's
+    trial_seats: int = 0  # of those bought, how many are an active trial's
+
+    @property
+    def paid_bought(self) -> int:
+        """Licences bought, not counting an active trial's (which may never be bought)."""
+        return self.bought - self.trial_seats
 
 
 def _counts(skus: list[dict], subs: list[dict] | None) -> dict[str, Count]:
@@ -226,7 +232,14 @@ def _counts(skus: list[dict], subs: list[dict] | None) -> dict[str, Count]:
         bought, used = _units(s, "enabled") + _units(s, "warning"), _consumed(s)
         if bought or used:
             paid = max(_units(s, "enabled") - trials.get(sid, 0), 0)
-            out[sid] = Count(sku_name(s.get("skuPartNumber")), bought, used, paid, bool(trials.get(sid)) and not paid)
+            out[sid] = Count(
+                sku_name(s.get("skuPartNumber")),
+                bought,
+                used,
+                paid,
+                bool(trials.get(sid)) and not paid,
+                _units(s, "enabled") - paid,
+            )
     return out
 
 
@@ -436,7 +449,9 @@ def _months(profiles, by_sku, prices, currency, end):
 def _month_on_month(latest, month_ago, prices, by_sku, currency) -> list[Highlight]:
     if latest is None:
         return [Highlight("Licences bought", "Not collected", "Refresh Tenant profile and licences", rows=Rows(MONTHS))]
-    bought = sum(c.bought for c in latest.values())
+    bought = sum(c.paid_bought for c in latest.values())
+    on_trial = sum(c.trial_seats for c in latest.values())
+    trials = f", plus {on_trial:,} on trial" if on_trial else ""
 
     def cost(counts: dict[str, Count]) -> tuple[float, bool]:
         total, priced = 0.0, False
@@ -449,7 +464,12 @@ def _month_on_month(latest, month_ago, prices, by_sku, currency) -> list[Highlig
     now_cost, priced = cost(latest)
     if month_ago is None:
         return [
-            Highlight("Licences bought", bought, "Paid licences; the change shows after a week", rows=Rows(MONTHS)),
+            Highlight(
+                "Licences bought",
+                bought,
+                f"Paid licences{trials}; the change shows after a week",
+                rows=Rows(MONTHS),
+            ),
             Highlight(
                 "Monthly cost",
                 Money(now_cost, currency) if priced else "Not priced",
@@ -458,14 +478,14 @@ def _month_on_month(latest, month_ago, prices, by_sku, currency) -> list[Highlig
             ),
         ]
     when, before = month_ago
-    then_bought = sum(c.bought for c in before.values())
+    then_bought = sum(c.paid_bought for c in before.values())
     then_cost, _ = cost(before)
     since = f"{when.day} {when:%b}"
     return [
         Highlight(
             "Licences bought",
             _signed(bought - then_bought),
-            f"{bought} now, {then_bought} on {since}",
+            f"{bought} now, {then_bought} on {since}{trials}",
             rows=Rows(MONTHS),
         ),
         Highlight(

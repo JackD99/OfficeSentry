@@ -117,7 +117,8 @@ def test_needs_two_collections_to_compare(db, two_tenants):
     assert "two different days" in report.notice
     figures = {h.label: h.value for h in report.highlights}
     assert figures["Assigned in the last 30 days"] == "Not yet"
-    assert figures["Licences bought"] == 18  # 10 Business Premium, 5 Copilot, 3 Visio in their grace period
+    # 10 Business Premium and 3 Visio in their grace period; the 5 Copilot licences are a trial's.
+    assert figures["Licences bought"] == 13
     assert s["Assigned and removed"].rows == [] and "collected once" in s["Assigned and removed"].empty
     month = _rows(s["Licences by month"])
     assert {r[1] for r in month} == {
@@ -165,7 +166,8 @@ def test_licences_assigned_and_removed_with_who_and_how(db, two_tenants):
     figures = {h.label: h for h in report.highlights}
     assert figures["Assigned in the last 30 days"].value == 3
     assert figures["Removed in the last 30 days"].value == 2
-    assert figures["Licences bought"].value == "+2" and figures["Licences bought"].foot.startswith("20 now, 18 on ")
+    assert figures["Licences bought"].value == "+2" and figures["Licences bought"].foot.startswith("15 now, 13 on ")
+    assert figures["Licences bought"].foot.endswith(", plus 5 on trial")
 
 
 def test_months_and_cost_at_your_prices(db, two_tenants):

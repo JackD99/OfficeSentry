@@ -9,7 +9,7 @@ from io import BytesIO
 from openpyxl import load_workbook
 
 from officesentry import endpoints, store, support
-from officesentry.reports import data_reports
+from officesentry.reports import data_reports, views
 from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
 from tests import devicedata as dd
@@ -248,6 +248,19 @@ def test_intune_policies_report(db, two_tenants):
     assert (tiles["App protection"].value, tiles["App protection"].tone) == ("iOS and Android", "ok")
 
 
+def test_paused_rings_figure_opens_the_rings_it_counts(db, two_tenants, monkeypatch):
+    """A paused ring nobody is assigned pauses nothing: not counted, and not opened by the figure."""
+    alpha, _ = two_tenants
+    old = idata.CONFIGURATIONS[1] | {"id": "ring-old", "displayName": "Update ring Old", "assignments": []}
+    monkeypatch.setattr(idata, "CONFIGURATIONS", idata.CONFIGURATIONS + [old])
+    seed_tenant(db, alpha)
+    report = _report(db, alpha)
+    tile = {t.label: t for t in report.tiles}["Update rings paused"]
+    view, _ = views.rows_view(report, tile.rows)
+    opened = [r[0] for s in views.apply(report, view).sections if s.title == "Windows update rings" for r in s.rows]
+    assert tile.value == 1 and opened == ["Update ring Pilot"]
+
+
 def test_intune_policies_report_before_collection(db, two_tenants):
     _, bravo = two_tenants
     report = _report(db, bravo)
@@ -369,25 +382,60 @@ def test_devices_report_shows_which_computers_have_a_saved_key(db, two_tenants, 
     attention = {r["Device"]: r for r in _table(report, "Needs attention")}
     assert attention["LAPTOP-ANN"]["Problems"] == "Encrypted, but no BitLocker recovery key saved in Entra ID"
     result = _results(db, bravo)["bitlocker_keys"]
-    assert [(f.severity, f.subject) for f in result.findings] == [("medium", "LAPTOP-ANN"), ("low", "DESK-RECEPTION")]
+    # DESK-RECEPTION is hybrid joined and not in Intune: its key is most likely in on-premises Active Directory.
+    assert [(f.severity, f.subject) for f in result.findings] == [("medium", "LAPTOP-ANN")]
 
 
 def test_bitlocker_check(db, two_tenants, monkeypatch):
     alpha, bravo = two_tenants
     seed_tenant(db, alpha)
     result = _results(db, alpha)["bitlocker_keys"]
-    # LAPTOP-BOB isn't encrypted at all (device_encryption says so); DESK-RECEPTION isn't in Intune.
-    assert result.status == "fail"
-    assert result.summary == "1 of 3 joined Windows computers without a saved recovery key"
-    assert [(f.severity, f.detail) for f in result.findings] == [
-        ("low", "No recovery key saved in Entra ID (encryption not known)")
-    ]
+    # LAPTOP-BOB isn't encrypted at all (device_encryption says so); DESK-RECEPTION is hybrid joined and not in
+    # Intune, so its key is most likely in on-premises Active Directory, which Office Sentry can't see.
+    assert result.status == "pass"
+    assert result.summary == (
+        "1 of 3 joined Windows computers has a saved recovery key "
+        "(1 not encrypted, 1 hybrid joined, whose key may be in on-premises AD)"
+    )
     monkeypatch.setattr(dd, "ENTRA_DEVICES", [dd.ENTRA_DEVICES[0], dd.ENTRA_DEVICES[4]])
     seed_tenant(db, bravo)
     result = _results(db, bravo)["bitlocker_keys"]
     assert (
         result.status == "pass" and result.summary == "The 1 joined Windows computer is covered by a saved recovery key"
     )
+
+
+def test_recovery_keys_by_join_type(db, two_tenants, monkeypatch):
+    """Only joined computers can save a recovery key in Entra ID. A registered personal PC enrolled in Intune
+    can't, so it isn't flagged; a hybrid joined one usually saves it in on-premises Active Directory, so an
+    encrypted one without a key in Entra ID is worth a look, not a medium finding."""
+    alpha, _ = two_tenants
+    entra = [dict(d) for d in dd.ENTRA_DEVICES]
+    entra[0]["trustType"] = "Workplace"  # LAPTOP-ANN, a personal PC added with "Access work or school"
+    entra[3]["deviceId"] = "d-bob"  # DESK-RECEPTION stands in for LAPTOP-BOB's Entra record, hybrid joined
+    del entra[1]
+    managed = [dict(d) for d in dd.MANAGED_DEVICES]
+    managed[1]["isEncrypted"] = True  # LAPTOP-BOB
+    monkeypatch.setattr(dd, "ENTRA_DEVICES", entra)
+    monkeypatch.setattr(dd, "MANAGED_DEVICES", managed)
+    monkeypatch.setattr(dd, "RECOVERY_KEYS", [])
+    seed_tenant(db, alpha)
+    report = _report(db, alpha, "devices")
+    attention = {r["Device"]: r["Problems"] for r in _table(report, "Needs attention")}
+    assert "recovery key" not in attention.get("LAPTOP-ANN", "")
+    assert (
+        "Encrypted, no BitLocker recovery key in Entra ID (check on-premises Active Directory)"
+        in attention["LAPTOP-BOB"]
+    )
+    assert _flags(report, "BitLocker recovery keys")["DESK-RECEPTION"] == "low"
+    result = _results(db, alpha)["bitlocker_keys"]
+    assert [(f.severity, f.subject, f.detail) for f in result.findings] == [
+        (
+            "low",
+            "DESK-RECEPTION",
+            "Encrypted, no recovery key in Entra ID: check it's saved in on-premises Active Directory",
+        )
+    ]
 
 
 def test_recovery_keys_wait_for_approval(db, two_tenants):

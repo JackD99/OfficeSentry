@@ -153,6 +153,11 @@ def test_tenant_quota():
     assert quota.total == 1024 * GB + 100 * GB + 250 * GB and quota.extra_gb == 250
     assert "250 GB of extra storage" in quota.explained
     assert tenant_quota([SKUS[1]]) is None and tenant_quota(None) is None
+    # A subscription in its grace period still gives its storage until Microsoft suspends it.
+    lapsing = dict(SKUS[0], capabilityStatus="Warning", prepaidUnits={"enabled": 0, "warning": 10})
+    assert tenant_quota([lapsing]).total == tenant_quota([SKUS[0]]).total
+    suspended = dict(SKUS[0], capabilityStatus="Suspended", prepaidUnits={"enabled": 0, "suspended": 10})
+    assert tenant_quota([suspended]) is None
 
 
 def test_helpers():

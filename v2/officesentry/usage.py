@@ -83,6 +83,8 @@ MAIL_SUITES = {
 }
 # Suites whose security features (Intune, Entra ID P1, Defender) a mail-only plan doesn't have.
 SECURITY_SUITES = {"SPB", "SPE_E3", "SPE_E5", "ENTERPRISEPREMIUM"}
+# Plans whose mailbox is 50 GB with no litigation hold: no home for a bigger mailbox, an archive or a hold.
+SMALL_MAILBOX = {"O365_BUSINESS_ESSENTIALS", "STANDARDPACK", EXCHANGE_P1}
 # Plans right-sizing can suggest; the prices page lists them so savings can be priced.
 TARGETS = ("O365_BUSINESS_ESSENTIALS", "STANDARDPACK", EXCHANGE_P1, EXCHANGE_P2)
 # Exchange Online Plan 1 holds 50 GB with no archive; leave headroom before suggesting it.
@@ -138,6 +140,22 @@ def person(snap: TenantSnapshot, upn: str | None) -> dict | None:
     unknown), ``apps``, ``activations``, ``email`` and ``teamsCounts``.
     """
     return people(snap).get((upn or "").lower()) if upn else None
+
+
+def blocked(snap: TenantSnapshot) -> set[str]:
+    """Lower-case sign-in names of accounts blocked from signing in. They can't use anything, so adoption
+    figures leave them out; Licence waste counts their licences."""
+    return {
+        u["userPrincipalName"].lower()
+        for u in snap.objects("users", "user") or []
+        if u.get("accountEnabled") is False and isinstance(u.get("userPrincipalName"), str)
+    }
+
+
+def desktop_licensed(row: dict) -> bool:
+    """Holds a plan that includes the desktop Office apps (Business Standard, E3), not a web-only one (Business
+    Basic, E1, F3)."""
+    return any(part_for_product(p) in WITHOUT_DESKTOP for p in row.get("products") or [])
 
 
 def licensed(row: dict) -> bool:
@@ -233,12 +251,18 @@ def _gb(n: float) -> str:
     return f"{n / 1024**3:.1f} GB"
 
 
-def rightsize(row: dict, held: list[str], mailbox: dict | None = None) -> list[Suggestion]:
+def rightsize(
+    row: dict, held: list[str], mailbox: dict | None = None, relies_on_security: bool = False
+) -> list[Suggestion]:
     """Cheaper licences for one person, from what they used in the last ``ACTIVE_DAYS`` days.
 
     Rules, most savings first: nothing used at all; Copilot unused; only email;
     no desktop Office apps; Exchange Online Plan 2 on a small mailbox with no
-    archive or hold. A licence gets at most one suggestion.
+    archive or hold. A licence gets at most one suggestion. Someone who
+    ``relies_on_security`` (a device managed by Intune, or an admin role) isn't
+    moved off a suite with Intune and Entra ID P1: their device would fall out of
+    compliance and Conditional Access. A mailbox over Plan 1's size, with an
+    archive or on hold isn't moved to a plan that can't keep it.
     """
     held = list(dict.fromkeys(held))
     if not held:
@@ -272,7 +296,11 @@ def rightsize(row: dict, held: list[str], mailbox: dict | None = None) -> list[S
     )
     suites = [p for p in held if p in MAIL_SUITES or p in WITHOUT_DESKTOP]
     for part in suites:
+        if part in SECURITY_SUITES and relies_on_security:
+            continue
         if part in MAIL_SUITES and email_only(row):
+            if big and part == "O365_BUSINESS_ESSENTIALS":
+                continue  # Exchange Online Plan 2, the plan that could keep it, costs more than Business Basic
             target = EXCHANGE_P2 if big else EXCHANGE_P1
             caution = (
                 "It also includes Intune, Entra ID P1 and Defender, which an Exchange Online plan doesn't. "
@@ -283,6 +311,8 @@ def rightsize(row: dict, held: list[str], mailbox: dict | None = None) -> list[S
             out.append(Suggestion(part, target, f"Only used email in the last {ACTIVE_DAYS} days", caution))
         elif part in WITHOUT_DESKTOP and desktop_use(row) is False:
             target = WITHOUT_DESKTOP[part]
+            if big and target in SMALL_MAILBOX:
+                continue  # its 50 GB mailbox has no room for this one, or no hold or archive
             caution = (
                 "No plan matches it without desktop apps; compare the web-only plans with the security "
                 "features they need."

@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 
 from .. import devices, dnscheck, hybrid
 from ..checks.identity import _privileged_users
-from ..licences import sku_name
+from ..licences import sku_name, working_units
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .evidence_base import (
@@ -228,11 +228,7 @@ def _cloud_services(snap: TenantSnapshot, results):
     skus = snap.objects("tenant_profile", "subscribed_sku")
     if skus is None:
         return NOT_KNOWN, "Subscriptions haven't been collected yet."
-    plans = [
-        sku_name(s.get("skuPartNumber"))
-        for s in skus
-        if (s.get("prepaidUnits") or {}).get("enabled", 0) > 0 and s.get("appliesTo") == "User"
-    ]
+    plans = [sku_name(s.get("skuPartNumber")) for s in skus if working_units(s) > 0 and s.get("appliesTo") == "User"]
     parts = [f"Microsoft 365 ({_listed(plans)})." if plans else "Microsoft 365."]
     sps = snap.objects("app_consents", "service_principal")
     if sps:

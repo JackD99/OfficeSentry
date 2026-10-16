@@ -566,7 +566,8 @@ def intune_policies(snap: TenantSnapshot, now: datetime, out: DataReport) -> Non
             if parts.get("configuration") == "read"
             else _unread(parts, "configuration")[1],
             ("warn" if paused_rings else "ok") if parts.get("configuration") == "read" else None,
-            Rows(RINGS, {"Paused": ["Security", "Feature", "Security, Feature"]}),
+            # Assigned rings only, as counted: a paused ring nobody gets is flagged low, not medium.
+            Rows(RINGS, {"Paused": ["Security", "Feature", "Security, Feature"], "Flag": "medium"}),
         ),
         Tile(
             "App protection",

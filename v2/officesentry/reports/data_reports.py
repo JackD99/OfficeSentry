@@ -1493,11 +1493,15 @@ SUPPORT = {
 
 
 NO_RECOVERY_KEY = "Encrypted, but no BitLocker recovery key saved in Entra ID"
+HYBRID_NO_RECOVERY_KEY = "Encrypted, no BitLocker recovery key in Entra ID (check on-premises Active Directory)"
 
 
-def _device_issues(d: dict, now: datetime, keys: dict[str, dict] | None = None) -> tuple[list[str], str | None]:
+def _device_issues(
+    d: dict, now: datetime, keys: dict[str, dict] | None = None, joins: dict[str, str] | None = None
+) -> tuple[list[str], str | None]:
     """A managed device's problems, worst first by flag. ``keys`` (``devices.recovery_keys``) is given when the
-    recovery key list was read."""
+    recovery key list was read, with ``joins``: each Entra device's join type by lower-cased ``deviceId``, since
+    only joined computers can save a recovery key there."""
     issues, flag = [], None
     rank = {"high": 0, "medium": 1, "low": 2}
 
@@ -1513,13 +1517,15 @@ def _device_issues(d: dict, now: datetime, keys: dict[str, dict] | None = None) 
         add("Not compliant", "medium")
     if devices.is_computer(d) and d.get("isEncrypted") is False:
         add("Not encrypted", "high")
+    join = (joins or {}).get((d.get("azureADDeviceId") or "").lower())
     if (
         keys is not None
         and devices.is_windows(d)
         and d.get("isEncrypted")
+        and join in devices.SAVES_KEYS
         and not devices.has_recovery_key(d.get("azureADDeviceId"), keys)
     ):
-        add(NO_RECOVERY_KEY, "medium")
+        add(*((HYBRID_NO_RECOVERY_KEY, "low") if join == devices.HYBRID else (NO_RECOVERY_KEY, "medium")))
     if devices.is_windows(d):
         support = devices.windows_support(d.get("osVersion"), now.date())
         if support.status in ("ended", "pro_ended", "ending"):
@@ -1622,8 +1628,9 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
             optional=("Enrolled", "Model"),
         )
         every.chart = Chart("Compliance")
+        joins = {(e.get("deviceId") or "").lower(): e.get("trustType") for e in entra if e.get("deviceId")}
         for d in sorted(managed, key=lambda d: (d.get("deviceName") or "").lower()):
-            issues, flag = _device_issues(d, now, keys)
+            issues, flag = _device_issues(d, now, keys, joins)
             if issues:
                 attention.add(
                     [d.get("deviceName"), d.get("userPrincipalName"), devices.os_label(d), "; ".join(issues)], flag
@@ -1846,7 +1853,8 @@ def _recovery_key_section(entra: list[dict], managed: list[dict], keys: dict[str
         ["Device", "Join type", "Encrypted", "Recovery key saved", "Keys saved", "Last saved", "Last seen"],
         intro="Windows computers joined to Entra ID and seen in the last "
         f"{devices.STALE_DAYS} days, and whether the BitLocker recovery key for the system drive is saved in "
-        "Entra ID. Encrypted comes from Intune. Office Sentry only reads that a key exists, never the key.",
+        "Entra ID. Encrypted comes from Intune. Hybrid joined computers often save theirs in on-premises Active "
+        "Directory instead, which Office Sentry can't see. Office Sentry only reads that a key exists, never the key.",
         empty="No Windows computers are joined to Entra ID.",
     )
     for d in sorted(entra, key=lambda d: (d.get("displayName") or "").lower()):
@@ -1866,7 +1874,8 @@ def _recovery_key_section(entra: list[dict], managed: list[dict], keys: dict[str
                 _date(saved.get("latest") if isinstance(saved.get("latest"), str) else None),
                 _seen(d.get("approximateLastSignInDateTime"), now),
             ],
-            "medium" if is_encrypted and not has_key else None,
+            # Hybrid joined computers often save theirs in on-premises Active Directory instead.
+            ("low" if d.get("trustType") == devices.HYBRID else "medium") if is_encrypted and not has_key else None,
         )
     section.rows, section.flags = _by_flag(section)
     return section
