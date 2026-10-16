@@ -1,6 +1,7 @@
 """Backups before upgrades, and restoring a backup."""
 
 import gzip
+import json
 import os
 import shutil
 import sqlite3
@@ -481,6 +482,42 @@ def test_the_worker_leaves_the_night_to_a_server_that_backs_up_itself(cfg, db, t
     assert _tick(cfg, db, late) == [f"backup:late:{night + timedelta(days=1, minutes=14):%Y-%m-%dT%H:%M:%SZ}"]
     assert tasks.drain(None, db, None, cfg) == 1
     assert len(_tick(cfg, db, night + timedelta(days=3))) == 1
+
+
+def test_the_worker_only_ever_deletes_copies_it_made(cfg, db, two_tenants, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from officesentry import nightly_backup, tasks
+
+    stamps = iter(f"20261015-0330{n:02}" for n in range(60))
+    monkeypatch.setattr(backups, "_stamp", lambda: next(stamps))
+    monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))
+    cfg.backup_cron, cfg.backup_keep = "30 3 * * *", 2
+    night = datetime.now(UTC).replace(hour=3, minute=31, second=0, microsecond=0)
+    folder = cfg.data_dir / "backups"
+    for _ in range(5):  # a server job in the same folder that keeps more than the worker does
+        main(["backup", "--keep", "14"])
+    servers = backups.backup_files(folder, backups.BACKUP_PREFIX)
+    made = night - timedelta(hours=1)
+    os.utime(servers[-1], (0, made.timestamp()))
+    backups.record_status(cfg.data_dir, "local", True, file=servers[-1], now=made)
+    assert _tick(cfg, db, night) == []  # the night is left to it
+    # It missed the next night: the worker stands in for it, then backs up every night, keeping 2 of its own.
+    assert len(_tick(cfg, db, made + nightly_backup.LATE)) == 1
+    tasks.drain(None, db, None, cfg)
+    for n in range(2, 5):
+        assert len(_tick(cfg, db, night + timedelta(days=n))) == 1
+        tasks.drain(None, db, None, cfg)
+    left = backups.backup_files(folder, backups.BACKUP_PREFIX)
+    assert left[:5] == servers and len(left) == 7  # all of the job's copies are still there
+    assert json.loads(nightly_backup._setting(db, nightly_backup.MINE)) == [p.name for p in left[5:]]
+    # The job, running again, rotates the whole folder as it always did, and the worker's list follows.
+    main(["backup", "--keep", "1"])
+    job = backups.newest_backup(folder)
+    assert len(_tick(cfg, db, night + timedelta(days=5))) == 1
+    tasks.drain(None, db, None, cfg)
+    left = backups.backup_files(folder, backups.BACKUP_PREFIX)
+    assert left[0] == job and json.loads(nightly_backup._setting(db, nightly_backup.MINE)) == [left[1].name]
 
 
 def test_a_copy_made_once_by_hand_never_leaves_a_gap(cfg, db, two_tenants, monkeypatch):

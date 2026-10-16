@@ -3,7 +3,8 @@
 Every install backs itself up without a crontab line: at ``cfg.backup_cron`` (``OFFICESENTRY_BACKUP_CRON``, 03:30
 in the install's timezone unless set; ``off`` turns it off) the worker queues a ``backup`` task, which makes
 the same copy as the ``backup`` command into ``<data dir>/backups``, keeping ``cfg.backup_keep``
-(``OFFICESENTRY_BACKUP_KEEP``), and records how it went for System status and the "backup failed" alert.
+(``OFFICESENTRY_BACKUP_KEEP``) of its own copies, and records how it went for System status and the "backup
+failed" alert. It never deletes a copy it didn't make: a server's own job in that folder keeps its own number.
 
 Many servers already make a nightly copy themselves (``deploy/jobs.sh``, a crontab line writing to a folder off
 the data volume, the cloud-init file, the Kubernetes CronJob, a NAS's scheduled task), so a night is left to a
@@ -15,6 +16,7 @@ System status would call the backup overdue. So there's one copy a night either 
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -25,6 +27,7 @@ log = logging.getLogger(__name__)
 
 LAST_SLOT = "backup.last_slot"  # the latest slot seen to (queued or skipped)
 MADE = "backup.made"  # the name of the last copy the worker made
+MINE = "backup.mine"  # the names of the copies the worker made and still keeps, oldest first (JSON)
 OTHER = "backup.other"  # when something else last made a copy, as the worker last saw it
 WAITING = "backup.waiting"  # the time of the copy a skipped night was left to
 RECENT = timedelta(hours=25)  # a copy made elsewhere this recently stands in for tonight's...
@@ -95,11 +98,27 @@ def _queue(ctx) -> None:
 def _backup(ctx) -> dict:
     other = made_elsewhere(ctx.conn, ctx.cfg)  # before this copy's record replaces the command's
     try:
-        dest, old = backups.backup_and_record(ctx.cfg.data_dir, ctx.cfg.db_path, folder(ctx.cfg), ctx.cfg.backup_keep)
+        # Kept 0: the command's rotation would trim every copy in the folder, a server job's too (_rotate).
+        dest, _ = backups.backup_and_record(ctx.cfg.data_dir, ctx.cfg.db_path, folder(ctx.cfg), 0)
     except backups.BackupFailed as exc:
         raise tasks.TaskFailed(str(exc)) from exc
+    old = _rotate(ctx.conn, ctx.cfg, dest.name)
     if other:
         _store(ctx.conn, OTHER, _iso(other))
     _store(ctx.conn, MADE, dest.name)
     log.info("Saved %s%s", dest.name, f" (removed {len(old)} older)" if old else "")
     return {"file": dest.name, "removed": len(old)}
+
+
+def _rotate(conn, cfg, made: str) -> list:
+    """Delete the worker's own copies beyond ``cfg.backup_keep``, oldest first, and never a copy something else
+    made: a server job writing to the same folder may keep more (``backup --keep 14``), and the night the
+    worker stands in for it mustn't trim that job's copies to the worker's number. Returns the deleted files."""
+    names = json.loads(_setting(conn, MINE) or "[]") or [n for n in (_setting(conn, MADE),) if n]
+    # dict.fromkeys: each name once, in order. A copy that's gone was rotated by a server job, or deleted by hand.
+    there = [folder(cfg) / n for n in dict.fromkeys([*names, made]) if (folder(cfg) / n).exists()]
+    old, kept = there[: -cfg.backup_keep], there[-cfg.backup_keep :]
+    for path in old:
+        path.unlink(missing_ok=True)
+    _store(conn, MINE, json.dumps([p.name for p in kept]))
+    return old
