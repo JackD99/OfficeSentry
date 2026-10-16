@@ -589,10 +589,9 @@ def apps(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             " (verified)" if a["verified"] else (" (unverified)" if a["publisher"] else "Unverified")
         )
         users = f"{plural(a['users'], 'user')}: {', '.join(a['user_scopes'])}" if a["user_scopes"] else ""
-        third.add(
-            [a["name"], publisher, a["app_permissions"], a["tenant_scopes"], users, ", ".join(a["risky"]) or "Low"],
-            a["severity"],
-        )
+        # The level first, then what earns it ("High: Mail.Read"), so every value in the column is a level.
+        risk = f"{(a['severity'] or 'low').title()}: {', '.join(a['risky'])}" if a["risky"] else "Low"
+        third.add([a["name"], publisher, a["app_permissions"], a["tenant_scopes"], users, risk], a["severity"])
 
     regs = Section(
         "App registrations and their credentials",
