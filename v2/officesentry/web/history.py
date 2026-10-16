@@ -15,7 +15,9 @@ from .access import needs, tenant_or_404
 
 bp = Blueprint("history", __name__)
 
-MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+# fullmatch: "$" also matches before a final newline, which then reached the download's file name. Year 0
+# isn't a date Python has.
+MONTH = re.compile(r"(?!0000)\d{4}-(0[1-9]|1[0-2])")
 
 
 @bp.get("/tenants/<int:tenant_id>/activity")
@@ -33,7 +35,7 @@ def activity(tenant_id: int):
 @needs("reports.activity", "export")
 def signins_csv(tenant_id: int, period: str):
     t = tenant_or_404(tenant_id)
-    if not MONTH.match(period):
+    if not MONTH.fullmatch(period):
         abort(404)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"sign-ins-{period}.csv")
     db_path, tid = current_app.extensions["officesentry.config"].db_path, t["id"]
