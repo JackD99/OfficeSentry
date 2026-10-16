@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 
 DEFAULT_NAME = "Office Sentry"
-DEFAULT_ACCENT = "#2557d6"
+DEFAULT_ACCENT = "#1d5c4b"
 MAX_LOGO_BYTES = 512 * 1024
 KEYS = (
     "brand_name",
