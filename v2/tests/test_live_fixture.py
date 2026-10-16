@@ -117,8 +117,11 @@ def test_every_check_runs_on_real_data(db, live):
     # Entra ID P2, so sign-in risk and risky users are hidden. Its one Windows PC is only Entra-registered,
     # and nobody has a manager set. It hasn't approved the SharePoint permission, so site permissions and the
     # owners of its sites (none has a Microsoft 365 group, so they're in SharePoint groups) wait for it, nor
-    # the BitLocker permission, so that check waits too.
+    # the BitLocker permission, so that check waits too. It was recorded before the 2.4 batch, so Windows LAPS
+    # and Defender alerts wait for those permissions.
     nothing_to_check = {
+        "laps_backups",
+        "defender_alerts",
         "site_guest_full_control",
         "site_owners",
         "bitlocker_keys",
@@ -321,10 +324,12 @@ def test_connection_health_on_real_data(db, live):
     result = health.result
     assert result["app_found"] and result["global_reader"] and not health.missing
     assert "Exchange.ManageAsAppV2" in result["other"]  # granted, but not one Office Sentry asks for
-    # Recorded with the 2.2 batch approved except BitLocker and SharePoint's own permission: those wait for
-    # approval, which is a step to do, not a problem.
-    assert set(health.waiting) <= set(permission_batch.CURRENT.permissions)
-    assert sorted(health.waiting) == ["BitLockerKey.ReadBasic.All", "SharePoint Sites.Read.All"]
+    # Recorded with the 2.2 batch approved except BitLocker and SharePoint's own permission, and before the 2.4
+    # batch: those wait for approval, which is a step to do, not a problem.
+    assert set(health.waiting) <= set(permission_batch.BATCH_OF)
+    assert sorted(health.waiting) == sorted(
+        ["BitLockerKey.ReadBasic.All", "SharePoint Sites.Read.All", *permission_batch.CURRENT.permissions]
+    )
     assert health.check("permissions").state in ("ok", "todo")
     assert health.onboarded
     # The replay signs in without an app connection; that is all there is to fix.

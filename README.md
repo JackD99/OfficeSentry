@@ -197,6 +197,8 @@ licence changes month by month, tenant settings, Microsoft 365 usage, Secure Sco
 [catalogue](v2/docs/checks.md#detail-reports) lists every one with the data it reads. The **Reports** page finds any
 of them by name or by the job you're doing ("Offboarding check", "Insurance renewal", "Storage cleanup").
 
+New in 2.4: **Security alerts**, Microsoft Defender's open incidents and alerts with who is dealing with each, and **Service health**, Microsoft's outages and the message centre's changes with a date to act by. The Devices report adds which computers back up their local admin password with Windows LAPS. <!-- since 2.4.0 -->
+
 ![The Reports page: every report, searchable, grouped by job](docs/screenshots/reports-library.png)
 
 ### A page for every person, mailbox, group and site
@@ -374,7 +376,9 @@ export and the client's side, then deletes the client and everything stored for 
   </tr>
   <tr>
     <td>The checklist for a client being added</td>
-    <td>Dark mode follows your system setting</td>
+    <td>Dark mode follows your system setting
+    unless you choose Light or Dark on your Account page, where staff also pick a colour <!-- since 2.4.0 -->
+    </td>
   </tr>
 </table>
 

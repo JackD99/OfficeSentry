@@ -63,8 +63,11 @@ LIMITS: dict[str, Limit] = {
         Limit("identity_reports_tenant", 5, 10, "tenant", "Sign-in and audit logs"),
         Limit("identity_protection", 1, 1, "tenant", "Identity Protection"),
         Limit("usage_reports", 100, 600, "api", "Microsoft 365 usage reports"),  # JSON (beta); CSV allows 14
-        Limit("secure_score", 150, 60, "tenant", "Secure Score"),
+        # Microsoft counts any call on Secure Score or Defender alerts against this one.
+        Limit("secure_score", 150, 60, "tenant", "Secure Score and Defender alerts"),
         Limit("intune", 2_000, 20, "tenant", "Intune devices"),
+        # Microsoft also allows no more than 800 an hour; Office Sentry makes three calls a collection.
+        Limit("service_health", 240, 60, "tenant", "Service health and message centre"),
         Limit("outlook", 10_000, 600, "tenant", "Outlook mail settings"),  # Microsoft's is per mailbox
         # Resource units; this is the tier for up to 1,000 licences (more licences allow up to 5 times as many).
         Limit("sharepoint", 1_250, 60, "tenant", "SharePoint and OneDrive", SHAREPOINT_DOCS, resource_units=True),
@@ -206,6 +209,14 @@ GRAPH: tuple[Endpoint, ...] = (
         fallback="Never the key itself; skipped, and the Devices report says so, until the client approves the "
         "permission (2.2)",
     ),
+    Endpoint(
+        "/directory/deviceLocalCredentials",
+        V1,
+        "DeviceLocalCredential.ReadBasic.All",
+        ("directory",),
+        fallback="Never the password itself; skipped, and the Devices report says so, until the client approves "
+        "the permission (2.4)",
+    ),
     # Policies.
     Endpoint("/policies/authorizationPolicy", V1, "Policy.Read.All", ("directory",)),
     Endpoint("/policies/adminConsentRequestPolicy", V1, "Policy.Read.All", ("directory",)),
@@ -313,6 +324,37 @@ GRAPH: tuple[Endpoint, ...] = (
     # Security and devices.
     Endpoint("/security/secureScores", V1, "SecurityEvents.Read.All", ("secure_score",)),
     Endpoint("/security/secureScoreControlProfiles", V1, "SecurityEvents.Read.All", ("secure_score",)),
+    # Microsoft Defender and service health (permissions added in 2.4; skipped while the client hasn't approved
+    # them).
+    Endpoint(
+        "/security/alerts_v2",
+        V1,
+        "SecurityAlert.Read.All",
+        ("secure_score",),
+        fallback="Shown as waiting until the client approves the permission (2.4); not offered in Microsoft 365 "
+        "operated by 21Vianet",
+    ),
+    Endpoint(
+        "/security/incidents",
+        V1,
+        "SecurityIncident.Read.All",
+        fallback="Shown as waiting until the client approves the permission (2.4); not offered in Microsoft 365 "
+        "operated by 21Vianet",
+    ),
+    *(
+        Endpoint(
+            path,
+            V1,
+            permission,
+            ("service_health",),
+            fallback="Shown as waiting until the client approves the permission (2.4)",
+        )
+        for path, permission in (
+            ("/admin/serviceAnnouncement/healthOverviews", "ServiceHealth.Read.All"),
+            ("/admin/serviceAnnouncement/issues", "ServiceHealth.Read.All"),
+            ("/admin/serviceAnnouncement/messages", "ServiceMessage.Read.All"),
+        )
+    ),
     Endpoint(
         "/deviceManagement/managedDevices",
         V1,

@@ -21,6 +21,7 @@ from tests import groupdata as grp
 from tests import hybriddata as hd
 from tests import intunedata as idata
 from tests import licencedata as ld
+from tests import securitydata as sec
 from tests import tenantsettingsdata as tsd
 from tests.sharepoint_data import mock_sharepoint
 from tests.teamsdata import mock_teams
@@ -210,6 +211,8 @@ def mock_tenant(
     teams_kw=None,
     intune_kw=None,
     recovery_keys=None,
+    laps=None,
+    security_kw=None,
     **phase4,
 ):
     paged(rsps, f"{V1}/organization", [gd.ORGANIZATION])
@@ -259,7 +262,9 @@ def mock_tenant(
         f"{V1}/informationProtection/bitlocker/recoveryKeys",
         dd.RECOVERY_KEYS if recovery_keys is None else recovery_keys,
     )
+    paged(rsps, f"{V1}/directory/deviceLocalCredentials", dd.LAPS_BACKUPS if laps is None else laps)
     mock_intune(rsps, **(intune_kw or {}))
+    mock_security(rsps, **(security_kw or {}))
     mock_group_eligibility(rsps, gd.GROUP_ELIGIBILITY)
     paged(rsps, f"{V1}/groups", grp.GROUPS if groups is None else groups)
 
@@ -314,6 +319,23 @@ def mock_tenant(
     mock_sharepoint(rsps, **(sharepoint_kw or {}))
     mock_usage(rsps, **(usage_kw or {}))
     mock_teams(rsps, **(teams_kw or {}))
+
+
+def mock_security(rsps, *, alerts=None, incidents=None, health=None, issues=None, messages=None, status=None) -> None:
+    """Defender's alerts and incidents, and Microsoft 365 service health and message centre posts
+    (``securitydata``). ``status`` maps a list's URL to an (HTTP status, body) answer instead."""
+    status = status or {}
+    for url, given, default in (
+        (sec.ALERTS_URL, alerts, sec.ALERTS),
+        (sec.INCIDENTS_URL, incidents, sec.INCIDENTS),
+        (sec.HEALTH_URL, health, sec.HEALTH),
+        (sec.ISSUES_URL, issues, sec.ISSUES),
+        (sec.MESSAGES_URL, messages, sec.MESSAGES),
+    ):
+        if url in status:
+            rsps.get(url, status=status[url][0], json=status[url][1])
+        else:
+            paged(rsps, url, default if given is None else given)
 
 
 def mock_intune(rsps, *, compliance=None, configurations=None, settings=None, ios=None, android=None, status=None):

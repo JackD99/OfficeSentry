@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-69 checks, 40 data sources (collectors) and 49 detail reports.
+71 checks, 42 data sources (collectors) and 51 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -50,6 +50,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 | **Company computers are encrypted**<br>`device_encryption` | `devices` | The tenant has no Intune licence, or Intune isn't readable | Turn on BitLocker (Windows) and FileVault (macOS) with an Intune disk encryption policy, with recovery keys escrowed to Entra ID, so a lost or stolen laptop doesn't expose the organisation's data. |
 | **Every platform in use has a compliance policy**<br>`intune_compliance_coverage` | `devices` | The tenant has no Intune licence; The tenant has no Intune licence, or Intune isn't readable | In Intune (Devices > Compliance), create and assign a compliance policy for each platform with enrolled devices, requiring at least encryption, a screen lock and a minimum OS version, and set devices with no policy to show as not compliant (Compliance settings). Until then those devices count as compliant, so Conditional Access that requires a compliant device lets them through. |
 | **Joined computers are managed by Intune**<br>`intune_enrolled` | `devices` | The tenant has no Intune licence, or Intune isn't readable | Enrol Entra-joined and hybrid-joined computers in Intune (automatic enrolment under Devices > Enrollment > Windows) so compliance, encryption and updates can be enforced on them. |
+| **Windows computers back up their local admin password with LAPS**<br>`laps_backups` | `devices` |  | In Entra ID (Devices > Device settings), turn on Microsoft Entra Local Administrator Password Solution (LAPS), then in Intune (Endpoint security > Account protection) create a Local admin password solution policy that backs the password up to Entra ID and assign it to every Windows computer. Each computer then gets its own local admin password, changed regularly, so one leaked password doesn't open every computer. |
 | **No old devices left in Entra ID**<br>`stale_devices` | `devices` |  | Disable, then after 30 days delete, device records that haven't signed in for 90 days (Entra admin center > Devices > All devices, filter by activity). Old records can still hold BitLocker keys and count toward device limits. |
 | **Windows computers still get security updates**<br>`supported_windows` | `devices` | The tenant has no Intune licence, or Intune isn't readable | Upgrade computers on Windows 10 or an old Windows 11 release to the current Windows 11 release (Intune: Windows feature updates policy). Replace hardware that can't run Windows 11, or buy Extended Security Updates as a stopgap. |
 
@@ -148,6 +149,12 @@ A check reads only the data its collectors stored. When that data is missing, or
 | **Guests have limited directory access**<br>`guest_access_level` | `tenant_policies` |  | Set guest user access to "Guest users have limited access to properties and memberships of directory objects", or to the most restrictive option (Entra admin center > External Identities > External collaboration settings). |
 | **Users can't create new tenants**<br>`tenant_creation` | `tenant_policies` |  | Set "Restrict non-admin users from creating tenants" to Yes (Entra admin center > Users > User settings). A tenant a user creates sits outside the organisation's policies, with that user as its Global Administrator. |
 
+### Threats
+
+| Check | Reads data from | Licence note | Recommendation |
+|---|---|---|---|
+| **No high or medium severity Defender alerts are left open**<br>`defender_alerts` | `security_alerts` |  | In the Microsoft Defender portal (Incidents & alerts), assign each open alert to someone, check what it names (for an account: recent sign-ins, inbox rules and MFA methods; for a device: what Defender found on it), then resolve it saying whether it was a real threat. Set up email notifications for new incidents (Settings > Microsoft Defender XDR > Email notifications) so they're seen the day they happen. The Security alerts report lists each alert. |
+
 ## Data sources (collectors)
 
 Each collector reads one area of a tenant and stores a snapshot. They run every night unless marked *on demand*.
@@ -164,7 +171,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `conditional_access` | Conditional Access | Conditional Access policies and the Security Defaults setting. | `Policy.Read.All` |
 | `connection` | Connection and permissions | Whether the app's permissions are granted in this tenant and it holds the Global Reader role. | `Application.Read.All`, `RoleManagement.Read.Directory` |
 | `deleted_items` | Deleted users and groups | Users and Microsoft 365 groups in the Entra ID recycle bin, and how many days are left to restore each before Microsoft deletes it for good. | `Directory.Read.All` |
-| `devices` | Devices | Devices registered or joined to Entra ID, which have a BitLocker recovery key saved, and Intune compliance, encryption and check-in for managed devices (needs Intune). | `Directory.Read.All`, `DeviceManagementManagedDevices.Read.All`, `BitLockerKey.ReadBasic.All` |
+| `devices` | Devices | Devices registered or joined to Entra ID, which have a BitLocker recovery key saved and which back up a local admin password with Windows LAPS, and Intune compliance, encryption and check-in for managed devices (needs Intune). | `Directory.Read.All`, `DeviceManagementManagedDevices.Read.All`, `BitLockerKey.ReadBasic.All`, `DeviceLocalCredential.ReadBasic.All` |
 | `directory_sync` | Directory sync | Whether accounts are synced from on-premises Active Directory, when directory and password hash sync last ran, and how each domain signs in and how often its passwords expire. | `Organization.Read.All`, `Directory.Read.All` |
 | `distribution_lists` | Distribution lists | Every distribution list, its owners and members, and how much mail it gets (needs Global Reader). | `Exchange.ManageAsApp` |
 | `domain_health` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each verified domain, checked in public DNS. | none |
@@ -183,6 +190,8 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `per_user_mfa` | Per-user MFA | The per-user MFA setting on each member, for tenants without Entra ID P1. | `Policy.Read.All` |
 | `risky_users` | Risky users | Accounts Entra ID Protection rates at risk or confirmed compromised, and those resolved in the last 90 days (needs Entra ID P2). | `IdentityRiskyUser.Read.All` |
 | `secure_score` | Secure Score | Current Secure Score, per-control scores and up to 90 days of daily history. | `SecurityEvents.Read.All` |
+| `security_alerts` | Security alerts | Microsoft Defender's alerts and incidents: those still open, and those resolved in the last 30 days. | `SecurityAlert.Read.All`, `SecurityIncident.Read.All` |
+| `service_health` | Service health | Microsoft 365 service status, outages and advisories affecting the tenant, and the message centre's posts about upcoming changes. | `ServiceHealth.Read.All`, `ServiceMessage.Read.All` |
 | `shared_files` | Shared files | Every file and folder in SharePoint and OneDrive shared with anyone, the whole organisation, people outside it, or given its own permissions. Needs the Sites.Read.All permission. | `Sites.Read.All` |
 | `sharepoint_storage` | SharePoint storage | What fills each site's storage: libraries, folders, large and old files, version history and recycle bins. Needs the Sites.Read.All permission. | `Sites.Read.All` |
 | `sharepoint_usage` | SharePoint and OneDrive usage | Every site and OneDrive with storage, activity and sharing link counts, from Microsoft's usage reports. | `Reports.Read.All` |
@@ -238,6 +247,8 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `onedrive` | OneDrive | Each person's OneDrive: storage, activity, sharing, and OneDrives of people who've left. | `shared_files`, `sharepoint_usage`, `users` |
 | `risky-users` | Risky users | Accounts Entra ID Protection rates at risk or confirmed compromised, and the risk resolved recently (needs Entra ID P2). | `risky_users`, `tenant_profile` |
 | `secure-score` | Secure Score trend | Secure Score over time, which controls changed, and where the points are. | `secure_score` |
+| `security-alerts` | Security alerts | What Microsoft Defender has flagged: open incidents and alerts, how severe, who is dealing with each, the accounts and devices they name, and what was resolved recently. | `security_alerts` |
+| `service-health` | Service health | Whether Microsoft 365 is working for this client: Microsoft's open outages and advisories, those resolved recently, and the message centre's upcoming changes, those needing action by a date first. | `service_health` |
 | `shared-files` | Shared files | Every file and folder shared with anyone, people outside, or the whole organisation. | `shared_files`, `sharepoint_usage` |
 | `shared-mailboxes` | Shared mailboxes | Shared, room and equipment mailboxes that can be signed in to, and who uses them. | `mailbox_usage`, `mailboxes`, `users` |
 | `sharepoint` | SharePoint sites | Storage and growth, inactive sites, and which sites are shared outside. | `sharepoint_usage` |
@@ -262,6 +273,7 @@ Every application permission the app requests (all read-only) and the collectors
 | `BitLockerKey.ReadBasic.All` | Microsoft Graph | Whether a device's BitLocker recovery key is saved (never the key) | `devices` |
 | `Channel.ReadBasic.All` | Microsoft Graph | Teams channels: standard, private and shared | `teams` |
 | `ChannelMember.Read.All` | Microsoft Graph | Who is in each private and shared channel, guests included | `teams` |
+| `DeviceLocalCredential.ReadBasic.All` | Microsoft Graph | Whether a computer's local admin password is backed up (never the password) | `devices` |
 | `DeviceManagementApps.Read.All` | Microsoft Graph | Intune app protection policies and managed apps | `intune_policies` |
 | `DeviceManagementConfiguration.Read.All` | Microsoft Graph | Intune configuration and compliance policies | `intune_policies` |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
@@ -275,7 +287,11 @@ Every application permission the app requests (all read-only) and the collectors
 | `ReportSettings.Read.All` | Microsoft Graph | Whether usage reports hide people's names | `m365_usage` |
 | `Reports.Read.All` | Microsoft Graph | Usage and MFA registration reports | `m365_usage`, `sharepoint_usage`, `teams` |
 | `RoleManagement.Read.Directory` | Microsoft Graph | Admin role holders and PIM | `admin_roles`, `connection` |
+| `SecurityAlert.Read.All` | Microsoft Graph | Microsoft Defender alerts | `security_alerts` |
 | `SecurityEvents.Read.All` | Microsoft Graph | Secure Score | `secure_score` |
+| `SecurityIncident.Read.All` | Microsoft Graph | Microsoft Defender incidents | `security_alerts` |
+| `ServiceHealth.Read.All` | Microsoft Graph | Microsoft 365 service health: outages and advisories | `service_health` |
+| `ServiceMessage.Read.All` | Microsoft Graph | Microsoft 365 message centre: upcoming changes | `service_health` |
 | `Sites.Read.All` | SharePoint Online | Who has access to each SharePoint site and list (SharePoint's own permission lists) | not used by a collector yet |
 | `SharePointTenantSettings.Read.All` | Microsoft Graph | SharePoint sharing settings | `tenant_policies` |
 | `Sites.Read.All` | Microsoft Graph | Which files are shared, and with whom (read-only) | `shared_files`, `sharepoint_storage`, `site_access` |

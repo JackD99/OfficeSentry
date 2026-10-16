@@ -303,7 +303,8 @@ def _send_context(t):
         "cloud": clouds.of(t),
         "today": datetime.now(UTC),
         "batch": permission_batch.CURRENT,
-        "new": [i for i in permission_batch.items(onboarding.CLIENT_WORDS) if i.permission in waiting],
+        # Every new permission it hasn't approved, from earlier batches too, not only this release's.
+        "new": permission_batch.items(onboarding.CLIENT_WORDS, only=waiting),
     }
 
 
