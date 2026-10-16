@@ -429,6 +429,8 @@ def staff(t: dict, rng: random.Random, now: datetime, mfa_share: float, joined_r
                 exchange=quiet,
                 teams=None if mail_only else quiet,
                 onedrive=None if inactive or mail_only else rng.choice([1, 3, 9, None]),
+                # Most people open a team site now and then (by index, so the other figures don't move).
+                sharepoint=None if inactive or mail_only else (2, 7, 20, None)[i % 4],
             )
         )
         if inactive:
