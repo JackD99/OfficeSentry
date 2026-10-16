@@ -9,7 +9,7 @@
     <span class="hint">{{ o.description }}</span></span></label>
 {%- endmacro %}
 {% block content %}
-<div class="crumbs"><a href="{{ url_for('reporting.index') }}">Month-end</a><span>/</span><a href="{{ url_for('reporting.plans') }}">Report plans</a></div>
+<div class="crumbs"><a href="{{ url_for('reporting.index') }}">Month-end</a><span>/</span><a href="{{ url_for('reporting.plans') }}">Report plans</a><span>/</span><span>{{ heading }}</span></div>
 <div class="page-head">
   <div><h1>{{ heading }}</h1>
     <div class="sub">One monthly report for every client you tick. Each gets its own scheduled email, kept in step with this plan.</div></div>

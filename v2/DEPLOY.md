@@ -87,6 +87,15 @@ the number of clients; a PDF's time is the rendering, which is why PDFs keep the
 a table. How long the night's collection takes depends on Microsoft's rate limits and each tenant's
 size, not on the server: see `OFFICESENTRY_WORKER_CONCURRENCY` below.
 
+**The night's collection** is set by how fast Microsoft answers, its limits and the size of each
+client. In a simulated night for 200 small clients (`scripts/month_end_dry_run.py`, with Microsoft's
+documented limits enforced as 429s and its random 429s and 503s thrown in), the worker made about
+58,000 requests, roughly 290 a client. About 1,100 of them were throttled, and every one was retried
+and recovered. Most of the throttling is on the sign-in log, under Microsoft's per-tenant limit on
+identity reports, so clients with many sign-ins take longest. Each run's page (a client's *Data
+collection*, then a data source) shows its requests, how many Microsoft throttled and how long it
+waited; if the night isn't finished by morning, raise `OFFICESENTRY_WORKER_CONCURRENCY`.
+
 ## First start
 
 Running Portainer, a NAS, Kubernetes, Azure, AWS or another cloud? The [deploy guides](docs/deploy/README.md)

@@ -55,6 +55,7 @@ from . import (
     system,
     tenant_admin,
     tenants,
+    timeline,
     upcoming,
     updates,
 )
@@ -396,6 +397,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(group_pages.bp)
     app.register_blueprint(site_pages.bp)
     app.register_blueprint(history.bp)
+    app.register_blueprint(timeline.bp)
     app.register_blueprint(saved_views.bp)
     app.register_blueprint(tenant_admin.bp)
     app.register_blueprint(onboarding.bp)

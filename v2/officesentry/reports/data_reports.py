@@ -472,12 +472,15 @@ def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             "addresses. The strictest one wins.",
             empty="No settings found.",
         )
+        others = any(not is_default_policy(p) for p in policies or [])
         for p in sorted(policies or [], key=lambda p: (not is_default_policy(p), str(p.get("Name") or ""))):
             on = p.get("AutoForwardingMode") == "On"
             controls.add(
                 [
                     f"Outbound spam policy: {p.get('Name')}",
-                    "Everyone else" if is_default_policy(p) else "Mailboxes it's assigned to",
+                    ("Everyone no other policy covers" if others else "Everyone")
+                    if is_default_policy(p)
+                    else "Mailboxes it's assigned to",
                     modes.get(p.get("AutoForwardingMode"), p.get("AutoForwardingMode")),
                 ],
                 # Allowing it for named mailboxes only is what the auto_forward_policy check recommends.
@@ -1234,7 +1237,9 @@ def domains(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                 (f"{h.dmarc_from}'s: {h.dmarc}" if h.dmarc_from else h.dmarc) or "None",
                 _mta_sts_text(h),
                 h.tls_rpt or ("None" if h.transport_checked else "Not checked"),
-                h.mx if h.sends_mail or not h.mx else "Null MX (accepts no mail)",
+                (h.mx or (dnscheck.UNKNOWN if "MX" in h.failed else "None"))
+                if h.sends_mail or not h.mx
+                else "Null MX (accepts no mail)",
             ]
         )
     report.sections = [overview, records]
