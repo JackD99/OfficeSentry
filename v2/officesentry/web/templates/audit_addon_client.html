@@ -14,7 +14,7 @@
     <div class="foot">{{ state.detail }}</div></div>
   <div class="tile"><div class="label">Last read</div>
     <div class="value small-value">{% if last_run %}{{ ts(last_run.finished_at or last_run.created_at) }}{% else %}Not yet{% endif %}</div>
-    <div class="foot">{% if last_run and last_run.status == 'failed' %}Failed: {{ last_run.error }}{% elif last_run %}Read every night with the rest of {{ tenant.name }}'s data.{% else %}Once the feed is on, every night.{% endif %}</div></div>
+    <div class="foot">{% if last_run and last_run.status == 'failed' %}Failed: {{ last_run.error }}{% elif last_run %}Read every night with the rest of {{ tenant.name|possessive }} data.{% else %}Once the feed is on, every night.{% endif %}</div></div>
   <div class="tile"><div class="label">Events kept</div>
     <div class="value">{{ '{:,}'.format(stored) }}</div>
     <div class="foot">Kept {{ retention }}.</div></div>
@@ -54,7 +54,7 @@
   <li class="{{ 'done' if confirmed else ('current' if sent else '') }}">
     <div class="step-title">The client approves</div>
     <div class="step-body">
-      {% if confirmed %}Confirmed {{ ts(row.consented_at) }}: Office Sentry signed in as the add-on and read {{ tenant.name }}'s feed settings.
+      {% if confirmed %}Confirmed {{ ts(row.consented_at) }}: Office Sentry signed in as the add-on and read {{ tenant.name|possessive }} feed settings.
       {% else %}
       A Global Administrator of {{ tenant.name }} opens the link, checks the one permission and presses <em>Accept</em>. Office Sentry then signs in as the add-on to confirm.
       {% if row and row.approved_at %}<p class="small">They came back from Microsoft saying they approved, {{ ts(row.approved_at) }}.</p>{% endif %}
@@ -69,7 +69,7 @@
     <div class="step-title">The feed starts</div>
     <div class="step-body">
       {% if started %}Started {{ ts(row.started_at) }}{% if row.started_by %}, as {{ row.started_by }} asked{% endif %}. Office Sentry reads the client's new audit records every night.
-      {% elif confirmed and not row.wanted_at %}
+      {% elif confirmed and not row.wanted_at and not row.stopped_at %}
       The client approved, but nobody here has asked for the add-on on {{ tenant.name }} yet. Switching it on asks Microsoft to start the feed.
       <form method="post" action="{{ url_for('audit_addon.switch_on', tenant_id=tenant.id) }}" class="step-action">{{ csrf() }}<button class="sm primary">Switch on</button></form>
       {% else %}
@@ -87,11 +87,14 @@
   <h2>Off</h2>
   <p>{{ row.stop_reason or 'Switched off.' }} <span class="muted small">{{ ts(row.stopped_at) }}{% if row.stopped_by %}, {{ row.stopped_by }}{% endif %}.</span></p>
   {% if row.check_error %}<p class="small">When stopping it: {{ row.check_error }}</p>{% endif %}
-  {% if pending %}<p class="small muted">{{ icon('refresh') }} Office Sentry is stopping the feed at Microsoft.</p>{% endif %}
+  {% if pending %}
+  <p class="small muted">{{ icon('refresh') }} Office Sentry is stopping the feed at Microsoft. Reload in a minute to switch it on again.</p>
+  {% else %}
   <form method="post" action="{{ url_for('audit_addon.switch_on', tenant_id=tenant.id) }}" class="step-action">{{ csrf() }}
     <button class="sm">Switch on again</button>
     <span class="small muted">If the client removed the app, send them the link again first.</span>
   </form>
+  {% endif %}
 </section>
 {% elif row and (row.wanted_at or row.started_at) %}
 <section class="card" id="off">

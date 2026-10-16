@@ -313,6 +313,8 @@ def _run_collector(
         state_history.record_finished(conn, run_id)
     except Exception:  # the history is a second copy, written in shadow: it must never fail a collection
         log.exception("Recording run %s in the state history failed", run_id)
+    if collector_cls.addon:
+        return status  # read as an add-on's own app, so it says nothing about the shared app's consent
     # Data came back, so consent exists even if it was granted outside Office Sentry's consent link.
     conn.execute(
         "UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?", (utcnow(), run["tenant_id"])

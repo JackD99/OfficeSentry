@@ -205,9 +205,10 @@
 {# The Reports tab's one report picker: every report the tenant has, grouped, with a search box. On
    laptops an "All reports" menu above the report (its area beside it), so the report has the page's whole
    width; a select on phones. The page puts it in a .report-layout above
-   <div class="report-main" id="report" tabindex="-1">. current: a detail report's key, 'review' or 'evidence'. #}
-{% macro _picker_href(tenant, e) %}{% if e.kind == 'review' %}{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}{% elif e.kind == 'evidence' %}{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}{% else %}{{ url_for('reports.data_report', tenant_id=tenant.id, key=e.key) }}{% endif %}{% endmacro %}
-{% macro report_picker(tenant, current) -%}
+   <div class="report-main" id="report" tabindex="-1">. current: a detail report's key, 'review' or 'evidence'.
+   on: the past day a detail report shows (?on=), kept when switching to another detail report. #}
+{% macro _picker_href(tenant, e, on) %}{% if e.kind == 'review' %}{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}{% elif e.kind == 'evidence' %}{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}{% else %}{{ url_for('reports.data_report', tenant_id=tenant.id, key=e.key, on=on) }}{% endif %}{% endmacro %}
+{% macro report_picker(tenant, current, on=None) -%}
 {% set staff = current_user.role != 'client' and can('reports.security', tenant.id) %}
 {% set areas = report_catalogue(tenant.id) %}
 {% set shown = ('data', 'review', 'evidence') %}
@@ -226,7 +227,7 @@
         <div class="report-group">
           <p class="picker-label" id="picker-{{ area.key }}">{{ area.title }}</p>
           <ul aria-labelledby="picker-{{ area.key }}">
-            {% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ _picker_href(tenant, e) }}" title="{{ e.description }}"{% if e.key == current %} aria-current="page"{% endif %}>{{ e.title }}</a></li>
+            {% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ _picker_href(tenant, e, on) }}" title="{{ e.description }}"{% if e.key == current %} aria-current="page"{% endif %}>{{ e.title }}</a></li>
             {% endfor %}
             {% if loop.first and staff %}<li data-name="custom reports report designs blocks"><a href="{{ url_for('designs.tenant_designs', tenant_id=tenant.id) }}" title="Your report designs, on this client's data"{% if current == 'designs' %} aria-current="page"{% endif %}>Custom reports</a></li>{% if current == 'designs' %}{% set here.area = area.title %}{% endif %}{% endif %}
           </ul>
@@ -243,6 +244,7 @@
   <select id="report-key" name="key">
     {% for area in areas %}{% set entries = [] %}{% for e in area.entries if e.kind in shown and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}<optgroup label="{{ area.title }}">{% for e in entries %}<option value="{{ e.key }}"{% if e.key == current %} selected{% endif %}>{{ e.title }}</option>{% endfor %}{% if loop.first and staff %}<option value="designs"{% if current == 'designs' %} selected{% endif %}>Custom reports</option>{% endif %}</optgroup>{% endif %}{% endfor %}
   </select>
+  {% if on %}<input type="hidden" name="on" value="{{ on }}">{% endif %}
   <noscript><button class="btn sm">Show</button></noscript>
 </form>
 {%- endmacro %}

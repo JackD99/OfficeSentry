@@ -213,6 +213,23 @@ def test_the_index_finds_what_a_scan_finds(app, db, two_tenants):
         assert not search(db, tenants, "nobody-here")[0]
 
 
+def test_every_matching_domain_and_names_that_look_like_an_address(app, db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, users=[dict(u, mail="dee@cafe.de") if u["id"] == "u1" else u for u in USERS])
+    tenant = store.get_tenant(db, alpha)
+    with app.test_request_context():
+        # Each of the client's domains that matches, not only the first.
+        domains = [h.title for h in search_tenant(db, tenant, ".com").hits if h.label == "Domain"]
+        assert domains == ["x.com", "parked.com", "x.onmicrosoft.com"]
+        # "cafe.de" could be the start of an IPv6 address, but it's found in an email address all the same.
+        assert ("Person", "Ann") in [(h.label, h.title) for h in search_tenant(db, tenant, "cafe.de").hits]
+        scanned = {q: _shown(search_tenant(db, tenant, q).hits) for q in (".com", "cafe.de", "203.0.113")}
+        assert search_index.refresh(db, tenant)
+        for q, hits in scanned.items():
+            groups, _ = search(db, [tenant], q)
+            assert _shown(groups[0].hits) == hits, q
+
+
 def test_an_index_behind_the_latest_collection_is_not_used(app, db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha, users=USERS)

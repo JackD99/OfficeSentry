@@ -274,7 +274,10 @@ def data_index(tenant_id: int):
         if not groups:
             abort(403)
         key = groups[0].reports[0][0]
-    return redirect(url_for("reports.data_report", tenant_id=t["id"], key=key))
+    # A past day (?on=) stays when switching reports; the report checks it.
+    return redirect(
+        url_for("reports.data_report", tenant_id=t["id"], key=key, on=request.args.get("on", "")[:10] or None)
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>")

@@ -121,7 +121,8 @@ def test_empty_history(client, db, two_tenants):
 
 def test_period_labels():
     assert issued.period_label("2026-10") == "October 2026"
-    assert issued.period_label("2026-W41") == "Week 41, 2026"
+    assert issued.period_label("2026-W41") == "Week of 5 Oct 2026"  # as the email names it
+    assert issued.period_label("2027-W53") == "2027-W53"  # 2027 has 52 weeks
     assert issued.period_label("2026-Q4") == "Q4 2026"
     assert issued.period_label(None) == ""
 

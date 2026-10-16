@@ -676,7 +676,7 @@ def admin_activity(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
     )
     if history is not None:
         # The activity history goes back further than the snapshot's 30 days once it has been kept a while.
-        events, cov = history
+        events, cov = adminactivity.with_snapshot(history, events), history[1]
         start = datetime.fromtimestamp(cov.detailed_from, UTC)
         span = (end - start).days
         if span > adminactivity.covered_days(window) + 1:
@@ -1996,7 +1996,9 @@ def detail_removed(conn, collector: str, run) -> bool:
 
 def _no_longer_held(conn, snap: TenantSnapshot, collectors, report: DataReport) -> None:
     """On a past day, say which data was collected by then but isn't held any more (sign-in detail, which
-    retention keeps for less time than the daily history), rather than that it was never collected."""
+    retention keeps for less time than the daily history, or anything older than the daily history keeps),
+    rather than that it was never collected."""
+    from .. import retention
 
     def held(collector: str) -> bool:
         run = snap.runs.get(collector)
@@ -2008,13 +2010,23 @@ def _no_longer_held(conn, snap: TenantSnapshot, collectors, report: DataReport) 
             ).fetchone()
         return not detail_removed(conn, collector, run)
 
-    gone = [REGISTRY[c].title for c in collectors if not held(c)]
+    gone = [c for c in collectors if not held(c)]
     if not gone:
         return
-    note = (
-        f"{' and '.join(gone)} from that day {verb(len(gone), 'is', 'are')} no longer held: the retention "
-        f"policy keeps {'it' if len(gone) == 1 else 'them'} for less time than the daily history."
-    )
+    notes = []
+    for why, these in (
+        ("the daily history doesn't go back that far", [c for c in gone if c not in retention.SIGNIN_COLLECTORS]),
+        (
+            "the retention policy keeps {} for less time than the daily history",
+            [c for c in gone if c in retention.SIGNIN_COLLECTORS],
+        ),
+    ):
+        if these:
+            notes.append(
+                f"{' and '.join(REGISTRY[c].title for c in these)} from that day {verb(len(these), 'is', 'are')} no "
+                f"longer held: {why.format('it' if len(these) == 1 else 'them')}."
+            )
+    note = " ".join(notes)
     if report.unavailable or not report.sections:
         report.unavailable = note
     else:

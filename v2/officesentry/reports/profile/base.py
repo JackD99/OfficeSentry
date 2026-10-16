@@ -165,12 +165,16 @@ class Person:
             if found is None:
                 self._admin_history = None
             else:
+                held = self.snap.objects("admin_activity", "admin_event")
                 mine = [
                     e
-                    for e in found[0]
+                    for e in adminactivity.with_snapshot(found, held)
                     if self.named(e.get("actor")) or any(self.named(t) for t in e.get("targets") or [])
                 ]
                 span = (self.end - datetime.fromtimestamp(found[1].detailed_from, UTC)).days
+                if held is not None:  # the snapshot's own window, where the history starts later
+                    window = (self.snap.objects("admin_activity", "audit_window") or [None])[0]
+                    span = max(span, adminactivity.covered_days(window))
                 self._admin_history = (
                     mine,
                     "the last 12 months" if span >= adminactivity.HISTORY_DAYS else f"the last {max(span, 1)} days",

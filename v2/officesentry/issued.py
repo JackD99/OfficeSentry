@@ -16,6 +16,7 @@ import calendar
 import hashlib
 import re
 from dataclasses import dataclass
+from datetime import date
 
 from .db import utcnow
 
@@ -86,7 +87,8 @@ def archive(
 
 
 def period_label(period: str | None) -> str:
-    """ "2026-10" -> "October 2026", "2026-W41" -> "Week 41, 2026", "2026-Q4" -> "Q4 2026"."""
+    """ "2026-10" -> "October 2026", "2026-W41" -> "Week of 5 Oct 2026" (as the email says), "2026-Q4" ->
+    "Q4 2026"."""
     m = re.fullmatch(r"(\d{4})-(?:(\d{2})|W(\d{2})|Q([1-4]))", period or "")
     if not m:
         return period or ""
@@ -94,7 +96,11 @@ def period_label(period: str | None) -> str:
     if month:
         return f"{calendar.month_name[int(month)]} {year}"
     if week:
-        return f"Week {int(week)}, {year}"
+        try:
+            monday = date.fromisocalendar(int(year), int(week), 1)
+        except ValueError:  # week 53 of a year that has 52
+            return period or ""
+        return f"Week of {monday.day} {monday:%b %Y}"
     return f"Q{quarter} {year}"
 
 
