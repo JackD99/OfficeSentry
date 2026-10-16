@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-71 checks, 42 data sources (collectors) and 51 detail reports.
+71 checks, 43 data sources (collectors) and 53 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -168,9 +168,10 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `app_sign_ins` | App sign-ins | When each enterprise app last signed in, for a person or on its own (needs Entra ID P1). | `AuditLog.Read.All` |
 | `auth_methods_policy` | Sign-in methods policy | Which sign-in methods the tenant allows and for whom, the registration campaign and system-preferred MFA. | `Policy.Read.All`, `Directory.Read.All` |
 | `auto_replies` | Automatic replies | Which mailboxes have an out-of-office reply on or scheduled, and who it goes to. | `MailboxSettings.Read` |
-| `conditional_access` | Conditional Access | Conditional Access policies and the Security Defaults setting. | `Policy.Read.All` |
+| `conditional_access` | Conditional Access | Conditional Access policies, their named locations and the Security Defaults setting. | `Policy.Read.All` |
 | `connection` | Connection and permissions | Whether the app's permissions are granted in this tenant and it holds the Global Reader role. | `Application.Read.All`, `RoleManagement.Read.Directory` |
 | `deleted_items` | Deleted users and groups | Users and Microsoft 365 groups in the Entra ID recycle bin, and how many days are left to restore each before Microsoft deletes it for good. | `Directory.Read.All` |
+| `detected_apps` | Installed apps | Every app and version Intune has found on managed devices, with how many devices have each. | `DeviceManagementManagedDevices.Read.All` |
 | `devices` | Devices | Devices registered or joined to Entra ID, which have a BitLocker recovery key saved and which back up a local admin password with Windows LAPS, and Intune compliance, encryption and check-in for managed devices (needs Intune). | `Directory.Read.All`, `DeviceManagementManagedDevices.Read.All`, `BitLockerKey.ReadBasic.All`, `DeviceLocalCredential.ReadBasic.All` |
 | `directory_sync` | Directory sync | Whether accounts are synced from on-premises Active Directory, when directory and password hash sync last ran, and how each domain signs in and how often its passwords expire. | `Organization.Read.All`, `Directory.Read.All` |
 | `distribution_lists` | Distribution lists | Every distribution list, its owners and members, and how much mail it gets (needs Global Reader). | `Exchange.ManageAsApp` |
@@ -199,7 +200,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `site_access` | Site access | Who owns, administers and can reach each SharePoint site: group owners and site admins, guests, what the default library grants, and sites open to everyone. Needs the Sites.Read.All permission. | `Sites.Read.All` |
 | `site_permissions` | Site permissions | Permission levels on each SharePoint site, SharePoint groups and their members, and lists, libraries and subsites with permissions of their own. Needs Sites.Read.All on SharePoint (not Graph). | `SharePoint Sites.Read.All` |
 | `teams` | Teams | Each team's channels, the guests and people from other organisations in private and shared channels, the apps added to each team, and when each team was last used. | `Directory.Read.All`, `Reports.Read.All`, `Channel.ReadBasic.All`, `ChannelMember.Read.All`, `TeamsAppInstallation.ReadForTeam.All` |
-| `tenant_policies` | Sharing and consent settings | Guest invitations, user consent to apps, default user permissions, admin consent requests, and SharePoint external sharing. | `Policy.Read.All`, `SharePointTenantSettings.Read.All` |
+| `tenant_policies` | Sharing and consent settings | Guest invitations, user consent to apps, default user permissions, admin consent requests, cross-tenant access settings, and SharePoint external sharing. | `Policy.Read.All`, `SharePointTenantSettings.Read.All` |
 | `tenant_profile` | Tenant profile and licences | Organization details, verified domains, subscriptions with renewal dates and licence capabilities. | `Organization.Read.All`, `Directory.Read.All` |
 | `user_details` | Departments and managers | Each account's department, job title, office, company and manager. | `User.Read.All` |
 | `users` | Users | Members and guests with licences (and whether each comes directly or from a group), password age and last sign-in (sign-in needs Entra ID P1). | `User.Read.All`, `AuditLog.Read.All` |
@@ -230,6 +231,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `hybrid` | Hybrid identity | Directory sync from on-premises AD, password hash sync, how each domain signs in, and admin accounts synced from AD. | `admin_roles`, `directory_sync`, `users` |
 | `inactive` | Inactive accounts | Members and guests who haven't signed in for a long time, and old invitations. | `admin_roles`, `mailbox_usage`, `mailboxes`, `tenant_profile`, `users` |
 | `inbox-rules` | Inbox rules | Rules that forward, delete or hide mail, and every rule in every mailbox. | `inbox_rules`, `mailboxes` |
+| `installed-apps` | Installed apps | Every app Intune has found on managed devices and how many devices have it, remote access tools first, and each app's versions. | `detected_apps` |
 | `intune-policies` | Intune policies | Which platforms have a compliance policy, what each compliance policy requires, configuration profiles and Windows update rings, endpoint security policies and app protection for phones, with whom each applies to. | `devices`, `group_nesting`, `groups`, `intune_policies` |
 | `legacy-auth` | Legacy sign-ins | Sign-ins with SMTP AUTH, IMAP, POP and other protocols that can't do MFA, and which mailboxes still allow them. | `legacy_signins`, `mailboxes` |
 | `licence-changes` | Licence changes | Who was given or lost a licence and when, who made the change, and licences bought and assigned month by month, from Office Sentry's own history. | `tenant_profile`, `users` |
@@ -259,6 +261,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `subscriptions` | Licences and subscriptions | Every subscription with licences bought, assigned and available, its cost and renewal date, trials and lapsing subscriptions, and who has which licence, directly or by group. | `groups`, `tenant_profile`, `users` |
 | `teams` | Teams channels, guests and apps | Each team's private and shared channels and who is in them, guests and people from other organisations, the apps added to each team, and teams nobody has used lately. | `teams` |
 | `tenant-settings` | Tenant settings | What users and guests can do by default, and whether users can ask an admin to approve apps. | `tenant_policies` |
+| `trusted-access` | Trusted organisations and locations | What other organisations' people can do here and whose MFA the tenant accepts (cross-tenant access), and the named locations Conditional Access trusts or blocks, with the policies using each. | `conditional_access`, `tenant_policies` |
 | `unused-apps` | Unused apps | Every app from outside Microsoft with when it last signed in, and those unused for 90 days that still hold permissions. | `app_consents`, `app_sign_ins` |
 | `usage` | Microsoft 365 usage | Who actually uses email, Teams, OneDrive, SharePoint and the Office apps, and when each person was last active. | `m365_usage`, `users` |
 
@@ -276,7 +279,7 @@ Every application permission the app requests (all read-only) and the collectors
 | `DeviceLocalCredential.ReadBasic.All` | Microsoft Graph | Whether a computer's local admin password is backed up (never the password) | `devices` |
 | `DeviceManagementApps.Read.All` | Microsoft Graph | Intune app protection policies and managed apps | `intune_policies` |
 | `DeviceManagementConfiguration.Read.All` | Microsoft Graph | Intune configuration and compliance policies | `intune_policies` |
-| `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
+| `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `detected_apps`, `devices` |
 | `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `admin_units`, `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `group_nesting`, `groups`, `teams`, `tenant_profile` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `distribution_lists`, `mail_flow`, `mail_protection`, `mailbox_usage`, `mailboxes`, `mobile_devices` |
 | `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | `risky_users` |

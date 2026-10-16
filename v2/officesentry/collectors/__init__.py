@@ -19,6 +19,7 @@ from . import security_alerts  # noqa: F401
 from . import domains  # noqa: F401
 from . import devices  # noqa: F401
 from . import intune_policies  # noqa: F401  (its report counts the devices snapshot by platform)
+from . import detected_apps  # noqa: F401
 from . import directory_sync  # noqa: F401
 from . import sharepoint  # noqa: F401  (shared files reuse the users and tenant profile snapshots)
 from . import sharepoint_storage  # noqa: F401

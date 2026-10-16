@@ -23,6 +23,7 @@ from tests import intunedata as idata
 from tests import licencedata as ld
 from tests import securitydata as sec
 from tests import tenantsettingsdata as tsd
+from tests import trustdata as trust
 from tests.sharepoint_data import mock_sharepoint
 from tests.teamsdata import mock_teams
 from tests.test_collectors import SKUS, USERS
@@ -213,6 +214,10 @@ def mock_tenant(
     recovery_keys=None,
     laps=None,
     security_kw=None,
+    locations=None,
+    cross_tenant=None,
+    partners=None,
+    detected_apps=None,
     **phase4,
 ):
     paged(rsps, f"{V1}/organization", [gd.ORGANIZATION])
@@ -223,6 +228,11 @@ def mock_tenant(
     paged(rsps, f"{V1}/roleManagement/directory/roleEligibilitySchedules", gd.ROLE_ELIGIBILITY)
     rsps.get(f"{V1}/policies/identitySecurityDefaultsEnforcementPolicy", json={"isEnabled": defaults})
     paged(rsps, f"{V1}/identity/conditionalAccess/policies", [gd.CA_MFA_ALL, gd.CA_REPORT_ONLY] if ca is None else ca)
+    paged(
+        rsps,
+        f"{V1}/identity/conditionalAccess/namedLocations",
+        trust.NAMED_LOCATIONS if locations is None else locations,
+    )
     paged(
         rsps,
         f"{V1}/reports/authenticationMethods/userRegistrationDetails",
@@ -257,6 +267,7 @@ def mock_tenant(
     )
     paged(rsps, f"{V1}/devices", dd.ENTRA_DEVICES)
     paged(rsps, f"{V1}/deviceManagement/managedDevices", dd.MANAGED_DEVICES)
+    paged(rsps, f"{V1}/deviceManagement/detectedApps", trust.DETECTED_APPS if detected_apps is None else detected_apps)
     paged(
         rsps,
         f"{V1}/informationProtection/bitlocker/recoveryKeys",
@@ -305,6 +316,11 @@ def mock_tenant(
     paged(rsps, f"{BETA}/organization", [gd.ORGANIZATION])
     paged(rsps, f"{V1}/domains", hd.DOMAINS)
     rsps.get(f"{V1}/policies/adminConsentRequestPolicy", json=tsd.ADMIN_CONSENT_POLICY)
+    rsps.get(
+        f"{V1}/policies/crossTenantAccessPolicy/default",
+        json=trust.CROSS_TENANT_DEFAULT if cross_tenant is None else cross_tenant,
+    )
+    paged(rsps, f"{V1}/policies/crossTenantAccessPolicy/partners", trust.PARTNERS if partners is None else partners)
     paged(rsps, f"{V1}/auditLogs/directoryAudits", ad.DIRECTORY_AUDITS if audits is None else audits)
     # The whole sign-in log, legacy clients included: the legacy sign-in collector reads them from the stored
     # log once it covers 30 days (the /v1.0 query above is its fallback until then).

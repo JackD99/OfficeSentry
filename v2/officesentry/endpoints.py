@@ -231,6 +231,9 @@ GRAPH: tuple[Endpoint, ...] = (
         ("directory",),
         fallback="Needs Entra ID P1; security defaults are read instead",
     ),
+    Endpoint("/identity/conditionalAccess/namedLocations", V1, "Policy.Read.All", ("directory",)),
+    Endpoint("/policies/crossTenantAccessPolicy/default", V1, "Policy.Read.All", ("directory",)),
+    Endpoint("/policies/crossTenantAccessPolicy/partners", V1, "Policy.Read.All", ("directory",)),
     Endpoint("/admin/sharepoint/settings", V1, "SharePointTenantSettings.Read.All"),
     # Sign-in and audit logs, and the MFA registration report: the identity and access reports limits.
     Endpoint(
@@ -359,6 +362,13 @@ GRAPH: tuple[Endpoint, ...] = (
     ),
     Endpoint(
         "/deviceManagement/managedDevices",
+        V1,
+        "DeviceManagementManagedDevices.Read.All",
+        ("intune",),
+        fallback="Needs Intune; shown as unavailable without it",
+    ),
+    Endpoint(
+        "/deviceManagement/detectedApps",
         V1,
         "DeviceManagementManagedDevices.Read.All",
         ("intune",),

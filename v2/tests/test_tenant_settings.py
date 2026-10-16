@@ -14,6 +14,7 @@ from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
 from tests import graphdata as gd
 from tests import tenantsettingsdata as tsd
+from tests import trustdata as trust
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.stored import unpack
@@ -56,6 +57,8 @@ def test_collects_settings_and_admin_consent_policy(db, two_tenants, factory):
     responses.get(f"{V1}/policies/authorizationPolicy", json=tsd.OPEN_POLICY)
     responses.get(f"{V1}/policies/adminConsentRequestPolicy", json=tsd.ADMIN_CONSENT_ON)
     responses.get(f"{V1}/admin/sharepoint/settings", json=gd.SHAREPOINT_SETTINGS)
+    responses.get(f"{V1}/policies/crossTenantAccessPolicy/default", json=trust.CROSS_TENANT_DEFAULT)
+    responses.get(f"{V1}/policies/crossTenantAccessPolicy/partners", json={"value": trust.PARTNERS})
     assert _run(db, alpha, "tenant_policies", factory)[1] == "succeeded"
     snap = TenantSnapshot(db, store.get_tenant(db, alpha))
     policy = snap.objects("tenant_policies", "authorization_policy")[0]

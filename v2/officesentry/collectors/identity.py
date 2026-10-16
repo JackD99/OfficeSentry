@@ -250,7 +250,7 @@ def _eligible_members(ctx: RunContext, group_ids: list[str]) -> tuple[dict[str, 
 class ConditionalAccess(Collector):
     key = "conditional_access"
     title = "Conditional Access"
-    description = "Conditional Access policies and the Security Defaults setting."
+    description = "Conditional Access policies, their named locations and the Security Defaults setting."
     permissions = ("Policy.Read.All",)
 
     def collect(self, ctx: RunContext) -> None:
@@ -262,6 +262,7 @@ class ConditionalAccess(Collector):
         if ctx.capabilities.get("entra_p1") is False:
             ctx.log("Tenant has no Entra ID P1; Conditional Access is not available")
             ctx.objects("ca_policy", [])
+            ctx.objects("named_location_status", [("status", {"state": "unavailable"})])
             ctx.metric("ca.policies_enabled", 0)
             return
         try:
@@ -276,6 +277,40 @@ class ConditionalAccess(Collector):
         ctx.metric(
             "ca.policies_report_only", sum(p.get("state") == "enabledForReportingButNotEnforced" for p in policies)
         )
+        try:
+            locations = ctx.paged(ctx.graph.get_all("/identity/conditionalAccess/namedLocations"))
+        except GraphError as exc:
+            ctx.warn(f"Named locations weren't readable: {exc.message}")
+            ctx.objects("named_location_status", [("status", {"state": "failed"})])
+            return
+        ctx.objects(
+            "named_location",
+            [(loc["id"], named_location(loc)) for loc in locations if isinstance(loc, dict) and loc.get("id")],
+        )
+        ctx.objects("named_location_status", [("status", {"state": "read"})])
+
+
+def named_location(loc: dict) -> dict:
+    """A named location as the Trusted organisations and locations report shows it: its IP ranges or
+    countries, and whether it's marked trusted."""
+    kind = (loc.get("@odata.type") or "").rsplit(".", 1)[-1]
+    out = {
+        "name": loc.get("displayName"),
+        "kind": "countries" if kind == "countryNamedLocation" else "ip",
+        "created": loc.get("createdDateTime"),
+        "modified": loc.get("modifiedDateTime"),
+    }
+    if out["kind"] == "ip":
+        out["trusted"] = loc.get("isTrusted") is True
+        out["ranges"] = [
+            r["cidrAddress"] for r in loc.get("ipRanges") or [] if isinstance(r, dict) and r.get("cidrAddress")
+        ]
+    else:
+        out["trusted"] = False  # only IP ranges can be marked trusted
+        out["countries"] = [c for c in loc.get("countriesAndRegions") or [] if isinstance(c, str)]
+        out["unknown"] = loc.get("includeUnknownCountriesAndRegions") is True
+        out["lookup"] = loc.get("countryLookupMethod")
+    return out
 
 
 def _policy_group_ids(policies: list[dict]) -> list[str]:

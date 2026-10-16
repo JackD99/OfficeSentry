@@ -14,6 +14,7 @@ from . import (  # noqa: F401
     group_page,
     group_structure,
     identity_reports,
+    installed_apps,
     intune_policies,
     licence_changes,
     mail_compliance,
@@ -34,6 +35,7 @@ from . import (  # noqa: F401
     site_permissions,
     subscriptions,
     teams,
+    trusted_access,
     unused_apps,
     usage_reports,
 )
