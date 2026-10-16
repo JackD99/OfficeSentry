@@ -59,6 +59,7 @@ def test_every_tenant_page_opens_one_tab(client, db, seeded):
         f"/tenants/{alpha}/projects": ("Findings", None),
         f"/tenants/{alpha}/changes": ("Changes", "What changed"),
         f"/tenants/{alpha}/activity": ("Changes", "Activity history"),
+        f"/tenants/{alpha}/timeline": ("Changes", "Timeline"),
         f"/tenants/{alpha}/data/mailboxes": ("Reports", None),
         f"/tenants/{alpha}/evidence": ("Reports", None),
         f"/tenants/{alpha}/users": ("Users", "People"),
