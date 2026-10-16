@@ -39,6 +39,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 from . import alerts, issued, mailer, schedule, store, tasks, tenant_groups, upcoming
 from .checks import RULES
 from .db import utcnow
+from .formatting import money
 from .mailer import Email, MailError
 from .reports import (
     branding,
@@ -694,6 +695,12 @@ def build_report_email(
     failing = review.failing
     stale = any(f.stale for f in review.freshness)
     verdict = summary.monthly(review).verdict
+    # The account manager's words for the month, and their own recommendations, lead as they do in the PDF.
+    me = context["month_end"]
+    commentary = [p.strip() for p in (me["commentary"] or "").split("\n\n") if p.strip()]
+    planned = [a for a in me["actions"] if a["status"] != "done"]
+    # Severities by check, as the attached report counts them (not the accounts each one affects).
+    by_check = {s: sum(1 for r in failing if r.severity == s) for s in summary.SEVERITIES}
     subject = (
         fill_placeholders(_field(schedule, "subject", "") or "", tenant["name"], label).strip()
         or f"{tenant['name']} security report · {label}"
@@ -710,6 +717,10 @@ def build_report_email(
         label=label,
         failing=failing[:6],
         more=max(0, len(failing) - 6),
+        by_check=by_check,
+        commentary=commentary,
+        planned=planned[:6],
+        more_planned=max(0, len(planned) - 6),
         files=files,
         stale=stale,
         message=message,
@@ -722,18 +733,31 @@ def build_report_email(
     if message:
         lines += [message, ""]
     # The answer first, as the HTML has it.
-    lines += [f"{verdict.label}: {verdict.headline}", ""]
+    lines += [f"{verdict.label}: {verdict.headline}"] + ([verdict.detail] if verdict.detail else []) + [""]
+    if commentary:
+        lines += [f"From {msp}:"] + [f"{p}" for p in commentary] + [""]
     if stale:
-        lines += ["Some of this tenant's data is more than 36 hours old, so a few figures may be out of date.", ""]
+        lines += [
+            "Some of your organisation's data is more than 36 hours old, so a few figures may be out of date.",
+            "",
+        ]
     for k in review.kpis:
         if k.value is None:
             continue
-        value = f"{review.currency} {k.value:,.2f}" if k.unit == "currency" else f"{k.value:g}{k.unit}"
-        change = f" ({k.delta:+g} in 4 weeks)" if k.delta else ""
+        value = money(k.value, review.currency, 2) if k.unit == "currency" else f"{k.value:g}{k.unit}"
+        change = f" ({k.delta:+g}{' pts' if k.unit == '%' else ''} in 4 weeks)" if k.delta else ""
         lines.append(f"  {k.label}: {value}{change}")
-    lines += ["", f"Needs attention: {plural(len(failing), 'check')}"]
-    for r in failing[:6]:
-        lines.append(f"  [{(r.severity or 'info').upper()}] {r.summary.rstrip('.')}. {r.action}.")
+    if planned:
+        lines += ["", "What we recommend next:"]
+        for a in planned[:6]:
+            target = f" (target: {a['target_label']})" if a["target_label"] else ""
+            detail = f" {a['detail'].rstrip('.')}." if a["detail"] else ""
+            lines.append(f"  - {a['title'].rstrip('.')}.{detail} {a['status_label']}{target}.")
+    breakdown = ", ".join(f"{n} {s}" for s, n in by_check.items() if n)
+    lines += ["", f"Needs attention: {plural(len(failing), 'check')}" + (f" ({breakdown})" if breakdown else "")]
+    if not planned:
+        for r in failing[:6]:
+            lines.append(f"  [{(r.severity or 'info').upper()}] {r.summary.rstrip('.')}. {r.action}.")
     if review.new_count or review.resolved:
         lines.append(f"New: {review.new_count} · Fixed: {len(review.resolved)}")
     if files:

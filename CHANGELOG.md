@@ -17,6 +17,33 @@ Yes, applied on start as usual, after a copy of the database is made: migration 
 each approved month-end report's commentary, recommendations and notes as the client was given them. Months
 approved before the update show the month as it is now, as before, until they're issued again.
 
+### Added
+
+- **The sign-in page says who to ask.** Under the sign-in card, "Trouble signing in? Contact Harbour IT at
+  help@... or 0161 ...", from the Branding page's support details, else the contact line the reports carry.
+
+### Changed
+
+- **A client's home page leads with where they stand**: the month's verdict, the account manager's note once
+  the month is approved, and buttons for the monthly review, its PDF and the two-page summary. Under it, the
+  MSP's own "What we recommend next" with each one's status and target, else what needs attention, led by
+  what was found ("1 admin without MFA") rather than the check's goal.
+- **The report email carries what the attached review does**: the verdict, the account manager's note ("From
+  Harbour IT") and their recommendations (else the top failing checks), in the HTML and the plain text.
+- **The verdict names the most urgent item** under it ("Most urgent: 1 admin without MFA"), on the review's
+  cover, report designs, the client's home page and the email.
+- **The two-page summary is two pages.** The summary PDF's cover is a band on page one, without a contents
+  list, so it's two pages with the account manager's note and recommendations, not three or four.
+- **A quarterly review compares with the start of the quarter.** A design with the quarter's blocks says
+  "Compared with 1 August", and its summary, key figures and What changed run from then, not from four weeks
+  ago.
+- **Check advice reads right to the client too.** "Review each app with the client", "the client's data" and
+  "Waiting for the client to approve" no longer reach a client's report, and admin MFA's advice no longer says
+  "each listed admin" where nothing is listed.
+- Charts of findings found and fixed name the first month and each January in full ("May 2026"), admin
+  activity in What changed gives dates in words ("6 Oct 2026"), and a quarterly review's Coming up shows
+  "Now" for what needs attention now.
+
 ### Fixed
 
 - [v2/DEPLOY.md](v2/DEPLOY.md), *Running on Windows without Docker*: updating no longer deletes the virtual
@@ -47,21 +74,13 @@ approved before the update show the month as it is now, as before, until they're
   which reached the file's name, or for year 0000, which broke the download off.
 - The **Activity log** download says in its last row when it holds only the newest 100,000 rows, and the
   log's user filter finds someone whatever case their name is typed in.
-- **Month-end reporting** never approves a month with nothing to send. Approving a client nothing had been
-  collected for emailed a blank report, and a plan whose only report was a deleted design was marked Approved
-  with nothing sent. Both are now refused with the reason, the queue has no tick box for them and flags "No
-  report to send", the Report plans page marks a plan with no reports, and deleting a design that was a plan's
-  only report says so. What a reviewer left out of a deleted design no longer leaves blocks out of the next one.
-- **Paused clients get no email.** Send now, Retry and Month-end's Send again all emailed a paused client, its
-  Emails page said "Due now" for good, and resuming it sent the report it had missed straight away. Its
-  schedules now say "Client paused", nothing can be sent by hand, and resuming waits for the next send time.
-- **Saving a report plan changes its archived clients too.** They kept the plan's old settings, so a restored
-  client could go back to sending without approval after the plan was changed to wait for it.
-- **A month-end plan's email is changed on its plan.** Editing or deleting it on the client's Emails page left
-  the month waiting for an email that no longer existed; the page now points to the plan, and the email
-  preview no longer offers Send now for a plan that sends on approval.
-- **"New critical since the last report"** on the month-end queue counted back months for clients that also
-  get weekly or quarterly reports. It now counts from the last report the client was sent.
+- **A client's home page showed checks the month-end reviewer had left out of their copy.** It's now built
+  from the client's copy of the month, as their report, PDFs and email are.
+- **The email and the home page counted affected accounts as checks** ("46 checks need attention (1 critical,
+  30 high, 69 medium, 63 low findings)" beside a report saying 14 high). They count checks, as the report does.
+- In PDFs, the found-and-fixed chart's "Fixed" key was cut off at the right edge.
+- A full review whose month has commentary no longer runs its cover's contents list under the footer: the
+  account manager's note opens the page after the cover.
 
 ### Security
 

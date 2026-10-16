@@ -33,7 +33,7 @@ def _setting(snap: TenantSnapshot, key: str) -> tuple[dict | None, str]:
     "Users can't create new tenants",
     "Tenant settings",
     'Set "Restrict non-admin users from creating tenants" to Yes (Entra admin center > Users > User '
-    "settings). A tenant a user creates sits outside the client's policies, with that user as its Global "
+    "settings). A tenant a user creates sits outside the organisation's policies, with that user as its Global "
     "Administrator.",
 )
 def tenant_creation(snap: TenantSnapshot, now: datetime):
@@ -44,7 +44,7 @@ def tenant_creation(snap: TenantSnapshot, now: datetime):
         return (
             "fail",
             "Any user can create a new Entra ID tenant",
-            [Finding("low", "Tenant", "Users can create tenants outside the client's control")],
+            [Finding("low", "Tenant", "Users can create tenants outside the organisation's control")],
         )
     return ("pass", "Only admins can create tenants", [])
 
@@ -111,7 +111,11 @@ def email_verified_join(snap: TenantSnapshot, now: datetime):
         return (
             "fail",
             "People can join by verifying an email address",
-            [Finding("low", "Tenant", "Anyone with a mailbox on one of the client's domains can create an account")],
+            [
+                Finding(
+                    "low", "Tenant", "Anyone with a mailbox on one of the organisation's domains can create an account"
+                )
+            ],
         )
     return ("pass", "Nobody can join just by verifying an email address", [])
 

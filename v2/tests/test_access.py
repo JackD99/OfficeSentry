@@ -49,7 +49,7 @@ def test_client_sees_only_granted_tenant(client, db, two_tenants):
     login(client, "client")
     page = client.get("/").get_data(as_text=True)
     assert "Alpha Ltd" in page and "Bravo Inc" not in page
-    assert "Monthly review" in page  # clients get the report home, not the collection dashboard
+    assert "Open your monthly review" in page  # clients get the report home, not the collection dashboard
     assert client.get(f"/tenants/{alpha}").status_code == 302
     assert client.get(f"/tenants/{bravo}").status_code == 404
     run_id = store.enqueue_run(db, alpha, "users")
