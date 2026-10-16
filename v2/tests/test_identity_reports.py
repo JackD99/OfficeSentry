@@ -326,7 +326,7 @@ def test_inactive_never_signed_in_wording(db, two_tenants):
     new = dict(CARL, id="u7", userPrincipalName="new@x.com", createdDateTime="2026-08-01T00:00:00Z", signInActivity={})
     seed_tenant(db, alpha, users=USERS + [new])
     rows = sections(build(db, store.get_tenant(db, alpha), "inactive", NOW))["Inactive members"].rows
-    assert rows[0][1] == "Never signed in (created 62 days ago)" and rows[0][2] == "Never"
+    assert rows[0][1] == "Never signed in" and rows[0][2] == "Never" and rows[0][3] == 62
 
 
 def test_inactive_without_p1_lists_only_what_it_can(db, free_tenant):
@@ -363,7 +363,7 @@ def test_secure_score_trend_and_control_changes(db, p1_tenant):
     ]
     assert [r[0] for r in s["Month by month"].rows] == ["October 2026 (so far)", "September 2026", "August 2026"]
     f = figures(report)
-    assert f["Secure Score"] == "42%" and f["Change in 30 days"] == "+7%" and f["Points available"] == "4"
+    assert f["Secure Score"] == "42%" and f["Change in 30 days"] == "+7 points" and f["Points available"] == "4"
     assert "<svg" in report.chart
 
 

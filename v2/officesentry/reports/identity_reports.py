@@ -504,7 +504,7 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     if p2 is False:
         report.notes.append(
             "PIM (admins activating a role only when they need it) needs Entra ID P2, which this "
-            "tenant doesn't have, so every role shown is permanent."
+            "tenant doesn't have, so admins hold their roles all the time."
         )
     if not any(u.get("signInActivityAvailable") for u in users.values()):
         report.notes.append(f"Last sign-in dates need {P1}, so inactive admins aren't checked.")
@@ -905,7 +905,7 @@ def _inactive_for(user: dict, now: datetime) -> tuple[str, int | None]:
     if last is None:
         created = _parse(user.get("createdDateTime"))
         days = (now - created).days if created else None
-        return (f"Never signed in (created {days} days ago)" if created else "Never signed in"), days
+        return "Never signed in", days
     days = (now - last).days
     if days >= 365:
         bucket = "Over a year"
@@ -1232,7 +1232,7 @@ def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
             return Highlight(label, "Not enough history", "Builds up as Office Sentry collects")
         return Highlight(
             label,
-            f"{delta:+g}%",
+            f"{delta:+g} points",
             f"Since {_day(datetime.combine(since, datetime.min.time()))}",
             None if not delta else ("ok" if delta > 0 else "bad"),
             Rows(months.title),

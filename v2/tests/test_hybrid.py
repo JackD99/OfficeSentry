@@ -232,10 +232,19 @@ def test_hybrid_report(db, two_tenants, hybrid):
     assert report.unavailable is None
     sections = {s.title: s for s in report.sections}
     assert list(sections) == ["Sync status", "Domains", "Synced admin accounts", "Accounts by source"]
-    status = dict(sections["Sync status"].rows)
-    assert status["Directory sync"] == "On" and status["Federated domains"] == "x.co.uk"
-    assert status["Last directory sync"].endswith("UTC (less than an hour ago)")
+    status = {r[0]: r[1:] for r in sections["Sync status"].rows}
+    assert status["Directory sync"][0] == "On" and status["Federated domains"][0] == "x.co.uk"
+    # The time has its own "Last ..." column, which What changed ignores, so a running sync isn't a change.
+    assert status["Directory sync runs"][0] == "Running"
+    assert status["Directory sync runs"][1].endswith("(less than an hour ago)")
     assert not sections["Sync status"].flagged
+    figures = {t.label: (t.value, t.tone) for t in report.tiles}
+    assert figures == {
+        "Directory sync": ("Running", "ok"),
+        "Synced accounts": (4, None),
+        "Synced admins": (2, "bad"),
+        "Federated domains": (1, None),
+    }
     domains = sections["Domains"]
     assert [r[0] for r in domains.rows] == ["x.com", "x.co.uk", "x.onmicrosoft.com"]  # default first
     assert dict(zip(domains.columns, domains.rows[1], strict=True))["Sign-in"] == "Federated"
@@ -253,8 +262,9 @@ def test_hybrid_report_flags_stale_sync(db, two_tenants, factory):
     _collect(db, alpha, factory, _org(last_sync=30, password_sync=None))
     sync = data_reports.build(db, store.get_tenant(db, alpha), "hybrid").sections[0]
     flags = {row[0]: flag for row, flag in zip(sync.rows, sync.flags, strict=True)}
-    assert flags["Last directory sync"] == "critical" and flags["Last password hash sync"] == "medium"
-    assert dict(sync.rows)["Last password hash sync"] == "Never"
+    assert flags["Directory sync runs"] == "critical" and flags["Password hash sync"] == "medium"
+    status = {r[0]: r[1:] for r in sync.rows}
+    assert status["Directory sync runs"][0] == "Stopped" and status["Password hash sync"] == ["No record", "Never"]
 
 
 def test_hybrid_report_cloud_only(db, two_tenants):
@@ -264,7 +274,7 @@ def test_hybrid_report_cloud_only(db, two_tenants):
     sections = {s.title: s for s in report.sections}
     assert list(sections) == ["Sync status", "Domains", "Accounts by source"]
     assert sections["Sync status"].intro.startswith("Cloud-only tenant")
-    assert dict(sections["Sync status"].rows)["Directory sync"] == "Never turned on"
+    assert sections["Sync status"].rows[0][:2] == ["Directory sync", "Never turned on"]
     assert sections["Accounts by source"].rows[-1] == ["All accounts", 0, 3, 3]
 
 
@@ -273,7 +283,7 @@ def test_sync_turned_off(db, two_tenants, factory):
     _collect(db, alpha, factory, {**hd.ORGANIZATION, "onPremisesSyncEnabled": False})
     assert _results(db, alpha)["directory_sync_running"].summary.startswith("Cloud-only tenant")
     sync = data_reports.build(db, store.get_tenant(db, alpha), "hybrid").sections[0]
-    assert dict(sync.rows)["Directory sync"] == "Turned off" and "was turned off" in sync.intro
+    assert sync.rows[0][:2] == ["Directory sync", "Turned off"] and "was turned off" in sync.intro
 
 
 def test_hybrid_report_without_data(db, two_tenants):
