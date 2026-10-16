@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 
 import pytest
 
-from officesentry import delivery, month_end, store
+from officesentry import delivery, month_end, roles, store
 from officesentry.reports import designs
 from officesentry.reports.data_reports import REPORTS
 from tests.conftest import login, make_user
@@ -340,10 +341,44 @@ def test_tenant_reports_tab_lists_designs(client, db, two_tenants):
     _staff(client, db)
     page = _text(client.get(f"/tenants/{alpha}/designs"))
     assert "No custom reports yet" in page and "New custom report" in page and "Report designs" not in page
-    did = designs.create(db, "Board pack", "test", designs.STARTERS["executive"][2])
+    did = designs.create(db, "Board pack", "test", designs.STARTERS["executive"][2], "For the board")
     page = _text(client.get(f"/tenants/{alpha}/designs"))
-    assert "Board pack" in page and f"/tenants/{alpha}/designs/{did}.pdf" in page
+    assert "Board pack" in page and "For the board" in page and f"/tenants/{alpha}/designs/{did}.pdf" in page
+    assert "Blocks" not in page and ">Not yet<" in page  # the reader's columns, not the designer's
     assert "Custom reports" in _text(client.get(f"/tenants/{alpha}/data/{next(iter(REPORTS))}"))
+
+
+def test_send_on_a_schedule_from_the_clients_custom_reports(client, db, two_tenants):
+    """ "Send on a schedule" beside a custom report opens the client's new schedule form with that report
+    ticked and nothing else, and the page says which of the client's emails already send it."""
+    alpha, _ = two_tenants
+    _staff(client, db, "admin")
+    did = designs.create(db, "Board pack", "test", designs.STARTERS["executive"][2])
+    key = designs.key_of(did)
+    page = _text(client.get(f"/tenants/{alpha}/designs"))
+    link = re.search(rf'href="(/tenants/{alpha}/schedules/new\?report=[^"]+)"', page).group(1)
+    assert link.replace("%3A", ":") == f"/tenants/{alpha}/schedules/new?report={key}"
+    form = _text(client.get(link))
+    assert f'value="{key}" checked' in form and 'value="review" checked' not in form
+    form = _text(client.get(f"/tenants/{alpha}/schedules/new"))
+    assert 'value="review" checked' in form and f'value="{key}" checked' not in form  # the usual start
+    form = _text(client.get(f"/tenants/{alpha}/schedules/new?report=design:999"))
+    assert 'value="review" checked' in form and "design:999" not in form  # an unknown report changes nothing
+    db.execute(
+        "INSERT INTO email_schedules (kind, tenant_id, reports, frequency, hour, created_at)"
+        " VALUES ('report', ?, ?, 'monthly', 8, '2026-10-16T00:00:00Z')",
+        (alpha, json.dumps(["review", key])),
+    )
+    db.commit()
+    page = _text(client.get(f"/tenants/{alpha}/designs"))
+    assert ">Not yet<" not in page and f'href="/tenants/{alpha}/schedules"' in page and ">Monthly email<" in page
+    # An auditor, who can't make schedules, still sees who gets it but has no "Send on a schedule".
+    client.post("/logout")
+    roles.assign(db, make_user(db, "aud", role="analyst", all_tenants=True), roles.by_key(db, "auditor"))
+    db.commit()
+    login(client, "aud")
+    page = _text(client.get(f"/tenants/{alpha}/designs"))
+    assert ">Monthly email<" in page and "Send on a schedule" not in page
 
 
 # -- Sending ------------------------------------------------------------------------------------------------

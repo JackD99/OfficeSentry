@@ -606,7 +606,9 @@ A custom report belongs to the MSP and works for every client: a block with noth
 (no accepted risks, no commentary yet) is left out of that client's report. Each client's **Reports →
 Custom reports** lists every one as a page and a PDF; the client's Reports tab, the "All reports" menu
 above a client's reports and the Reports page list them too, and a report plan or a client's email schedule
-can send one (as a PDF) alongside or instead of the monthly review. Text blocks and the cover's title
+can send one (as a PDF) alongside or instead of the monthly review: *Send on a schedule* beside a custom
+report on a client's Custom reports page starts a schedule with it ticked, and that page says which of the
+client's emails already send each one. Text blocks and the cover's title
 and subtitle take `{client}`, `{month}`, `{quarter}`, `{msp}` and `{date}`, and a custom report holds up to 60 blocks.
 Anyone who can *Design custom reports* makes and edits them; removing
 one also needs *Settings*, since it comes out of any plan or schedule that sent it.

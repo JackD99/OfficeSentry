@@ -11,16 +11,20 @@
     <span class="meta">Your own client reports, built from blocks, on {{ tenant.name }}'s data.</span></div>
     {% if can_open('designs.index') %}<div class="toolbar-actions"><a class="btn sm" href="{{ url_for('designs.index') }}">{{ icon('plus') }} New custom report</a></div>{% endif %}</div>
   {% if designs %}
+  {#- The reader's columns: what each report is for, when it last changed, and whether this client already
+      gets it (designs.sent_to); "Send on a schedule" opens a new schedule with the report ticked. -#}
   <table class="stack-sm">
-    <thead><tr><th>Report</th><th class="num">Blocks</th><th></th></tr></thead>
+    <thead><tr><th>Report</th><th>Changed</th><th>Sent to {{ tenant.name }}</th><th></th></tr></thead>
     <tbody>
     {% for d in designs %}
     <tr>
       <td><a class="strong" href="{{ url_for('designs.tenant_design', tenant_id=tenant.id, design_id=d.id) }}">{{ d.name }}</a>
         {% if d.description %}<span class="sub">{{ d.description }}</span>{% endif %}</td>
-      <td data-label="Blocks" class="num">{{ counts[d.id] }}</td>
+      <td data-label="Changed" class="nowrap small muted">{{ (d.updated_at or d.created_at)|ago }}</td>
+      <td data-label="Sent to {{ tenant.name }}" class="small">{% if sent.get(d.id) %}{% if can_open('email.tenant_emails', tenant_id=tenant.id) %}<a href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}" title="The client's emailed reports">{{ sent[d.id]|join(', ') }}</a>{% else %}{{ sent[d.id]|join(', ') }}{% endif %}{% else %}<span class="muted">Not yet</span>{% endif %}</td>
       <td class="num"><div class="row-actions">
         {% if pdf_available and can_open('designs.tenant_design_pdf', tenant_id=tenant.id, design_id=d.id) %}<a class="btn sm" href="{{ url_for('designs.tenant_design_pdf', tenant_id=tenant.id, design_id=d.id) }}">{{ icon('download') }} PDF</a>{% endif %}
+        {% if can_open('email.new_schedule', tenant_id=tenant.id) %}<a class="btn sm ghost" href="{{ url_for('email.new_schedule', tenant_id=tenant.id, report='design:' ~ d.id) }}" title="A new scheduled email to {{ tenant.name }} with this report ticked">{{ icon('send') }} Send on a schedule</a>{% endif %}
         {% if can_open('designs.edit', design_id=d.id) %}<a class="btn sm ghost" href="{{ url_for('designs.edit', design_id=d.id, tenant=tenant.id) }}">Edit</a>{% endif %}</div></td>
     </tr>
     {% endfor %}
