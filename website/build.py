@@ -367,7 +367,8 @@ WHATS_NEW = [
                 "title": "Every report leads with its numbers",
                 "text": "Nine more detail reports, Devices, Guests and Conditional Access among them, open with "
                 "headline figures that each open the rows they count, and All clients compares them across "
-                "every client.",
+                "every client. Last sign-in, forwarding, MFA, DMARC and holds now count the way Microsoft and "
+                "Exchange do, so an account under a password spray no longer looks active.",
                 "href": "/docs/reference/#reports",
                 "link": "Reports",
             },
@@ -392,6 +393,7 @@ WHATS_NEW = [
             "a month-end report changed after approval reaches the client only as a new version",
             "month-end never sends a client the same month twice",
             "month-end never approves an empty report, and a paused client gets no email",
+            "client PDFs never end on a page of only small print, and their charts use the report's own font",
             "pausing a client mid-collection sends no alerts",
             "a SharePoint network failure no longer reads as awaiting approval",
             "percentage changes read in points everywhere, and the Overview no longer shows more licensed users in red",

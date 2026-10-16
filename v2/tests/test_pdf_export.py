@@ -6,9 +6,14 @@ same template is served as a print-ready page that opens the browser's print win
 
 from __future__ import annotations
 
+import dataclasses
+import itertools
+import re
+
 import pytest
 
 from officesentry.reports import data_reports, export, rollups
+from officesentry.web import printing
 from tests import auditdata
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -134,6 +139,70 @@ def test_every_detail_report_renders_as_pdf_with_no_data(client, db, vault, two_
     for key in data_reports.REPORTS:
         resp = client.get(f"/tenants/{alpha}/data/{key}.pdf")
         assert resp.status_code == 200 and resp.data[:4] == b"%PDF", key
+
+
+def _marked(html: str) -> str:
+    """The PDF's page with ids to find on its pages once laid out: the last table's rows and the small print."""
+    head, _, tail = html.rpartition("<tbody>")
+    row = itertools.count(1)
+    tail = re.sub("<tr>", lambda _: f'<tr id="row{next(row)}">', tail)
+    return (head + "<tbody>" + tail).replace('<footer class="about', '<footer id="about" class="about')
+
+
+@needs_pdf
+def test_the_small_print_ends_a_table_report_under_its_last_rows(client, db, two_tenants, monkeypatch):
+    """However many rows a table report has, its last page carries at least two of them with the small print
+    under them, never the small print alone, and a total comes once, under the last rows."""
+    import weasyprint
+
+    alpha, bravo = two_tenants
+    seed_tenant(db, alpha)
+    seed_tenant(db, bravo)
+    make_user(db, "admin")
+    login(client, "admin")
+    pages = []
+
+    def laid_out(html, base_url):
+        doc = weasyprint.HTML(string=_marked(html), base_url=base_url, url_fetcher=export.url_fetcher()).render()
+        pages[:] = [set(page.anchors) for page in doc.pages]
+        return b"%PDF-1.7"
+
+    def rows(report, n):  # the report's first table alone, n rows long
+        first = report.sections[0]
+        first = dataclasses.replace(first, rows=(first.rows * n)[:n], flags=(list(first.flags) * n)[:n])
+        return dataclasses.replace(report, sections=[first])
+
+    def clients(rollup, n):  # n rows of clients
+        return dataclasses.replace(rollup, rows=(list(rollup.rows) * n)[:n])
+
+    monkeypatch.setattr(export, "to_pdf", laid_out)
+    cap_rows, cap_rollup = printing.cap_rows, printing.cap_rollup
+    for n in range(4, 45):
+        monkeypatch.setattr(printing, "cap_rows", lambda report, limit=None, n=n: cap_rows(rows(report, n), limit))
+        client.get(f"/tenants/{alpha}/data/apps.pdf")
+        assert {f"row{n - 1}", f"row{n}", "about"} <= pages[-1], (n, pages)
+    for n in (4, 9, 12, 20, 30, 40):
+        monkeypatch.setattr(
+            printing, "cap_rollup", lambda rollup, limit=None, n=n: cap_rollup(clients(rollup, n), limit)
+        )
+        client.get("/across/review.pdf")
+        total = f"row{n + 1}"
+        assert {f"row{n - 1}", f"row{n}", total, "about"} <= pages[-1], (n, pages)
+        assert not any(total in page for page in pages[:-1]), (n, pages)
+
+
+def test_a_short_licences_section_stays_on_one_page_of_the_review_pdf(client, db, two_tenants, monkeypatch):
+    """The monthly review's Licences section (the saving, a few licences and their total) moves to the next
+    page whole, like the sections after it, rather than leaving one licence at the foot of a page."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    make_user(db, "admin")
+    login(client, "admin")
+    pages = []
+    monkeypatch.setattr(export, "pdf_available", lambda: True)
+    monkeypatch.setattr(export, "to_pdf", lambda html, base_url: pages.append(html) or b"%PDF-1.7")
+    client.get(f"/tenants/{alpha}/report.pdf")
+    assert '<section id="licences" class="keep">' in pages[0]
 
 
 def test_pdf_detail_matches_the_page(client, db, two_tenants, no_weasyprint):
