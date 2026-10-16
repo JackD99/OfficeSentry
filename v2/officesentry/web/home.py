@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 
 from .. import first_run, home, month_end
-from ..formatting import strftime
+from ..formatting import strftime as datefmt
 from ..issued import period_label
 from ..reports.monthly_review import setting
 from .access import access_of, can, current, is_staff, login_required, needs, safe_next
@@ -79,8 +79,8 @@ def stamp(when: datetime, now: datetime, zone: ZoneInfo) -> tuple[str, str]:
     week, the date before that; and the whole date and time for its tooltip."""
     local, today = when.astimezone(zone), now.astimezone(zone).date()
     days = (today - local.date()).days
-    short = local.strftime("%H:%M") if days <= 0 else (local.strftime("%a") if days < 7 else strftime(local, "%-d %b"))
-    return short, strftime(local, "%a %-d %b %Y, %H:%M %Z")
+    short = local.strftime("%H:%M") if days <= 0 else (local.strftime("%a") if days < 7 else datefmt(local, "%-d %b"))
+    return short, datefmt(local, "%a %-d %b %Y, %H:%M %Z")
 
 
 def get_started() -> list[first_run.Step] | None:
