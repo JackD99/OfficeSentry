@@ -321,6 +321,8 @@ def crawl(app, client, ids: dict) -> tuple[list[tuple[str, int, str]], int, list
     return list(bad.values()), len(answered), list(buttons.values())
 
 
+# An administrator opens some 1,400 pages: about 20 seconds here, over two minutes under coverage in CI.
+@pytest.mark.timeout(600)
 @pytest.mark.parametrize("walker", WALKERS)
 def test_no_page_offers_a_link_that_answers_403(world, walker, _pdf_as_page):
     app, db, ids = world
