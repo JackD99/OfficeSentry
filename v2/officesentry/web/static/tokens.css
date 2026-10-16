@@ -69,6 +69,7 @@
   --fs-2xl: 1.75rem;   /* 28px: page titles */
   --fs-figure: 1.875rem; /* 30px: headline figures */
   --fs-3xl: 2rem;      /* 32px */
+  --fs-lead: 2.375rem; /* 38px: the lead figure of a statement line */
 
   /* Spacing: a 4px grid (--space-N is N x 4px), with half steps for tight controls. */
   --space-0-5: 2px; --space-1: 4px; --space-1-5: 6px; --space-2: 8px; --space-2-5: 10px; --space-3: 12px;
