@@ -41,6 +41,12 @@ approved before the update show the month as it is now, as before, until they're
 - **Update button:** when the data volume is full once the new version is running, the updater still goes
   back to the version before if the new one isn't healthy, and an update that stops part way never says
   "before anything was changed".
+- An address or form with a number too big for the database, such as a client number 25 digits long, gets the
+  not-found page or says the number is too big, instead of a server error.
+- The sign-ins download on a client's **Activity history** is not found for a month with a newline after it,
+  which reached the file's name, or for year 0000, which broke the download off.
+- The **Activity log** download says in its last row when it holds only the newest 100,000 rows, and the
+  log's user filter finds someone whatever case their name is typed in.
 - The READMEs: [v2/README.md](v2/README.md) lists all 49 reports by area and links the 69 checks, and covers
   month-end reporting, Every row, Coming up and search, which it had left out. The development notes moved to
   the [developer guide](DEVELOPING.md), which no longer says the portal never calls Microsoft. The website's
