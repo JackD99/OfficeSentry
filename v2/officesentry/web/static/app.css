@@ -1795,3 +1795,36 @@ tbody tr:hover + tr.row-note > td, tbody tr.row-note:hover > td { background: va
 details.last-update { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
 details.last-update > summary { cursor: pointer; font-size: var(--fs-sm); }
 details.last-update .setup-steps { margin-top: var(--space-2); }
+
+/* -- A client's timeline (timeline.html): months as bands, dated entries under each, the measures beside --- */
+.story-filters { gap: var(--space-2) var(--space-5); }
+.subtabs a.active .count-badge { color: inherit; }
+.months { list-style: none; margin: 0; padding: 0; }
+.month-band { padding: var(--space-3) var(--space-5) var(--space-2-5); background: var(--surface-2); border-top: 1px solid var(--rule); }
+.month-band h3 { margin: 0; font-family: var(--serif); font-weight: 600; font-size: var(--fs-lg); }
+.month-band h3 a { color: inherit; }
+.month-band .sum { margin: var(--space-1) 0 0; color: var(--text-2); font-size: var(--fs-sm); max-width: 80ch; }
+.entries { list-style: none; margin: 0; padding: var(--space-1) 0; }
+.entry { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: var(--space-2-5); padding: 8px var(--space-5); border-top: 1px solid var(--border); }
+.entries > .entry:first-child { border-top: 0; }
+.entry .when { color: var(--muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 1px; }
+.entry .line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); overflow-wrap: anywhere; }
+.entry .kind { color: var(--muted); font-size: var(--fs-sm); font-weight: 600; font-variant-caps: all-small-caps; letter-spacing: .05em; white-space: nowrap; }
+.entry .detail { color: var(--muted); font-size: var(--fs-sm); margin-top: 2px; overflow-wrap: anywhere; }
+.entry-none { margin: 0; padding: var(--space-2-5) var(--space-5); color: var(--muted); font-size: var(--fs-sm); }
+.measures { list-style: none; margin: 0; padding: var(--space-1) 0 var(--space-2); }
+.measures li { padding: var(--space-3) var(--space-5); border-top: 1px solid var(--border); }
+.measures li:first-child { border-top: 0; }
+.measure-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-1-5); }
+.measure-head .label { color: var(--muted); font-size: var(--fs-sm); font-variant-caps: all-small-caps; letter-spacing: .05em; font-weight: 600; }
+.measure-head .value { font-family: var(--serif); font-weight: 600; font-size: var(--fs-lg); font-variant-numeric: lining-nums tabular-nums; white-space: nowrap; }
+.measure-head .delta { font-family: var(--font); font-size: var(--fs-sm); font-weight: 600; margin-left: var(--space-1); }
+.measures svg.trend { display: block; width: 100%; height: auto; }
+svg.spark .spark-tick { stroke: var(--chart-grid); }
+svg.spark .spark-dot { fill: var(--decor); }
+.measures .foot { color: var(--muted); font-size: var(--fs-xs); margin-top: var(--space-1); }
+@media (max-width: 960px) { .measures-card { order: -1; } } /* the numbers before the long story on a phone */
+@media (max-width: 640px) {
+  .entry { grid-template-columns: 1fr; gap: 2px; }
+  .month-band, .entry, .entry-none, .measures li { padding-left: var(--space-4); padding-right: var(--space-4); }
+}

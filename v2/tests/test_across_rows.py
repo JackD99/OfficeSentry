@@ -276,7 +276,8 @@ def test_check_matrix_page_lists_only_visible_tenants(client, db, two_tenants):
     email = _csv(client.get("/across/checks.csv?category=email").data)
     assert email[0][:6] == rows[0][:6] and email[0][6:] and all(c.startswith("Email: ") for c in email[0][6:])
     assert len(email[0]) < len(rows[0]) and int(email[1][2]) <= int(rows[1][2])
-    assert client.get("/across/checks.xlsx?category=email").status_code == 200
+    resp = client.get("/across/checks.xlsx?category=email")
+    assert resp.status_code == 200 and 'filename="all-clients-checks-email.xlsx"' in resp.headers["Content-Disposition"]
     assert _csv(client.get("/across/checks.csv?category=nonsense").data)[0] == rows[0]  # unknown: every check
     # Downloads without words of their own get the usual ones for their format.
     assert 'title="This page as a PDF"' in client.get("/changes").get_data(as_text=True)
