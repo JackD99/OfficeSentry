@@ -218,6 +218,8 @@ def create_app(cfg: Config | None = None) -> Flask:
             reports.hidden_reports(tenant_id) if g.get("db") is not None else frozenset()
         ),
         can=access.can,
+        # Whether a link opens for the signed-in person: templates draw it only then (access.can_open).
+        can_open=access.can_open,
         manages_groups=access.manages_groups,
         # The client switcher beside a client's name (_macros.tenant_header): this page for the other clients.
         client_switch=switcher.choices,

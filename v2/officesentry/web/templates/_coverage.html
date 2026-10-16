@@ -22,7 +22,7 @@
       <td class="num">
         {% if 'no_contacts' in r.gaps or 'no_recipients' in r.gaps %}<a class="btn sm" href="{{ url_for('email.tenant_emails', tenant_id=r.tenant.id) }}#contacts">Add a contact</a>{% endif %}
         {% if 'left_off' in r.gaps %}<a class="btn sm" href="{{ url_for('email.tenant_emails', tenant_id=r.tenant.id) }}#contacts">Review contacts</a>{% endif %}
-        {% if 'no_report' in r.gaps %}{% if admin %}<a class="btn sm" href="{{ url_for('reporting.new_plan', tenant=r.tenant.id) }}">Add to a plan</a>{% else %}<a class="btn sm" href="{{ url_for('email.new_schedule', tenant_id=r.tenant.id) }}">Schedule a report</a>{% endif %}{% endif %}
+        {% if 'no_report' in r.gaps %}{% if admin %}<a class="btn sm" href="{{ url_for('reporting.new_plan', tenant=r.tenant.id) }}">Add to a plan</a>{% elif can_open('email.new_schedule', tenant_id=r.tenant.id) %}<a class="btn sm" href="{{ url_for('email.new_schedule', tenant_id=r.tenant.id) }}">Schedule a report</a>{% endif %}{% endif %}
       </td>
     </tr>
     {% endfor %}

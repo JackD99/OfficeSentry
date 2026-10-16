@@ -13,10 +13,10 @@
     <div class="sub">Preview{% if s %} · {{ s.describe }} ({{ s.tz }}){% endif %}</div></div>
   <div class="actions">
     {% if s %}
-    {% if s.on_approval %}<a class="btn primary" href="{{ url_for('reporting.index') }}">{{ icon('check') }} Review</a>
-    {% elif not s.client_off %}<form method="post" action="{{ url_for('email.send_now', schedule_id=s.id) }}" data-busy="Sending…">{{ csrf() }}<input type="hidden" name="from" value="preview"><button class="primary">{{ icon('send') }} Send now</button></form>{% endif %}
-    {% if s.plan_id %}{% if can('settings.manage') %}<a class="btn" href="{{ url_for('reporting.edit_plan', plan_id=s.plan_id) }}">{{ icon('edit') }} Edit plan</a>{% endif %}
-    {% else %}<a class="btn" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>{% endif %}
+    {% if s.on_approval %}{% if can_open('reporting.index') %}<a class="btn primary" href="{{ url_for('reporting.index') }}">{{ icon('check') }} Review</a>{% endif %}
+    {% elif not s.client_off and can_open('email.send_now', schedule_id=s.id, tenant=s.tenant_id) %}<form method="post" action="{{ url_for('email.send_now', schedule_id=s.id) }}" data-busy="Sending…">{{ csrf() }}<input type="hidden" name="from" value="preview"><button class="primary">{{ icon('send') }} Send now</button></form>{% endif %}
+    {% if s.plan_id %}{% if can_open('reporting.edit_plan', plan_id=s.plan_id) %}<a class="btn" href="{{ url_for('reporting.edit_plan', plan_id=s.plan_id) }}">{{ icon('edit') }} Edit plan</a>{% endif %}
+    {% elif can_open('email.edit_schedule', schedule_id=s.id, tenant=s.tenant_id) %}<a class="btn" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>{% endif %}
     {% endif %}
     <a class="btn ghost" href="{{ back }}">Back</a>
   </div>

@@ -1,6 +1,6 @@
 {#- Today (home.today): what needs a technician today, the answer first, then each client and why. -#}
 {% extends "base.html" %}
-{% from "_macros.html" import icon %}
+{% from "_macros.html" import icon, page_link with context %}
 {% from "_groups.html" import group_picker with context %}
 {% from "_home.html" import home_switch, make_home with context %}
 {% from "_get_started.html" import get_started as get_started_card %}
@@ -37,9 +37,10 @@
   <a class="tile link{{ ' tone-bad' if data.failing }}" href="{{ url_for('tenant_admin.clients') }}">
     <div class="label">Collections failing{{ icon('arrow', 'go') }}</div><div class="value">{{ data.failing }}</div>
     <div class="foot">{% if data.stale %}{{ data.stale }} more out of date{% else %}clients that couldn't be read{% endif %}</div></a>
-  <a class="tile link{{ ' tone-warn' if data.due }}" href="{{ url_for('upcoming.index') }}">
-    <div class="label">Due this week{{ icon('arrow', 'go') }}</div><div class="value">{{ data.due }}</div>
-    <div class="foot">renewals, expiring secrets, full mailboxes</div></a>
+  {% set upcoming = url_for('upcoming.index') if can_open('upcoming.index') %}
+  <{{ 'a' if upcoming else 'div' }} class="tile{{ ' link' if upcoming }}{{ ' tone-warn' if data.due }}"{% if upcoming %} href="{{ upcoming }}"{% endif %}>
+    <div class="label">Due this week{% if upcoming %}{{ icon('arrow', 'go') }}{% endif %}</div><div class="value">{{ data.due }}</div>
+    <div class="foot">renewals, expiring secrets, full mailboxes</div></{{ 'a' if upcoming else 'div' }}>
   <a class="tile link" href="{{ url_for('tenants.dashboard') }}">
     <div class="label">Nothing to do{{ icon('arrow', 'go') }}</div><div class="value">{{ data.fine }}</div>
     <div class="foot">of {{ data.tenants|plural('client') }}</div></a>
@@ -55,7 +56,7 @@
       <div class="today-name"><span class="dot {{ row.tone }}" aria-hidden="true"></span><a href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">{{ t.name }}</a></div>
       <ul class="today-reasons">
         {% for r in row.reasons %}
-        <li><a href="{{ r.href }}">{{ r.text }}</a>
+        <li>{{ page_link(r.href, r.text) }}
           {% if r.detail %}<div class="small muted">{{ r.detail }}</div>{% endif %}</li>
         {% endfor %}
       </ul>
@@ -66,7 +67,7 @@
 {% else %}
 <div class="card empty" id="needs-you"><h3>All clear</h3>
   <p>No new critical or high findings, every collection is working and nothing is due this week.</p>
-  <a class="btn" href="{{ url_for('upcoming.index') }}">{{ icon('calendar') }} See what's coming up</a></div>
+  {% if upcoming %}<a class="btn" href="{{ upcoming }}">{{ icon('calendar') }} See what's coming up</a>{% endif %}</div>
 {% endif %}
 {% if data.without %}<p class="footnote">Couldn't read: {% for t, part in data.without %}{{ part }} for {{ t.name }}{{ ', ' if not loop.last }}{% endfor %}.</p>{% endif %}
 <p class="footnote">{% if data.rows and data.fine %}{{ data.fine|plural('other client') }} {{ 'needs' if data.fine == 1 else 'need' }} nothing today. {% endif %}Every client, worst first, is on <a href="{{ url_for('tenants.dashboard') }}">Clients</a>.</p>

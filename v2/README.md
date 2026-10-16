@@ -662,6 +662,8 @@ work without it.
   who holds more. Every page and download checks on the server; hidden
   clients return 404 and a capability taken away on one client answers 403
   there. There is always at least one Administrator.
+  Pages only link to what the person can open, and only show buttons they can
+  use (`access.can_open`): a name or report they can't open shows as text. <!-- since 2.4.0 -->
 - **Sign in with Microsoft** (optional, off until an admin sets it up): staff sign
   in with their own Microsoft Entra ID account through OpenID Connect, under the
   MSP's own Conditional Access and MFA. *Settings → Microsoft sign-in* creates a

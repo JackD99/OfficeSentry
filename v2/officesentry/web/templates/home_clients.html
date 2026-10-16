@@ -1,6 +1,6 @@
 {#- Accounts (home.clients): the account manager's view, the answer first, then a line per client. -#}
 {% extends "base.html" %}
-{% from "_macros.html" import icon %}
+{% from "_macros.html" import icon, page_link with context %}
 {% from "_groups.html" import group_picker with context %}
 {% from "_home.html" import home_switch, make_home with context %}
 {% from "_get_started.html" import get_started as get_started_card %}
@@ -39,9 +39,10 @@
   <a class="tile link{{ ' tone-warn' if data.renewals }}" href="{{ url_for('upcoming.index') }}">
     <div class="label">Renewals in 30 days{{ icon('arrow', 'go') }}</div><div class="value">{{ data.renewals }}</div>
     <div class="foot">subscriptions and trials</div></a>
-  <a class="tile link{{ ' tone-warn' if data.to_approve }}" href="{{ url_for('reporting.queue', period=data.period) }}">
-    <div class="label">Reports to approve{{ icon('arrow', 'go') }}</div><div class="value">{{ data.to_approve if data.on_plan else '–' }}</div>
-    <div class="foot">{% if data.on_plan %}for {{ data.period_label }}, of {{ data.on_plan }}{% else %}no client on a report plan{% endif %}</div></a>
+  {% set queue = url_for('reporting.queue', period=data.period) if can_open('reporting.queue', period=data.period) %}
+  <{{ 'a' if queue else 'div' }} class="tile{{ ' link' if queue }}{{ ' tone-warn' if data.to_approve }}"{% if queue %} href="{{ queue }}"{% endif %}>
+    <div class="label">Reports to approve{% if queue %}{{ icon('arrow', 'go') }}{% endif %}</div><div class="value">{{ data.to_approve if data.on_plan else '–' }}</div>
+    <div class="foot">{% if data.on_plan %}for {{ data.period_label }}, of {{ data.on_plan }}{% else %}no client on a report plan{% endif %}</div></{{ 'a' if queue else 'div' }}>
   {% if can('projects.view') %}<a class="tile link" href="{{ url_for('projects.index') }}">
     <div class="label">Projects to propose{{ icon('arrow', 'go') }}</div><div class="value">{{ data.to_propose }}</div>
     <div class="foot">recommended, not proposed yet</div></a>{% endif %}
@@ -64,9 +65,9 @@
     {% for r in data.rows %}{% set t = r.tenant %}
     <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}">
       <td><a href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">{{ t.name }}</a></td>
-      <td class="num" data-label="Licence waste / month" data-sort="{{ r.waste if r.waste is not none else '' }}">{% if r.waste is none %}<span class="muted">–</span>{% else %}<a href="{{ url_for('reports.data_report', tenant_id=t.id, key='licences') }}">{{ r.waste|money(data.currency) }}</a>{% endif %}</td>
-      <td data-label="Next renewal" data-sort="{{ r.renewal.days if r.renewal and r.renewal.days is not none else '' }}">{% if r.renewal %}<a href="{{ r.renewal.href or url_for('upcoming.index') }}">{{ r.renewal.title }}</a> <span class="small muted nowrap">{{ r.renewal.when or r.renewal.type }}</span>{% if r.renewals > 1 %} <span class="small muted">+{{ r.renewals - 1 }} more</span>{% endif %}{% else %}<span class="muted">None in 30 days</span>{% endif %}</td>
-      <td data-label="{{ data.period_label }} report">{% if r.report_state %}<a class="pill {{ STATE_TONE.get(r.report_state, '') }}" href="{{ url_for('reporting.review', period=data.period, tenant_id=t.id) }}">{{ states[r.report_state] }}</a>{% if r.report_ready %} <span class="small muted">ready</span>{% endif %}{% else %}<span class="muted">Not on a plan</span>{% endif %}</td>
+      <td class="num" data-label="Licence waste / month" data-sort="{{ r.waste if r.waste is not none else '' }}">{% if r.waste is none %}<span class="muted">–</span>{% else %}{{ page_link(url_for('reports.data_report', tenant_id=t.id, key='licences'), r.waste|money(data.currency)) }}{% endif %}</td>
+      <td data-label="Next renewal" data-sort="{{ r.renewal.days if r.renewal and r.renewal.days is not none else '' }}">{% if r.renewal %}{{ page_link(r.renewal.href or url_for('upcoming.index'), r.renewal.title) }} <span class="small muted nowrap">{{ r.renewal.when or r.renewal.type }}</span>{% if r.renewals > 1 %} <span class="small muted">+{{ r.renewals - 1 }} more</span>{% endif %}{% else %}<span class="muted">None in 30 days</span>{% endif %}</td>
+      <td data-label="{{ data.period_label }} report">{% if r.report_state %}{{ page_link(url_for('reporting.review', period=data.period, tenant_id=t.id), states[r.report_state], 'pill ' ~ STATE_TONE.get(r.report_state, '')) }}{% if r.report_ready %} <span class="small muted">ready</span>{% endif %}{% else %}<span class="muted">Not on a plan</span>{% endif %}</td>
       <td class="num" data-label="Projects" data-sort="{{ r.projects }}">{% if r.projects %}<a href="{{ url_for('projects.tenant', tenant_id=t.id) }}">{{ r.projects }}</a>{% if r.proposed %} <span class="small muted">({{ r.proposed }} proposed)</span>{% endif %}{% elif r.note %}<span class="muted" title="{{ r.note }}">–</span>{% else %}0{% endif %}</td>
       <td class="num" data-label="Secure Score" data-sort="{{ r.score if r.score is not none else '' }}">{{ '%.0f%%'|format(r.score) if r.score is not none else '–' }}</td>
     </tr>
