@@ -285,7 +285,7 @@ def test_review_suggests_projects_then_quick_fixes(client, db, two_tenants):
         review.index("Projects to propose")
         < review.index("Project: Identity and Conditional Access")
         < review.index("Quick fixes")
-        < review.index("Have each listed admin register a strong method")
+        < review.index("Have every admin without MFA register a strong method")
     )
     client.post(f"/tenants/{alpha}/report-actions", data={"rule_key": "project:identity", "period": PERIOD})
     action = month_end.actions(db, alpha)[0]
