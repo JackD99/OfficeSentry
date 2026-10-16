@@ -18,7 +18,7 @@ from officesentry.exchange import ExchangeClient
 from officesentry.graph import GRAPH_ROOT, GraphClient, GraphError
 from officesentry.mailflow import size_bytes
 from officesentry.reports import views
-from officesentry.reports.data_reports import REPORTS, DataReport, build
+from officesentry.reports.data_reports import REPORTS, DataReport, build, mailboxes
 from officesentry.reports.mail_reports import shared_mailboxes
 from officesentry.snapshot import TenantSnapshot
 from officesentry.worker import execute_run
@@ -461,3 +461,69 @@ def test_shared_mailboxes_leave_out_teams_rooms_and_dont_call_unmatched_safe():
     # Nothing open, but one mailbox unknown: not "ok".
     report = _shared([_box("info@x.com", "SharedMailbox", "s1")], [])
     assert (report.highlights[0].value, report.highlights[0].tone) == ("0 of 1", None)
+
+
+def _forwarding(boxes, rules=(), allows=False, remote_blocks=False):
+    now = datetime(2026, 10, 2, tzinfo=UTC)
+    report = DataReport("mailboxes", "Mail forwarding", "", {}, now)
+    snap = _Snap(
+        {
+            ("mailboxes", "mailbox"): boxes,
+            ("inbox_rules", "inbox_rule"): list(rules),
+            ("mailboxes", "accepted_domain"): [{"DomainName": "x.com"}],
+            ("mailboxes", "outbound_spam_policy"): [
+                {"Name": "Default", "IsDefault": True, "AutoForwardingMode": "On" if allows else "Automatic"}
+            ],
+            ("mailboxes", "remote_domain"): [{"DomainName": "*", "AutoForwardEnabled": not remote_blocks}],
+        }
+    )
+    mailboxes(snap, now, report)
+    return report
+
+
+def test_mail_forwarding_reads_a_forward_as_exchange_does():
+    """With both set, Exchange forwards to the recipient an admin picked, not the address people can set in
+    Outlook on the web. A forward outside counts while it can get out; a blocked one is listed at medium, and a
+    turned-off rule isn't counted."""
+    boxes = [
+        {  # an old Gmail address left behind under an internal recipient: the forward stays inside
+            "PrimarySmtpAddress": "ann@x.com",
+            "ForwardingAddress": "Boss",
+            "ForwardingRecipient": {"PrimarySmtpAddress": "boss@x.com"},
+            "ForwardingSmtpAddress": "smtp:ann@gmail.com",
+            "DeliverToMailboxAndForward": True,
+        },
+        {"PrimarySmtpAddress": "bob@x.com", "ForwardingSmtpAddress": "smtp:bob@gmail.com"},
+    ]
+    off = {
+        "mailbox": "cat@x.com",
+        "displayName": "Old forward",
+        "isEnabled": False,
+        "actions": {"forwardTo": [{"emailAddress": {"address": "cat@gmail.com"}}]},
+    }
+    report = _forwarding(boxes, [off], allows=True)
+    fwd = report.sections[0]
+    assert [(r[0], r[1], r[2], r[3], r[4], f) for r, f in zip(fwd.rows, fwd.flags, strict=True)] == [
+        ("ann@x.com", "boss@x.com", "Admin (forwarding recipient)", "No", "", None),
+        ("bob@x.com", "bob@gmail.com", "Mailbox forwarding address", "Yes", "Yes", "high"),
+        ("cat@x.com", "cat@gmail.com", 'Inbox rule "Old forward" (turned off)', "Yes", "Yes", "low"),
+    ]
+    outside = report.highlights[0]
+    assert (outside.label, outside.value, outside.tone) == ("Forwarding outside", 1, "bad")
+    view, _ = views.rows_view(report, outside.rows)
+    assert len(views._matching_rows(fwd, "forwarding", view, report.generated_at.date())) == 1
+
+    # The default remote domain turning automatic forwarding off blocks it, whatever the spam policy says.
+    report = _forwarding(boxes, [off], allows=True, remote_blocks=True)
+    fwd = report.sections[0]
+    assert [(r[4], f) for r, f in zip(fwd.rows, fwd.flags, strict=True)] == [
+        ("", None),
+        ("No: blocked", "medium"),
+        ("No: blocked", "low"),
+    ]
+    outside = report.highlights[0]
+    assert (outside.value, outside.foot, outside.tone) == (
+        1,
+        "From 1 mailbox, all blocked from reaching outside",
+        "warn",
+    )
