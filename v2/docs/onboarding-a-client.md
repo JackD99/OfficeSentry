@@ -379,6 +379,14 @@ Errors start with the service, the HTTP status and Microsoft's error code, for
 example `Graph 403 Authorization_RequestDenied: …`. Where the text below comes
 from Microsoft rather than Office Sentry, it is marked *typically*.
 
+<!-- since 2.4.0 -->
+A run that failed because Microsoft was busy or out of reach (`Graph 429`, `503`,
+`network_error` and the like), or because the worker was restarted mid-run, is
+tried again by itself about 20 minutes later, and once more two hours after that.
+The *Data collection* page says when, and there is nothing to do unless the last
+try fails too.
+<!-- /since -->
+
 | Error | Cause and fix |
 |---|---|
 | `client has no app connection with a client ID` | The app connection is missing its client ID. Add it under *Settings → App connection*. |
@@ -389,6 +397,7 @@ from Microsoft rather than Office Sentry, it is marked *typically*.
 | `Exchange 401 …` or `Exchange 403 …` ending *Exchange refused access. In this tenant, assign the Global Reader role to the Office Sentry app …* | Only the six data sources that read Exchange Online (step 3). Assign Global Reader, and make sure consent included `Exchange.ManageAsApp`. |
 | `Graph 0 network_error: …` / `Exchange 0 network_error: …` | The Office Sentry server couldn't reach Microsoft after several retries. Check its internet access, proxy and DNS. |
 | `worker stopped before the run finished` | The worker was stopped or restarted mid-run. Refresh that data source. |
+| `The worker stopped before the run finished (a restart or an update).` | The worker was stopped or restarted mid-run. It's tried again by itself; Refresh the data source if you'd rather not wait. | <!-- since 2.4.0 -->
 | `unknown client or collector` | The run refers to a data source that no longer exists, usually after an upgrade. Safe to ignore. |
 | Any other `SomeError: …` | An unexpected error in Office Sentry. The run's log has the full details; report it with that log. |
 

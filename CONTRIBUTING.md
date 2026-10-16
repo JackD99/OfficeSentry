@@ -168,6 +168,23 @@ together ran every test.
   accepts) so the walk sends a form the route would act on, not an empty
   one.
 
+<!-- since 2.4.0 -->
+- A collection run that fails for a reason waiting fixes (`worker.passing`:
+  Microsoft busy, throttling or out of reach, the database locked; or a
+  worker that stopped mid-run, `store.expire_run_leases`) gets a `retry_at`
+  (`store.plan_retry`, `RETRY_DELAYS`). Housekeeping queues it again as a
+  run whose `retry_of` is the first failure (`store.queue_retries`), unless
+  something newer of that data source was queued or the client is paused.
+  `alerts.after_run` waits for the last try, and pages show such a failure
+  as being tried again (`store.retry_pending`, the `retrying` filter). A new
+  kind of failure that passes by itself goes in `worker.passing`.
+- The worker's nightly database backup is the `backup` task
+  (`nightly_backup.py`, at `cfg.backup_cron`). It leaves a night to a copy
+  the `backup` command made in the last 25 hours, wherever it wrote (the
+  command's record in `backup-status.json`, or the backups folder), and
+  makes one itself if no newer copy comes `nightly_backup.LATE` after it.
+<!-- /since -->
+
 ## Signing off your commits
 
 Office Sentry uses the [Developer Certificate of Origin](https://developercertificate.org)

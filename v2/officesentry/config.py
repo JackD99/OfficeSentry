@@ -53,6 +53,10 @@ class Config:
     keep_monthly: int = 12
     # Collector runs the worker executes at once, each for a different tenant.
     worker_concurrency: int = 4
+    # The worker's nightly database backup (nightly_backup.py): when, as cron in ``timezone`` ("" is off), and
+    # how many copies it keeps in <data dir>/backups.
+    backup_cron: str = "30 3 * * *"
+    backup_keep: int = 7
     secure_cookies: bool = True
     # Who must use two-step sign-in: "staff" (admins and analysts), "all", or "off".
     # Without OFFICESENTRY_REQUIRE_MFA, the database's own default applies (mfa_policy).
@@ -223,6 +227,8 @@ def load_config(**overrides) -> Config:
         keep_daily=int(_env("KEEP_DAILY", "30")),
         keep_monthly=int(_env("KEEP_MONTHLY", "12")),
         worker_concurrency=int(_env("WORKER_CONCURRENCY", "4")),
+        backup_cron=_backup_cron(),
+        backup_keep=int(_env("BACKUP_KEEP", "7")),
         secure_cookies=_env("INSECURE_COOKIES", "") != "1",
         require_mfa=_env("REQUIRE_MFA", "staff").strip().lower(),
         require_mfa_explicit=bool(_env("REQUIRE_MFA").strip()) or "require_mfa" in overrides,
@@ -248,6 +254,11 @@ def _collect_cron() -> str:
     return f"0 {int(_env('NIGHTLY_HOUR', '2'))} * * *"
 
 
+def _backup_cron() -> str:
+    cron = _env("BACKUP_CRON", "30 3 * * *").strip()
+    return "" if cron.lower() == "off" else cron
+
+
 def _check(cfg: Config) -> None:
     """Fail at startup with a plain message rather than later in the worker."""
     from .schedule import cron_problem, timezone_problem
@@ -261,6 +272,10 @@ def _check(cfg: Config) -> None:
         problems.append(f"{ENV_PREFIX}MAX_AGE_HOURS, KEEP_DAILY and KEEP_MONTHLY must be positive")
     if not 1 <= cfg.worker_concurrency <= 32:
         problems.append(f"{ENV_PREFIX}WORKER_CONCURRENCY must be between 1 and 32")
+    if cfg.backup_cron and (p := cron_problem(cfg.backup_cron)):
+        problems.append(f"{ENV_PREFIX}BACKUP_CRON: {p} (or off)")
+    if cfg.backup_keep < 1:
+        problems.append(f"{ENV_PREFIX}BACKUP_KEEP must be at least 1")
     # 0 here would sign everyone out on their next request, with nothing in the log to say why.
     if cfg.session_idle_minutes < 1 or cfg.session_hours < 1:
         problems.append(f"{ENV_PREFIX}SESSION_IDLE_MINUTES and {ENV_PREFIX}SESSION_HOURS must be at least 1")
