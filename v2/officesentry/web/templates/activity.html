@@ -11,7 +11,7 @@
       <label>User <input name="user" value="{{ filters.user }}" list="activity-users" maxlength="64" autocomplete="off"></label>
       <datalist id="activity-users">{% for u in users %}<option value="{{ u }}">{% endfor %}</datalist>
       <label>Action <select name="action"><option value="">Any</option>
-        {% for a in actions %}<option value="{{ a }}" {% if a == filters.action %}selected{% endif %}>{{ a|replace('tenant', 'client')|replace('_', ' ')|capitalize }}</option>{% endfor %}
+        {% for a in actions %}<option value="{{ a }}" {% if a == filters.action %}selected{% endif %}>{{ action_text(a) }}</option>{% endfor %}
       </select></label>
       <label>Client <select name="tenant"><option value="">Any</option>
         {% for tid, name in tenants %}<option value="{{ tid }}" {% if tid == filters.tenant %}selected{% endif %}>{{ name }}</option>{% endfor %}
@@ -30,7 +30,7 @@
     {% for r in rows %}
     <tr><td class="nowrap">{{ ts(r.ts) }}</td>
       <td data-label="User">{{ r.username or '' }}</td>
-      <td data-label="Action">{{ r.action|replace('tenant', 'client')|replace('_', ' ')|capitalize }}</td>
+      <td data-label="Action">{{ action_text(r.action) }}</td>
       <td data-label="Client">{{ tenant_label(r, names, added) }}</td>
       <td data-label="Address" class="mono small">{{ r.ip or '' }}</td>
       <td data-label="Detail" class="small">{{ detail_text(r, names, added) }}</td></tr>

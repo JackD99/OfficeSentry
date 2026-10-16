@@ -1,11 +1,14 @@
 """The audit log: source addresses, no flooding by strangers, retention, and the admin Activity log page."""
 
+import csv
+import io
 import re
 from datetime import UTC, datetime, timedelta
 
 from officesentry import store
 from officesentry.db import AUDIT_NOISE, AUDIT_NOISE_DAYS, audit, audit_counted, prune_audit
 from tests.conftest import PASSWORD, login, make_user
+from tests.test_limited_roles import _limited
 
 ATTACKER = "198.51.100.7"
 
@@ -107,9 +110,34 @@ def test_activity_log_filters_pages_and_exports(client, db, connection_id):
 
     csv = client.get("/admin/activity.csv", query_string={"tenant": alpha}).get_data(as_text=True)
     lines = csv.strip().splitlines()
-    assert lines[0].lstrip("﻿") == "Time (UTC),User,Action,Client,Address,Detail"
+    assert lines[0].lstrip("﻿") == "Time (UTC),User,Action,Client,Address,Detail,What happened"
     assert len(lines) == 3 and "'=HYPERLINK" in csv  # formulas are defused
     assert db.execute("SELECT 1 FROM audit_log WHERE action = 'activity_log_downloaded'").fetchone()
+
+
+def test_the_export_reads_each_row_in_words_after_the_stored_fields(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    audit(db, "admin", "user_access_changed", detail=f"jordan.desk: +collect@{alpha}, -export@{bravo}")
+    audit(db, "admin", "tenant_updated", alpha, "")
+    make_user(db, "admin")
+    login(client, "admin")
+    rows = list(csv.reader(io.StringIO(client.get("/admin/activity.csv").get_data(as_text=True).lstrip("\ufeff"))))
+    header, body = rows[0], rows[1:]
+    assert header[-2:] == ["Detail", "What happened"]
+    access = next(r for r in body if r[2] == "user_access_changed")
+    assert access[5] == f"jordan.desk: +collect@{alpha}, -export@{bravo}"  # as stored, for existing spreadsheets
+    assert access[6] == (
+        "User access changed: jordan.desk: allowed Refresh data for Alpha Ltd; not allowed Download files for Bravo Inc"
+    )
+    assert next(r for r in body if r[2] == "tenant_updated")[6] == "Client updated"
+    # Someone who sees only Alpha never reads Bravo's name in the words either.
+    _limited(db, "rev", ["reports.security", "activity_log.read"], tenants=[alpha])
+    client.post("/logout")
+    login(client, "rev")
+    text = client.get("/admin/activity.csv").get_data(as_text=True)
+    assert (
+        "Bravo Inc" not in text and f"not allowed Download files for Client #{bravo} (deleted or not visible)" in text
+    )
 
 
 def test_refused_pages_are_counted_per_person_and_hour(client, db, two_tenants):
