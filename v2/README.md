@@ -87,6 +87,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   or "who signed in from this IP?" is one search. Each result opens the
   person's or object's page, or the detail report filtered to that row, and it
   only finds what you can open.
+  Press `/` (or Ctrl+K, ⌘K on a Mac) on any page to start typing in it. <!-- since 2.4.0 -->
 - **Home pages** (staff): **Today** (`/today`, for technicians) lists the
   clients that need someone today and why: critical and high findings new in
   the last day, collections that failed or are out of date, access not granted
@@ -779,6 +780,8 @@ and follows it through consent, Global Reader and its first collection.
 
 ## Managing clients
 
+- **Settings** in the menu opens *Client settings*. Its pages are in four areas, shown as tabs with the open area's pages under them: *Clients* (Client settings, Client groups, App connection), *Reports and email* (Branding, Licence prices, Email delivery, Alerts), *Team* (Users, Microsoft sign-in, Activity log) and *System* (System status, Data retention, Updates, Support). These docs name the page, as in *Settings → Email delivery*. <!-- since 2.4.0 -->
+- **Switch client**, beside a client's name (staff who see more than one client): opens the page you're on for another client you see, within the client group you picked, with a box to find one by name. From an account, mailbox, group or site it opens that client's list, and a report the other client doesn't have, or that you can't open there, opens its Reports tab. <!-- since 2.4.0 -->
 - **Client settings** (*Settings → Client settings*, or *Connection health* on
   the Clients page) lists every client with its status (*Onboarding*,
   *Healthy*, *Needs attention*, *Paused*, *Archived*), consent, missing

@@ -100,8 +100,9 @@ FITS = (
 
 
 def test_tables_are_fitted_again_once_the_fonts_arrive(open_as, browser):
-    """A page draws in a fallback font until Inter arrives (font-display: swap) and Inter is a little wider, so
-    tables.js fits each table again then: one that fitted in the fallback but needs to be snug in Inter is."""
+    """A page draws in a fallback font until the bundled fonts arrive (font-display: swap), which set text a
+    little differently, so tables.js fits each table again then: one that fitted in the fallback is checked
+    again in the bundled fonts."""
     spec = next(p for p in PAGES if p.name == "stress/across.rows_index[file-permissions]")
     where = open_as(spec)
     width, height = LAPTOPS[0]

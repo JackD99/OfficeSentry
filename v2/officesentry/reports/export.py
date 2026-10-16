@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import functools
+import io
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 from urllib.request import url2pathname
@@ -42,6 +44,25 @@ def allowed_url(url: str) -> bool:
     return path.is_relative_to(STATIC_DIR) and path.is_file()
 
 
+@functools.lru_cache(maxsize=16)
+def _unpacked_font(path: str, mtime: float) -> bytes:
+    """A shipped WOFF2 font as plain OpenType, unpacked once per process. WeasyPrint unpacks every
+    font a stylesheet names for every PDF, which took most of a short PDF's time."""
+    from fontTools.ttLib import woff2
+
+    out = io.BytesIO()
+    woff2.decompress(io.BytesIO(Path(path).read_bytes()), out)
+    return out.getvalue()
+
+
+def _font(url: str) -> bytes | None:
+    """The unpacked font for an allowed ``.woff2`` URL, else None (fetch it as usual)."""
+    if not url.lower().startswith("file:") or not urlsplit(url).path.lower().endswith(".woff2"):
+        return None
+    path = Path(url2pathname(unquote(urlsplit(url).path))).resolve()
+    return _unpacked_font(str(path), path.stat().st_mtime)
+
+
 def url_fetcher():
     """A WeasyPrint URL fetcher that only fetches what ``allowed_url`` allows."""
     from weasyprint import urls
@@ -52,6 +73,8 @@ def url_fetcher():
             def fetch(self, url, headers=None):
                 if not allowed_url(url):
                     raise ValueError(f"Office Sentry doesn't load {url[:100]} into PDFs")
+                if (font := _font(url)) is not None:
+                    return urls.URLFetcherResponse(url, font, {"Content-Type": "font/otf"})
                 return super().fetch(url, headers)
 
         return StaticOnlyFetcher(allowed_protocols=("data", "file"), allow_redirects=False)
@@ -59,6 +82,8 @@ def url_fetcher():
     def fetch(url, *args, **kwargs):  # older WeasyPrint: a plain function
         if not allowed_url(url):
             raise ValueError(f"Office Sentry doesn't load {url[:100]} into PDFs")
+        if (font := _font(url)) is not None:
+            return {"string": font, "mime_type": "font/otf", "redirected_url": url}
         return urls.default_url_fetcher(url, *args, **kwargs)
 
     return fetch
