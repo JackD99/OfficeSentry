@@ -41,7 +41,7 @@ from .object_page import (
     sources_for,
 )
 from .profile.base import HISTORY_LIMIT, Event, Part
-from .sharepoint import CONCEALED_NOTICE, INACTIVE_DAYS, site_type, size, storage_chart
+from .sharepoint import CONCEALED_NOTICE, INACTIVE_DAYS, site_name, site_type, size, storage_chart, url_key
 
 KIND = "site"
 URL = "sites"
@@ -60,11 +60,6 @@ def _text(value) -> str:
 
 def _int(value) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
-
-
-def url_key(url) -> str:
-    """A site address as compared everywhere: lower case, no trailing slash."""
-    return _text(url).lower().rstrip("/")
 
 
 def site_key(row: dict) -> str:
@@ -113,15 +108,9 @@ PAGE_INDEXES.append(PageIndex(_index))
 
 
 def _name(site: dict, storage: dict | None) -> str:
-    """The site's name: SharePoint storage has it; the usage report only has the address, whose last part
-    ("/sites/finance-team") reads as a name."""
-    name = _text((storage or {}).get("site"))
-    if name:
-        return name
-    url = url_key(site.get("url"))
-    if "/sites/" in url or "/teams/" in url:
-        return url.rsplit("/", 1)[-1].replace("-", " ").replace("_", " ").title()
-    return _text(site.get("url"))
+    """The site's name, as the SharePoint sites report shows it: SharePoint storage has it; the usage report
+    only has the address, whose last part ("/sites/finance-team") reads as a name."""
+    return _text((storage or {}).get("site")) or site_name(site)
 
 
 def _storage_rows(snap: TenantSnapshot) -> dict[str, dict]:
@@ -567,7 +556,7 @@ def _about(s: Site) -> list[tuple[str, object]]:
 
 
 def _reports(s: Site) -> list[tuple[str, str]]:
-    links = [("SharePoint sites", s.report("sharepoint", "All sites", "Site", s.url))]
+    links = [("SharePoint sites", s.report("sharepoint", "All sites", "Site", s.name))]
     if s.storage_collected:
         links.append(("SharePoint storage", s.report("sharepoint-storage", "Sites by storage", "Site", s.name)))
     if s.snap.has("shared_files"):

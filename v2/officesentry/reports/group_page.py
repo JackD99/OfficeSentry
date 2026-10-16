@@ -46,6 +46,7 @@ from .object_page import (
     sources_for,
 )
 from .profile.base import HISTORY_LIMIT, Event, Part
+from .sharepoint import site_name, site_names
 from .site_page import matches_group, site_key, site_path
 
 KIND = "group"
@@ -926,11 +927,10 @@ def _reports(m: Group) -> list[tuple[str, str]]:
         links.append(("Admin roles", m.report("admins")))
     site = _team_site(m)
     if site is not None and site.get("url"):
-        links.append(("SharePoint sites", m.report("sharepoint", "All sites", "Site", site["url"])))
+        name = site_name(site, site_names(m.snap))  # both reports name the site, as the site's page does
+        links.append(("SharePoint sites", m.report("sharepoint", "All sites", "Site", name)))
         if m.snap.has("sharepoint_storage"):
-            links.append(
-                ("SharePoint storage", m.report("sharepoint-storage", "Sites by storage", "Site", site["url"]))
-            )
+            links.append(("SharePoint storage", m.report("sharepoint-storage", "Sites by storage", "Site", name)))
     if m.snap.has("admin_activity"):
         links.append(("Admin activity", m.report("admin-activity")))
     return links
