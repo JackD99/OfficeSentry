@@ -188,7 +188,6 @@ a.grade:hover, a.grade:focus-visible { background: var(--surface-2); }
 .tile .value .grade { margin-right: var(--space-1-5); }
 .grade-row { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--space-0-5); margin: 0; padding: 0; }
 .grade-row .cell { display: grid; gap: var(--space-0-5); justify-items: center; }
-.card.flush > .footnote { padding: 0 var(--space-5) var(--space-4); }
 .grade-row .cell small { font-size: var(--fs-2xs); color: var(--muted); }
 .grade-row .cell.now small { color: var(--text-2); font-weight: 600; }
 .part-checks { margin-top: var(--space-2); }
