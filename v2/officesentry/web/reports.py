@@ -325,9 +325,10 @@ def evidence_download(tenant_id: int, ext: str):
 @bp.get("/tenants/<int:tenant_id>/data")
 @needs()
 def data_index(tenant_id: int):
-    """The Reports tab, and the report picker on phones: ``?key=`` or the first report. A key can also name a
-    custom report (``design:<id>``) or one of the person's saved views (``view:<id>``), as the picker lists
-    them."""
+    """The Reports tab: without ``?key=`` the client's report catalogue (every report the person opens there,
+    with a search box), with one (the picker on phones, links from elsewhere) that report. A key can also name
+    a summary, a custom report (``design:<id>``) or one of the person's saved views (``view:<id>``), as the
+    picker lists them; one that isn't there, or isn't theirs to open, shows the catalogue."""
     t = tenant_or_404(tenant_id)
     key = request.args.get("key", "")
     if key == "review":
@@ -345,15 +346,27 @@ def data_index(tenant_id: int):
         if view is None:
             abort(404)
         return redirect(view["href"])
-    groups = report_groups(t["id"])
-    if not exists(key, t["id"]) or not can(report_capability(key), t["id"]):
-        if not groups:
-            abort(403)
-        key = groups[0].reports[0][0]
-    # A past day (?on=) stays when switching reports; the report checks it.
-    return redirect(
-        url_for("reports.data_report", tenant_id=t["id"], key=key, on=request.args.get("on", "")[:10] or None)
+    if not report_groups(t["id"]):
+        abort(403)
+    if key and exists(key, t["id"]) and can(report_capability(key), t["id"]):
+        # A past day (?on=) stays when switching reports; the report checks it.
+        return redirect(
+            url_for("reports.data_report", tenant_id=t["id"], key=key, on=request.args.get("on", "")[:10] or None)
+        )
+    return render_template("report_index.html", tenant=t, count=report_count(t["id"]))
+
+
+def report_count(tenant_id: int) -> int:
+    """How many reports the person opens on this client, as the Reports tab lists them: the summaries and
+    detail reports, and the MSP's custom reports."""
+    areas = library.catalogue(hidden_reports(tenant_id))
+    listed = sum(
+        1
+        for a in areas
+        for e in a.entries
+        if e.kind in ("data", "review", "evidence") and can(entry_capability(e), tenant_id)
     )
+    return listed + len(custom_reports(tenant_id))
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>")

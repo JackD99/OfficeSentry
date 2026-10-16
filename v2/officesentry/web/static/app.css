@@ -889,6 +889,12 @@ td.tenant-col { min-width: 190px; max-width: 20em; } /* a long client name wraps
 .report-links.featured { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); margin-bottom: 18px; }
 .report-directory { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 18px 24px; padding-top: var(--space-4); border-top: 1px solid var(--border); }
 .report-group h3 { margin: 0 0 var(--space-1-5); font-size: var(--fs-md); font-weight: 600; font-variant-caps: all-small-caps; letter-spacing: .06em; color: var(--muted); }
+/* The client's own reports (custom reports, saved views) between the featured cards and the directory. */
+.report-own { display: flex; flex-wrap: wrap; gap: 0 var(--space-6); }
+.report-own .report-group { min-width: 0; max-width: 100%; margin-bottom: 18px; }  /* on the groups, so a search that hides both leaves no gap */
+.report-own .opts .n { color: var(--muted); }
+.report-own .opt.new { color: var(--accent); }
+.report-own .opt.new:hover { background: var(--accent-soft); }
 .report-group ul { list-style: none; margin: 0; padding: 0; }
 .report-group li a { display: block; padding: var(--space-1) 0; color: var(--text-2); font-weight: 500; font-size: .9rem; }
 .report-group li a:hover { color: var(--accent); }

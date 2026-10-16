@@ -287,3 +287,59 @@
   <noscript><button class="btn sm">Show</button></noscript>
 </form>
 {%- endmacro %}
+{% macro report_directory(tenant) -%}
+{#- Every report for one client, as the Reports tab (report_index.html) and the overview's Reports card show
+    it: the summaries as featured cards, the MSP's custom reports and the person's saved views, then every
+    detail report by area; the same entries as report_picker. Each item carries data-name for the card's
+    search box (data-report-search="report-directory"), whose no-match line sits beside this. -#}
+{% set staff = current_user.role != 'client' and can('reports.security', tenant.id) %}
+{% set areas = report_catalogue(tenant.id) %}
+{% set custom = custom_reports(tenant.id) if staff else [] %}
+{% set mine = my_views(tenant.id) %}
+{% set projects = can('projects.view', tenant.id) %}
+{% set featured = [] %}{% for e in areas[0].entries if e.kind in ('review', 'evidence') and can(entry_capability(e), tenant.id) %}{% set _ = featured.append(e) %}{% endfor %}
+<p class="muted small m0 no-match" hidden>No report matches that. Try a word like mailbox, admin or licence.</p>
+<div id="report-directory">
+  {% if featured or projects %}
+  <div class="report-group report-links featured">
+    {% for e in featured %}
+    <a class="report-link{% if loop.first %} primary{% endif %}" href="{{ _picker_href(tenant, e, none) }}" data-name="{{ e.search }}">
+      <span class="title">{{ e.title }} {{ icon('arrow') }}</span><span class="desc">{{ e.description }}</span></a>
+    {% endfor %}
+    {% if projects %}
+    <a class="report-link" href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}" data-name="recommended projects proposal quote work the findings call for">
+      <span class="title">Recommended projects {{ icon('arrow') }}</span><span class="desc">Work the findings call for, to propose to the client.</span></a>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if staff or mine %}
+  <div class="report-own">
+    {% if staff %}
+    <div class="report-group">
+      <h3>Custom reports</h3>
+      <div class="opts">
+        {% for c in custom %}<a class="opt" href="{{ c.href }}" data-name="{{ c.search }}" title="{{ c.description or 'A custom report, on ' ~ tenant.name ~ "'s data" }}">{{ c.name }}</a>
+        {% endfor %}<a class="opt" href="{{ url_for('designs.tenant_designs', tenant_id=tenant.id) }}" data-name="custom reports designs blocks all" title="Every custom report, on {{ tenant.name }}'s data{% if not custom %}: none yet{% endif %}">{{ 'All custom reports' if custom else 'Custom reports' }}</a>
+        {% if can_open('designs.index') %}<a class="opt new" href="{{ url_for('designs.index') }}" data-name="new custom report design blocks make build" title="Build a client report from blocks; it then works for every client">{{ icon('plus') }} New custom report</a>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% if mine %}
+    <div class="report-group">
+      <h3>Your views</h3>
+      <div class="opts">{% for v in mine %}<a class="opt" href="{{ v.href }}" data-name="{{ v.search }}" title="{{ v.report }} with the filters, columns and sort you saved as “{{ v.name }}”">{{ v.name }}<span class="n">{{ v.report }}</span></a>
+        {% endfor %}</div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+  <div class="report-directory">
+    {% for area in areas[1:] %}{% set entries = [] %}{% for e in area.entries if e.kind == 'data' and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}
+    <div class="report-group">
+      <h3>{{ area.title }}</h3>
+      <ul>{% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=e.key) }}" title="{{ e.description }}">{{ e.title }}</a></li>{% endfor %}</ul>
+    </div>
+    {% endif %}{% endfor %}
+  </div>
+</div>
+{%- endmacro %}
