@@ -263,7 +263,7 @@
 {% endif %}
 
 {% if paid and 'part:licences' not in off %}
-<section id="licences">
+<section id="licences"{% if paid|length <= 8 %} class="keep"{% endif %}>
   <h2>Licences</h2>
   {% if report.licences.monthly_waste %}
   <div class="callout keep">
