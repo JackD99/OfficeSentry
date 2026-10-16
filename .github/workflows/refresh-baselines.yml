@@ -4,8 +4,13 @@ name: Refresh baselines
 # "refresh-baselines" to the pull request does it from the pull request itself: the pinned browser retakes
 # the screenshots (tests/browser/baselines), the nightly suite redraws the example PDFs' pages
 # (tests/nightly/pdf_baselines), whatever changed is committed to the branch, the label comes off, and the
-# checks start again on that commit (a push made with the workflow's own token starts none by itself).
-# Look at the new images in the pull request before merging.
+# ui and nightly comparisons run again on that commit. Look at the new images in the pull request before
+# merging.
+#
+# The pull request can't merge on that commit as it stands. GitHub holds a pull request's runs for a push
+# made with the workflow's own token until someone with write access approves them ("Approve workflows to
+# run" on the pull request), and the ruleset's "CI passed" only counts once they've run: a "CI passed" from
+# a run started here doesn't (#128 on 16 October). Approve them, or push once more (merging main does it).
 #
 # The pages are captured from the pull request merged with main, as the checks compare them (a branch
 # behind main would otherwise get baselines without main's changes), and .github/scripts/commit_baselines.sh
@@ -121,9 +126,9 @@ jobs:
             exit 0
           fi
           # The ui and nightly checks only where their baselines changed, comparing the pull request merged
-          # with main as their pull_request runs do; the main suite always, so the new commit has a CI result.
-          gh workflow run v2.yml --ref "$BRANCH"
-          # Those two check out refs/pull/<n>/merge, which GitHub makes again a little after a push. Started
+          # with main as their pull_request runs do. Not the main suite: the ruleset doesn't count a run
+          # started here, and the approval or push the pull request needs next runs it.
+          # They check out refs/pull/<n>/merge, which GitHub makes again a little after a push. Started
           # straight away they could compare the merge from before the new baselines and fail on the old
           # difference (#123 on 16 October), so they wait until it merges the branch's new head (asking for
           # the pull request makes GitHub work out the merge).
