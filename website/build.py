@@ -367,7 +367,8 @@ WHATS_NEW = [
                 "title": "Every report leads with its numbers",
                 "text": "Nine more detail reports, Devices, Guests and Conditional Access among them, open with "
                 "headline figures that each open the rows they count, and All clients compares them across "
-                "every client.",
+                "every client. Last sign-in, forwarding, MFA, DMARC and holds now count the way Microsoft and "
+                "Exchange do, so an account under a password spray no longer looks active.",
                 "href": "/docs/reference/#reports",
                 "link": "Reports",
             },

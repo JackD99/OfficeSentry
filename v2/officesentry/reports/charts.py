@@ -9,11 +9,11 @@ from html import escape
 # Presentation attributes for renderers without CSS (WeasyPrint's SVG, image
 # viewers). In the browser, report.css overrides them for dark mode.
 GRID = 'stroke="#e3e6eb" stroke-width="1"'
-AXIS = 'fill="#5d6676" font-size="11" font-family="sans-serif"'
+AXIS = 'fill="#5d6676" font-size="11" font-family="Source Sans 3, sans-serif"'
 SERIES = 'fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"'
 END = 'fill="#2a78d6" stroke="#ffffff" stroke-width="2"'
-VALUE = 'fill="#1d2330" font-size="12" font-weight="700" font-family="sans-serif"'
-COUNT = 'fill="#5d6676" font-size="9" font-family="sans-serif"'
+VALUE = 'fill="#1d2330" font-size="12" font-weight="700" font-family="Source Sans 3, sans-serif"'
+COUNT = 'fill="#5d6676" font-size="9" font-family="Source Sans 3, sans-serif"'
 
 
 def line_chart(

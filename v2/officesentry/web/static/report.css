@@ -406,7 +406,7 @@ body.pdf thead { display: table-header-group; }
 body.pdf article.document, body.pdf article.document .cover.compact { page: doc; }
 body.pdf article.document.wide, body.pdf article.document.wide .cover.compact { page: wide; }
 body.pdf .lede { margin: 0 0 4mm; }
-body.pdf .kpis + .kpis, body.pdf .kpis + .callout { margin-top: 3mm; }
+body.pdf .kpis + .kpis, body.pdf .kpis + .callout, body.pdf .kpis + .breakdown { margin-top: 3mm; }
 body.pdf .doc-section { margin-top: 2mm; }
 body.pdf .doc-section .section-intro { break-after: avoid; }
 body.pdf .empty-note { break-before: avoid; }
@@ -423,6 +423,16 @@ body.pdf .tidy-item:last-child { border-bottom: 1px solid var(--border); }
 /* A heading never ends a page: it keeps its intro and the first rows of its table. */
 body.pdf h2, body.pdf h3, body.pdf .section-intro, body.pdf .check-head { break-after: avoid; }
 body.pdf table { orphans: 3; widows: 3; }
+/* The small print follows a table report's last rows rather than taking a page to itself: the last table
+   carries at least two rows onto its last page, and a short one splits to do it, keeping its heading, header
+   row and first two rows together. A short comparison of clients (.whole) moves whole instead. */
+body.pdf section.doc-section:last-of-type + footer.about,
+body.pdf section.doc-section:last-of-type .legend-note { break-before: avoid; }
+body.pdf section.doc-section:last-of-type .table-wrap:not(.whole) { break-inside: auto; }
+body.pdf section.doc-section:last-of-type .table-wrap.keep tbody tr:nth-child(2),
+body.pdf section.doc-section:last-of-type tbody tr:last-child { break-before: avoid; }
+/* A total comes once, under the last rows, rather than at the foot of every page. */
+body.pdf tfoot { display: table-row-group; break-before: avoid; }
 /* A long check card splits across pages rather than leaving most of a page empty: its heading, what to do
    and the first rows stay together, the table header repeats, and each part keeps the card's border. */
 body.pdf .check { break-inside: auto; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
