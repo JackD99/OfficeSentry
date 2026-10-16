@@ -6,6 +6,7 @@ import json
 import shutil
 import socket
 import socketserver
+import sys
 import tempfile
 import threading
 import time
@@ -84,6 +85,14 @@ class Engine(BaseHTTPRequestHandler):
 
 class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
+
+    def handle_error(self, request, client_address) -> None:
+        """A client that hung up first is no error: after a 204's headers it has the whole answer and may close
+        before the fake writes the empty body, and the helper that takes too long stops waiting for it. Those
+        printed a traceback into the test run's log now and then; anything else still does."""
+        if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError)):
+            return
+        super().handle_error(request, client_address)
 
 
 @pytest.fixture

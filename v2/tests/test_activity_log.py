@@ -60,6 +60,7 @@ def test_old_sign_in_noise_is_pruned_but_changes_are_kept(db):
 
 def _seed(db, connection_id):
     alpha = store.create_tenant(db, "Alpha Ltd", "alpha.onmicrosoft.com", connection_id)
+    db.execute("UPDATE tenants SET created_at = '2026-08-01T00:00:00Z' WHERE id = ?", (alpha,))  # before its rows
     rows = [
         ("2026-09-01T10:00:00Z", "ana", "collect_requested", alpha, "users"),
         ("2026-09-02T10:00:00Z", "bob", "tenant_updated", alpha, '=HYPERLINK("x")'),
