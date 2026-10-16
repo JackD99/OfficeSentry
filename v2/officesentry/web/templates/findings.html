@@ -53,7 +53,7 @@
     <form method="post" action="{{ url_for('reports.accept_finding', finding_id=key) }}" class="accept">
       {{ csrf() }}
       <label>Reason <input name="note" maxlength="500" required placeholder="e.g. Break-glass account, monitored"{% if was %} value="{{ was.accepted_note }}"{% endif %}></label>
-      <label>Review on (optional) <input type="date" name="until"></label>
+      <label>Review on (optional) <input type="date" name="until" min="{{ first_review_day }}"></label>
       <button class="sm primary">Accept risk</button>
     </form>
   </details>

@@ -268,6 +268,39 @@ def test_designs_are_made_edited_duplicated_and_removed(client, db, two_tenants)
     assert actions.count("report_design_created") == 2 and "report_design_deleted" in actions
 
 
+def test_a_design_of_more_blocks_than_it_holds_is_refused_not_cut(client, db, two_tenants):
+    """It used to keep the first 60 and drop the rest without a word."""
+    _staff(client, db, "admin")
+    did = designs.create(db, "Pack", "admin", {"blocks": [_block("verdict")]})
+    body = {"blocks": [_block("text", text=f"Block {n}") for n in range(designs.MAX_BLOCKS + 1)]}
+    resp = client.post(f"/reporting/designs/{did}", data=json.dumps(body), content_type="application/json")
+    assert resp.status_code == 400
+    assert resp.get_json() == {
+        "ok": False,
+        "error": "Not saved: a design holds 60 blocks at most. Remove some and it saves.",
+    }
+    assert [b["kind"] for b in designs.document(designs.get(db, did))["blocks"]] == ["verdict"]
+    body["blocks"].pop()
+    assert (
+        client.post(f"/reporting/designs/{did}", data=json.dumps(body), content_type="application/json").status_code
+        == 200
+    )
+    assert len(designs.document(designs.get(db, did))["blocks"]) == designs.MAX_BLOCKS
+
+
+def test_the_editor_lists_every_placeholder_the_title_takes(client, db, two_tenants):
+    """The cover's title is filled like a text block, so {quarter} works there too."""
+    alpha, _ = two_tenants
+    _staff(client, db, "admin")
+    did = designs.create(db, "Pack", "admin", {"settings": {"title": "{client} {quarter}"}})
+    page = _text(client.get(f"/reporting/designs/{did}"))
+    hint = page.split('id="cover-title"', 1)[1].split("</label>", 1)[0]
+    assert 'class="hint">Placeholders: {client}, {month}, {quarter}, {msp} and {date}.<' in hint
+    tenant = store.get_tenant(db, alpha)
+    title = designs.context(db, tenant, designs.get(db, did))["title"]
+    assert "{" not in title and title.startswith("Alpha Ltd ")
+
+
 def test_who_may_do_what(client, db, two_tenants):
     alpha, _ = two_tenants
     did = designs.create(db, "D", "test", designs.STARTERS["executive"][2])

@@ -238,9 +238,11 @@ bulk and following each one through consent.
    optionally `group` (several separated by `;`; missing groups are created),
    `contact` (`jane@contoso.com` or `Jane Smith <jane@contoso.com>`, also added
    to the client's email contacts) and `cloud` (empty for Commercial, or GCC
-   High, DoD, China). Excel's *Save as CSV* works, comma or semicolon. Up to
-   1,000 rows at a time; **Download a template** has the layout. You see every
-   row first, with what's wrong with any of them, which app connection each
+   High, DoD, China). Excel's *Save as CSV* works, comma or semicolon, and so
+   do Excel's *Unicode Text* and Windows PowerShell's `ConvertTo-Csv > clients.csv`
+   (UTF-16). Up to 1,000 rows at a time; **Download a template** has the
+   layout. You see every row first, with its line in the file and what's
+   wrong with any of them, which app connection each
    cloud uses, any groups the import creates and who will see the new
    clients through a group. Nothing is added until you press **Import**.
    Clients already in Office Sentry are skipped, never changed.
@@ -488,7 +490,9 @@ walks through it:
    [What Office Sentry reads](what-office-sentry-reads.md#how-to-remove-access).
 3. **Check what will be deleted**: collection runs and stored data, findings
    (including accepted risks), emailed reports, alert emails, client contacts,
-   email history, and which Office Sentry users lose access.
+   email history, the files in the client's **Report history** (the reports
+   as they were sent or published, linked so you can download them first),
+   and which Office Sentry users lose access, with their roles.
 4. **Delete permanently**: tick any client accounts that had access to this
    client only, if they should go too (they'd see nothing afterwards), type the
    client's name and press *Delete … permanently*.

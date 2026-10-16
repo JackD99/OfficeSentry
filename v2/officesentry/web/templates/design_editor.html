@@ -53,7 +53,7 @@
           <span class="layout-title">Cover and options</span><span class="layout-sub" id="cover-sub"></span>
         </button>
         <div class="layout-settings" id="cover-settings" hidden>
-          <label>Title <input type="text" id="cover-title" maxlength="120" placeholder="{{ design.name }}"><span class="hint">Placeholders: {client}, {month}, {msp}, {date}.</span></label>
+          <label>Title <input type="text" id="cover-title" maxlength="120" placeholder="{{ design.name }}"><span class="hint">Placeholders: {{ placeholders }}.</span></label>
           <label>Subtitle <input type="text" id="cover-subtitle" maxlength="{{ text_max }}" placeholder="{month}"></label>
           <fieldset class="seg-field"><legend>Cover</legend>
             <span class="seg sm">
@@ -85,7 +85,7 @@
 </div>
 
 <template id="designer-icons">{% for n in ('up', 'down', 'half', 'copy', 'close') %}<span data-icon="{{ n }}">{{ icon(n) }}</span>{% endfor %}</template>
-<script type="application/json" id="designer-data">{{ {"doc": doc, "palette": palette, "tenant": tenant.id if tenant else none}|tojson }}</script>
+<script type="application/json" id="designer-data">{{ {"doc": doc, "palette": palette, "tenant": tenant.id if tenant else none, "max_blocks": max_blocks}|tojson }}</script>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='designer.js') }}" nonce="{{ csp_nonce }}"></script>
