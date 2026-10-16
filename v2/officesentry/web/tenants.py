@@ -16,7 +16,7 @@ from ..db import audit, transaction, utcnow
 from ..discovery import tenant_id_for_domain
 from ..entra import admin_consent_url
 from ..reports.month_changes import CHANGE_REPORTS
-from ..text import plural
+from ..text import one_line, plural
 from .access import can, is_staff, login_required, manages_groups, needs, opens_on, tenant_or_404, visible_tenants
 from .groups import group_aware, scoped_tenants
 from .reports import report_groups
@@ -160,7 +160,7 @@ def dashboard():
 def new_tenant():
     connections = store.list_connections(g.db)
     if request.method == "POST":
-        name = request.form.get("name", "").strip()
+        name = one_line(request.form.get("name", ""))
         ref = request.form.get("tenant_ref", "").strip().lower()
         conn_id = request.form.get("connection_id", type=int)
         cloud = request.form.get("cloud", clouds.DEFAULT)

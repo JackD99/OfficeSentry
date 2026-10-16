@@ -7,8 +7,9 @@ code from you. You add their primary contacts once; they press **Sign in with Mi
 What it is and isn't:
 
 - It uses the same small sign-in app as [staff sign-in](staff-sign-in.md), in **your own** tenant, with no
-  API permissions. Office Sentry only asks Microsoft who signed in. The read-only connection to your clients'
-  tenants doesn't change, and no client is asked for any new permission.
+  application permissions: only the standard sign-in scopes (`openid`, `profile`, `email`), so Office Sentry
+  only learns who signed in. The read-only connection to your clients' tenants doesn't change, and no client
+  is asked for any new permission.
 - Each person still needs a client account here, granted their own company only, so tenant isolation works
   exactly as before: they see that client's reports and nothing else.
 - Office Sentry only lets them in from **their own company's tenant**. A Microsoft account from anywhere else,
@@ -121,3 +122,14 @@ counted per address, without their names.
 **Turn off client sign-in** under *Settings → Microsoft sign-in* sends client accounts back to passwords;
 anyone without one can't sign in until you set one on their user page. The sign-in app keeps accepting other
 organisations' accounts until you change it back in Entra, but Office Sentry lets none of them in.
+
+A client can also take the sign-in app out of their own tenant at any time, without your help. Their Microsoft
+365 administrator opens the Microsoft Entra admin centre, then *Enterprise applications*, the sign-in app (named
+"Office Sentry sign-in", or the name you gave it when you set it up, as shown under *The sign-in app* on
+**Settings → Microsoft sign-in**), *Properties* and *Delete*. That takes back their organisation's approval: their
+people can't sign in with Microsoft until they approve it again, as in
+[Their administrator's approval](#their-administrators-approval). The approval link is the same every time, so the
+one you sent before still works. Anyone there with a password account here can still sign in with that.
+
+Office Sentry doesn't see the removal, since it never looks in the client's tenant for the sign-in app: the
+client's **Client sign-in** page keeps showing the approval it noted.
