@@ -100,7 +100,8 @@ ACCESS_WORD = re.compile(r"([+-])([a-z_.]+)(?:@(\d+))?")
 def detail_text(row, names: dict[int, str], added: dict[int, str]) -> str:
     """A row's detail in words where it was stored as keys: "jordan.desk: +collect@2" reads "jordan.desk:
     allowed Refresh data for Alpha Ltd" (a client named as the Client column names it), and an evidence answer
-    names its question. Everything else (and the CSV export) shows the detail as stored."""
+    names its question. Everything else shows the detail as stored. The CSV export keeps the stored detail and
+    adds these words in its What happened column."""
     action, detail = row["action"], row["detail"] or ""
     if action == "user_access_changed" and ": " in detail:
         who, words = detail.split(": ", 1)
@@ -124,6 +125,17 @@ def detail_text(row, names: dict[int, str], added: dict[int, str]) -> str:
     if action == "evidence_answer_cleared" and detail in QUESTIONS:
         return f"{QUESTIONS[detail]} Back to the suggested answer"
     return detail
+
+
+def action_text(action: str) -> str:
+    """An action as the page names it: "tenant_updated" reads "Client updated"."""
+    return action.replace("tenant", "client").replace("_", " ").capitalize()
+
+
+def what_happened(row, names: dict[int, str], added: dict[int, str]) -> str:
+    """A row in words, as the page reads it: the action, then its detail."""
+    detail = detail_text(row, names, added)
+    return f"{action_text(row['action'])}: {detail}" if detail else action_text(row["action"])
 
 
 @bp.get("/admin/activity")
@@ -156,6 +168,7 @@ def index():
         tenant_label=tenant_label,
         added=_added(),
         detail_text=detail_text,
+        action_text=action_text,
         actions=actions,
         users=users,
         tenants=sorted(names.items(), key=lambda kv: kv[1].lower()),
@@ -182,12 +195,18 @@ def export():
             tenant_label(r, names, added),
             r["ip"] or "",
             r["detail"] or "",
+            what_happened(r, names, added),
         ]
         for r in rows
     ]
     if cut:  # said in the file itself, so nobody takes it for the whole log
-        lines.append([f"Only the newest {CSV_LIMIT:,} rows. Choose dates to download the rest.", "", "", "", "", ""])
-    table = Table("Activity log", ["Time (UTC)", "User", "Action", "Client", "Address", "Detail"], lines)
+        lines.append(
+            [f"Only the newest {CSV_LIMIT:,} rows. Choose dates to download the rest.", "", "", "", "", "", ""]
+        )
+    # The stored fields first, as they always were, so spreadsheets built on them keep working; then the row
+    # as the page reads it.
+    columns = ["Time (UTC)", "User", "Action", "Client", "Address", "Detail", "What happened"]
+    table = Table("Activity log", columns, lines)
     audit(g.db, g.user["username"], "activity_log_downloaded", detail=f"{len(rows)} rows" + (", cut" if cut else ""))
     return Response(
         to_csv(table),
