@@ -486,7 +486,7 @@ def test_the_worker_leaves_the_night_to_a_server_that_backs_up_itself(cfg, db, t
 def test_a_copy_made_once_by_hand_never_leaves_a_gap(cfg, db, two_tenants, monkeypatch):
     from datetime import UTC, datetime, timedelta
 
-    from officesentry import system_health, tasks
+    from officesentry import nightly_backup, system_health, tasks
 
     stamps = iter(f"20261015-0330{n:02}" for n in range(60))
     monkeypatch.setattr(backups, "_stamp", lambda: next(stamps))
@@ -504,8 +504,11 @@ def test_a_copy_made_once_by_hand_never_leaves_a_gap(cfg, db, two_tenants, monke
     assert _tick(cfg, db, night + timedelta(days=1)) == []  # it stands in for tonight's...
     assert len(_tick(cfg, db, by_hand + timedelta(hours=25))) == 1  # ...until it's 25 hours old
     tasks.drain(None, db, None, cfg)
-    now = by_hand + timedelta(hours=25, minutes=2)
-    assert system_health.check_backup(db, cfg, now).status == "ok"
+    # The task records its copy at the time it really ran, so System status is asked at that time too.
+    local = backups.read_status(cfg.data_dir)["local"]
+    assert local["ok"] and local["detail"].startswith(nightly_backup._setting(db, nightly_backup.MADE))
+    caught_up = datetime.fromisoformat(local["last_success"].replace("Z", "+00:00"))
+    assert system_health.check_backup(db, cfg, caught_up + timedelta(minutes=2)).status == "ok"
     assert len(_tick(cfg, db, night + timedelta(days=2))) == 1  # then back to every night
 
 
