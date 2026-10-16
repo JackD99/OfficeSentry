@@ -19,7 +19,8 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   graphite and plum. Anyone who picked one of those keeps it; anyone who had picked bottle green picks it
   again there.
 - **Reports and emails for an MSP without a brand colour** use the ink (`#2b4a6b`) instead of bottle green.
-  A colour set under *Settings → Branding* stays as it is.
+  A colour set under *Settings → Branding* stays as it is. Emails' text and lines take the same plain greys
+  as the reports.
 - **A redrawn mark**: a solid shield with its tick cut out, on a flat ink square, in the menu, the browser
   tab, the website and its link preview.
 
