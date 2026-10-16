@@ -41,6 +41,12 @@ approved before the update show the month as it is now, as before, until they're
 - **Update button:** when the data volume is full once the new version is running, the updater still goes
   back to the version before if the new one isn't healthy, and an update that stops part way never says
   "before anything was changed".
+- An address or form with a number too big for the database, such as a client number 25 digits long, gets the
+  not-found page or says the number is too big, instead of a server error.
+- The sign-ins download on a client's **Activity history** is not found for a month with a newline after it,
+  which reached the file's name, or for year 0000, which broke the download off.
+- The **Activity log** download says in its last row when it holds only the newest 100,000 rows, and the
+  log's user filter finds someone whatever case their name is typed in.
 - **Month-end reporting** never sends a client the same month twice. An automatic plan's month that someone
   had started reviewing stayed In review after the timer sent it, so approving sent it again; Retry on a
   failed email sent it again after the automatic retry had already got it through (or sent a later month, or a
