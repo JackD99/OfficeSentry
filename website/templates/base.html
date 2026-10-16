@@ -41,7 +41,8 @@
     <a class="brand" href="/">{{ logo() }}<span>Office Sentry</span></a>
     {%- macro links() %}
         {{ nav_link('/#features', 'Features') }}
-        {{ nav_link('/docs/', 'Docs', unless='/docs/security/') }}
+        {{ nav_link('/docs/', 'Docs', unless=('/docs/security/', '/docs/compare/')) }}
+        {{ nav_link('/docs/compare/', 'Compare') }}
         {{ nav_link('/docs/security/', 'Security') }}
         {% if source_public %}<a href="{{ github }}">GitHub</a>{% endif %}
         <a class="btn primary sm" href="{{ demo_url }}">Try the demo</a>
