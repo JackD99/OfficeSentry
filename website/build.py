@@ -385,6 +385,7 @@ WHATS_NEW = [
             "a check that each client's Microsoft 365 audit log is switched on",
             "a client's What's new page lists every permission it hasn't approved, from any release",
             "a new look, with serif titles and figures, ruled sections and one bottle green",
+            "emails in the reports' colours, and bottle green for MSPs who haven't picked a colour",
             "each person picks light, dark or their device's setting, and staff one of five colours",
             "removing something asks first in the portal's own dialog, light or dark like the page",
             "a pressed Save, Send now or Approve shows it's working and can't send twice",

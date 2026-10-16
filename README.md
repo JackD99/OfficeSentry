@@ -13,9 +13,9 @@ anything in a client's tenant.
   through GDAP. No agents, and no Partner Center needed.
 
 [![CI](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml/badge.svg)](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml)
-[![Release](https://img.shields.io/github/v/release/JackD99/OfficeSentry?label=release)](https://github.com/JackD99/OfficeSentry/releases/latest)
-[![Image](https://img.shields.io/badge/image-ghcr.io%2Fjackd99%2Fofficesentry-2563eb)](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry)
-[![Licence](https://img.shields.io/badge/licence-AGPL--3.0-blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/JackD99/OfficeSentry?label=release&color=1d5c4b)](https://github.com/JackD99/OfficeSentry/releases/latest)
+[![Image](https://img.shields.io/badge/image-ghcr.io%2Fjackd99%2Fofficesentry-1d5c4b)](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry)
+[![Licence](https://img.shields.io/badge/licence-AGPL--3.0-1d5c4b)](LICENSE)
 
 [Website](https://officesentry.co.uk) · [Live demo](https://demo.officesentry.co.uk) (fictional clients, no sign-up) · [Example reports (PDF)](examples/) · [Quick start](#quick-start) ·
 [How it compares](website/pages/compare/reporting-tools.md) · [What it reads](v2/docs/what-office-sentry-reads.md) · [Security model](#security-model) · [Getting help](SUPPORT.md) ·
