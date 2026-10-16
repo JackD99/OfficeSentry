@@ -18,8 +18,15 @@ from ..checks.groups import group_owner_problem, group_type, m365_groups
 from ..checks.sharing import SHARING_LEVELS
 from ..checks.tenant_settings import GUEST_ROLES, admin_consent_missing
 from ..collectors import REGISTRY
-from ..licences import last_sign_in
-from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
+from ..licences import last_sign_in, never_signed_in
+from ..mailflow import (
+    forwarding_allowed,
+    inbox_rule_risk,
+    is_default_policy,
+    is_external,
+    mailbox_forwarding,
+    tenant_domains,
+)
 from ..permission_batch import waiting_text
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
@@ -388,54 +395,74 @@ def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         return
     domains = tenant_domains(snap) or set()
 
+    policies = snap.objects("mailboxes", "outbound_spam_policy")
+    remote = snap.objects("mailboxes", "remote_domain")
+    allowed = forwarding_allowed(policies)
+    # The default remote domain ("*") turning automatic forwarding off blocks it whatever the policies say.
+    remote_blocks = any(d.get("DomainName") == "*" and d.get("AutoForwardEnabled") is False for d in remote or [])
+    if remote_blocks and allowed:
+        allowed = "No"
+    delivered = {"Yes": "Yes", "Depends": "If its policy allows", "No": "No: blocked"}.get(allowed, "Unknown")
     fwd = Section(
         "Forwarding",
-        ["Mailbox", "Forwards to", "Set by", "Outside the organisation", "Keeps a copy"],
-        intro="Every place mail leaves a mailbox automatically: admin-set forwarding and inbox rules.",
+        ["Mailbox", "Forwards to", "Set by", "Outside the organisation", "Reaches outside", "Keeps a copy"],
+        intro="Every place mail leaves a mailbox automatically: the mailbox's forwarding setting and inbox rules. "
+        "A forward outside that the outbound spam policy blocks bounces, but someone set it up: check why.",
         empty="No mailbox forwards mail.",
     )
+
+    def add(mailbox, target, set_by, on: bool, keeps) -> None:
+        external = is_external(target, domains) if "@" in target else None
+        reaches = delivered if external else ""
+        if external is None:  # a recipient Exchange couldn't name: where it goes isn't known
+            flag = "low"
+        elif not external:
+            flag = None
+        elif not on:
+            flag = "low"
+        else:
+            flag = "medium" if allowed == "No" else "high"
+        fwd.add([mailbox, target, set_by, "Unknown" if external is None else external, reaches, keeps], flag)
+
     for m in boxes or []:
         target = mailbox_forwarding(m)
         if target:
-            external = is_external(target, domains)
-            fwd.add(
-                [
-                    m.get("PrimarySmtpAddress"),
-                    target,
-                    "Admin (mailbox setting)",
-                    external,
-                    m.get("DeliverToMailboxAndForward"),
-                ],
-                "high" if external else None,
-            )
+            # People can set a forwarding address themselves in Outlook on the web; a recipient only an admin can.
+            by = "Admin (forwarding recipient)" if m.get("ForwardingAddress") else "Mailbox forwarding address"
+            add(m.get("PrimarySmtpAddress"), target, by, True, m.get("DeliverToMailboxAndForward"))
     for r in sorted(rules or [], key=lambda r: ((r.get("mailbox") or "").lower(), r.get("sequence") or 0)):
         risk = inbox_rule_risk(r, domains)
+        on = r.get("isEnabled", True) is not False
+        actions = r.get("actions") or {}
+        keeps = not (actions.get("delete") or actions.get("permanentDelete"))
         for target in risk.forwards_to:
-            external = target in risk.external
-            fwd.add(
-                [r.get("mailbox"), target, f'Inbox rule "{r.get("displayName")}"', external, True],
-                ("high" if r.get("isEnabled", True) else "low") if external else None,
-            )
-    outside = sum(1 for row in fwd.rows if row[3] == "Yes")
+            by = f'Inbox rule "{r.get("displayName")}"' + ("" if on else " (turned off)")
+            add(r.get("mailbox"), target, by, on, keeps)
+    outside = [row for row, flag in zip(fwd.rows, fwd.flags, strict=True) if flag in ("high", "medium")]
+    boxes_out = len({str(row[0]).lower() for row in outside})
     report.highlights = [
         Highlight(
             "Forwarding outside",
-            outside,
-            "Admin-set or by inbox rule",
-            "bad" if outside else "ok",
-            Rows("Forwarding", {"Outside the organisation": "Yes"}),
+            len(outside),
+            (
+                f"From {plural(boxes_out, 'mailbox')}, all blocked from reaching outside"
+                if allowed == "No"
+                else f"From {plural(boxes_out, 'mailbox')}, by mailbox setting or inbox rule"
+            )
+            if outside
+            else "Turned on, by mailbox setting or inbox rule",
+            ("warn" if allowed == "No" else "bad") if outside else "ok",
+            Rows("Forwarding", flagged=True),
         ),
         Highlight(
             "Forwarding inside",
-            len(fwd.rows) - outside,
+            sum(row[3] == "No" for row in fwd.rows),
             "To colleagues in the organisation",
             rows=Rows("Forwarding", {"Outside the organisation": "No"}),
         ),
     ]
 
     sections = [fwd]
-    policies = snap.objects("mailboxes", "outbound_spam_policy")
-    remote = snap.objects("mailboxes", "remote_domain")
     if policies is not None or remote is not None:
         modes = {"On": "Allowed", "Off": "Blocked", "Automatic": "Blocked (Microsoft's default)"}
         controls = Section(
@@ -445,17 +472,16 @@ def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             "addresses. The strictest one wins.",
             empty="No settings found.",
         )
-        allowed = False
-        for p in sorted(policies or [], key=lambda p: (not p.get("IsDefault"), str(p.get("Name") or ""))):
+        for p in sorted(policies or [], key=lambda p: (not is_default_policy(p), str(p.get("Name") or ""))):
             on = p.get("AutoForwardingMode") == "On"
-            allowed |= on
             controls.add(
                 [
                     f"Outbound spam policy: {p.get('Name')}",
-                    "Everyone" if p.get("IsDefault") else "Mailboxes it's assigned to",
+                    "Everyone else" if is_default_policy(p) else "Mailboxes it's assigned to",
                     modes.get(p.get("AutoForwardingMode"), p.get("AutoForwardingMode")),
                 ],
-                "medium" if on else None,
+                # Allowing it for named mailboxes only is what the auto_forward_policy check recommends.
+                ("medium" if is_default_policy(p) else "low") if on else None,
             )
         for d in sorted(remote or [], key=lambda d: str(d.get("DomainName") or "")):
             target = "Any outside domain" if d.get("DomainName") == "*" else d.get("DomainName")
@@ -465,9 +491,13 @@ def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         if policies:
             forwarding = Highlight(
                 "Automatic forwarding",
-                "Allowed" if allowed else "Blocked",
-                "By the outbound spam policy",
-                "warn" if allowed else "ok",
+                {"Yes": "Allowed", "Depends": "Some mailboxes", "No": "Blocked"}[allowed],
+                {
+                    "Yes": "The default outbound spam policy allows it",
+                    "Depends": "Only for mailboxes a policy allowing it covers",
+                    "No": "By the default remote domain" if remote_blocks else "By the outbound spam policy",
+                }[allowed],
+                {"Yes": "warn", "Depends": None, "No": "ok"}[allowed],
                 Rows("What stops forwarding"),
             )
         else:  # every Exchange Online organisation has a default policy, so none means it wasn't read
@@ -994,7 +1024,7 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                     u.get("mail") or u.get("userPrincipalName"),
                     _date(u.get("createdDateTime")),
                     "Not accepted" if pending else "Accepted",
-                    last.date().isoformat() if last else ("Never" if activity else "Unknown"),
+                    last.date().isoformat() if last else (never_signed_in(u) if activity else "Unknown"),
                     u.get("accountEnabled"),
                 ],
                 "low" if stale or pending else None,
@@ -1202,7 +1232,7 @@ def domains(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                 h.domain,
                 h.spf or "None",
                 h.spf_lookups if h.spf else "",
-                h.dmarc or "None",
+                (f"{h.dmarc_from}'s: {h.dmarc}" if h.dmarc_from else h.dmarc) or "None",
                 _mta_sts_text(h),
                 h.tls_rpt or ("None" if h.transport_checked else "Not checked"),
                 h.mx if h.sends_mail or not h.mx else "Null MX (accepts no mail)",

@@ -28,6 +28,7 @@ MAILBOX_FIELDS = (
     "Alias",
     "ArchiveStatus",
     "LitigationHoldEnabled",
+    "InPlaceHolds",  # retention policies and eDiscovery holds on the mailbox (mail_compliance)
     "IssueWarningQuota",
     "ProhibitSendQuota",
     "ProhibitSendReceiveQuota",
@@ -151,6 +152,8 @@ class Mailboxes(Collector):
                     "org",
                     {
                         "AuditDisabled": org.get("AuditDisabled"),
+                        # Retention policies for every mailbox; None when Exchange didn't say.
+                        "InPlaceHolds": org.get("InPlaceHolds") if isinstance(org.get("InPlaceHolds"), list) else None,
                         "SmtpClientAuthenticationDisabled": transport.get("SmtpClientAuthenticationDisabled"),
                         "UnifiedAuditLogIngestionEnabled": self._audit_log(ctx),
                     },

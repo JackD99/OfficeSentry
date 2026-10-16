@@ -80,6 +80,20 @@ def load_prices(conn) -> dict[str, float]:
 
 
 def last_sign_in(user: dict) -> datetime | None:
+    """When the account last signed in successfully, as far as Microsoft says.
+
+    Microsoft's last interactive and non-interactive sign-in times move on failed attempts too, so a password
+    spray on a leaver's account would make it look in use. When Microsoft sent the last successful sign-in
+    (``successfulSignInKnown``), that's the answer. Microsoft only records it from December 2023, so with none,
+    an attempt from before then is taken as the last sign-in, as it always was. Snapshots from before Office
+    Sentry kept the successful time use the newest of the three.
+    """
+    if user.get("successfulSignInKnown"):
+        successful = parse_ts(user.get("lastSuccessfulSignInDateTime"))
+        if successful:
+            return successful
+        older = [dt for dt in map(parse_ts, _attempts(user)) if dt and dt < SUCCESS_RECORDED_FROM]
+        return max(older) if older else None
     values = [
         user.get("lastSignInDateTime"),
         user.get("lastNonInteractiveSignInDateTime"),
@@ -87,6 +101,20 @@ def last_sign_in(user: dict) -> datetime | None:
     ]
     parsed = [dt for dt in map(parse_ts, values) if dt]
     return max(parsed) if parsed else None
+
+
+def never_signed_in(user: dict) -> str:
+    """What to show for an account ``last_sign_in`` has no date for: "Never", or that someone tried and failed
+    (Microsoft has attempts but no success), which on an unused account is often a password spray."""
+    return FAILED_ONLY if any(parse_ts(a) for a in _attempts(user)) else "Never"
+
+
+FAILED_ONLY = "Failed attempts only"
+SUCCESS_RECORDED_FROM = datetime(2023, 12, 1, tzinfo=UTC)  # Microsoft's lastSuccessfulSignInDateTime
+
+
+def _attempts(user: dict) -> tuple:
+    return user.get("lastSignInDateTime"), user.get("lastNonInteractiveSignInDateTime")
 
 
 def is_stale(user: dict, now: datetime, days: int = STALE_DAYS) -> bool | None:

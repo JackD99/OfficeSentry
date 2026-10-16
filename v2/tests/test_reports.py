@@ -50,7 +50,7 @@ def test_report_pages(client, db, two_tenants):
     page = client.get(f"/tenants/{alpha}/report").get_data(as_text=True)
     assert "Monthly Security &amp; Licensing Review" in page and "Alpha Ltd" in page
     # A failing check leads with what's wrong, not its name (the goal), which would read as the opposite.
-    assert "<h3>1 admin without MFA, and 1 whose registration isn&#39;t known</h3>" in page
+    assert "<h3>1 admin without MFA, and 2 whose registration isn&#39;t known</h3>" in page  # one through PIM
     assert "Every admin has MFA registered" not in page
     xlsx = client.get(f"/tenants/{alpha}/report.xlsx")
     wb = load_workbook(__import__("io").BytesIO(xlsx.data))

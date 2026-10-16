@@ -18,7 +18,8 @@ from officesentry.exchange import ExchangeClient
 from officesentry.graph import GRAPH_ROOT, GraphClient, GraphError
 from officesentry.mailflow import size_bytes
 from officesentry.reports import views
-from officesentry.reports.data_reports import REPORTS, build
+from officesentry.reports.data_reports import REPORTS, DataReport, build, mailboxes
+from officesentry.reports.mail_reports import shared_mailboxes
 from officesentry.snapshot import TenantSnapshot
 from officesentry.worker import execute_run
 from tests import graphdata as gd
@@ -395,3 +396,134 @@ def test_legacy_signins_stop_splitting_when_the_log_is_too_slow(db, two_tenants,
     assert sum(r["succeeded"] + r["failed"] for r in found) == 2 * len(LEGACY_CLIENTS)
     error = db.execute("SELECT error FROM runs WHERE id = ?", (run_id,)).fetchone()[0]
     assert "timed out for these clients" in error
+
+
+class _Snap:
+    """Stand-in snapshot: {(collector, kind): objects}."""
+
+    def __init__(self, data):
+        self.data = data
+
+    def objects(self, collector, kind):
+        return self.data.get((collector, kind))
+
+
+def _shared(boxes, users, skus=()):
+    now = datetime(2026, 10, 2, tzinfo=UTC)
+    report = DataReport("shared-mailboxes", "Shared mailboxes", "", {}, now)
+    snap = _Snap(
+        {
+            ("mailboxes", "mailbox"): boxes,
+            ("users", "user"): users,
+            ("tenant_profile", "subscribed_sku"): list(skus),
+        }
+    )
+    shared_mailboxes(snap, now, report)
+    return report
+
+
+def _box(address, kind, user_id):
+    return {
+        "_id": f"g-{user_id}",
+        "PrimarySmtpAddress": address,
+        "RecipientTypeDetails": kind,
+        "ExternalDirectoryObjectId": user_id,
+    }
+
+
+def _account(user_id, skus=()):
+    return {"_id": user_id, "accountEnabled": True, "licensed": bool(skus), "skuIds": list(skus)}
+
+
+def test_shared_mailboxes_leave_out_teams_rooms_and_dont_call_unmatched_safe():
+    rooms_sku = {"skuId": "sku-mtr", "skuPartNumber": "Microsoft_Teams_Rooms_Pro"}
+    report = _shared(
+        [
+            _box("boardroom@x.com", "RoomMailbox", "r1"),
+            _box("kitchen@x.com", "RoomMailbox", "r2"),
+            _box("info@x.com", "SharedMailbox", "s1"),
+        ],
+        [_account("r1", ["sku-mtr"]), _account("r2")],
+        [rooms_sku],
+    )
+    rows = report.sections[0]
+    # The boardroom's Teams Rooms device signs in with its account; the kitchen has no such licence.
+    assert [(r[0], r[2], f) for r, f in zip(rows.rows, rows.flags, strict=True)] == [
+        ("info@x.com", "Unknown", None),
+        ("boardroom@x.com", "Yes", None),
+        ("kitchen@x.com", "Yes", "medium"),
+    ]
+    headline = report.highlights[0]
+    assert (headline.value, headline.foot, headline.tone) == ("1 of 3", "1 not matched to an account", "bad")
+    assert "1 room with a Teams Rooms licence is left out" in rows.intro
+    assert "1 mailbox couldn't be matched to an account" in rows.intro
+
+    # Nothing open, but one mailbox unknown: not "ok".
+    report = _shared([_box("info@x.com", "SharedMailbox", "s1")], [])
+    assert (report.highlights[0].value, report.highlights[0].tone) == ("0 of 1", None)
+
+
+def _forwarding(boxes, rules=(), allows=False, remote_blocks=False):
+    now = datetime(2026, 10, 2, tzinfo=UTC)
+    report = DataReport("mailboxes", "Mail forwarding", "", {}, now)
+    snap = _Snap(
+        {
+            ("mailboxes", "mailbox"): boxes,
+            ("inbox_rules", "inbox_rule"): list(rules),
+            ("mailboxes", "accepted_domain"): [{"DomainName": "x.com"}],
+            ("mailboxes", "outbound_spam_policy"): [
+                {"Name": "Default", "IsDefault": True, "AutoForwardingMode": "On" if allows else "Automatic"}
+            ],
+            ("mailboxes", "remote_domain"): [{"DomainName": "*", "AutoForwardEnabled": not remote_blocks}],
+        }
+    )
+    mailboxes(snap, now, report)
+    return report
+
+
+def test_mail_forwarding_reads_a_forward_as_exchange_does():
+    """With both set, Exchange forwards to the recipient an admin picked, not the address people can set in
+    Outlook on the web. A forward outside counts while it can get out; a blocked one is listed at medium, and a
+    turned-off rule isn't counted."""
+    boxes = [
+        {  # an old Gmail address left behind under an internal recipient: the forward stays inside
+            "PrimarySmtpAddress": "ann@x.com",
+            "ForwardingAddress": "Boss",
+            "ForwardingRecipient": {"PrimarySmtpAddress": "boss@x.com"},
+            "ForwardingSmtpAddress": "smtp:ann@gmail.com",
+            "DeliverToMailboxAndForward": True,
+        },
+        {"PrimarySmtpAddress": "bob@x.com", "ForwardingSmtpAddress": "smtp:bob@gmail.com"},
+    ]
+    off = {
+        "mailbox": "cat@x.com",
+        "displayName": "Old forward",
+        "isEnabled": False,
+        "actions": {"forwardTo": [{"emailAddress": {"address": "cat@gmail.com"}}]},
+    }
+    report = _forwarding(boxes, [off], allows=True)
+    fwd = report.sections[0]
+    assert [(r[0], r[1], r[2], r[3], r[4], f) for r, f in zip(fwd.rows, fwd.flags, strict=True)] == [
+        ("ann@x.com", "boss@x.com", "Admin (forwarding recipient)", "No", "", None),
+        ("bob@x.com", "bob@gmail.com", "Mailbox forwarding address", "Yes", "Yes", "high"),
+        ("cat@x.com", "cat@gmail.com", 'Inbox rule "Old forward" (turned off)', "Yes", "Yes", "low"),
+    ]
+    outside = report.highlights[0]
+    assert (outside.label, outside.value, outside.tone) == ("Forwarding outside", 1, "bad")
+    view, _ = views.rows_view(report, outside.rows)
+    assert len(views._matching_rows(fwd, "forwarding", view, report.generated_at.date())) == 1
+
+    # The default remote domain turning automatic forwarding off blocks it, whatever the spam policy says.
+    report = _forwarding(boxes, [off], allows=True, remote_blocks=True)
+    fwd = report.sections[0]
+    assert [(r[4], f) for r, f in zip(fwd.rows, fwd.flags, strict=True)] == [
+        ("", None),
+        ("No: blocked", "medium"),
+        ("No: blocked", "low"),
+    ]
+    outside = report.highlights[0]
+    assert (outside.value, outside.foot, outside.tone) == (
+        1,
+        "From 1 mailbox, all blocked from reaching outside",
+        "warn",
+    )

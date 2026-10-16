@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from ...licences import is_stale, last_sign_in
+from ...licences import is_stale, last_sign_in, never_signed_in
 from ...snapshot import TenantSnapshot
 from ...text import fold
 from ...text import plural as _plural
@@ -63,7 +63,7 @@ def directory(conn, tenant, now: datetime | None = None) -> tuple[list[Directory
             seen, seen_sort = "Not checked", ""
         else:
             last = last_sign_in(u)
-            seen, seen_sort = (_day(last), last.isoformat()) if last else ("Never", "0")
+            seen, seen_sort = (_day(last), last.isoformat()) if last else (never_signed_in(u), "0")
             inactive += bool(enabled and is_stale(u, now, INACTIVE_DAYS))
         label = u.get("userPrincipalName") or u.get("displayName") or uid
         registered = reg.registered(uid)

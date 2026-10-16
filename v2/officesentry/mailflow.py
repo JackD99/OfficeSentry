@@ -66,15 +66,72 @@ def tenant_domains(snap) -> set[str] | None:
 
 
 def mailbox_forwarding(mailbox: dict) -> str | None:
-    """Where an admin-set mailbox forward sends mail, as an address, if anywhere."""
-    if mailbox.get("ForwardingSmtpAddress"):
-        return smtp_address(mailbox["ForwardingSmtpAddress"])
-    recipient = mailbox.get("ForwardingRecipient") or {}
-    return (
-        smtp_address(recipient.get("ExternalEmailAddress"))
-        or smtp_address(recipient.get("PrimarySmtpAddress"))
-        or (mailbox.get("ForwardingAddress") or None)
+    """Where the mailbox's forwarding setting sends mail, as an address, if anywhere.
+
+    With both set, Exchange forwards to ForwardingAddress (a recipient an admin picked) and ignores
+    ForwardingSmtpAddress (any address, which people can set themselves in Outlook on the web).
+    """
+    if mailbox.get("ForwardingAddress"):
+        recipient = mailbox.get("ForwardingRecipient") or {}
+        return (
+            smtp_address(recipient.get("ExternalEmailAddress"))
+            or smtp_address(recipient.get("PrimarySmtpAddress"))
+            or mailbox["ForwardingAddress"]
+        )
+    return smtp_address(mailbox.get("ForwardingSmtpAddress"))
+
+
+def is_default_policy(policy: dict) -> bool:
+    """Whether an outbound spam filter policy is the organisation-wide default. Without IsDefault, the
+    default is the one Microsoft names "Default"."""
+    if isinstance(policy.get("IsDefault"), bool):
+        return policy["IsDefault"]
+    return policy.get("Name") == "Default" or policy.get("_id") == "Default"
+
+
+def forwarding_allowed(policies: list[dict] | None) -> str | None:
+    """Whether Exchange lets automatic forwarding (inbox rules and mailbox forwarding) reach outside addresses,
+    by the outbound spam policies: "Yes" when the default policy allows it, "Depends" when only scoped policies
+    do (for the mailboxes they cover), "No" when every policy blocks it (Automatic is Off), or None when the
+    policies weren't read. A blocked forward bounces back to the mailbox."""
+    if not policies:  # every Exchange Online organisation has a default policy, so none means it wasn't read
+        return None
+    allowing = [p for p in policies if p.get("AutoForwardingMode") == "On"]
+    if any(is_default_policy(p) for p in allowing):
+        return "Yes"
+    return "Depends" if allowing else "No"
+
+
+def _keeps(hold: str) -> bool:
+    """An InPlaceHolds entry that keeps mail: not an exclusion ("-mbx…") or a delete-only policy (":1")."""
+    return bool(hold) and not hold.startswith("-") and not hold.endswith(":1")
+
+
+def retention_hold(mailbox: dict, org_holds: list | None) -> bool | None:
+    """Whether a retention policy or eDiscovery hold keeps this mailbox's mail (litigation hold aside), from
+    Exchange's InPlaceHolds: the mailbox's own (eDiscovery holds and policies that name it) and the organisation's
+    ("mbx…" policies for every mailbox, unless the mailbox is excluded with "-mbx…"). None when they weren't read,
+    as in snapshots from before Office Sentry read them."""
+    own = mailbox.get("InPlaceHolds")
+    if not isinstance(own, list):
+        return None
+    own = [str(h).strip() for h in own]
+    if any(_keeps(h) for h in own):
+        return True
+    if org_holds is None:
+        return None
+    excluded = {h[1:].split(":")[0].lower() for h in own if h.startswith("-")}
+    return any(
+        _keeps(h) and h.lower().startswith("mbx") and h.split(":")[0].lower() not in excluded
+        for h in (str(x).strip() for x in org_holds)
     )
+
+
+def org_holds(snap) -> list | None:
+    """The organisation's InPlaceHolds (retention policies for every mailbox), or None when not read."""
+    org = next((s for s in snap.objects("mailboxes", "mail_settings") or [] if s.get("_id") == "org"), None)
+    holds = (org or {}).get("InPlaceHolds")
+    return holds if isinstance(holds, list) else None
 
 
 @dataclass
