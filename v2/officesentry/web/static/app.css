@@ -378,6 +378,7 @@ button[aria-busy="true"]::before { content: ""; flex: none; width: 13px; height:
   h1 { font-size: var(--fs-xl); }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tile .value { font-size: 1.35rem; }
+  .tiles > .tile:first-child .value.small-value { font-size: var(--fs-figure); }
   .card { padding: var(--space-4); }
   .hide-sm { display: none; }
   table.stack-sm thead { display: none; }
@@ -569,6 +570,9 @@ mark.blank { background: var(--warn-soft); color: var(--text); border-radius: 3p
 
 /* -- Emailed reports ----------------------------------------------------------- */
 .tile .value.small-value { font-size: 1.125rem; line-height: 1.9; }
+/* A worded lead figure (the next email's time, a version) takes a figure's line height, and on phones the
+   figure size, so it breaks onto two close lines at most rather than three far apart. */
+.tiles > .tile:first-child .value.small-value { line-height: 1.25; }
 .sched-list > li { align-items: flex-start; padding: var(--space-3-5) var(--space-5); }
 .sched-list.compact-sched > li { padding: var(--space-2-5) 0; }
 .sched.paused .title, .sched.paused .desc { color: var(--faint); }
