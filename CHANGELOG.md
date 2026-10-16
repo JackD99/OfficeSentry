@@ -9,6 +9,20 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
+## [2.4.1] - Unreleased
+
+### Changed
+
+- **A calmer default colour, called Ink.** The portal, the demo and the website now use plain grey paper,
+  a light menu and one blue-black ink for links and buttons, so colour is left for findings and status.
+  Bottle green, 2.4.0's default, is still on each person's Account page (*Appearance*) with navy, claret,
+  graphite and plum. Anyone who picked one of those keeps it; anyone who had picked bottle green picks it
+  again there.
+- **Reports and emails for an MSP without a brand colour** use the ink (`#2b4a6b`) instead of bottle green.
+  A colour set under *Settings → Branding* stays as it is.
+- **A redrawn mark**: a solid shield with its tick cut out, on a flat ink square, in the menu, the browser
+  tab, the website and its link preview.
+
 ## [2.4.0] - 2026-10-16
 
 ### Action required
@@ -1655,6 +1669,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
+[2.4.1]: https://github.com/JackD99/OfficeSentry/compare/v2.4.0...HEAD
 [2.4.0]: https://github.com/JackD99/OfficeSentry/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/JackD99/OfficeSentry/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...v2.3.0

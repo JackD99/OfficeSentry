@@ -47,7 +47,7 @@
   </tr>
   {% endfor %}
 </table>
-{% if items|length > shown %}<div style="font-size:13px;color:#56625c;margin-top:4px;">And {{ items|length - shown }} more on the <a href="{{ link('upcoming.index') }}" style="color:#1d5c4b;">Coming up page</a>.</div>{% endif %}
+{% if items|length > shown %}<div style="font-size:13px;color:#56625c;margin-top:4px;">And {{ items|length - shown }} more on the <a href="{{ link('upcoming.index') }}" style="color:#2b4a6b;">Coming up page</a>.</div>{% endif %}
 {% endfor %}
 
 <div style="margin-top:24px;">{{ button(link('upcoming.index'), 'Open Coming up') }}</div>

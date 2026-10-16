@@ -11,8 +11,8 @@ the tokens win and this file is out of date.
 Office Sentry tells an MSP, and through the MSP its clients, how their Microsoft 365 stands: how many
 accounts, how much waste, what needs fixing first. People act on those figures and pass them on, so the
 look borrows from documents that people already trust with numbers: an audited statement, a well-set annual
-report. Ruled sections instead of floating cards, figures set like a total, quiet labels, ink on paper and
-one deep green.
+report. Ruled sections instead of floating cards, figures set like a total, quiet labels, and ink on plain
+paper.
 
 The look comes from type, colour and rules. Layout, navigation and controls stay as people expect them: a
 menu on the left, tabs, tables, ordinary buttons and forms. Nothing is decorated for its own sake.
@@ -24,8 +24,9 @@ menu on the left, tabs, tables, ordinary buttons and forms. Nothing is decorated
    matters most and is set biggest.
 2. **Ruled, not floating.** Sections are separated by borders and rules. Cards have a border and no shadow.
    Only what drops over the page (a menu, a notice) has a shadow. One elevation per element.
-3. **Ink on paper.** Green-black ink on stone paper, a bottle-green menu, and one accent green for links,
-   primary buttons and focus. Dark mode is the same idea at night, not an inverted copy.
+3. **Ink on paper.** Near-black ink on plain grey paper, a paper menu that steps back from the page, and
+   one blue-black ink for links, primary buttons and focus. Colour is left for what needs someone:
+   severity and status. Dark mode is the same idea at night (charcoal, not an inverted copy).
 4. **Colour means something.** Red, orange, amber and grey are severity; green, amber and red are status.
    They are never decoration, and never the only signal: a severity always carries its word, a check
    square its letter.
@@ -41,12 +42,12 @@ checks). The values below are light / dark.
 
 | Role | Tokens | Light / dark |
 |---|---|---|
-| Paper | `--bg`, `--surface`, `--surface-2`, `--sunken` | stone `#f3f4f1` and white / deep green-black `#0e1412`, `#141c19` |
-| Ink | `--text`, `--text-2`, `--muted`, `--faint` | `#17201c` to `#5b6660` / `#e7ede9` to `#8a9a92` |
-| Lines | `--border`, `--border-strong`, `--decor` | pale green-greys; `--decor` is for lines and icons only, never text |
-| The ink rule | `--rule` | `#17201c` / `#c9d3ce`: under table headings, the current tab, and closing a row of figures |
-| Accent | `--accent`, `--accent-hover`, `--accent-soft`, `--accent-text` | bottle green `#1d5c4b` / mint `#79c9aa` |
-| Menu | `--sidebar*`, `--logo-from`, `--logo-to` | `#12302a` / `#0a1613`, dark in light and dark mode |
+| Paper | `--bg`, `--surface`, `--surface-2`, `--sunken` | paper `#f4f4f2` and white / charcoal `#111214`, `#17191b` |
+| Ink | `--text`, `--text-2`, `--muted`, `--faint` | `#1c1e20` to `#5d6267` / `#e8e9ea` to `#909498` |
+| Lines | `--border`, `--border-strong`, `--decor` | plain greys; `--decor` is for lines and icons only, never text |
+| The ink rule | `--rule` | `#1c1e20` / `#cdd0d2`: under table headings, the current tab, and closing a row of figures |
+| Accent | `--accent`, `--accent-hover`, `--accent-soft`, `--accent-text` | ink `#2b4a6b` / pale ink `#9fb8d4` |
+| Menu | `--sidebar*`, `--logo-from`, `--logo-to` | paper `#e9eae7` / near-black `#0b0c0d`; the mark's tile is ink `#2b4a6b` |
 | Status | `--ok`, `--warn`, `--bad`, `--info` (and `-soft`) | for states: collected, failing, paused |
 | Severity | `--sev-critical`, `--sev-high`, `--sev-medium`, `--sev-low` (and `-soft`, `-fill`) | for findings only |
 | Charts | `--chart-series`, `--chart-2`, `--chart-3`, `--chart-grid`, `--chart-track` | three series at most, in that order |
@@ -66,20 +67,21 @@ Rules:
 
 Client-facing output (report pages, PDFs, emails, the client's own pages) uses the same tokens for paper,
 ink, lines and severity, but its accent is the MSP's brand (`--brand`, `--brand-ink`, ... from
-`/brand.css`, inline in PDFs). A client report never shows Office Sentry's green where the MSP has set its
-own colour.
+`/brand.css`, inline in PDFs). A client report never shows Office Sentry's ink where the MSP has set its
+own colour; an MSP that hasn't set one gets the ink (`DEFAULT_ACCENT` in `reports/branding.py`).
 
 Client reports and their PDFs also keep Source Sans 3 for their titles and headline figures: they are the
 MSP's documents, and the serif is Office Sentry's own voice, kept for the portal.
 
 ### Colour themes
 
-Staff can pick a colour for their own screen on the Account page: bottle green (the default), navy, claret,
-graphite or plum (`web/appearance.py`, `static/themes.css`). A theme changes only the Accent and Menu tokens;
-paper, ink, lines, status and severity stay the same, so a finding reads the same in every theme. Each
-theme meets the same contrast rules in light and dark (`v2/tests/test_appearance.py` measures them). A
-theme is never loaded by `report.css`, so it never reaches a client report, a PDF or an email, and client
-accounts only choose light or dark.
+Staff can pick a colour for their own screen on the Account page: ink (the default), bottle green, navy,
+claret, graphite or plum (`web/appearance.py`, `static/themes.css`). Bottle green was the default in 2.4.0; a
+stored `green` reads as today's default, so nobody's saved choice points at a missing theme. A theme changes
+only the Accent and Menu tokens; paper, ink, lines, status and severity stay the same, so a finding reads the
+same in every theme. Each theme meets the same contrast rules in light and dark (`v2/tests/test_appearance.py`
+measures them). A theme is never loaded by `report.css`, so it never reaches a client report, a PDF or an
+email, and client accounts only choose light or dark.
 
 To add a theme: a block per mode in `themes.css` (light, dark when the device is dark, dark when the person
 chose it), an entry in `appearance.THEMES`, and a look at the menu, a primary button and a selected tab in
@@ -157,11 +159,12 @@ Rules:
   `--bad` and ask before they act.
 - **Icons**: one set, drawn on a 24px grid with round ends, in `_macros.html` (`icon()`). They sit beside a
   word, never alone without a label or a tooltip.
-- **The mark**: the shield with its tick, white on the bottle-green gradient (`--logo-from` to `--logo-to`),
-  in the menu, the browser tab (`v2/officesentry/web/static/favicon.svg`, also the sign-in page's logo when
-  the MSP has none) and the website (`website/assets/`: `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`
-  and the link preview `social-card.png`). Change them together. An MSP's own logo replaces it in the portal,
-  never on the website.
+- **The mark**: a flat-topped shield in solid white with its tick cut out, on a square ink tile with small
+  corners (`--logo-from`, `--logo-to`, `--logo-text`; one flat colour, no gradient). It sits in the menu, the
+  browser tab (`v2/officesentry/web/static/favicon.svg`, also the sign-in page's logo when the MSP has none)
+  and the website (`website/assets/`: `favicon.svg`, `favicon.ico`, `apple-touch-icon.png` and the link
+  preview `social-card.png`). Change them together. An MSP's own logo replaces it in the portal, never on the
+  website.
 
 ## Checking a change
 

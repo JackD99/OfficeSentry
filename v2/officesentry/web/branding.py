@@ -119,7 +119,7 @@ def settings():
             return redirect(url_for("branding.settings"))
         accent = request.form.get("accent", "").strip()
         if accent and not branding.HEX_RE.match(accent):
-            flash("Pick a colour like #1d5c4b.", "error")
+            flash("Pick a colour like #2b4a6b.", "error")
             return redirect(url_for("branding.settings"))
         values["brand_accent"] = accent.lower() or branding.DEFAULT_ACCENT
         upload = request.files.get("logo")

@@ -63,9 +63,9 @@ def test_every_theme_changes_only_the_accent_and_the_menu():
         assert set(theme_light) <= {n for n in light if n.startswith(("accent", "sidebar", "logo"))}, key
         assert set(theme_dark) == {n for n in dark if n.startswith(("accent", "sidebar", "logo"))}, key
     # The default is tokens.css's own colours, so its swatch shows what the menu looks like without a theme.
-    green_light, green_dark, _ = themes[appearance.DEFAULT_THEME]
-    assert green_light == {n: v for n, v in light.items() if n in green_light}
-    assert green_dark == {n: v for n, v in dark.items() if n in green_dark}
+    default_light, default_dark, _ = themes[appearance.DEFAULT_THEME]
+    assert default_light == {n: v for n, v in light.items() if n in default_light}
+    assert default_dark == {n: v for n, v in dark.items() if n in default_dark}
 
 
 @pytest.mark.parametrize("key", list(appearance.THEMES))
@@ -86,7 +86,7 @@ def test_the_portal_draws_the_choice_and_reports_keep_their_own(client, db):
     make_user(db, "ana", role="analyst", all_tenants=True)
     login(client, "ana")
     page = client.get("/account").get_data(as_text=True)
-    assert '<html lang="en">' in page  # nothing chosen: the device decides, in bottle green
+    assert '<html lang="en">' in page  # nothing chosen: the device decides, in ink
     assert 'data-accent="navy"' in page  # the swatches
 
     response = client.post("/account/appearance", data={"theme": "dark", "accent": "navy"})
@@ -102,9 +102,13 @@ def test_the_portal_draws_the_choice_and_reports_keep_their_own(client, db):
     report = client.get("/styleguide/report").get_data(as_text=True)
     assert 'data-theme="dark"' in report and "data-accent" not in report and "themes.css" not in report
 
-    client.post("/account/appearance", data={"theme": "light", "accent": "green"})
+    client.post("/account/appearance", data={"theme": "light", "accent": "ink"})
     page = client.get("/account").get_data(as_text=True)
     assert '<html lang="en" data-theme="light">' in page
+
+    client.post("/account/appearance", data={"theme": "light", "accent": "bottle"})
+    page = client.get("/account").get_data(as_text=True)
+    assert '<html lang="en" data-theme="light" data-accent="bottle">' in page
 
 
 def test_nonsense_is_refused(client, db):
@@ -124,7 +128,7 @@ def test_a_client_chooses_light_or_dark_only(client, db, two_tenants):
     assert "Light or dark" in page and 'name="accent"' not in page
     assert client.post("/account/appearance", data={"theme": "dark", "accent": "plum"}).status_code == 302
     row = db.execute("SELECT theme, accent FROM users WHERE username = 'client'").fetchone()
-    assert (row["theme"], row["accent"]) == ("dark", "green")
+    assert (row["theme"], row["accent"]) == ("dark", "ink")
     page = client.get("/account").get_data(as_text=True)
     assert 'data-theme="dark"' in page and 'data-accent="plum"' not in page
 
@@ -137,3 +141,7 @@ def test_look_for_nobody_and_for_old_rows():
     )
     assert appearance.look({"role": "client", "theme": "dark", "accent": "claret"}) == appearance.Look("dark", "")
     assert appearance.look({"role": "admin", "theme": "neon", "accent": "neon"}) == appearance.Look("", "")
+    # "green" is the column's default and was 2.4.0's default theme: it reads as today's default, Ink.
+    assert appearance.look({"role": "admin", "theme": "system", "accent": "green"}) == appearance.Look("", "")
+    assert appearance.theme_of({"accent": "green"}) == "ink"
+    assert appearance.look({"role": "admin", "theme": "dark", "accent": "bottle"}) == appearance.Look("dark", "bottle")
