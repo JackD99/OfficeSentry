@@ -58,7 +58,7 @@
     {% for r in rows %}
     <tr>
       {#- A month whose email failed can be ticked too: it's sent again, the same files. -#}
-      {% if admin %}<td>{% if (r.state in ('draft', 'in_review') or (r.state == 'approved' and r.error)) and not r.paused and not r.approving %}<input type="checkbox" name="tenants" value="{{ r.tenant.id }}" form="bulk" aria-label="Select {{ r.tenant.name }}">{% endif %}</td>{% endif %}
+      {% if admin %}<td>{% if ((r.state in ('draft', 'in_review') and not r.blocked) or (r.state == 'approved' and r.error)) and not r.paused and not r.approving %}<input type="checkbox" name="tenants" value="{{ r.tenant.id }}" form="bulk" aria-label="Select {{ r.tenant.name }}">{% endif %}</td>{% endif %}
       <td data-label="Client"><a class="strong" href="{{ url_for('reporting.review', period=period, tenant_id=r.tenant.id) }}">{{ r.tenant.name }}</a>
         <span class="sub">{{ r.plan.name }}{% if r.paused %} · paused{% endif %}</span></td>
       <td data-label="State">{% if r.approving %}<span class="pill accent">{{ 'Approving…' if r.task.status == 'running' else 'Waiting to approve' }}</span>

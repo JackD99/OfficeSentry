@@ -31,6 +31,10 @@ screens, so they run the same one-file stack as [Portainer](portainer.md):
   with the manager's scheduler if it has one for commands in a container, otherwise the host's
   (`45 3 * * * docker exec <web container> python -m officesentry backup --keep 14` in `crontab -e`). Save
   `/keys/secrets.json` (`cat` it in the `web` container) in your password manager.
+  <!-- since 2.4.0 -->
+  From 2.4.0 the scheduled command is optional: the worker makes the same copy by itself every night and
+  keeps the last 7 ([Backups](../../DEPLOY.md#backups)).
+  <!-- /since -->
 - **Updating:** read the [release notes](https://github.com/JackD99/OfficeSentry/releases), change
   `OFFICESENTRY_VERSION`, and redeploy with a fresh pull of the image.
 

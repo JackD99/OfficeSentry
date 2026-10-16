@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from . import __version__, backups, cert_lifecycle, lifecycle, schedule, worker
+from . import __version__, backups, cert_lifecycle, lifecycle, schedule, store, worker
 from .db import latest_version, schema_version
 from .devices import parse_ts
 from .text import duration, plural
@@ -218,18 +218,21 @@ def last_slot(conn, cfg, now: datetime, newer_than: datetime) -> Slot | None:
 def _slot(conn, at: str) -> Slot | None:
     floor = conn.execute("SELECT id FROM runs WHERE created_at < ? ORDER BY id DESC LIMIT 1", (at,)).fetchone()
     rows = conn.execute(
-        "SELECT tenant_id, status, error FROM runs WHERE id > ? AND scheduled_for = ? AND trigger = 'schedule'",
+        "SELECT tenant_id, collector, status, error, retry_at FROM runs WHERE id > ? AND scheduled_for = ?"
+        " AND trigger = 'schedule' ORDER BY id",
         (floor["id"] if floor else 0, at),
     ).fetchall()
     if not rows:
         return None
+    # A run tried again (store.plan_retry) carries its slot too: each data source counts by its last try.
+    latest = {(r["tenant_id"], r["collector"]): r for r in rows}
     per: dict[int, list] = {}
-    for r in rows:
+    for r in latest.values():
         per.setdefault(r["tenant_id"], []).append(r)
     failed = pending = 0
     errors: Counter = Counter()
     for runs in per.values():
-        if any(r["status"] in ("queued", "running") for r in runs):
+        if any(r["status"] in ("queued", "running") or store.retry_pending(r) for r in runs):
             pending += 1
             continue
         bad = [r for r in runs if r["status"] == "failed"]
@@ -305,9 +308,10 @@ def check_collection(conn, cfg, now) -> Check:
     return Check("collection", "Collection", OK, summary, data=data)
 
 
-BACKUP_SETUP = (
-    'Back up every night: DEPLOY.md, "Backups", has the one line to add to the server\'s crontab. '
-    "Keep the copies off the data volume."
+OFF_VOLUME = 'DEPLOY.md, "Backups", says how to keep copies off the data volume too.'
+SERVER_JOBS = (
+    "Check that the server still runs it: crontab -l should list deploy/jobs.sh, and bash deploy/jobs.sh schedule "
+    "in the Office Sentry folder puts it back."
 )
 # How old each backup job's last success may get: nightly copies, and the weekly restore drill.
 # (what it's called, how old its last success may get, how to see the whole error)
@@ -320,14 +324,28 @@ BACKUP_JOBS = {
     "offsite": (
         "off-site backup",
         timedelta(hours=26),
-        'Run Deploy with the backup action to see the whole message (DEPLOY.md, "Off-site backups").',
+        "Run it by hand in the Office Sentry folder to see the whole message: bash deploy/jobs.sh now (DEPLOY.md, "
+        '"Off-site backups").',
     ),
     "restore_check": (
         "restore check",
         timedelta(days=8),
-        'Run Deploy with the restore-drill action (DEPLOY.md, "Restore drill").',
+        'Run it by hand in the Office Sentry folder: bash deploy/jobs.sh drill (DEPLOY.md, "Restore drill").',
     ),
 }
+
+
+def backup_setup(cfg) -> str:
+    """What makes the nightly backup, for a check that finds none or an old one."""
+    if not cfg.backup_cron:
+        return (
+            "The worker's nightly backup is turned off (OFFICESENTRY_BACKUP_CRON=off), so back up every night some "
+            'other way (DEPLOY.md, "Backups").'
+        )
+    minute, hour, *rest = cfg.backup_cron.split()
+    daily = rest == ["*", "*", "*"] and minute.isdigit() and hour.isdigit()
+    when = f"at {int(hour):02}:{int(minute):02}" if daily else f"on the schedule {cfg.backup_cron}"
+    return f"The worker makes one every night {when} ({cfg.timezone}) while it's running. " + OFF_VOLUME
 
 
 def check_backup(conn, cfg, now) -> Check:
@@ -349,7 +367,7 @@ def check_backup(conn, cfg, now) -> Check:
         },
     }
     if not jobs:
-        return Check("backup", "Backups", WARN, "No backup has been made yet", BACKUP_SETUP, data)
+        return Check("backup", "Backups", WARN, "No backup has been made yet", backup_setup(cfg), data)
     worst: tuple[int, str, str] | None = None
     newest = None
     for name, j in sorted(jobs.items()):
@@ -369,7 +387,7 @@ def check_backup(conn, cfg, now) -> Check:
             problem = (
                 1,
                 f"No {label} for {duration((now - done).total_seconds())}" if done else f"No {label} has worked yet",
-                "Check that it still runs (crontab -l on the server). " + BACKUP_SETUP,
+                backup_setup(cfg) if name == "local" else SERVER_JOBS,
             )
         else:
             continue

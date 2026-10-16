@@ -212,6 +212,7 @@ capabilities it needs (`test_roles.py`), no one sees another tenant's data
 (`test_isolation_walk.py`), every Microsoft call is listed in `endpoints.py`
 (`test_ratelimit.py`), and every check and report survives missing or odd
 data (`test_robustness.py`).
+Names, titles and file names from a client's tenant never become markup on a page or in a PDF (`test_injection_walk.py`). <!-- since 2.4.0 -->
 
 Templates and CSS also have browser tests that compare screenshots with
 baselines; see `tests/browser/README.md`. CI runs them on pull requests that

@@ -128,6 +128,14 @@ The nightly CronJob keeps 14 backups in `/data/backups`, on the same volume. Kee
 snapshots (your cloud's, or Velero), or copy the newest file out with `kubectl cp` from a scheduled job of
 your own.
 
+<!-- since 2.4.0 -->
+From 2.4.0 the CronJob is optional. The worker makes the same copy by itself every night and keeps the last 7
+([Backups](../../DEPLOY.md#backups)), skipping nights the CronJob has made one. To rely on the worker alone,
+take `backup-cronjob.yaml` out of `kustomization.yaml`, run
+`kubectl -n officesentry delete cronjob officesentry-backup`, and skip suspending and resuming it when you
+restore.
+<!-- /since -->
+
 ## Updating
 
 Read the release notes first ([releases](https://github.com/JackD99/OfficeSentry/releases)), above all
