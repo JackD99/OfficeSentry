@@ -12,6 +12,7 @@ Prints a few lines of Markdown for the job summary. Standard library only.
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tarfile
 
@@ -20,12 +21,13 @@ SBOM = "https://spdx.dev/Document"
 PROVENANCE = "https://slsa.dev/provenance/"
 
 
-def purl_prefix(image: str) -> str:
-    """How BuildKit's provenance names an image without its tag or digest: Docker Hub's by its short name."""
+def purl_name(image: str) -> str:
+    """How BuildKit's provenance names an image before its tag (`@3.12-slim`) or, for an image named by its
+    digest alone, its qualifiers (`?digest=sha256:...&platform=...`): Docker Hub's by its short name."""
     for short in ("docker.io/library/", "docker.io/"):
         if image.startswith(short):
-            return f"pkg:docker/{image.removeprefix(short)}@"
-    return f"pkg:docker/{image}@"
+            return f"pkg:docker/{image.removeprefix(short)}"
+    return f"pkg:docker/{image}"
 
 
 def check(path: str, context: str | None) -> list[str]:
@@ -64,7 +66,8 @@ def check(path: str, context: str | None) -> list[str]:
     if context:
         source = context.split("=docker-image://", 1)[1]
         image, digest = source.split("@", 1)
-        base = [uri for uri in uris if uri.startswith(purl_prefix(image)) and digest.split(":", 1)[1] in uri]
+        name, hexdigest = purl_name(image), digest.split(":", 1)[1]
+        base = [uri for uri in uris if re.split(r"[@?]", uri, maxsplit=1)[0] == name and hexdigest in uri]
         if not base:
             raise ValueError(f"The provenance doesn't name {source} among its materials: {uris}.")
         lines.append(f"The provenance names the base image as `{base[0]}`.")
