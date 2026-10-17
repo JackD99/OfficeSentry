@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, tenant_header, report_directory with context %}
+{% block title %}Reports · {{ tenant.name }}{% endblock %}
+{% block content %}
+{{ tenant_header(tenant, 'data') }}
+{#- The Reports tab: the client's report catalogue (_macros.report_directory, the overview's Reports card at
+    full width), so the first click on Reports shows every report rather than one of them. -#}
+<section class="card report-index">
+  <div class="card-head"><div><h2>Reports</h2>
+    <span class="meta">{{ count }} reports on {{ tenant.name }}'s data. Pick one, or search{% if can('clients.compare') %}; the <a href="{{ url_for('reports.overview', tenant=tenant.id) }}">Reports page</a> has them by job and across every client{% endif %}.</span></div>
+    <input class="search sm" type="search" data-report-search="report-directory" placeholder="Find a report…" aria-label="Find a report"></div>
+  {{ report_directory(tenant) }}
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}
