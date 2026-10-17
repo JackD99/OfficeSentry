@@ -1,0 +1,144 @@
+{#- One client's grade: the letter, how it's worked out, twelve months of history and the comparison with the other
+    clients this person sees (web/grade.py, grades.py). Staff only: a client reads its grade in the monthly review. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import tenant_header with context %}
+{% from "_grade.html" import badge, history_row %}
+{% block title %}Grade · {{ tenant.name }}{% endblock %}
+{% macro figure_value(f, v) -%}
+{%- if v is none %}<span class="faint">–</span>
+{%- elif f.unit == 'grade' %}{{ badge(v, 'xs') }}
+{%- elif f.unit == '%' %}{{ '%g'|format(v) }}%
+{%- elif f.unit == 'currency' %}{{ v|money(currency, 2) }}
+{%- else %}{{ '%g'|format(v) }}{% endif -%}
+{%- endmacro %}
+{% block content %}
+{{ tenant_header(tenant, 'grade', title='Grade') }}
+{% set worst_names = graded.worst_parts|map(attribute='title')|list %}
+
+<p class="intro-line">{{ graded.sentence(tenant.name) }}{% if graded.next_step(tenant.name) %} {{ graded.next_step(tenant.name) }}{% endif %}</p>
+
+<div class="tiles">
+  <div class="tile">
+    <div class="label">Grade</div>
+    <div class="value">{{ badge(graded.letter) }}</div>
+    <div class="foot">{% if trend %}{{ trend.text }}{% elif graded.letter is none %}{{ graded.reason|capitalize }}{% else %}&nbsp;{% endif %}</div>
+  </div>
+  <div class="tile">
+    <div class="label">Next step</div>
+    {% if graded.next_letter %}
+    <div class="value">{{ badge(graded.next_letter) }}</div>
+    <div class="foot">once {{ graded.to_fix|length|plural('check') }} in {{ worst_names|join(' and ') }} {{ 'is' if graded.to_fix|length == 1 else 'are' }} fixed</div>
+    {% elif graded.letter == 'A' %}
+    <div class="value wordy">Nothing to fix</div>
+    <div class="foot">Every check that could run passed</div>
+    {% else %}
+    <div class="value"><span class="faint">–</span></div>
+    <div class="foot">Graded once data has been collected</div>
+    {% endif %}
+  </div>
+  <div class="tile">
+    <div class="label">Checks counted</div>
+    <div class="value">{{ graded.ran }}<span class="unit"> of {{ graded.total }}</span></div>
+    <div class="foot">{% if graded.ungraded %}{{ graded.ungraded|length|plural('part') }} not graded: {{ graded.ungraded|map(attribute='title')|join(', ') }}{% elif graded.partial %}Fewer than half could run{% else %}Every part graded{% endif %}</div>
+  </div>
+  <div class="tile">
+    <div class="label">Against similar clients</div>
+    {% if comparison and comparison.graded and graded.letter %}
+    <div class="value">{{ comparison.better_than }}<span class="unit"> of {{ comparison.graded }} better</span></div>
+    <div class="foot">{{ 'client' if comparison.graded == 1 else 'clients' }} with a grade{% if comparison.band %}, {{ comparison.band }}{% endif %}</div>
+    {% else %}
+    <div class="value"><span class="faint">–</span></div>
+    <div class="foot">{% if graded.letter %}Needs {{ min_peers }} other clients with a grade{% else %}Needs a grade first{% endif %}</div>
+    {% endif %}
+  </div>
+</div>
+
+<section class="card flush" id="parts">
+  <div class="card-head toolbar"><div><h2>How the grade is worked out</h2>
+    <p class="muted small">The same rules for every client: a part is its worst open finding after accepted risks are set aside, and the grade is the worst part.</p></div></div>
+  <div class="table-scroll">
+  <table class="stack-sm">
+    <thead><tr><th>Part</th><th>Today</th><th>What moves it</th><th class="num nowrap">Part grade</th></tr></thead>
+    <tbody>
+    {% for p in graded.parts %}
+    <tr>
+      <td><b>{{ p.title }}</b><div class="muted small">{{ p.ran }} of {{ p.total|plural('check') }} ran</div></td>
+      <td data-label="Today" class="wrap">
+        {% if p.grade is none %}<span class="muted">{{ p.reason }}.</span>{% for w in p.why %}<div class="muted small">{{ w|trim('.') }}.</div>{% endfor %}
+        {% elif not p.pulls %}Every check passed.
+        {% else %}{% for pull in p.pulls[:3] %}<div><span class="sevtext {{ pull.severity }}">{{ pull.severity }}</span> {{ pull.summary|trim('.') }}.</div>{% endfor %}{% if p.pulls|length > 3 %}<div class="muted small">and {{ p.pulls|length - 3 }} more {{ 'check' if p.pulls|length == 4 else 'checks' }}</div>{% endif %}
+        {% endif %}
+      </td>
+      <td data-label="What moves it" class="wrap small">
+        {% if p.grade is none %}<span class="muted">Graded once at least half its checks can run.</span>
+        {% elif not p.pulls %}<span class="muted">Nothing: it's an A.</span>
+        {% else %}Fix {{ p.moves|length|plural('check') }} at {{ p.worst }} and it's {{ 'an' if p.next_grade in 'AE' else 'a' }} {{ p.next_grade }}: {{ p.moves|map(attribute='title')|join('; ') }}.
+        {% endif %}
+      </td>
+      <td data-label="Part grade" class="num">{{ badge(p.grade, 'xs') }}</td>
+    </tr>
+    {% endfor %}
+    <tr class="total-row">
+      <td><b>Grade</b></td>
+      <td data-label="Today" class="wrap">{% if graded.letter %}The worst part{% if graded.letter != 'A' %}: {{ worst_names|join(' and ') }}{% endif %}.{% else %}{{ graded.reason|capitalize }}.{% endif %}</td>
+      <td data-label="What moves it" class="wrap small">{{ graded.next_step(tenant.name) or ('Nothing: every check that could run passed.' if graded.letter == 'A' else 'Collect data first.') }}</td>
+      <td data-label="Part grade" class="num">{{ badge(graded.letter, 'xs') }}</td>
+    </tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="footnote pad">A critical finding makes a part an E, a high finding a D, a medium a C, only low findings a B, and no open finding an A. Accepted risks and info findings don't count.</p>
+</section>
+
+<div class="grid-2">
+  <section class="card" id="history">
+    <div class="card-head"><h2>Twelve months of grades</h2></div>
+    {{ history_row(months) }}
+    <p class="footnote">The grade on each month-end, from the findings open then, with this month so far at the end.{% if trend %} {{ trend.text }}.{% endif %} Months before the first collection aren't graded.</p>
+  </section>
+  <section class="card" id="comparison">
+    <div class="card-head"><h2>Compared with your other clients</h2>{% if comparison %}<span class="meta">{{ comparison.peers|plural('client') }}{% if comparison.band %} of {{ comparison.band }}{% endif %}</span>{% endif %}</div>
+    {% if comparison %}
+    <table class="stack-sm">
+      <thead><tr><th>Figure</th><th class="num">This client</th><th class="num">Median</th><th>Standing</th></tr></thead>
+      <tbody>
+      {% for f in comparison.figures %}
+      <tr>
+        <td>{{ f.label }}</td>
+        <td class="num" data-label="This client">{{ figure_value(f, f.value) }}</td>
+        <td class="num" data-label="Median">{{ figure_value(f, f.median) }}</td>
+        <td data-label="Standing">{% if f.standing %}<span class="delta {{ 'flat' if f.standing == 'same' else f.standing }}">{{ {'better': 'Better', 'worse': 'Worse', 'same': 'Same'}[f.standing] }}</span>{% else %}<span class="faint">–</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="footnote">{% if comparison.graded and graded.letter %}A better grade than {{ comparison.better_than }} of the {{ comparison.graded }} with one. {% endif %}Only the clients you can see, as last worked out; none of them is named.</p>
+    {% else %}
+    <p class="muted m0">Needs at least {{ min_peers }} other clients you can see with a grade{% if others %}: {{ others|plural('other client') }} {{ 'has' if others == 1 else 'have' }} none stored yet{% else %}, and there are none{% endif %}. Nothing about a client leaves this install.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card" id="rules">
+  <div class="card-head"><h2>The rules</h2><span class="meta">the same for every client</span></div>
+  <ol>
+    <li><b>Five parts.</b> The checks are grouped into Admin accounts, Sign-in and accounts, Mail, Devices, and Sharing and apps. Checks about cost, capacity and housekeeping don't count.</li>
+    <li><b>A part is its worst open finding.</b> A critical finding makes it an E, a high finding a D, a medium a C, only low findings a B, and a part whose every check passed is an A. Accepted risks are set aside first, and info findings are notes, not problems.</li>
+    <li><b>A part needs half its checks.</b> It's only graded when at least half its checks could run (no Intune, no Entra ID P1, nothing collected yet); otherwise it says why, and the grade comes from the parts that were.</li>
+    <li><b>The grade is the worst part.</b> One critical gap keeps a client out of A and B. Fix the checks at a part's worst level and it takes its next grade.</li>
+    <li><b>History</b> is the grade on each month-end for the last twelve months, from the findings open then (first seen by then, not fixed, not an accepted risk), with each finding's current level and the parts graded today.</li>
+    <li><b>The comparison</b> sets a client beside the others of about the same size by licensed users, or every other client when fewer than {{ min_peers }} are that size: the median grade and figures, and how many it is better than. No client is named, and nothing leaves this install.</li>
+  </ol>
+  <h3 class="col-title">What each part checks</h3>
+  {% for part in parts %}
+  <details class="part-checks"><summary><b>{{ part.title }}</b> <span class="muted small">{{ part.checks|length|plural('check') }}</span></summary>
+    <p class="muted small">{{ part.covers }}</p>
+    <ul class="small">{% for key in part.checks %}<li>{{ titles[key] }}</li>{% endfor %}</ul>
+  </details>
+  {% endfor %}
+  <details class="part-checks"><summary><b>Doesn't count</b> <span class="muted small">{{ ungraded|length|plural('check') }}</span></summary>
+    <p class="muted small">Cost, capacity and housekeeping say nothing about how exposed a client is. These stay on the Findings tab and in the monthly review.</p>
+    <ul class="small">{% for key in ungraded %}<li>{{ titles[key] }}</li>{% endfor %}</ul>
+  </details>
+</section>
+{% endblock %}

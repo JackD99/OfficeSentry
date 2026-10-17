@@ -30,6 +30,7 @@ PAGES = [
     Page("today", "/today"),
     Page("clients", "/clients"),
     Page("tenant-overview", "/tenants/{t}"),
+    Page("tenant-grade", "/tenants/{t}/grade", full=True),
     Page("findings", "/tenants/{t}/findings"),
     Page("finding-sheet", "/tenants/{t}/findings/{f}"),
     Page("tenant-changes", "/tenants/{t}/changes"),

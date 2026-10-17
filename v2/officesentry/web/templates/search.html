@@ -6,31 +6,50 @@
   <div>
     {% if one %}<div class="crumbs"><a href="{{ url_for('search.index', q=q) }}">Search all clients</a></div>{% endif %}
     <h1>Search{% if one %} {{ one.name }}{% endif %}</h1>
-    <div class="sub">People, mailboxes, forwarding addresses, sign-in IP addresses, apps, devices and domains in the latest data from {{ searched|plural('client') }}.</div>
+    <div class="sub">{% if not one %}Clients by name or domain, and people{% else %}People{% endif %}, mailboxes, forwarding addresses, sign-in IP addresses, apps, devices and domains in the latest data from {{ searched|plural('client') }}.</div>
   </div>
 </div>
 
 <form method="get" action="{{ url_for('search.index') }}" class="library-bar" role="search">
   {% if one %}<input type="hidden" name="tenant" value="{{ one.id }}">{% endif %}
   <label class="library-search">{{ icon('search') }}<span class="sr-only">Search</span>
-    <input type="search" name="q" value="{{ q }}" placeholder="Name, email address, IP address, app or device…" autocomplete="off" maxlength="200"{% if not q %} autofocus{% endif %}></label>
+    <input type="search" name="q" value="{{ q }}" placeholder="{{ 'Client, person' if not one else 'Name' }}, email address, IP address, app or device…" autocomplete="off" maxlength="200"{% if not q %} autofocus{% endif %}></label>
   <button class="btn primary">Search</button>
 </form>
 
 {% if not q %}
 <div class="card empty">
   <h3>Find something in any client</h3>
-  <p>Search for a person's name or email address, an address mail is forwarded to, the start of an IP address (such as 203.0.113), an app name or ID, a device name or a domain.</p>
+  <p>Search for {% if not one %}a client's name or domain, {% endif %}a person's name or email address, an address mail is forwarded to, the start of an IP address (such as 203.0.113), an app name or ID, a device name or a domain.</p>
 </div>
 {% elif short %}
 <p class="muted">Type at least {{ min_length }} characters.</p>
-{% elif not groups %}
+{% elif not groups and not clients %}
 <div class="card empty">
   <h3>Nothing found</h3>
   <p>Nothing matches "{{ q }}" in {{ searched|plural('client') }}. Searches use each client's latest collected data; IP addresses come from the last 7 days of sign-ins.</p>
 </div>
 {% else %}
 {% if truncated %}<div class="callout warn" role="status">{{ icon('alert') }}<span>There are more matches than can be shown. Search for something more specific.</span></div>{% endif %}
+{% if clients %}
+<section class="card search-group" aria-labelledby="found-clients">
+  <div class="card-head">
+    <h2 id="found-clients">Clients</h2>
+    <span class="meta">{{ clients|length }} {{ 'match' if clients|length == 1 else 'matches' }}</span>
+  </div>
+  <ul class="list">
+    {% for t in clients %}
+    <li>
+      <span class="pill">Client</span>
+      <div class="grow">
+        <a class="title" href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">{{ t.name }}</a>
+        <div class="desc">{{ t.tenant_ref }}</div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 {% for grp in groups %}
 <section class="card search-group">
   <div class="card-head">

@@ -6,15 +6,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
-from functools import cache
-from pathlib import Path
 
 from ..changes import Change, all_changes
 from ..checks import SEVERITY_RANK, Finding, RuleResult, evaluate
+from ..codeversion import code_version as _code_version
 from ..collectors import REGISTRY, core
 from ..db import try_write, utcnow
 from ..devices import parse_day
@@ -451,15 +449,6 @@ def _rollup_row(conn, tenant, now: datetime | None = None) -> dict:
         "unavailable": len(report.unavailable),
         "stale_data": any(f.stale for f in report.freshness),
     }
-
-
-@cache
-def _code_version() -> str:
-    """A hash of Office Sentry's code, so an upgrade (new checks, say) rebuilds every cached rollup row."""
-    digest = hashlib.sha256()
-    for path in sorted(Path(__file__).resolve().parents[1].rglob("*.py")):
-        digest.update(path.read_bytes())
-    return digest.hexdigest()[:16]
 
 
 def _fingerprint(conn, tenant, now: datetime) -> str:

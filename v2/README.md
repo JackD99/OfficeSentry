@@ -100,6 +100,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   (PDF, XLSX, CSV) like a report table, and comes as a weekly email too (below).
 - **Search all clients** (the box at the top of the menu, `/search`, for
   staff): one search through the latest data of every client you can see, for
+  clients by name or domain (listed first), <!-- since 2.5.0 -->
   people, groups, mailboxes, addresses mail is forwarded to (by an admin or an
   inbox rule), SharePoint sites, sign-in IP addresses, apps and app
   registrations, devices and domains. "Which clients forward to this address?"
@@ -143,6 +144,19 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   Notes and hand-offs stay with the team: never on a client's pages, in a
   report or in an email. Nothing is ever written to the client's tenant.
 <!-- /since -->
+  <!-- since 2.5.0 -->
+- **Client grades** (`/tenants/<id>/grade`, staff with *Security findings and
+  reviews*): every client's grade from A to E, the worst of five parts (admin
+  accounts, sign-in and accounts, mail, devices, sharing and apps), each part
+  its worst open finding after accepted risks are set aside and graded only
+  when half its checks could run. The grade sits beside the client's name on
+  every page about them and on the Clients page, and leads the
+  Overview's figures; its page shows what
+  moves each part, the grade on each of the last twelve month-ends (from the
+  findings table, nothing extra stored) and the comparison with the other
+  clients the person sees of about the same size, none of them named. The
+  rules are in [docs/client-grades.md](docs/client-grades.md).
+  <!-- /since -->
 - **Since last month**: new and fixed findings, admin role changes, new,
   disabled and deleted accounts, licences people were given or lost, and
   Conditional Access policies added, switched or edited, compared with the
@@ -272,7 +286,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   reports and who to contact at the MSP; they don't see collection internals
   or run logs.
 - **Branding** (`/admin/branding`): the MSP's name, logo and colour on report
-  covers, the portal, the sign-in page and the browser tab icon ("Powered by
+  covers, the portal, the sign-in page and every browser tab's icon and title ("Powered by
   Office Sentry" stays small in the footer), the support contact clients see
   in reports and on the sign-in page,
   and an optional note printed at the end of every report. The name is also

@@ -115,6 +115,8 @@
     <dt><code>sev_legend()</code></dt><dd>{{ sev_legend() }}</dd>
     <dt>Severity text</dt><dd class="sg-row">{% for s in ('critical', 'high', 'medium', 'low') %}<span class="sevtext {{ s }}">{{ s }}</span>{% endfor %}</dd>
     <dt>Check squares</dt><dd class="sg-row"><span class="chk pass" title="Pass"></span>{% for s in ('critical', 'high', 'medium', 'low') %}<span class="chk fail {{ s }}" title="Fail: {{ s }}"></span>{% endfor %}<span class="chk accepted" title="Accepted risk"></span><span class="chk unavailable" title="Not checked"></span></dd>
+    {% from "_grade.html" import badge %}
+    <dt>Grades</dt><dd class="sg-row">{% for letter in 'ABCDE' %}{{ badge(letter) }}{% endfor %}{{ badge(none) }}{{ badge('C', 'sm') }}{{ badge(none, 'sm') }}{% for letter in 'ABCDE' %}{{ badge(letter, 'xs') }}{% endfor %}</dd>
     <dt><code>ts()</code></dt><dd class="sg-row">{{ ts(three_days_ago) }}<span>{{ ts(none) }}</span></dd>
   </dl>
 </section>

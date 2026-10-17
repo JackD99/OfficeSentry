@@ -457,7 +457,7 @@ def test_refresh_builds_every_kind_and_the_search_index(db, history):
     db.execute("DELETE FROM summary_cache")
     precomputed.refresh(db, store.get_tenant(db, alpha))
     kinds = {r["kind"] for r in db.execute("SELECT kind FROM summary_cache WHERE tenant_id = ?", (alpha,))}
-    expected = {"changes:7", "changes:30", "changes:90", "checks", "evidence", "review", "projects", "search"}
+    expected = {"changes:7", "changes:30", "changes:90", "checks", "evidence", "review", "projects", "grade", "search"}
     expected |= {f"rollup:{key}" for key in data_reports.REPORTS}
     assert kinds == expected
     assert db.execute("SELECT COUNT(*) FROM search_index WHERE tenant_id = ?", (alpha,)).fetchone()[0] > 0

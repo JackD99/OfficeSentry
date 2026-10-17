@@ -1,0 +1,20 @@
+{#- A client's grade (grades.py), drawn the same way everywhere: a letter in a ruled square, coloured by what holds
+    it there, with the letter always present so colour is never the only signal. `size` is '' (44px), 'sm' (28px,
+    the client header) or 'xs' (22px, table rows and the twelve-month row); `href` makes it a link to the grade
+    page. A client without a grade gets a dashed square. -#}
+{% macro badge(letter, size='', href=none, title=none) -%}
+{%- set cls = 'grade' ~ (' ' ~ size if size else '') ~ ' ' ~ (letter|lower if letter else 'none') -%}
+{%- if letter -%}
+{%- set tip = title or ('Grade ' ~ letter ~ ': how it is worked out' if href else 'Grade ' ~ letter) -%}
+<{{ 'a' if href else 'span' }} class="{{ cls }}"{% if href %} href="{{ href }}"{% endif %} title="{{ tip }}"><span class="sr-only">Grade </span>{{ letter }}</{{ 'a' if href else 'span' }}>
+{%- else -%}
+<span class="{{ cls }}" title="{{ title or 'Not graded yet' }}"><span aria-hidden="true">–</span><span class="sr-only">Not graded</span></span>
+{%- endif -%}
+{%- endmacro %}
+
+{#- The last twelve month-ends' grades (grades.history), this month so far at the end. -#}
+{% macro history_row(months) -%}
+<div class="grade-row" role="list" aria-label="Grade by month">
+  {% for m in months %}<span class="cell{{ ' now' if m.current }}" role="listitem">{{ badge(m.letter, 'xs', title=(m.name ~ (', so far' if m.current else '') ~ (': ' ~ m.letter if m.letter else ': not graded'))) }}<small>{{ m.label }}</small></span>{% endfor %}
+</div>
+{%- endmacro %}
