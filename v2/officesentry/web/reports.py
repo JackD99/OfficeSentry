@@ -25,6 +25,7 @@ from ..reports import (
 )
 from ..reports.monthly_review import SUMMARY_STEM, build, leave_out, setting
 from . import as_of
+from . import finding as finding_pages
 from .access import (
     by_report,
     can,
@@ -500,8 +501,10 @@ def prices():
 # -- Findings ------------------------------------------------------------------
 
 
-def _findings_page(t, resolved: bool):
-    report = findings_report.build(g.db, t, resolved=resolved)
+def _findings_page(t, resolved: bool, open_finding=None):
+    """The Findings tab; with ``open_finding`` (a findings row), its sheet is open beside the table (the
+    sheet page, ``finding``), and the table starts on the columns that leave it room."""
+    report = findings_report.build(g.db, t, resolved=resolved, compact=open_finding is not None)
     view = views.View.parse(request.args)
     saved = g.db.execute(
         "SELECT * FROM saved_views WHERE user_id = ? AND report_key = ? ORDER BY name COLLATE NOCASE",
@@ -512,6 +515,11 @@ def _findings_page(t, resolved: bool):
     current = [f for f in unresolved if not findings_report.is_accepted(f, report.generated_at)]
     lapsed = {f["id"]: f for f in current if f["accepted_at"]}  # past their review date, back among the open ones
     counts = {"open": len(current), "resolved": len(rows) - len(unresolved)}
+    # The table's links carry the view on the page they're on: the tab, or the sheet page, so the sheet stays
+    # open while someone filters or sorts beside it.
+    extra = {"first_review_day": finding_pages.first_review_day()}
+    if open_finding is not None:
+        extra.update(finding_pages.sheet_for(t, open_finding))
     return render_template(
         "findings.html",
         tenant=t,
@@ -523,7 +531,8 @@ def _findings_page(t, resolved: bool):
         lapsed=lapsed,
         links=views.headline_links(report, request.path),
         counts=counts,
-        first_review_day=_first_review_day(),
+        open_id=open_finding["id"] if open_finding is not None else None,
+        **extra,
     )
 
 
@@ -542,6 +551,15 @@ def tenant_findings(tenant_id: int):
 @needs("reports.security")
 def resolved_findings(tenant_id: int):
     return _findings_page(tenant_or_404(tenant_id), resolved=True)
+
+
+@bp.get("/tenants/<int:tenant_id>/findings/<int:finding_id>")
+@needs("reports.security")
+def finding(tenant_id: int, finding_id: int):
+    """The Findings tab with one finding's sheet open beside the table (first, on a phone): its evidence,
+    history, where else the check fails, the fix, and the text to act on it (web/finding.py)."""
+    t, row = finding_pages.finding_or_404(finding_id, tenant_id)
+    return _findings_page(t, resolved=row["resolved_at"] is not None, open_finding=row)
 
 
 @bp.get("/tenants/<int:tenant_id>/findings.<ext>", defaults={"resolved": False})
@@ -614,7 +632,11 @@ def accept_finding(finding_id: int):
         findings.accept(g.db, row["id"], g.user["username"], note, f"{until}T00:00:00Z" if until else None)
         audit(g.db, g.user["username"], "finding_accepted", row["tenant_id"], f"{row['rule_key']}:{row['subject']}")
         flash("Risk accepted. It's under Accepted risks, here and in the monthly review.", "success")
+        if _from_sheet():
+            return _to_sheet(row)
         return redirect(url_for("reports.tenant_findings", tenant_id=row["tenant_id"]) + "#t-accepted-risks")
+    if _from_sheet():
+        return _to_sheet(row)
     return redirect(url_for("reports.tenant_findings", tenant_id=row["tenant_id"]))
 
 
@@ -624,4 +646,15 @@ def unaccept_finding(finding_id: int):
     row = _finding_or_404(finding_id)
     findings.unaccept(g.db, row["id"])
     audit(g.db, g.user["username"], "finding_unaccepted", row["tenant_id"], f"{row['rule_key']}:{row['subject']}")
+    if _from_sheet():
+        return _to_sheet(row)
     return redirect(url_for("reports.tenant_findings", tenant_id=row["tenant_id"]))
+
+
+def _from_sheet() -> bool:
+    """Whether the form was sent from the finding's sheet, which then stays open."""
+    return request.form.get("from") == "sheet"
+
+
+def _to_sheet(row):
+    return redirect(url_for("reports.finding", tenant_id=row["tenant_id"], finding_id=row["id"]))

@@ -124,10 +124,13 @@ def _names(snap: TenantSnapshot) -> dict[str, str]:
     return names
 
 
-def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResult]:
+def evaluate(snap: TenantSnapshot, now: datetime | None = None, only: set[str] | None = None) -> list[RuleResult]:
+    """Run every check (or just the keys in ``only``) against the snapshot, in ``RULES`` order."""
     now = now or datetime.now(UTC)
     results = []
     for r in RULES:
+        if only is not None and r.key not in only:
+            continue
         # A check returns (status, summary, findings) and may add advice that replaces the default.
         try:
             status, summary, findings, *extra = r.check(snap, now)

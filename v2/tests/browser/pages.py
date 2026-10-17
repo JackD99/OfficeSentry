@@ -1,7 +1,8 @@
 """The pages the browser tests capture: the ones people use most, plus the style guide.
 
-``{t}`` is the showcase tenant (Fabrikam Dental Group in scripts/demo_data.py) and ``{o}`` the one being
-onboarded. Each page is captured at a laptop and a phone width, in light and dark: four baselines.
+``{t}`` is the showcase tenant (Fabrikam Dental Group in scripts/demo_data.py), ``{o}`` the one being
+onboarded and ``{f}`` the showcase tenant's finding the sheet opens on (``screenshots.Server.finding_id``).
+Each page is captured at a laptop and a phone width, in light and dark: four baselines.
 A page added here needs ``pytest tests/browser --ui --update -k <name>`` once (README.md).
 """
 
@@ -30,6 +31,7 @@ PAGES = [
     Page("clients", "/clients"),
     Page("tenant-overview", "/tenants/{t}"),
     Page("findings", "/tenants/{t}/findings"),
+    Page("finding-sheet", "/tenants/{t}/findings/{f}"),
     Page("tenant-changes", "/tenants/{t}/changes"),
     Page("tenant-timeline", "/tenants/{t}/timeline"),
     Page("reports-tab", "/tenants/{t}/data"),

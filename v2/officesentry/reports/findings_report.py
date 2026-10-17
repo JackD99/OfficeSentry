@@ -27,6 +27,12 @@ SEVERITY = "Severity"
 FIRST_SEEN = "First seen"
 
 _ISO = "%Y-%m-%dT%H:%M:%SZ"
+# With a finding's sheet open beside the table, these columns wait in the Columns menu (the sheet shows them).
+COMPACT_OPTIONAL = {
+    OPEN: ("Category", FIRST_SEEN),
+    ACCEPTED: ("Accepted by", "Reason", "Review on", FIRST_SEEN),
+    RESOLVED: (FIRST_SEEN,),
+}
 _ORDER = (
     "CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2"
     " WHEN 'low' THEN 3 ELSE 4 END, rule_key, subject COLLATE NOCASE"
@@ -101,10 +107,13 @@ class _Builder:
         return section
 
 
-def build(conn, tenant, resolved: bool = False, now: datetime | None = None) -> DataReport:
-    """Open findings and accepted risks, or (``resolved``) the findings a later collection no longer saw."""
+def build(conn, tenant, resolved: bool = False, now: datetime | None = None, compact: bool = False) -> DataReport:
+    """Open findings and accepted risks, or (``resolved``) the findings a later collection no longer saw.
+    ``compact`` (a finding's sheet open beside the table) starts each table on the columns that fit a
+    laptop with the sheet; the rest are in Columns, and downloads keep them."""
     now = now or datetime.now(UTC)
     b = _Builder(conn, tenant, now)
+    aside = COMPACT_OPTIONAL if compact else {}
     if resolved:
         report = DataReport(
             RESOLVED_KEY,
@@ -126,6 +135,7 @@ def build(conn, tenant, resolved: bool = False, now: datetime | None = None) -> 
             "",
             "Nothing resolved yet. Findings move here when a later collection no longer sees the problem.",
         )
+        section.optional = aside.get(RESOLVED, ())
         report.sections = [section]
         recent = sum(1 for f in rows if (f["resolved_at"] or "") >= (now - timedelta(days=30)).strftime(_ISO))
         report.tiles = [
@@ -181,6 +191,8 @@ def build(conn, tenant, resolved: bool = False, now: datetime | None = None) -> 
         "No accepted risks. When something is intentional, accept the risk from its row above and "
         "it moves here with the reason.",
     )
+    findings.optional = aside.get(OPEN, ())
+    risks.optional = aside.get(ACCEPTED, ())
     report.sections = [findings, risks]
 
     severe = sum(1 for f in open_rows if f["severity"] in ("critical", "high"))
