@@ -47,7 +47,11 @@ def test_workbook_sheets_are_styled_filterable_and_typed():
     book.table(
         "Devices",
         ["Device", "Last check-in", "Share", "Count"],
-        [["LAPTOP-1", "2026-08-20 (45d)", "60%", 3], ["=HYPERLINK(1)", "2026-10-01 22:42", "Under 1%", 0]],
+        [
+            ["LAPTOP-1", "2026-08-20 (45d)", "60%", 3],
+            ["=HYPERLINK(1)", "2026-10-01 22:42", "Under 1%", 0],
+            ["SRV-1", "2026-09-01", "100%", 113280],
+        ],
         flags=["high", None],
     )
     data = book.save(
@@ -67,12 +71,17 @@ def test_workbook_sheets_are_styled_filterable_and_typed():
     assert {"Devices", "Alpha Ltd"} <= set(summary)
     assert any("Harbour IT" in str(c) and "4 Oct 2026" in str(c) for c in summary)
     ws = wb["Devices"]
-    assert ws.freeze_panes == "A2" and ws.auto_filter.ref == "A1:E3"
+    assert ws.freeze_panes == "A2" and ws.auto_filter.ref == "A1:E4"
     assert ws["A1"].font.bold and ws["A1"].fill.fgColor.rgb.endswith("0D7A5F")
-    assert ws["B2"].value == datetime(2026, 8, 20) and ws["B2"].number_format == workbook.DATE_FORMAT
-    assert ws["C2"].value == 0.6 and ws["C2"].number_format == "0%" and ws["C3"].value == "Under 1%"
-    assert ws["E1"].value == "Flag" and ws["E2"].value == "high" and ws["E3"].value is None
-    assert ws["A3"].data_type == "s" and ws["A3"].value == "=HYPERLINK(1)"  # never a formula
+    # The flag column comes first and reads as the page does.
+    assert [c.value for c in ws[1]] == ["Flag", "Device", "Last check-in", "Share", "Count"]
+    assert ws["A2"].value == "High" and ws["A3"].value is None and ws["A4"].value is None
+    assert ws["A2"].fill.fgColor.rgb.endswith(workbook.FLAG_FILLS["high"][0])
+    assert ws["C2"].value == datetime(2026, 8, 20) and ws["C2"].number_format == workbook.DATE_FORMAT
+    assert ws["D2"].value == 0.6 and ws["D2"].number_format == "0%" and ws["D3"].value == "Under 1%"
+    assert ws["B3"].data_type == "s" and ws["B3"].value == "=HYPERLINK(1)"  # never a formula
+    # Counts of 10,000 or more get a thousands separator; smaller ones stay plain.
+    assert ws["E4"].value == 113280 and ws["E4"].number_format == "#,##0" and ws["E2"].number_format == "General"
     assert ws.print_title_rows == "$1:$1"
 
 
@@ -129,6 +138,25 @@ def test_summary_links_open_sheets_with_quotes_and_no_sheet_takes_excels_history
     assert links == ["#'OneDrives of people who''ve left'!A1", "#'History (2)'!A1"]
     assert tables.sheet_name("HISTORY", set()) == "HISTORY (2)"
     assert tables.sheet_name("History of sign-ins", set()) == "History of sign-ins"
+
+
+def test_long_sheet_names_are_cut_at_a_word():
+    assert tables.sheet_name("Large mailboxes without an archive", set()) == "Large mailboxes without an…"
+    assert tables.sheet_name("Authentication strengths in Conditional Access", set()) == "Authentication strengths in…"
+    assert tables.sheet_name("Sites shared outside the organisation", set()) == "Sites shared outside the…"
+    # A second table with the same cut name is numbered, still within Excel's 31 characters.
+    used = {"large mailboxes without an…"}
+    assert tables.sheet_name("Large mailboxes without an archive", used) == "Large mailboxes without an… (2)"
+    assert tables.sheet_name("A" * 40, set()) == "A" * 30 + "…"  # no word to cut at
+    assert all(len(tables.sheet_name(t, set())) <= 31 for t in ("Short", "A word " * 10, "x" * 31, "y" * 32))
+
+
+def test_csv_keeps_signed_changes_with_units_as_they_are():
+    # A change with a unit isn't a formula either, so Excel doesn't show a stray apostrophe.
+    for text in ("+6.5 GB", "-4.6 points", "+12 items a day", "+2", "-1.5", "+4.6%", "+£23.00"):
+        assert tables.csv_cell(text) == text
+    for text in ("=1+1", "+cmd|' /C calc'!A0", "-1 and then =SUM(A1)", "@SUM(A1)", "+1 GB (see =A1)"):
+        assert tables.csv_cell(text) == "'" + text
 
 
 def test_plain_table_downloads_have_no_cover_unless_asked():

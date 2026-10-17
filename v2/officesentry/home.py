@@ -1,8 +1,11 @@
 """Home pages by role (pages in ``web/home.py``): each opens with one sentence, then the detail.
 
-- **Today**, for technicians: the clients that need someone today, and why: critical and high findings that
-  are new in the last day, collections that failed or are out of date, access not granted yet, and anything
-  due within a week (from ``upcoming``).
+- **Today**, for technicians: a ledger of what happened across their clients, one line per thing, worst
+  first, with what's new above a line and what they'd seen before (and is still open) below it: critical
+  and high findings first seen or back, collections that failed or are out of date, access not granted
+  yet, anything due within a week (from ``upcoming``) and the critical and high findings a collection no
+  longer saw. Every line has the time it happened: the collection that found it, the run that failed, the
+  day the client was added. Until Today knows when the person last looked, new means the last day.
 - **Clients**, for account managers: licence waste, renewals in the next 30 days, this month's reports
   waiting for approval and projects to propose, per client.
 
@@ -19,14 +22,16 @@ from datetime import UTC, datetime, timedelta
 
 from . import store, tenant_health, upcoming
 from .collectors import REGISTRY
+from .formatting import parse
 from .rules import RULES
-from .text import plural
+from .text import plural, subject_label
 
 TODAY, CLIENTS = "today", "clients"
 HOMES = {
     TODAY: (
         "Today",
-        "What needs you today: new critical and high findings, collections that failed and anything due this week.",
+        "What happened across your clients since you last looked: new critical and high findings, collections "
+        "that failed, anything due this week and what was fixed.",
     ),
     CLIENTS: (
         "Accounts",
@@ -34,14 +39,20 @@ HOMES = {
     ),
 }
 DEFAULT = TODAY
-NEW_SINCE = timedelta(days=1)  # what counts as a new finding on Today
+NEW_SINCE = timedelta(days=1)  # what's new on Today, until it knows when the person last looked
+LOOKBACK = timedelta(days=7)  # critical and high findings this recent stay on Today, below the line once seen
 DUE_WITHIN = 7  # days: Coming up items that make Today
 RENEWAL_WITHIN = 30  # days: renewals on Clients
 RENEWAL_TYPES = (upcoming.SUBSCRIPTION, upcoming.TRIAL)
 STALE_AFTER = timedelta(hours=36)  # matches monthly_review.STALE_AFTER and the tenants list
+NAMED = 3  # accounts or items named on a line before "and N more"
 _ISO = "%Y-%m-%dT%H:%M:%SZ"
 _RULE_TITLES = {r.key: r.title for r in RULES}
-_RANK = {"bad": 0, "warn": 1}
+# A line's level, worst first: a collection that failed sits between critical and high; something that needs
+# attention now (a lapsing subscription, a mailbox nearly full, a renewal due today) comes after high.
+LEVELS = ("critical", "bad", "high", "now", "warn", "ok")
+_LEVEL_RANK = {level: i for i, level in enumerate(LEVELS)}
+_TONE = {"critical": "bad", "high": "bad", "bad": "bad", "now": "bad", "warn": "warn", "ok": "ok"}
 _NOUNS = {
     upcoming.SUBSCRIPTION: "subscription",
     upcoming.TRIAL: "trial",
@@ -51,7 +62,7 @@ _NOUNS = {
     upcoming.DMARC: "domain",
     upcoming.RISK: "accepted risk",
 }
-KINDS = ("findings", "collection", "access", "due")  # the order a client's reasons show in
+KINDS = ("finding", "collection", "access", "due", "fixed")  # what a line can be about
 
 
 def home_of(user) -> str:
@@ -74,47 +85,70 @@ def join(parts: list[str]) -> str:
 
 
 @dataclass
-class Reason:
-    kind: str  # findings | collection | access | due
-    tone: str  # bad | warn
-    text: str  # what's wrong, in words
-    detail: str = ""  # one more line: which checks, which collectors
-    href: str = ""  # where to look or fix it (a portal path, set by the page)
-    tenant_id: int = 0
-    target: str = ""  # what href points at: findings | collection | tenant | upcoming | a path from Coming up
+class Entry:
+    """One line of Today's ledger."""
 
-
-@dataclass
-class TodayRow:
+    kind: str  # finding | fixed | collection | access | due
+    level: str  # critical | high | bad | now | warn | ok: the colour of the line's key, and its place
+    word: str  # the key's word: Critical, High, Failed, Due today, Fixed, ...
+    when: datetime  # when it happened (UTC): the collection that found it, the run that failed
     tenant: dict
-    reasons: list[Reason] = field(default_factory=list)
+    text: str  # what happened, in words
+    detail: str = ""  # one more line: which accounts or items, which collectors, what happens next
+    target: str = ""  # what href points at: findings | fixed | collection | tenant | upcoming | a path from Coming up
+    anchor: str = ""  # a fragment on that page (a check's group on Findings)
+    count: int = 1  # findings or items behind the line
+    key: str = (
+        ""  # the item, for handing it to a colleague or snoozing it: finding:<check> | collection | access | due:...
+    )
+    new: bool = True  # happened since the line, or seen before and still open
+    href: str = ""  # where to look or fix it (a portal path, set by the page)
+    stamp: str = ""  # the time as the page shows it, in the MSP's timezone (set by the page)
+    stamp_full: str = ""
 
     @property
     def tone(self) -> str:
-        return min((r.tone for r in self.reasons), key=lambda t: _RANK.get(t, 2), default="")
+        return _TONE.get(self.level, "warn")
+
+    @property
+    def order(self) -> tuple:
+        """New before seen, worst first, then latest first."""
+        return (0 if self.new else 1, _LEVEL_RANK.get(self.level, len(LEVELS)), -self.when.timestamp())
 
 
 @dataclass
 class Today:
-    rows: list[TodayRow]  # clients that need someone, worst first
+    entries: list[Entry]  # new lines first (worst first), then what was seen before and is still open
     tenants: int  # active clients looked at
-    new_severe: int  # new critical and high findings among them
-    new_critical: int
-    failing: int  # clients whose collection failed or can't sign in
-    stale: int  # clients whose data is out of date
-    waiting: int  # clients that haven't granted access yet
-    due: int  # things due within DUE_WITHIN days, or needing attention now
-    since: datetime
+    since: datetime  # the line: what happened after this is new
+    new_severe: int = 0  # new critical and high findings
+    new_critical: int = 0
+    failing: int = 0  # clients whose collection failed or can't sign in
+    stale: int = 0  # clients whose data is out of date
+    waiting: int = 0  # clients that haven't granted access yet
+    due: int = 0  # things due within DUE_WITHIN days, or needing attention now
+    fixed: int = 0  # critical and high findings no longer seen since the line
+    clients: int = 0  # clients with a line
+    since_label: str = "yesterday"  # how the sentence names the line
     without: list[tuple[dict, str]] = field(default_factory=list)  # Coming up parts that couldn't be read
 
     @property
+    def new(self) -> list[Entry]:
+        return [e for e in self.entries if e.new]
+
+    @property
+    def seen(self) -> list[Entry]:
+        return [e for e in self.entries if not e.new]
+
+    @property
     def fine(self) -> int:
-        return self.tenants - len(self.rows)
+        return self.tenants - self.clients
 
     def sentence(self) -> str:
-        """The page's opening line."""
+        """The page's opening line: what's new, counted, then what was fixed."""
         if not self.tenants:
             return "No active clients to look after yet."
+        new = self.new
         parts = []
         if self.new_severe:
             word = (
@@ -122,184 +156,313 @@ class Today:
                 if self.new_critical == self.new_severe
                 else ("critical or high" if self.new_critical else "high")
             )
-            parts.append(plural(self.new_severe, f"new {word} finding"))
-        if self.failing:
-            parts.append(plural(self.failing, "failed collection"))
-        if self.stale:
-            parts.append(f"{self.stale} out of date")
-        if self.waiting:
-            parts.append(f"{self.waiting} waiting for access")
-        if self.due:
-            parts.append(f"{plural(self.due, 'thing')} due this week")
-        if not self.rows:
+            parts.append((self.new_severe, f"new {word} finding"))
+        failed = [e for e in new if e.kind == "collection" and e.level == "bad"]
+        if failed:
+            parts.append((len(failed), "failed collection"))
+        retrying = [e for e in new if e.kind == "collection" and e.level == "warn" and e.word == "Retrying"]
+        if retrying:
+            parts.append((len(retrying), "collection being tried again", "collections being tried again"))
+        stale = [e for e in new if e.kind == "collection" and e.word == "Out of date"]
+        if stale:
+            parts.append((len(stale), "client out of date", "clients out of date"))
+        waiting = [e for e in new if e.kind == "access"]
+        if waiting:
+            parts.append((len(waiting), "client waiting for access", "clients waiting for access"))
+        due = sum(e.count for e in new if e.kind == "due")
+        if due:
+            parts.append((due, "thing due this week", "things due this week"))
+        fixed = f" {plural(self.fixed, 'finding')} {'was' if self.fixed == 1 else 'were'} fixed." if self.fixed else ""
+        if not parts:
+            seen = self.seen
+            if seen:
+                still = f"{plural(len(seen), 'thing')} you'd seen {'is' if len(seen) == 1 else 'are'} still open."
+                return f"Nothing new since {self.since_label}. {still}{fixed}"
             who = "Your client is" if self.tenants == 1 else f"All {self.tenants} clients are"
             return (
                 f"Nothing needs you today. {who} collecting, with no new critical or high findings and nothing"
-                " due this week."
+                f" due this week.{fixed}"
             )
-        lead = f"{plural(len(self.rows), 'client')} {'needs' if len(self.rows) == 1 else 'need'} you today"
-        return f"{lead}: {join(parts)}."
+        n = sum(p[0] for p in parts)
+        lead = f"{plural(n, 'thing')} {'needs' if n == 1 else 'need'} someone today"
+        return f"{lead}: {join([plural(*p) for p in parts])}.{fixed}"
 
 
 def _active(tenants) -> list[dict]:
     return [dict(t) for t in tenants if t["enabled"] and not t["archived_at"]]
 
 
-def _new_findings(conn, ids: list[int], since: str, now: str) -> dict[int, list]:
-    """Critical and high findings first seen (or back) since ``since``, open and not accepted, per tenant."""
-    if not ids:
-        return {}
-    marks = ",".join("?" * len(ids))
+def _at(value, fallback: datetime) -> datetime:
+    return parse(value) or fallback
+
+
+def _named(subjects: list[str]) -> str:
+    """'a · b · c and 2 more'."""
+    text = " · ".join(subjects[:NAMED])
+    return text + (f" and {len(subjects) - NAMED} more" if len(subjects) > NAMED else "")
+
+
+def _finding_entries(conn, tenants: dict[int, dict], since: datetime, now: datetime) -> list[Entry]:
+    """Critical and high findings first seen (or back) in the last LOOKBACK, open and not accepted: one line
+    per client, check and severity, split at the line so what's new since it isn't mixed with what was seen."""
+    if not tenants:
+        return []
+    marks = ",".join("?" * len(tenants))
     rows = conn.execute(
-        f"SELECT tenant_id, rule_key, severity, COUNT(*) AS n FROM findings WHERE tenant_id IN ({marks})"
-        " AND resolved_at IS NULL AND severity IN ('critical', 'high')"
+        f"SELECT tenant_id, rule_key, severity, subject, detail, first_seen, reopened_at FROM findings"
+        f" WHERE tenant_id IN ({marks}) AND resolved_at IS NULL AND severity IN ('critical', 'high')"
         " AND (first_seen >= ? OR IFNULL(reopened_at, '') >= ?)"
         " AND (accepted_at IS NULL OR (accepted_until IS NOT NULL AND accepted_until <= ?))"
-        " GROUP BY tenant_id, rule_key, severity"
-        " ORDER BY CASE severity WHEN 'critical' THEN 0 ELSE 1 END, n DESC, rule_key",
-        (*ids, since, since, now),
+        " ORDER BY rule_key, subject COLLATE NOCASE",
+        (*tenants, (now - LOOKBACK).strftime(_ISO), (now - LOOKBACK).strftime(_ISO), now.strftime(_ISO)),
     ).fetchall()
-    out: dict[int, list] = {}
+    cut = since.strftime(_ISO)
+    groups: dict[tuple, list] = {}
     for r in rows:
-        out.setdefault(r["tenant_id"], []).append(r)
+        at = max(r["first_seen"], r["reopened_at"] or "")
+        groups.setdefault((r["tenant_id"], r["rule_key"], r["severity"], at >= cut), []).append((at, r))
+    out = []
+    for (tenant_id, rule_key, severity, _), found in groups.items():
+        found.sort(key=lambda f: f[0], reverse=True)
+        first = found[0][1]
+        subjects = [subject_label(f[1]["subject"]) for f in found]
+        if len(found) == 1:
+            detail = f"{subjects[0]}: {first['detail']}" if first["detail"] else subjects[0]
+        else:
+            detail = f"{plural(len(found), 'finding')}: {_named(subjects)}"
+        out.append(
+            Entry(
+                "finding",
+                severity,
+                severity.capitalize(),
+                _at(found[0][0], now),
+                tenants[tenant_id],
+                _RULE_TITLES.get(rule_key, rule_key),
+                detail,
+                target="findings",
+                anchor=f"#check-{rule_key}",
+                count=len(found),
+                key=f"finding:{rule_key}",
+            )
+        )
     return out
 
 
-def _collection(conn, tenant: dict, now: datetime) -> Reason | None:
+def _fixed_entries(conn, tenants: dict[int, dict], since: datetime, now: datetime) -> list[Entry]:
+    """Critical and high findings a collection no longer saw since the line: one line per client."""
+    if not tenants:
+        return []
+    marks = ",".join("?" * len(tenants))
+    rows = conn.execute(
+        f"SELECT tenant_id, rule_key, subject, resolved_at FROM findings WHERE tenant_id IN ({marks})"
+        " AND resolved_at >= ? AND severity IN ('critical', 'high') ORDER BY resolved_at DESC, rule_key",
+        (*tenants, since.strftime(_ISO)),
+    ).fetchall()
+    by_tenant: dict[int, list] = {}
+    for r in rows:
+        by_tenant.setdefault(r["tenant_id"], []).append(r)
+    out = []
+    for tenant_id, fixed in by_tenant.items():
+        names = [f"{_RULE_TITLES.get(r['rule_key'], r['rule_key'])} ({subject_label(r['subject'])})" for r in fixed]
+        out.append(
+            Entry(
+                "fixed",
+                "ok",
+                "Fixed",
+                _at(fixed[0]["resolved_at"], now),
+                tenants[tenant_id],
+                f"{plural(len(fixed), 'finding')} no longer seen",
+                _named(names),
+                target="fixed",
+                count=len(fixed),
+            )
+        )
+    return out
+
+
+def _collected_at(latest: dict, now: datetime) -> datetime:
+    """When the client's latest collection finished: the time of what it found."""
+    finished = [
+        r["finished_at"] for r in latest.values() if r["status"] in ("succeeded", "partial") and r["finished_at"]
+    ]
+    return _at(max(finished), now) if finished else now
+
+
+def _collection(tenant: dict, latest: dict, now: datetime) -> Entry | None:
     """Why this client's data can't be trusted today, or None. The same reading as the tenants list."""
     if not tenant["consented_at"]:
-        return Reason(
+        return Entry(
             "access",
             "warn",
+            "Waiting",
+            _at(tenant["created_at"], now),
+            tenant,
             "Waiting for a tenant admin to grant access",
             "Nothing can be collected until they do.",
             target="tenant",
+            key="access",
         )
-    latest = tenant_health.latest_runs(conn, tenant["id"])
     if not latest:
         return None  # added and consented, first collection still to come
-    failed = [k for k, r in latest.items() if r["status"] == "failed"]
-    sign_in = [latest[k]["error"] for k in failed if (latest[k]["error"] or "").startswith("Sign-in failed: ")]
-    if sign_in and len(sign_in) == len(failed):
-        return Reason(
-            "collection",
-            "bad",
-            "Office Sentry can't sign in to this tenant",
-            sign_in[0].removeprefix("Sign-in failed: "),
-            target="collection",
-        )
+    failed = [r for r in latest.values() if r["status"] == "failed"]
     if failed:
-        names = [REGISTRY[k].title for k in failed if k in REGISTRY]
-        if all(store.retry_pending(latest[k], now) for k in failed):  # Microsoft was busy: tried again by itself
-            return Reason(
+        when = _at(max(r["finished_at"] or "" for r in failed), now)
+        sign_in = [r["error"] for r in failed if (r["error"] or "").startswith("Sign-in failed: ")]
+        if sign_in and len(sign_in) == len(failed):
+            return Entry(
+                "collection",
+                "bad",
+                "Failed",
+                when,
+                tenant,
+                "Office Sentry can't sign in to this tenant",
+                sign_in[0].removeprefix("Sign-in failed: "),
+                target="collection",
+                key="collection",
+            )
+        names = ", ".join(REGISTRY[r["collector"]].title for r in failed if r["collector"] in REGISTRY)
+        if all(store.retry_pending(r, now) for r in failed):  # Microsoft was busy: tried again by itself
+            return Entry(
                 "collection",
                 "warn",
+                "Retrying",
+                when,
+                tenant,
                 f"{plural(len(failed), 'collection')} failed and will be tried again",
-                ", ".join(names),
+                names,
                 target="collection",
+                key="collection",
             )
-        return Reason(
-            "collection", "bad", f"{plural(len(failed), 'collection')} failed", ", ".join(names), target="collection"
+        return Entry(
+            "collection",
+            "bad",
+            "Failed",
+            when,
+            tenant,
+            f"{plural(len(failed), 'collection')} failed",
+            names,
+            target="collection",
+            key="collection",
         )
     if any(r["status"] in ("queued", "running") for r in latest.values()):
         return None
     finished = [r["finished_at"] for r in latest.values() if r["finished_at"]]
     cutoff = (now - STALE_AFTER).strftime(_ISO)
     if finished and min(finished) < cutoff:
-        return Reason(
+        return Entry(
             "collection",
             "warn",
+            "Out of date",
+            _at(min(finished), now) + STALE_AFTER,  # when the oldest data passed the limit
+            tenant,
             "Some data is more than 36 hours old",
             "Reports and checks may be out of date.",
             target="collection",
+            key="collection",
         )
     return None
 
 
-def _due(items: list) -> list[Reason]:
-    """Coming up items for one client: one line each, or one line per type when there are several."""
+def _due_word(item) -> str:
+    """The key's word for a Coming up item: Now for what needs attention whatever its date, else when it's due."""
+    if item.window == upcoming.NOW:
+        return "Now"
+    return f"Due {item.when}" if item.when else "Due"
+
+
+def _due(tenant: dict, items: list, when: datetime) -> list[Entry]:
+    """Coming up items for one client: one line each, or one line per type when there are several. They
+    carry the time of the collection that found them."""
     by_type: dict[str, list] = {}
     for item in items:
         by_type.setdefault(item.type, []).append(item)
     out = []
     for kind, group in by_type.items():
-        tone = "bad" if any(i.window == upcoming.NOW for i in group) else "warn"
+        level = "now" if any(i.window == upcoming.NOW for i in group) else "warn"
         if len(group) == 1:
             item = group[0]
-            when = f", {item.when}" if item.when else ""
-            out.append(Reason("due", tone, f"{kind}: {item.title}{when}", item.detail, target=item.href))
+            # The key says when it's due; a line that needs attention now says its date, if it has one, in words.
+            dated = f", {item.when}" if level == "now" and item.when else ""
+            out.append(
+                Entry(
+                    "due",
+                    level,
+                    _due_word(item),
+                    when,
+                    tenant,
+                    f"{kind}: {item.title}{dated}",
+                    item.detail,
+                    target=item.href or "upcoming",
+                    key=f"due:{kind}:{item.title}",
+                )
+            )
         else:
             # Each part's items share a link (the report that lists them), so one line links to all of them.
             href = group[0].href if len({i.href for i in group}) == 1 else ""
             out.append(
-                Reason(
+                Entry(
                     "due",
-                    tone,
+                    level,
+                    "Now" if level == "now" else "This week",
+                    when,
+                    tenant,
                     f"{kind}: {plural(len(group), _NOUNS.get(kind, 'item'))}",
-                    " · ".join(i.title for i in group),
+                    _named([i.title for i in group]),
                     target=href or "upcoming",
+                    count=len(group),
+                    key=f"due:{kind}",
                 )
             )
     return out
 
 
-def today(conn, tenants, now: datetime | None = None, shows: Callable[[str, int], bool] | None = None) -> Today:
-    """What needs someone today across ``tenants`` (paused and archived ones are left out). ``shows(kind,
-    tenant id)`` says which kinds of reason the person may see on each client; the rest aren't counted."""
+def today(
+    conn,
+    tenants,
+    now: datetime | None = None,
+    shows: Callable[[str, int], bool] | None = None,
+    since: datetime | None = None,
+) -> Today:
+    """Today's ledger across ``tenants`` (paused and archived ones are left out): what happened since
+    ``since`` (the last day without it) above the line, what was seen before and is still open below it.
+    ``shows(kind, tenant id)`` says which kinds of line the person may see on each client; the rest aren't
+    counted."""
     now = now or datetime.now(UTC)
     shows = shows or (lambda kind, tenant_id: True)
-    since = now - NEW_SINCE
+    since = since or now - NEW_SINCE
     active = _active(tenants)
-    found = _new_findings(conn, [t["id"] for t in active], since.strftime(_ISO), now.strftime(_ISO))
+    by_id = {t["id"]: t for t in active}
+    entries = [e for e in _finding_entries(conn, by_id, since, now) if shows("finding", e.tenant["id"])]
+    entries += [e for e in _fixed_entries(conn, by_id, since, now) if shows("fixed", e.tenant["id"])]
     up = upcoming.collect(conn, active, now)
-    soon = {}
+    soon: dict[int, list] = {}
     for item in up.items:
         if item.tenant and (item.window == upcoming.NOW or (item.days is not None and item.days <= DUE_WITHIN)):
             soon.setdefault(item.tenant["id"], []).append(item)
-    rows, totals = [], {"new": 0, "critical": 0, "failing": 0, "stale": 0, "waiting": 0, "due": 0}
     for t in active:
-        row = TodayRow(t)
-        news = found.get(t["id"], []) if shows("findings", t["id"]) else []
-        if news:
-            n = sum(r["n"] for r in news)
-            critical = sum(r["n"] for r in news if r["severity"] == "critical")
-            word = "critical" if critical == n else ("critical or high" if critical else "high")
-            titles = [_RULE_TITLES.get(r["rule_key"], r["rule_key"]) for r in news]
-            row.reasons.append(
-                Reason(
-                    "findings",
-                    "bad" if critical else "warn",
-                    plural(n, f"new {word} finding"),
-                    "Failing: " + " · ".join(dict.fromkeys(titles)),
-                    target="findings",
-                )
-            )
-            totals["new"] += n
-            totals["critical"] += critical
-        if (state := _collection(conn, t, now)) is not None and shows(state.kind, t["id"]):
-            row.reasons.append(state)
-            key = {"access": "waiting", "collection": "failing" if state.tone == "bad" else "stale"}[state.kind]
-            totals[key] += 1
-        if shows("due", t["id"]):
-            row.reasons += _due(soon.get(t["id"], []))
-            totals["due"] += len(soon.get(t["id"], []))
-        if row.reasons:
-            for r in row.reasons:
-                r.tenant_id = t["id"]
-            row.reasons.sort(key=lambda r: (KINDS.index(r.kind), _RANK.get(r.tone, 2)))
-            rows.append(row)
-    rows.sort(key=lambda r: (_RANK.get(r.tone, 2), -len(r.reasons), r.tenant["name"].lower()))
+        latest = tenant_health.latest_runs(conn, t["id"])
+        if (state := _collection(t, latest, now)) is not None and shows(state.kind, t["id"]):
+            entries.append(state)
+        if soon.get(t["id"]) and shows("due", t["id"]):
+            entries += _due(t, soon[t["id"]], _collected_at(latest, now))
+    for e in entries:
+        e.new = e.when >= since
+    entries.sort(key=lambda e: e.order)
+    new = [e for e in entries if e.new]
+    collections = [e for e in entries if e.kind == "collection"]
     return Today(
-        rows,
+        entries,
         len(active),
-        totals["new"],
-        totals["critical"],
-        totals["failing"],
-        totals["stale"],
-        totals["waiting"],
-        totals["due"],
         since,
-        up.without,
+        new_severe=sum(e.count for e in new if e.kind == "finding"),
+        new_critical=sum(e.count for e in new if e.kind == "finding" and e.level == "critical"),
+        failing=sum(1 for e in collections if e.level == "bad"),
+        stale=sum(1 for e in collections if e.word == "Out of date"),
+        waiting=sum(1 for e in entries if e.kind == "access"),
+        due=sum(e.count for e in entries if e.kind == "due"),
+        fixed=sum(e.count for e in new if e.kind == "fixed"),
+        clients=len({e.tenant["id"] for e in entries if e.kind != "fixed"}),
+        without=up.without,
     )
 
 

@@ -86,14 +86,15 @@ check, a key figure, a whole part of the report), with a preview of the client's
 one client or many: each is frozen as it is and emailed or published to the client's portal.
 Anything you change after approving waits for a new version, so the client's portal always matches what they were sent.
 
-**Report designs** let an account manager build their own client report without code: drag in blocks (a
+**Custom reports** let an account manager build their own client report without code: drag in blocks (a
 verdict, key figures, failing checks, what changed, licences, a table from any detail report, your own text),
-set each one up, see it on a real client as you go, and send it with a report plan. Start from an executive
-summary, a full review, a licensing review or a **Quarterly review**: three months of Secure Score and findings,
-what was fixed, the projects on the table and where each stands, licence spend and what's coming up in the next
-90 days ([example PDF](examples/quarterly-review.pdf)).
+set each one up, see it on a real client as you go, and send it with a report plan or a client's email
+schedule (*Send on a schedule* on the client's Custom reports page starts one with it ticked). Start from an
+executive summary, a full review, a licensing review or a **Quarterly review**: three months of Secure Score
+and findings, what was fixed, the projects on the table and where each stands, licence spend and what's coming
+up in the next 90 days ([example PDF](examples/quarterly-review.pdf)).
 
-![The report designer with the Quarterly review: blocks, the layout, and a preview on a real client](docs/screenshots/design-editor.png)
+![The custom report editor with the Quarterly review: blocks, the layout, and a preview on a real client](docs/screenshots/design-editor.png)
 
 ### SharePoint storage: why it's full and what to clean up
 

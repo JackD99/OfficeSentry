@@ -3,17 +3,21 @@
 {% block title %}Changes · {{ tenant.name }}{% endblock %}
 {% block content %}
 {{ tenant_header(tenant, 'changes') }}
-<div class="toolbar">
-  <nav class="subtabs m0" aria-label="Period">
-    {% for d in periods %}<a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id, days=d) }}"{% if d == days %} class="active" aria-current="page"{% endif %}>Last {{ d }} days</a>{% endfor %}
-    {% if period %}<a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id, **query) }}" class="active" aria-current="page">Chosen dates</a>{% endif %}
-  </nav>
+<div class="toolbar report-title">
+  <div>
+    <h2 class="section-title">{{ title }}</h2>
+    <p class="muted small m0">Key figures, findings and every detail report compared with the data held at the start of the period.</p>
+  </div>
   <div class="toolbar-actions">
-    {{ downloads([('PDF', url_for('across.tenant_changes_pdf', tenant_id=tenant.id, **query), ''),
-                  ('XLSX', url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='xlsx', **query), ''),
+    {{ downloads([('PDF', url_for('across.tenant_changes_pdf', tenant_id=tenant.id, **query), 'This report as a document'),
+                  ('XLSX', url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='xlsx', **query), 'Figures, findings and changes, a sheet each'),
                   ('CSV', url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='csv', **query), 'Every change in one table')]) }}
   </div>
 </div>
+<nav class="subtabs" aria-label="Period">
+  {% for d in periods %}<a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id, days=d) }}"{% if d == days %} class="active" aria-current="page"{% endif %}>Last {{ d }} days</a>{% endfor %}
+  {% if period %}<a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id, **query) }}" class="active" aria-current="page">Chosen dates</a>{% endif %}
+</nav>
 
 {#- The period as two dates: change either and the page compares those two days instead. -#}
 <form class="date-pick" method="get" action="{{ url_for('across.tenant_changes', tenant_id=tenant.id) }}">

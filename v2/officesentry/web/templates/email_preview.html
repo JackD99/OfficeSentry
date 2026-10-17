@@ -1,15 +1,14 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, csrf %}
+{% from "_macros.html" import icon, csrf, tenant_header with context %}
 {% from "_email.html" import people, when_local with context %}
 {% block title %}Preview · Office Sentry{% endblock %}
 {% block content %}
 {% set back = url_for('email.tenant_emails', tenant_id=tenant.id) if tenant else url_for('email.overview') %}
-<div class="crumbs">
-  {% if tenant %}<a href="{{ url_for('tenants.dashboard') }}">Clients</a><span>/</span><a href="{{ back }}">{{ tenant.name }}</a><span>/</span><span>Emailed reports</span>
-  {% else %}<a href="{{ back }}">Email reports</a>{% endif %}
-</div>
+{% if tenant %}{{ tenant_header(tenant, 'schedules', back=('Emailed reports', back)) }}
+{% else %}<div class="crumbs"><a href="{{ back }}">Email reports</a><span>/</span><span>Preview</span></div>{% endif %}
+{% set tag = 'h2' if tenant else 'h1' %}
 <div class="page-head">
-  <div><h1>{{ email.subject if email else 'Alert preview' }}</h1>
+  <div><{{ tag }}{% if tenant %} class="page-title"{% endif %}>{{ email.subject if email else 'Alert preview' }}</{{ tag }}>
     <div class="sub">Preview{% if s %} · {{ s.describe }} ({{ s.tz }}){% endif %}</div></div>
   <div class="actions">
     {% if s %}
@@ -18,7 +17,6 @@
     {% if s.plan_id %}{% if can_open('reporting.edit_plan', plan_id=s.plan_id) %}<a class="btn" href="{{ url_for('reporting.edit_plan', plan_id=s.plan_id) }}">{{ icon('edit') }} Edit plan</a>{% endif %}
     {% elif can_open('email.edit_schedule', schedule_id=s.id, tenant=s.tenant_id) %}<a class="btn" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>{% endif %}
     {% endif %}
-    <a class="btn ghost" href="{{ back }}">Back</a>
   </div>
 </div>
 

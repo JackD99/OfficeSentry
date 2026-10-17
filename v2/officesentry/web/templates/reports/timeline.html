@@ -1,0 +1,62 @@
+{#- A client's timeline (reports/timeline.py) as a PDF: the measures by month, then each month with its
+    summary and entries. The web page is timeline.html. -#}
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+{% set compact_cover = true %}
+{% set document = true %}
+
+{% block doc_title %}Timeline{% endblock %}
+{% block client %}{{ tenant.name }}{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Period', period ~ (', ' ~ tl.months[-1].label ~ ' to ' ~ tl.months[0].label if tl.months else '')) }}
+  {% if show %}{{ ui.meta('Showing', groups|selectattr(0, 'equalto', show)|map(attribute=1)|first) }}{% endif %}
+  {{ ui.meta('Microsoft 365 tenant', tenant.tenant_ref) }}
+{% endblock %}
+
+{% block body %}
+{% if tl.left_out %}<div class="callout warn">Left out, since you can't open them for this client: {{ tl.left_out|join(', ') }}.</div>{% endif %}
+{% if tl.empty %}
+<p class="empty-note">Nothing recorded yet. The timeline fills as Office Sentry collects from this client.</p>
+{% else %}
+{% if tl.measures %}
+<section class="doc-section keep">
+  <h2>By month</h2>
+  <p class="section-intro">The last value captured in each month. Open findings are the critical and high findings not fixed or accepted at the month's end.</p>
+  {% call ui.figures([tl.measures|length, 2]|min) %}
+    {% for x in tl.measures %}
+    <div class="kpi">
+      <div class="label">{{ x.label }}</div>
+      <div class="value has-spark"><span>{{ x.text(x.latest) }}</span>{% if x.svg %}{{ x.svg|safe }}{% endif %}</div>
+      <div class="note">{% if x.svg %}{{ x.text(x.first) }} in {{ x.since }}{% if x.delta %}, {{ '%+g'|format(x.delta) }}{{ ' pts' if x.unit == '%' }} since{% else %}, unchanged since{% endif %}{% else %}Not enough history yet{% endif %}</div>
+    </div>
+    {% endfor %}
+  {% endcall %}
+</section>
+{% endif %}
+
+{% for m in tl.months %}
+<section class="doc-section">
+  <h2>{{ m.label }}</h2>
+  {% if m.summary %}<p class="section-intro">{{ m.summary|join(' · ') }}</p>{% endif %}
+  {% if m.entries %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th class="nw">Day</th><th>Kind</th><th>What</th></tr></thead>
+    <tbody>{% for e in m.entries %}
+    <tr><td class="nw">{{ e.when }}</td>
+      <td class="nw">{{ e.label }}{% if e.word %} {{ ui.sev(e.level) if e.level in ('critical', 'high', 'medium', 'low') else '(' ~ e.word ~ ')' }}{% endif %}</td>
+      <td>{{ e.title|breakable }}{% if e.detail %} <span class="muted">{{ e.detail|breakable }}</span>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="empty-note">{% if show %}Nothing of this kind this month.{% else %}Nothing recorded.{% endif %}</p>{% endif %}
+</section>
+{% endfor %}
+{% endif %}
+
+<footer class="about keep">
+  {% if tl.truncated %}<p>The oldest {{ tl.truncated|plural('entry', 'entries') }} are left off. The XLSX and CSV carry every entry.</p>{% endif %}
+  {% if tl.quiet %}<p>Nothing recorded in {{ tl.quiet_text }}.</p>{% endif %}
+  <p>{{ tl.sources }}</p>
+  <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Collected from Microsoft 365 with read-only access; nothing was changed.</p>
+</footer>
+{% endblock %}

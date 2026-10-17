@@ -8,27 +8,33 @@
 <div class="report-main" id="report" tabindex="-1">
 <section class="card flush">
   <div class="card-head toolbar"><div><h2>Custom reports</h2>
-    <span class="meta">Every report design, on {{ tenant.name }}'s data. Designs are made under {{ page_link(url_for('designs.index'), 'Month-end → Report designs') }}.</span></div></div>
+    <span class="meta">Your own client reports, built from blocks, on {{ tenant.name }}'s data.</span></div>
+    {% if can_open('designs.index') %}<div class="toolbar-actions"><a class="btn sm" href="{{ url_for('designs.index') }}">{{ icon('plus') }} New custom report</a></div>{% endif %}</div>
   {% if designs %}
+  {#- The reader's columns: what each report is for, when it last changed, and which of this client's emails
+      already send it (designs.sent_to; the heading leaves the client's name out, since a long one would
+      widen the table past its card); "Send on a schedule" opens a new schedule with the report ticked. -#}
   <table class="stack-sm">
-    <thead><tr><th>Report</th><th class="num">Blocks</th><th></th></tr></thead>
+    <thead><tr><th>Report</th><th>Changed</th><th>Sent by</th><th></th></tr></thead>
     <tbody>
     {% for d in designs %}
     <tr>
       <td><a class="strong" href="{{ url_for('designs.tenant_design', tenant_id=tenant.id, design_id=d.id) }}">{{ d.name }}</a>
         {% if d.description %}<span class="sub">{{ d.description }}</span>{% endif %}</td>
-      <td data-label="Blocks" class="num">{{ counts[d.id] }}</td>
+      <td data-label="Changed" class="nowrap small muted">{{ (d.updated_at or d.created_at)|ago }}</td>
+      <td data-label="Sent by" class="small">{% if sent.get(d.id) %}{% if can_open('email.tenant_emails', tenant_id=tenant.id) %}<a href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}" title="The client's emailed reports">{{ sent[d.id]|join(', ') }}</a>{% else %}{{ sent[d.id]|join(', ') }}{% endif %}{% else %}<span class="muted">Not yet</span>{% endif %}</td>
       <td class="num"><div class="row-actions">
         {% if pdf_available and can_open('designs.tenant_design_pdf', tenant_id=tenant.id, design_id=d.id) %}<a class="btn sm" href="{{ url_for('designs.tenant_design_pdf', tenant_id=tenant.id, design_id=d.id) }}">{{ icon('download') }} PDF</a>{% endif %}
-        {% if can_open('designs.edit', design_id=d.id) %}<a class="btn sm ghost" href="{{ url_for('designs.edit', design_id=d.id, tenant=tenant.id) }}">Edit design</a>{% endif %}</div></td>
+        {% if can_open('email.new_schedule', tenant_id=tenant.id) %}<a class="btn sm ghost" href="{{ url_for('email.new_schedule', tenant_id=tenant.id, report='design:' ~ d.id) }}" title="A new scheduled email to {{ tenant.name }} with this report ticked">{{ icon('send') }} Send on a schedule</a>{% endif %}
+        {% if can_open('designs.edit', design_id=d.id) %}<a class="btn sm ghost" href="{{ url_for('designs.edit', design_id=d.id, tenant=tenant.id) }}">Edit</a>{% endif %}</div></td>
     </tr>
     {% endfor %}
     </tbody>
   </table>
   {% else %}
-  <div class="empty"><h3>No report designs yet</h3>
-    <p>A design is a client report built from blocks, which then works for every client.</p>
-    {% if can_open('designs.index') %}<a class="btn primary" href="{{ url_for('designs.index') }}">{{ icon('plus') }} Make one</a>{% endif %}</div>
+  <div class="empty"><h3>No custom reports yet</h3>
+    <p>Build a client report from blocks once, with your branding, and it works for every client. A report plan or a client's email schedule can send it as a PDF.</p>
+    {% if can_open('designs.index') %}<a class="btn primary" href="{{ url_for('designs.index') }}">{{ icon('plus') }} New custom report</a>{% else %}<p class="small muted m0">Someone who can <em>Design custom reports</em> makes them under Reports.</p>{% endif %}</div>
   {% endif %}
 </section>
 </div>

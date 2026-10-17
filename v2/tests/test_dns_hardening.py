@@ -240,7 +240,7 @@ def test_domains_that_dont_receive_mail_get_no_transport_findings(mx):
     h = dnscheck.check_domain("a.com", resolver({("a.com", "MX"): mx, ("_smtp._tls.a.com", "TXT"): []}), no_fetch)
     assert not h.sends_mail  # a null MX ("0 .") means no mail
     assert {i.area for i in dnscheck.issues(h, transport=True)} <= {"SPF", "DMARC"}
-    assert dnscheck.transport_summary(h) == {"MTA-STS": "n/a", "TLS-RPT": "n/a"}
+    assert dnscheck.transport_summary(h) == {"MTA-STS": "Not needed", "TLS-RPT": "Not needed"}
 
 
 @pytest.mark.parametrize(
@@ -491,7 +491,7 @@ def test_enforced_mta_sts_passes(db, two_tenants):
         "MTA-STS policy",
         "TLS-RPT record",
     ]
-    assert overview.rows[0][5:7] == ["Enforced", "Pass"] and overview.rows[1][5:7] == ["n/a", "n/a"]
+    assert overview.rows[0][5:7] == ["Enforced", "Pass"] and overview.rows[1][5:7] == ["Not needed", "Not needed"]
     assert records.rows[0][4] == "id=1; mode: enforce; mx: *.mail.protection.outlook.com; max_age: 604800"
     assert records.rows[0][5] == "v=TLSRPTv1; rua=mailto:t@x.com"
     assert "MTA-STS and TLS-RPT" in report.description
