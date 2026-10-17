@@ -479,8 +479,14 @@ def all_rows(conn, tenants, key: str, now: datetime | None = None, href=None, la
     """
     now = now or datetime.now(UTC)
     title, description, _collectors, _builder = data_reports.REPORTS[key]
+    # The "tenant" is every client at once: ``clients`` tells the PDF and workbook covers to say how many
+    # rather than name a Microsoft 365 tenant.
     combined = DataReport(
-        key, title, description, {"id": 0, "name": label, "tenant_ref": plural(len(tenants), "client")}, now
+        key,
+        title,
+        description,
+        {"id": 0, "name": label, "tenant_ref": plural(len(tenants), "client"), "clients": len(tenants)},
+        now,
     )
     sections: dict[str, Section] = {}
     totals: Counter = Counter()
