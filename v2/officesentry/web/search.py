@@ -391,6 +391,13 @@ def search(conn, tenants, q: str, allowed=None) -> tuple[list[Group], bool]:
     return groups, False
 
 
+def matching_clients(tenants, q: str) -> list:
+    """The clients among ``tenants`` (the ones this person sees) whose name or domain holds ``q`` (lower
+    case), names starting with it first, then by name."""
+    found = [t for t in tenants if q in t["name"].lower() or q in (t["tenant_ref"] or "").lower()]
+    return sorted(found, key=lambda t: (not t["name"].lower().startswith(q), t["name"].lower()))
+
+
 @bp.get("/search")
 @needs("clients.compare")
 def index():
@@ -401,13 +408,16 @@ def index():
         tenants = [t for t in tenants if t["id"] == one]
         if not tenants:
             abort(404)
-    groups, truncated, short = [], False, bool(q) and len(q) < MIN_LENGTH
+    groups, truncated, short, clients = [], False, bool(q) and len(q) < MIN_LENGTH, []
     if q and not short:
+        if one is None:
+            clients = matching_clients(tenants, q.lower())
         groups, truncated = search(g.db, tenants, q.lower(), allowed=can)
     return render_template(
         "search.html",
         q=q,
         short=short,
+        clients=clients,
         groups=groups,
         truncated=truncated,
         one=tenants[0] if one is not None else None,

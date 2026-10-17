@@ -100,6 +100,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   (PDF, XLSX, CSV) like a report table, and comes as a weekly email too (below).
 - **Search all clients** (the box at the top of the menu, `/search`, for
   staff): one search through the latest data of every client you can see, for
+  clients by name or domain (listed first), <!-- since 2.5.0 -->
   people, groups, mailboxes, addresses mail is forwarded to (by an admin or an
   inbox rule), SharePoint sites, sign-in IP addresses, apps and app
   registrations, devices and domains. "Which clients forward to this address?"
