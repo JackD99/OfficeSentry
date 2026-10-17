@@ -175,3 +175,21 @@ def test_email_sender_name_falls_back_to_the_brand_name(db, vault):
     db.execute("INSERT INTO settings (key, value) VALUES ('msp_name', 'Harbour Reports')")
     mailer.send(db, vault, email)
     assert sends()[-1][2]["From"] == "Harbour Reports <r@msp.com>"
+
+
+def test_every_browser_tab_ends_with_the_msp_name(client, db, two_tenants):
+    """A title that names a client or a settings page still says whose portal it is."""
+    alpha, _ = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    assert "<title>Alpha Ltd · Office Sentry</title>" in client.get(f"/tenants/{alpha}").get_data(as_text=True)
+    assert "<title>Manage · Alpha Ltd · Office Sentry</title>" in client.get(f"/tenants/{alpha}/manage").get_data(
+        as_text=True
+    )
+    assert "<title>Roles · Office Sentry</title>" in client.get("/admin/roles").get_data(as_text=True)
+    _brand(db, name="Harbour & Co")
+    assert "<title>Manage · Alpha Ltd · Harbour &amp; Co</title>" in client.get(f"/tenants/{alpha}/manage").get_data(
+        as_text=True
+    )
+    assert "<title>Roles · Harbour &amp; Co</title>" in client.get("/admin/roles").get_data(as_text=True)
+    assert "<title>Clients · Harbour &amp; Co</title>" in client.get("/").get_data(as_text=True)

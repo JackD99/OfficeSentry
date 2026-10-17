@@ -43,6 +43,7 @@ td.num { white-space: nowrap; }
 .account .role { font-size: var(--fs-xs); color: var(--sidebar-muted); }
 .account .links { display: flex; gap: var(--space-3); margin-top: var(--space-1-5); font-size: var(--fs-sm); }
 .account a, .account button.link { color: var(--sidebar-text); }
+.account .links a.active { color: var(--sidebar-strong); font-weight: 600; }
 .mobile-bar { display: none; }
 .content { min-width: 0; }
 .nav a.nav-search-link, .fold-icon { display: none; }
@@ -69,6 +70,7 @@ td.num { white-space: nowrap; }
   .menu-folded .sidebar .account .links form { display: block; }
   .menu-folded .sidebar .account :is(.links a, button.link) { display: flex; width: 100%; border-radius: var(--radius-sm); }
   .menu-folded .sidebar .account :is(.links a, button.link):hover { background: var(--sidebar-active); color: var(--sidebar-strong); }
+  .menu-folded .sidebar .account .links a.active { background: var(--sidebar-active); box-shadow: inset 2px 0 0 var(--sidebar-marker); }
   .menu-folded .sidebar .fold-icon { width: 16px; height: 16px; }
 }
 /* The public demo site's bar (web/public_demo.py): what this is, and where to get it. */
@@ -686,7 +688,7 @@ svg.brand-preview { display: block; width: 100%; height: auto; margin: var(--spa
 .auth-card .brand .logo-chip img { max-height: 48px; max-width: 260px; }
 .mobile-bar .brand .logo-chip img { max-height: 24px; max-width: 150px; }
 body.branded .brand .logo { background: var(--brand); color: var(--on-brand); }
-body.branded .nav a.active { box-shadow: inset 2px 0 0 var(--brand); }
+body.branded .nav a.active, .menu-folded body.branded .sidebar .account .links a.active { box-shadow: inset 2px 0 0 var(--brand); }
 body.branded .auth-card .card { border-top: 3px solid var(--brand); }
 body.branded .auth-card button.primary, body.branded .auth-card button.primary:hover { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
 body.branded .auth-card button.primary:hover { opacity: .9; }
