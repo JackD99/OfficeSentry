@@ -19,7 +19,7 @@ def test_tenants_page_opens_and_downloads_each_monthly_review(client, db, two_te
     make_user(db, "admin")
     login(client, "admin")
     page = client.get("/").get_data(as_text=True)
-    assert f'href="/tenants/{alpha}/report.pdf"' in page and f'href="/tenants/{alpha}/report"' in page
+    assert f'href="/tenants/{alpha}/report.pdf"' in page and f'href="/tenants/{alpha}"' in page  # PDF, overview
     assert f'href="/tenants/{bravo}/report.pdf"' not in page  # nothing to download before consent
     assert "across 1 client with a score" in page and "1 up to date" in page
     assert client.get(f"/tenants/{alpha}/report.pdf").status_code == 200

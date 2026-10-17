@@ -35,7 +35,7 @@ of date, [tell us](https://github.com/JackD99/OfficeSentry/issues/new/choose) an
 
 ## Where Office Sentry is stronger
 
-- **Built around several clients.** Every report has an All clients view, one row per client, and every figure
+- **Built around several clients.** The Clients page shows any report for every client, one row each, and every figure
   opens the rows behind it. Clients can be grouped by tier, sector or region.
 - **History is the product.** Each day's results are kept for 30 days and each month's for a year by default
   (longer if you choose), so every report says what changed since last month and every finding records when

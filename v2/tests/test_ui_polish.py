@@ -41,7 +41,7 @@ def test_overview_changes_are_in_points_and_neutral_when_neither_way_is_better(c
     page = client.get(f"/tenants/{alpha}").get_data(as_text=True)
     assert '<span class="delta better">+7 pts</span> in 4 weeks' in page and "+7%" not in page
     assert '<span class="delta flat">+1</span> in 4 weeks' in page
-    review = client.get("/across/review").get_data(as_text=True)  # All clients: the same figures, a row each
+    review = client.get("/").get_data(as_text=True)  # the Clients page: the same figures, a row each
     assert '<span class="delta better tiny">+7</span>' in review and '<span class="delta flat tiny">+1</span>' in review
 
 
