@@ -5,12 +5,16 @@ import types
 
 import pytest
 
+from officesentry import system_alerts
 from officesentry.__main__ import main
 
 
 @pytest.fixture
 def env(cfg, monkeypatch):
     monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))
+    # serve builds the app outside testing, so its first request would start the worker watchdog: a thread that
+    # outlives this test and opens a connection a minute later, in the middle of whichever test runs then.
+    monkeypatch.setattr(system_alerts, "start_watchdog", lambda app, cfg: False)
     return cfg
 
 
