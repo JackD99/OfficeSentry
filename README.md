@@ -88,10 +88,11 @@ Anything you change after approving waits for a new version, so the client's por
 
 **Custom reports** let an account manager build their own client report without code: drag in blocks (a
 verdict, key figures, failing checks, what changed, licences, a table from any detail report, your own text),
-set each one up, see it on a real client as you go, and send it with a report plan. Start from an executive
-summary, a full review, a licensing review or a **Quarterly review**: three months of Secure Score and findings,
-what was fixed, the projects on the table and where each stands, licence spend and what's coming up in the next
-90 days ([example PDF](examples/quarterly-review.pdf)).
+set each one up, see it on a real client as you go, and send it with a report plan or a client's email
+schedule (*Send on a schedule* on the client's Custom reports page starts one with it ticked). Start from an
+executive summary, a full review, a licensing review or a **Quarterly review**: three months of Secure Score
+and findings, what was fixed, the projects on the table and where each stands, licence spend and what's coming
+up in the next 90 days ([example PDF](examples/quarterly-review.pdf)).
 
 ![The custom report editor with the Quarterly review: blocks, the layout, and a preview on a real client](docs/screenshots/design-editor.png)
 
