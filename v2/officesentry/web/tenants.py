@@ -19,7 +19,6 @@ from ..reports.month_changes import CHANGE_REPORTS
 from ..text import one_line, plural
 from .access import can, is_staff, login_required, manages_groups, needs, opens_on, tenant_or_404, visible_tenants
 from .groups import group_aware, scoped_tenants
-from .reports import report_groups
 
 bp = Blueprint("tenants", __name__)
 
@@ -295,7 +294,6 @@ def tenant(tenant_id: int):
         key_changes=key_changes,
         attention=attention,
         health=data_health(t, latest),
-        report_groups=report_groups(t["id"]),
         setup=None if setup.onboarded else setup,
         setup_can_check=_check_problem(t) is None and can("collect", t["id"]),
         cloud_problem=cloud_problem,

@@ -65,6 +65,7 @@ def test_every_tenant_page_opens_one_tab(client, db, seeded):
         f"/tenants/{alpha}/changes": ("Changes", "What changed"),
         f"/tenants/{alpha}/activity": ("Changes", "Activity history"),
         f"/tenants/{alpha}/timeline": ("Changes", "Timeline"),
+        f"/tenants/{alpha}/data": ("Reports", None),
         f"/tenants/{alpha}/data/mailboxes": ("Reports", None),
         f"/tenants/{alpha}/evidence": ("Reports", None),
         f"/tenants/{alpha}/users": ("Users", "People"),
@@ -172,6 +173,45 @@ def test_report_picker_lists_custom_reports_and_saved_views(client, db, seeded):
     page = client.get(f"/tenants/{alpha}/data/inbox-rules").get_data(as_text=True)
     assert "Custom reports" not in page and "Board pack" not in page
     assert client.get(f"/tenants/{alpha}/data?key=design:{did}").status_code == 404
+
+
+def _directory(page: str) -> str:
+    return page.split('id="report-directory"')[1].split("</section>")[0]
+
+
+def test_reports_tab_opens_on_the_catalogue(client, db, vault, seeded):
+    """The Reports tab is the client's report catalogue: the summaries, the MSP's custom reports and the
+    person's saved views, then every detail report by area, with one search box; the overview's Reports card
+    is the same list. A key that isn't there shows it too."""
+    alpha = seeded
+    auditdata.everywhere(db, vault)  # the add-on's report too
+    make_user(db, "admin")
+    login(client, "admin")
+    did = designs.create(db, "Board pack", "admin", designs.STARTERS["executive"][2], "For the board")
+    client.post(
+        "/reports/mailboxes/views",
+        data={"name": "Leaving us", "query": "f=forwarding/outside-the-organisation:Yes", "tenant_id": alpha},
+    )
+    for url in (f"/tenants/{alpha}/data", f"/tenants/{alpha}", f"/tenants/{alpha}/data?key=nothing"):
+        page = client.get(url).get_data(as_text=True)
+        directory = _directory(page)
+        hrefs = re.findall(r'href="(/tenants/[^"]+)"', directory)
+        assert hrefs[:3] == [f"/tenants/{alpha}/report", f"/tenants/{alpha}/evidence", f"/tenants/{alpha}/projects"]
+        assert {f"/tenants/{alpha}/data/{key}" for key in data_reports.REPORTS} <= set(hrefs)
+        assert f"/tenants/{alpha}/designs/{did}" in hrefs and f"/tenants/{alpha}/designs" in hrefs
+        assert f"/tenants/{alpha}/data/mailboxes?f=forwarding%2Foutside-the-organisation%3AYes" in hrefs
+        assert "New custom report" in directory and 'href="/reporting/designs"' in directory
+        assert 'data-report-search="report-directory"' in page and ">Your views</h3>" in directory
+    page = client.get(f"/tenants/{alpha}/data").get_data(as_text=True)
+    assert _active(_tab_bar(page)) == ["Reports"] and '<nav class="report-menu"' not in page
+    assert re.search(r"\d+ reports on .*'s data\. Pick one, or search", page)
+    # A client account gets its own areas, and neither custom reports nor anyone's views.
+    make_user(db, "client", role="client", tenants=[alpha])
+    client.post("/logout")
+    login(client, "client")
+    directory = _directory(client.get(f"/tenants/{alpha}/data").get_data(as_text=True))
+    assert f"/tenants/{alpha}/report" in directory and f"/tenants/{alpha}/data/mailboxes" in directory
+    assert "Custom reports" not in directory and "Your views" not in directory and "Board pack" not in directory
 
 
 def test_tenant_header_pins_its_tab_bar(client, db, seeded):
