@@ -1262,7 +1262,7 @@ a.chk:hover, a.chk:focus-visible { outline: 2px solid var(--accent); outline-off
   .tabs a { padding: 8px 9px; }
 }
 /* Links in running text are underlined, not told apart by colour alone. */
-main :is(p, .callout, .footnote, .help, .group-help) a:not([class]) { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+main :is(p, .callout, .footnote, .help, .group-help, .sheet dd) a:not([class]) { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
 /* Skip link: off screen until it gets keyboard focus. */
 .skip-link { position: absolute; left: 12px; top: -48px; z-index: 100; padding: var(--space-2) var(--space-3-5); border-radius: var(--radius-sm); background: var(--surface); color: var(--accent); font-weight: 600; }
 .skip-link:focus { top: 12px; box-shadow: var(--shadow-menu); }
