@@ -14,9 +14,11 @@ from dataclasses import dataclass, field
 from io import StringIO
 
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r", "\n")
-# A change that is only a signed number ("+2", "-1.5", "+4.6%", "+£23.00") can't be a formula: no prefix.
-SIGNED_NUMBER = re.compile(r"[+-][£$€]?\d[\d,]*(?:\.\d+)?%?")
+# A change that is only a signed number, with or without a unit ("+2", "-1.5", "+4.6%", "+£23.00", "+6.5 GB",
+# "+4.6 points"), can't be a formula: no prefix, since Excel shows the prefix as a stray apostrophe.
+SIGNED_NUMBER = re.compile(r"[+-][£$€]?\d[\d,]*(?:\.\d+)?%?(?: [A-Za-z]+){0,3}")
 RESERVED_SHEET = "history"  # Excel keeps this sheet name for itself and offers to repair a workbook that uses it
+SHEET_NAME_MAX = 31  # Excel's limit
 
 
 @dataclass
@@ -50,12 +52,24 @@ def to_csv(table: Table) -> bytes:
     return ("﻿" + out.getvalue()).encode("utf-8")  # BOM so Excel reads UTF-8
 
 
+def fit(text: str, limit: int) -> str:
+    """``text`` within ``limit`` characters: whole when it fits, else cut at a word and ended with an ellipsis
+    ("Large mailboxes without an…"), never mid-word ("Large mailboxes without an arch")."""
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    at_word = cut.rsplit(" ", 1)[0].rstrip(" ,;:(-") if " " in cut else ""
+    return (at_word if len(at_word) >= limit // 2 else cut.rstrip()) + "…"
+
+
 def sheet_name(title: str, used: set[str]) -> str:
-    name = re.sub(r"[\[\]:*?/\\\x00-\x1f]", " ", title).strip()[:31] or "Sheet"
+    """A sheet's name for ``title``: within Excel's 31 characters, cut at a word, and unlike any in ``used``
+    (which it joins). The Summary sheet maps every sheet to its table's full title."""
+    name = fit(re.sub(r"[\[\]:*?/\\\x00-\x1f]", " ", title).strip(), SHEET_NAME_MAX) or "Sheet"
     base, n = name, 2
     while name.lower() in used or name.lower() == RESERVED_SHEET:
         suffix = f" ({n})"
-        name = base[: 31 - len(suffix)] + suffix
+        name = fit(base, SHEET_NAME_MAX - len(suffix)) + suffix
         n += 1
     used.add(name.lower())
     return name
