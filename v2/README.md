@@ -103,7 +103,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   or "who signed in from this IP?" is one search. Each result opens the
   person's or object's page, or the detail report filtered to that row, and it
   only finds what you can open.
-  <!-- since 2.5.0 -->
   Press `/` (or Ctrl+K, ⌘K on a Mac), or click that box, to open the **jump
   box** over any page: type a few letters to land on a client, a report for
   a client ("north mfa"), a report across every client, a custom report, one
@@ -112,7 +111,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   ("north mfa pdf") for the report's file.
   Enter opens the highlighted row, and the last row searches everything for
   what you typed. While the box is empty it shows the places you opened last.
-  <!-- /since -->
 - **Home pages** (staff): **Today** (`/today`, for technicians) is a ledger of
   what happened across your clients, one line per thing, worst first, each with
   the time it happened: critical and high findings first seen or back,
