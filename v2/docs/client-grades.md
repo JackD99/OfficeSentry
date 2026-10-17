@@ -1,4 +1,3 @@
-<!-- since 2.5.0 -->
 # Client grades
 
 Every client gets a grade from **A** to **E**: one letter to put in front of a client, worked out the same
@@ -70,4 +69,3 @@ The Grade page sets the client beside the other clients you can see, so you can 
 
 The grade shows to staff roles that can see **Security findings and reviews** on the client, on the pages
 they already open; a first-line role without findings sees no grade. Clients don't see the Grade page.
-<!-- /since -->

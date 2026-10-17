@@ -319,101 +319,78 @@ GUIDES = "Guides"  # v2/docs/*.md not listed above
 # `icon` is one of the icons in templates/home.html. Drop the oldest list once a newer one is released.
 WHATS_NEW = [
     {
-        "version": "2.4.0",
-        "title": "See who deleted, shared or opened what in your clients' Microsoft 365",  # the band's heading
+        "version": "2.5.0",
+        "title": "Act on a finding, grade every client, and get anywhere in a few keystrokes",  # the band's heading
         # a sentence under it
-        "summary": "An optional audit log add-on keeps who deleted, downloaded or shared a file and who opened "
-        "someone else's mailbox, and every client is checked for an audit log that's switched off.",
-        "chip": "The audit log add-on",  # a few words for the link at the top of the page
+        "summary": "Every finding opens a sheet with its evidence, history and fix, every client gets a grade "
+        "from A to E with the rules published, and Today becomes one ledger of what changed overnight.",
+        "chip": "Findings, grades and Today",  # a few words for the link at the top of the page
         "items": [  # up to six {"icon", "title", "text", "href", "link"}: "link" names the page "href" opens
             {
-                "icon": "history",
-                "title": "Who deleted, shared or opened what",
-                "text": "An optional second app reads each approving client's Microsoft 365 audit log every night: "
-                "files deleted, downloaded or shared, mail opened by someone other than its owner, and inbox rules "
-                "that forward or delete mail, kept for two years and never the contents.",
-                "href": "/docs/audit-log-addon/",
-                "link": "The audit log add-on",
-            },
-            {
                 "icon": "alert",
-                "title": "Four new reports, from Defender alerts to remote access tools",
-                "text": "Security alerts lists each client's open Defender incidents and alerts and who has picked "
-                "them up, and Service health has Microsoft 365 outages and the message centre changes to act on "
-                "by a date. Installed apps puts remote access tools such as AnyDesk and ScreenConnect first, and "
-                "Trusted organisations and locations shows whose MFA a client accepts and which networks "
-                "Conditional Access trusts. The first two need read-only permissions each client approves once.",
-                "href": "/docs/what-it-reads/",
-                "link": "What Office Sentry reads",
-            },
-            {
-                "icon": "review",
-                "title": "Clients read one story",
-                "text": "Their home page, the report email and the PDFs all show the month you approved, lead with "
-                "the verdict and name the most urgent gap, and the two-page summary fits on two pages.",
-                "href": "/docs/reference/#month-end-reporting",
-                "link": "Month-end reporting",
+                "title": "A sheet for every finding",
+                "text": "A finding opens beside the table with the evidence behind it, its history, where else the "
+                "same check fails, the fix as numbered steps and its project. Copy ready-made ticket text, email "
+                "the client's contact from your own mail app, keep a note or hand it to a colleague; notes never "
+                "reach the client.",
+                "href": "/docs/reference/#reports",
+                "link": "Reports",
             },
             {
                 "icon": "shield",
-                "title": "Looks after itself",
-                "text": "Every install backs its database up every night with no crontab line, and a collection "
-                "that failed because Microsoft was busy tries again by itself.",
-                "href": "/docs/install/#backups",
-                "link": "Backups",
+                "title": "A grade for every client",
+                "text": "One letter from A to E, worked out the same way for everyone: the worst of five parts, "
+                "each its worst open finding after accepted risks. Its page shows what moves each part, twelve "
+                "month-ends of history and how the client compares with others of its size, none of them named.",
+                "href": "/docs/client-grades/",
+                "link": "Client grades",
             },
             {
-                "icon": "table",
-                "title": "Every report leads with its numbers",
-                "text": "Nine more detail reports, Devices, Guests and Conditional Access among them, open with "
-                "headline figures that each open the rows they count, and All clients compares them across "
-                "every client. Last sign-in, forwarding, MFA, DMARC and holds now count the way Microsoft and "
-                "Exchange do, so an account under a password spray no longer looks active.",
+                "icon": "history",
+                "title": "Today is a ledger of the night",
+                "text": "One list across every client, worst first, of what changed since yesterday, with what "
+                "the team fixed. Hand a line to a colleague or snooze it, and a line marks where you last looked.",
+                "href": "/docs/reference/#reports",
+                "link": "Home pages",
+            },
+            {
+                "icon": "review",
+                "title": "A client's year on one page",
+                "text": "Timeline, under a client's Changes tab, lays out the year month by month for a review "
+                "meeting: findings found and fixed, admin changes, reports sent, failed nights and the client's "
+                "own milestones, beside Secure Score, MFA and open findings at each month's end.",
                 "href": "/docs/reference/#reports",
                 "link": "Reports",
             },
             {
                 "icon": "search",
-                "title": "Quicker to get around",
-                "text": "Switch client, beside every client's name, opens the page you're on for another client, "
-                "Settings sit in four areas, and / jumps to search from any page. Every person, mailbox, group and "
-                "site page links back to its list, a person's page puts their open findings beside their account, and "
-                "month-end names the months either side.",
+                "title": "Get anywhere in a few keystrokes",
+                "text": 'Press / and type "north mfa" for MFA coverage at Northwind, add pdf for the file, or '
+                "type a page, a setting, a custom report or a person. Search all clients finds clients by name "
+                "or domain too, and only offers what you can open.",
+                "href": "/docs/reference/#reports",
+                "link": "Reports",
+            },
+            {
+                "icon": "table",
+                "title": "One Clients page, and reports that behave the same way",
+                "text": "Clients and All clients are one page, worst first, with any report for every client a "
+                "menu away. Custom reports live under Reports and send from where you are, a client's Reports "
+                "tab opens on its catalogue, and every download is named, sorted and laid out the same way.",
                 "href": "/docs/reference/#managing-clients",
                 "link": "Managing clients",
             },
         ],
         "also": [  # smaller changes, a few words each
-            "a check that each client's Microsoft 365 audit log is switched on",
-            "Devices shows which computers back up their local admin password with Windows LAPS, never the password "
-            "itself",
-            "a client's What's new page lists every permission it hasn't approved, from any release",
-            "a new look, with serif titles and figures, ruled sections and one ink blue",
-            "emails in the reports' colours, and ink blue for MSPs who haven't picked a colour",
-            "each person picks light, dark or their device's setting, and staff one of six colours",
-            "removing something asks first in the portal's own dialog, light or dark like the page",
-            "a pressed Save, Send now or Approve shows it's working and can't send twice",
-            "every message after an action carries an icon as well as its colour",
-            "the Activity log and its download spell out access changes and evidence answers, and offboarding "
-            "names every app to delete",
-            "a client whose sign-in breaks keeps its last good data, and its findings aren't marked fixed",
-            "a month-end report changed after approval reaches the client only as a new version",
-            "month-end never sends a client the same month twice",
-            "month-end never approves an empty report, and a paused client gets no email",
-            "client PDFs never end on a page of only small print, and their charts use the report's own font",
-            "pausing a client mid-collection sends no alerts",
-            "a SharePoint network failure no longer reads as awaiting approval",
-            "percentage changes read in points everywhere, and the Overview no longer shows more licensed users in red",
-            "licence right-sizing never suggests a plan that would take someone's devices out of Intune or their "
-            "sign-ins out of Conditional Access",
-            "licence counts leave out trial seats and free allocations, and a subscription in its grace period "
-            "keeps its reports working until Microsoft suspends it",
-            "search lists every matching domain, and a mailbox's last inbox rule shows as removed",
-            "only staff who can open every report in a client's plan can add people to it",
-            "every page links only to what the viewer can open and shows only the buttons they can use",
-            "the Update button installs only releases tagged on main",
-            "Updates lists every release since yours, however far behind, and never says Up to date before it "
-            "has checked",
+            "the menu lights the entry every page belongs to, and every browser tab ends with your name",
+            "every settings page opens with a Settings heading and says where a sub-page came from",
+            "the Flag or Severity column comes first in every CSV and workbook",
+            "cross-client PDFs carry your cover and footer, and tables start where they are",
+            "clearer wording and dates across the Email, Identity, Files and Devices reports",
+            "Devices lists each device's problems as short items you can filter on",
+            "SharePoint sites name each site instead of its whole address",
+            "a public demo that looks like a real tenant, with the audit log add-on switched on",
+            "a diagram of how data flows and how security is checked, in SECURITY.md",
         ],
     },
 ]

@@ -9,9 +9,173 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
-## [2.5.0] - Unreleased
+## [2.5.0] - 2026-10-17
 
-In progress. What changed is listed here when 2.5.0 is released.
+### Action required
+
+None. `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are the same as 2.4.1's.
+
+### New Microsoft permissions
+
+None.
+
+### Database upgrade
+
+Yes, applied on start as usual, after a copy of the database is made: migration 48 adds a note, who a finding
+was handed to and until when it is snoozed to each finding. Migration 49 adds a table for hand-offs and snoozes
+on Today's lines that aren't findings, and two columns to each person's account for when they last opened
+Today.
+
+### Added
+
+- **A sheet for every finding.** Every row of a client's Findings tab opens the finding's sheet beside the
+  table (above it on a phone): the evidence behind it (for an account, the facts from its page), its history,
+  where else the same check fails across the clients you see, the fix as numbered steps, and the project it
+  belongs to. Each finding has its own link. **Copy for a ticket** puts ready-made ticket text on the
+  clipboard, and **Email the contact** opens a prefilled email to the client's contact in your own mail app;
+  Office Sentry sends nothing itself. The team can keep a note on a finding and hand it to a colleague who
+  sees that client. Notes and hand-offs never appear on a client's pages, in reports or in emails, and note
+  text isn't kept in the activity log.
+- **A grade for every client.** Each client gets a grade from A to E, worked out the same way for everyone:
+  the worst of five parts (admin accounts, sign-in and accounts, mail, devices, sharing and apps), where a
+  part's grade is its worst open finding after accepted risks are set aside, and a part is only graded when at
+  least half its checks could run. The grade sits beside the client's name on every page about them, shows on
+  the Clients page and leads the Overview's figures. Its own Grade page shows what moves each part, the grade
+  at each of the last twelve month-ends and how the client compares with your other clients of about the same
+  size, without naming any of them. Staff with *Security findings and reviews* see it; the rules are in
+  [v2/docs/client-grades.md](v2/docs/client-grades.md).
+- **A client's year on one page.** *Timeline*, under a client's Changes tab (staff only), lays out the
+  client's year month by month for a review meeting. Each month opens with a one-line summary (new and fixed
+  findings, Secure Score and MFA then and now, admin changes, reports sent, failed nights) and links to What
+  changed for its dates. Under it are dated entries: findings found, fixed, come back and accepted; admin
+  changes worth telling a client about, from the activity history; reports sent and month-end approvals;
+  month-end notes and next steps; failed collections; and the client's own milestones. Beside it, Secure
+  Score, MFA, open critical and high findings and unassigned paid licences at each month's end. Filter by
+  kind, look back 12 or 24 months or everything kept, and download it as PDF, XLSX or CSV. Each person sees
+  only the parts whose report they can open on that client.
+- **Jump box.** Press `/` (or Ctrl+K, ⌘K on a Mac), or click the menu's search box, and type a few letters to
+  land on a client, a report for a client ("north mfa"), a report across every client, a custom report, one of
+  your saved views, a page, a setting, or a person, mailbox, forwarding address, site, app, device or domain.
+  Add `pdf` or `xlsx` for the report's file ("north mfa pdf"). On a client's page, a report typed on its own
+  opens for that client first. Enter opens the highlighted row, the last row searches everything, and the
+  places opened last show while the box is empty. It only offers what you can open.
+- **Hand a line on Today to a colleague, or snooze it.** Anyone who can annotate a client's findings can hand
+  a line to a colleague who sees that client, or snooze it until tomorrow morning or for a week. A finding
+  line hands on or snoozes every open finding behind it, so the finding's sheet shows the same; a failed
+  collection, a client waiting for access or a Coming up item keeps its hand-off until the line clears.
+  Snoozed lines leave the list and the counts and wait in a Snoozed card at the foot of the page. Every
+  hand-off and snooze is in the activity log.
+- **Today shows what was fixed.** The critical and high findings fixed since yesterday, one line per client,
+  and a Fixed tile, so a quiet morning says what the team's work did.
+- *Search all clients* finds clients by name or domain: the matching clients you can see come first, in a
+  Clients group that opens each one's overview, above what was found inside them.
+- A client's Custom reports page shows what each report is for, when it last changed and which of the
+  client's emails already send it, with a **Send on a schedule** button that opens a new scheduled email for
+  that client with the report ticked.
+- Guests: the Guest accounts table has a Name column after the address, on the page and in every download.
+- SharePoint sites: the All sites table has an Address column, kept in downloads and left off the page until
+  shown.
+- Devices: the Operating systems table has a *What it means* column with each Windows release's support
+  advice, once per release.
+- SECURITY.md has a diagram of how data flows from a client's tenant through Office Sentry, a table of what is
+  kept where and how each part is protected, and *How security is checked*: the tests and scans that guard
+  security on every change. DEPLOY.md says what sets the length of the night's collection, with figures from
+  a simulated 200-client night.
+
+### Changed
+
+- **One Clients page.** The Clients page and All clients are one page. **Clients** lists every client worst
+  first with the monthly review's figures, each client's data health, its review as a PDF, sorting, a filter
+  box, totals and PDF, XLSX and CSV downloads, and its *All reports* menu shows any other report for every
+  client the same way (Every row and Checks keep the Clients heading). The All clients menu entry is gone;
+  `/across` and `/across/review` open the Clients page, and every other address and download is unchanged.
+  Columns follow what the viewer may open, so first-line roles get the page with the people columns. Accounts
+  keeps its place as a Home page, its table titled "By client".
+- **Today is a ledger of what changed overnight.** One list across every client the person can see, worst
+  first and newest first (Critical, Failed, High, Now, Waiting, Out of date, Retrying, Due this week, Fixed),
+  each line with the time it happened in the person's time zone, the client, what it is and a link to it,
+  instead of a card per client. Findings of one check on one client are one line, and older critical and high
+  findings, failed collections and clients still waiting for access sit under a "Seen before" divider.
+  What's new since your previous visit sits above a line where you last looked (the last day on your first
+  visit), and opening Today again within two hours keeps the line where it was.
+- **Custom reports.** Report designs are now called custom reports everywhere (the pages, the Month-end
+  buttons, the editor, the docs and the website) and live under Reports. The Reports page opens with the
+  MSP's custom reports and the person's saved views, with "New custom report" beside them, and a client's
+  *All reports* menu lists them in two groups of their own. Report plans and client email schedules list
+  custom reports under their own heading, between the summary and detail reports.
+- **A client's Reports tab opens on its report catalogue** (the summaries, your custom reports and saved
+  views, and every detail report by area, with a search box) instead of the first detail report; a report
+  that isn't there, or that you can't open, shows the catalogue too. The Overview's Reports card is the same
+  list.
+- **Accept risk** moved from the Findings table into the finding's sheet; Undo stays on the accepted risks.
+- **Finding your way.** The menu lights the entry a page belongs to on every page (a person, mailbox, group or
+  site, a run, a schedule, search results, custom reports and the rest), and the Account link lights on the
+  account pages. Every browser tab ends with your company's name. Every settings page opens with a Settings
+  heading above its area tabs, and a page opened from another shows where it came from above its title
+  (Roles ← Users, a run ← Data collection, Report history ← Emailed reports, Recommended projects ← Findings
+  and so on). The schedule preview's Back button is gone; the back link above the title does the same job.
+  The account page is called "Account", as the menu calls it, and every page with no clients to list says
+  "No clients yet" or "No clients to show", as the Clients page does.
+- **Downloads.** Every download is named the same way: the report's key, the table's name only when the
+  report has several, then the client, or `all-clients` (`clients-<group>` for a group). Downloads from the
+  Clients pages, the checks matrix and What changed start `all-clients-` instead of `all-tenants-`. Emailed
+  attachments and Report history keep their names. In every CSV and workbook the Flag or Severity column
+  comes first, capitalised as on the page ("High"); sheet names longer than Excel's 31 characters are cut at
+  a word; counts of 10,000 or more have a thousands separator in workbooks; and a client's What changed
+  workbook says on its Summary sheet what it holds.
+- **Report pages behave the same way everywhere.** Every Download link explains its format the same way; the
+  checks matrix downloads cover the category it shows; Every row uses the same Views menu as a client's
+  report; a column of numbers or sizes sorts rather than filters unless its report asks for a filter, and
+  filter values sort smallest first ("9.9 GB" before "10.7 GB"); a note that says the same thing under every
+  row is said once above the table (downloads keep the column); "To review" counts each flagged item once
+  across a report's tables; and a report's description and notices keep to about 70 characters a line. What
+  changed has its Download control at the right of a title row, as on every report page.
+- **Cross-client PDFs.** Every row PDFs have a cover with Prepared by, Date and the number of clients, and
+  your internal footer, instead of one client's collection date and tenant; the workbook's Summary gives the
+  number of clients. The Clients PDF cover no longer repeats the report's title.
+- **Email reports.** Mailbox size trend writes the date it compares with like the rest of the page, and a
+  forecast more than two years away says "More than 2 years away". Mail forwarding says who the default
+  outbound spam policy covers. Mailbox permissions lists each person's mailboxes and each mailbox's people in
+  the same order. Email domains says "Not needed" for DKIM, MTA-STS and TLS-RPT on a domain that receives no
+  mail, instead of "n/a".
+- **Identity reports.** All users, Guests, Inactive accounts, Conditional Access and Trusted organisations
+  and locations say exactly what their figures count; Inactive accounts lists guests by their own address,
+  not the `#EXT#` sign-in name; and Hybrid names a domain's services in words (Email, SharePoint, Teams and
+  Skype for Business, Sign-in and so on) instead of Microsoft's internal names.
+- **Files, devices and tenant reports.** SharePoint sites, its Largest sites chart and its Sites shared outside
+  and Inactive sites tables name each site instead of showing its whole address, and "Microsoft's figures as
+  of" reads as a date. The Devices report's Problems column is a list of short items ("Not compliant", "Not
+  encrypted", "Windows 10 past support") that the filter offers one by one. File and folder permissions leaves
+  an expired link's Days left blank; Apps and consents gives every Risk value as a level with what earns it
+  ("High: Mail.Read"); and Site access says how its access levels relate to SharePoint's own.
+- The monthly review's New, Changed and Fixed tags are 12 px, a list of choices inside a card no longer draws
+  a second box, and small-caps labels are spaced a little less.
+- **The public demo looks like a real tenant.** Automatic replies are read for every mailbox and mailboxes
+  carry holds; shared and room mailboxes have their directory accounts; one client has Entra ID P2, so Risky
+  users has data; accounts, password ages, guests, deleted users and sign-in locations look as a real
+  tenant's do; people use SharePoint; and the audit log add-on is on with six days of file and mailbox
+  activity, so Files and mailbox access can be seen. Demo data only: a new install still starts with the
+  add-on off.
+
+### Fixed
+
+- Mailbox size trend no longer fails for a mailbox growing by a few bytes a month.
+- Email domains' Published records says "None" for a domain with no MX record, and "Couldn't check" when the
+  lookup failed, instead of an empty cell.
+- Sign-in activity dates its window as the page does ("since 9 Oct 2026"), not as an ISO date.
+- A group's page linked to SharePoint storage by the site's address, which matched nothing; it now finds the
+  site by name.
+- The detail-report workbook's file name is quoted in the download header like every other download's, so a
+  client name with a comma or semicolon can't break it.
+- A signed change with a unit ("+6.5 GB") is no longer prefixed with an apostrophe in CSV downloads; a bare
+  signed number still is, since Excel would read it as a formula.
+- A table too long for the rest of a PDF page starts on that page under its heading instead of leaving the
+  page above half empty, and its last two rows stay together.
+- A long word in an evidence page's text to paste, such as a guest's sign-in name, wraps on a phone instead of
+  running off the card; the finding sheet's links to other clients are underlined, not told apart by colour
+  alone.
+- A page's "nothing here yet" heading follows the page's title in a screen reader's heading list.
+- Every row's Views and Download controls no longer drop under the description on a laptop.
 
 ## [2.4.1] - 2026-10-16
 
@@ -1686,7 +1850,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
-[2.5.0]: https://github.com/JackD99/OfficeSentry/compare/v2.4.1...HEAD
+[2.5.0]: https://github.com/JackD99/OfficeSentry/compare/v2.4.1...v2.5.0
 [2.4.1]: https://github.com/JackD99/OfficeSentry/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/JackD99/OfficeSentry/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/JackD99/OfficeSentry/compare/v2.3.0...v2.3.1
