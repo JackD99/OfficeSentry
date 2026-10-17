@@ -30,7 +30,7 @@
 <p class="footnote center">Setting up for <span class="strong">{{ username }}</span> · <a href="{{ url_for('auth.login') }}">Cancel</a></p>
 {% endblock %}
 {% block content %}
-<div class="crumbs"><a href="{{ url_for('auth.account') }}">Your account</a><span>/</span><span>Two-step sign-in</span></div>
+<div class="crumbs"><a href="{{ url_for('auth.account') }}">Account</a><span>/</span><span>Two-step sign-in</span></div>
 <div class="page-head"><div><h1>Set up two-step sign-in</h1>
   <div class="sub">You'll enter a code from your phone each time you sign in.</div></div></div>
 <div class="card narrow">{{ setup_form() }}</div>

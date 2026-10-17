@@ -219,7 +219,7 @@ input.price { max-width: 130px; margin: 0 0 0 auto; text-align: right; }
 .callout.bad { background: var(--bad-soft); }
 .callout strong { color: var(--text); }
 .empty { text-align: center; padding: 36px 20px; color: var(--muted); }
-.empty h3 { color: var(--text); margin-bottom: var(--space-1-5); font-family: var(--serif); font-weight: 600; font-size: var(--fs-lg); }
+.empty h2, .empty h3 { color: var(--text); margin-bottom: var(--space-1-5); font-family: var(--serif); font-weight: 600; font-size: var(--fs-lg); }
 .empty .btn { margin-top: var(--space-2); }
 
 /* -- Lists ----------------------------------------------------------------- */
