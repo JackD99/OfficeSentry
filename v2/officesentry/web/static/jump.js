@@ -213,6 +213,9 @@
     }
   });
   dialog.addEventListener('close', function () {
+    // The event comes a task after the box closed: if it was opened again since (Escape, then Ctrl+K straight
+    // away), the search waiting for what was typed there is the new box's, so leave it.
+    if (dialog.open) return;
     clearTimeout(timer);
     timer = null;
     wanted = false;

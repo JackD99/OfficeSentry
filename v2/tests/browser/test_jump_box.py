@@ -78,6 +78,24 @@ def test_slash_opens_it_and_two_words_find_a_report_for_a_client(signed_in):
     page.wait_for_url("**/search?q=xyzzy")
 
 
+def test_a_late_close_event_leaves_the_box_opened_again_alone(signed_in):
+    """A dialog's close event comes a task after it closes, so after a quick Escape and Ctrl+K it can land while
+    the open box is waiting to search what was typed; it mustn't cancel that search."""
+    page = signed_in()
+    page.keyboard.press("/")
+    expect(page.locator("#jump")).to_be_visible()
+    page.evaluate(
+        """() => {
+          document.getElementById('jump').close();
+          document.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', ctrlKey: true, bubbles: true}));
+          const input = document.getElementById('jump-q');
+          input.value = 'xyzzy';
+          input.dispatchEvent(new Event('input', {bubbles: true}));
+        }"""
+    )
+    expect(page.locator("#jump .jump-status")).to_have_text("Nothing matches “xyzzy”")
+
+
 def test_the_menu_button_opens_it_on_a_laptop_and_a_phone(signed_in):
     laptop = signed_in()
     laptop.locator(".sidebar .nav-search-btn").click()
