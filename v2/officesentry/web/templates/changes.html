@@ -16,7 +16,7 @@
     <h1>What changed</h1>
     <div class="sub">Changes in {{ ('the clients in ' ~ group_scope.group.name) if group_scope and group_scope.group else 'every client' }} over the last {{ days }} days, most important first.</div>
   </div>
-  <div class="actions">{{ group_picker() }}<a class="btn" href="{{ url_for('across.index') }}">{{ icon('tenants') }} Compare reports</a></div>
+  <div class="actions">{{ group_picker() }}<a class="btn" href="{{ url_for('tenants.dashboard') }}">{{ icon('tenants') }} Clients</a></div>
 </div>
 
 <div class="report-picker">{{ period_tabs('across.changes') }}</div>

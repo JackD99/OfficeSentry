@@ -5,9 +5,9 @@
 {% from "_across.html" import across_head with context %}
 {% from "_report_table.html" import report_table, saved_views with context %}
 {% set report = data.report %}
-{% block title %}{{ report.title }} · Every row · All clients · Office Sentry{% endblock %}
+{% block title %}{{ report.title }} · Every row · Clients · Office Sentry{% endblock %}
 {% block content %}
-{{ across_head(key, main, 'rows') }}
+{{ across_head(key, main, 'rows', count=count) }}
 
 <div class="toolbar report-title">
   <div>

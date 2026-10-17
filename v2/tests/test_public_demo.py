@@ -164,7 +164,7 @@ def test_visitors_can_pick_a_group(demo_app, db, two_tenants):
     # The choice follows to the other group-aware pages, as it does for someone signed in, and is this
     # browser's alone.
     assert "Bravo Inc" not in client.get("/changes").get_data(as_text=True)
-    assert "Bravo Inc" not in client.get("/across/review").get_data(as_text=True)
+    assert "Bravo Inc" not in client.get("/across/mfa").get_data(as_text=True)
     assert "Bravo Inc" in demo_app.test_client().get("/").get_data(as_text=True)
     assert db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 0
 

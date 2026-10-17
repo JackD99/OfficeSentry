@@ -63,16 +63,15 @@ def _days() -> int:
 @bp.get("/across")
 @needs("clients.compare")
 def index():
+    """Where the picker's select on phones and older links go: the Clients page shows the monthly review
+    across every client, and ``/across/<report>`` any other report."""
     key = request.args.get("key", "")
     if request.args.get("mode") == "rows" and key in data_reports.REPORTS:
         return redirect(url_for("across.rows_index", key=key))
-    if key == "checks" and can("reports.security"):  # the picker's select on phones
+    if key == "checks" and can("reports.security"):
         return redirect(url_for("across.checks"))
-    available = _available()
-    if key not in dict(available):
-        if not available:
-            abort(403)
-        key = available[0][0]
+    if key in ("", "review") or key not in dict(_available()):
+        return redirect(url_for("tenants.dashboard"))
     return redirect(url_for("across.rollup", key=key))
 
 
@@ -108,16 +107,60 @@ def _rollup_or_404(key: str):
 
 
 def _picker() -> dict:
-    """What the All clients report picker needs beyond the catalogue: the summaries this person may open."""
-    return {"main": _available()[:2] if can("reports.security") else []}
+    """What the Clients page's report picker needs beyond the catalogue: the summaries this person may open,
+    and nothing at all for someone who can't compare clients (the picker's pages are closed to them). The
+    monthly review is the Clients page itself, open to every staff role; the insurance evidence and Checks
+    need the security capability."""
+    if not can("clients.compare"):
+        return {"main": [], "picker": False}
+    main = [(k, title) for k, title in rollups.available()[:2] if k == "review" or can(_rollup_capability(k))]
+    return {"main": main, "picker": True}
+
+
+def column_capability(rollup: rollups.Rollup, column: rollups.Column) -> str:
+    """The capability a column's figures need on a client: the monthly review's figures each belong to the
+    report they open (findings and changes to the security area), so on the Clients page someone sees a
+    client's MFA figure but not its findings when that's what they hold there; any other rollup is one
+    report's, so every column needs that report's area."""
+    if rollup.key != "review":
+        return _rollup_capability(rollup.key)
+    target = rollups.REVIEW_LINKS.get(column.key, ("findings", ""))[0]
+    return "reports.security" if target in ("findings", "changes") else report_capability(target)
+
+
+def rollup_page(data: rollups.Rollup, tenants: list | None = None, **extra):
+    """The Clients page for one rollup: the columns this person opens somewhere, the capability each cell
+    needs on its client, and the total row only over columns nobody listed is denied (``tenants``, when
+    rows may stay for a client some figures are closed on; a rollup opened through ``need_also`` has
+    already left those clients out)."""
+    capability = {c.key: column_capability(data, c) for c in data.columns}
+    columns = [c for c in data.columns if can(capability[c.key])]
+    total = data.total_row()
+    if total is not None and tenants is not None:
+        for c in columns:
+            if not all(can(capability[c.key], t["id"]) for t in tenants):
+                total.values.pop(c.key, None)
+        if not total.values:
+            total = None
+    return render_template(
+        "clients.html",
+        rollup=data,
+        key=data.key,
+        columns=columns,
+        cell_capability=capability,
+        total=total,
+        **_picker(),
+        **extra,
+    )
 
 
 @bp.get("/across/<key>")
 @needs("clients.compare", also=_by_rollup)
 @group_aware
 def rollup(key: str):
-    data = _rollup_or_404(key)
-    return render_template("rollup.html", rollup=data, key=key, **_picker())
+    if key == "review":  # the Clients page
+        return redirect(url_for("tenants.dashboard"))
+    return rollup_page(_rollup_or_404(key))
 
 
 # -- Every row of a detail report, across tenants ---------------------------------------
@@ -157,7 +200,16 @@ def rows_index(key: str):
         )
     if not table:
         return render_template(
-            "rollup_rows.html", data=data, key=key, tv=None, table="", tables=[], saved=[], view_query="", **_picker()
+            "rollup_rows.html",
+            data=data,
+            key=key,
+            tv=None,
+            table="",
+            tables=[],
+            saved=[],
+            view_query="",
+            count=len(_tenants_for(key)),
+            **_picker(),
         )
     query = views.View.parse(request.args).query()
     return redirect(url_for("across.rows", key=key, table=table) + (f"?{query}" if query else ""))
@@ -185,6 +237,7 @@ def rows(key: str, table: str):
         max_rows=rollups.MAX_ROWS,
         view_query=view.query(),
         saved=saved,
+        count=len(_tenants_for(key)),
         **_picker(),
     )
 

@@ -116,7 +116,7 @@ def custom_reports(tenant_id: int | None = None) -> list[dict]:
 
 def my_views(tenant_id: int | None = None) -> list[dict]:
     """The signed-in person's saved views (``web/saved_views.py``) that open here: on this client, each on its
-    report with the view applied; without a client, on the All clients "Every row" page of its report (the
+    report with the view applied; without a client, on the Every row page of its report across clients (the
     Findings pages have none). Each with the report it belongs to."""
     titles = {k: v[0] for k, v in data_reports.REPORTS.items()} | findings_report.TITLES
     rows = g.db.execute(

@@ -248,18 +248,18 @@ team and never reach a client's reports or emails. Nothing is ever written to th
 
 ### Across all clients, and what changed
 
-The **Clients** page puts every client side by side, worst first. **All clients** compares any report across every
-client (one row each, every figure clickable), and **What changed** lists month-over-month changes: new and fixed
-findings, admin, account, Conditional Access, forwarding, app, device and group changes, and a row-by-row comparison
-of every detail report.
+The **Clients** page puts every client side by side, worst first, with the monthly review's figures; pick any
+report from its menu to compare it across every client (one row each, every figure clickable). **What changed**
+lists month-over-month changes: new and fixed findings, admin, account, Conditional Access, forwarding, app, device
+and group changes, and a row-by-row comparison of every detail report.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/all-tenants.png" alt="All clients rollup"></td>
+    <td width="50%"><img src="docs/screenshots/all-tenants.png" alt="The Clients page showing MFA coverage for every client"></td>
     <td width="50%"><img src="docs/screenshots/what-changed.png" alt="What changed across all clients"></td>
   </tr>
   <tr>
-    <td>All clients: the monthly review's figures for every client (<a href="examples/all-clients-monthly-review.pdf">PDF</a>)</td>
+    <td>Clients, with MFA coverage picked: one report for every client (the monthly review's figures as a <a href="examples/all-clients-monthly-review.pdf">PDF</a>)</td>
     <td>What changed in the last 30 days, most important first (<a href="examples/what-changed-all-clients.pdf">PDF</a>)</td>
   </tr>
 </table>
@@ -400,7 +400,7 @@ export and the client's side, then deletes the client and everything stored for 
 [`examples/`](examples/) has real exports from the demo data: the monthly review (PDF and XLSX) and its summary PDF,
 a quarterly review, Cyber Essentials evidence, the insurance evidence pack, SharePoint storage, MFA coverage, mailbox
 permissions, mail forwarding, licence right-sizing, sign-in activity, sign-in methods, subscriptions, Conditional
-Access, an account page, What changed, All clients and a recommended projects proposal. All of it is fictional.
+Access, an account page, What changed, the Clients page and a recommended projects proposal. All of it is fictional.
 
 ## Security model
 

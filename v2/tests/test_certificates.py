@@ -145,7 +145,8 @@ def test_banner_and_connections_page_warn_admins(client, db, connection_id, two_
     assert "expired 2 days ago" in page and "Collection from every client has stopped." in page
     analyst = client.application.test_client()
     login(analyst, "analyst")  # only admins can replace it, so only they're told
-    assert "certificate" not in analyst.get("/").get_data(as_text=True).lower()
+    page = analyst.get("/").get_data(as_text=True)
+    assert "Test app certificate" not in page and "Collection from every client has stopped" not in page
 
 
 # -- Replacing a certificate ------------------------------------------------------------------------------

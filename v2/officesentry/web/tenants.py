@@ -111,23 +111,23 @@ def data_health(tenant, latest: dict) -> tuple[str, str, str]:
 @login_required
 @group_aware
 def dashboard():
-    from ..reports.monthly_review import dashboard_trends, rollup_row, setting
+    """The Clients page: every client the person looks after, worst first, with the monthly review's figures
+    side by side (the review rollup, ``reports/rollups.py``), each client's data health and its monthly
+    review. The picker above the table opens any other report the same way (``across.rollup``)."""
+    from ..reports import rollups
+    from ..reports.monthly_review import dashboard_trends, rollup_row
 
     if not is_staff():
         from . import client_home
 
         return client_home.render(visible_tenants(g.db, g.user))
-    rows = [rollup_row(g.db, t, cached=True) for t in scoped_tenants()]
+    from .across import rollup_page
+    from .home import get_started
+
+    tenants = scoped_tenants()
+    rows = [rollup_row(g.db, t, cached=True) for t in tenants]
     for row in rows:
         row["health"] = data_health(row["tenant"], _latest_runs(row["tenant"]["id"]))
-    rows.sort(
-        key=lambda r: (
-            -r["counts"]["critical"],
-            -r["counts"]["high"],
-            -r["counts"]["medium"],
-            r["tenant"]["name"].lower(),
-        )
-    )
     # The tiles add up only the clients whose cells the person may see: findings, and Secure Score (tenant).
     secure = [r for r in rows if can("reports.security", r["tenant"]["id"])]
     scored = [r for r in rows if can("reports.tenant", r["tenant"]["id"])]
@@ -145,13 +145,16 @@ def dashboard():
         "data_issues": sum(r["health"][0] in ("bad", "warn") for r in rows),
         **trends,
     }
-    from .home import get_started
-
-    return render_template(
-        "dashboard.html",
-        rows=rows,
+    review = rollups.review_rollup(
+        g.db, tenants, datetime.now(UTC), cached=True, built={r["tenant"]["id"]: r for r in rows}
+    )
+    review.rows.sort(key=lambda r: (bool(r.note), -r.attention, r.tenant["name"].lower()))
+    return rollup_page(
+        review,
+        tenants,
         summary=summary,
-        currency=setting(g.db, "currency", "GBP"),
+        health={r["tenant"]["id"]: r["health"] for r in rows},
+        sparks={r["tenant"]["id"]: r["kpis"] for r in rows},
         get_started=get_started(),
     )
 
