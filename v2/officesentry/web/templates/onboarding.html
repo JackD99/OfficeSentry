@@ -3,10 +3,10 @@
 {% block title %}Onboarding · Office Sentry{% endblock %}
 {% block content %}
 {% set waiting = counts.sent + counts.approved %}
-<div class="crumbs"><a href="{{ url_for('tenant_admin.clients') }}">Client settings</a><span>/</span><span>Onboarding</span></div>
+<div class="crumbs"><a href="{{ url_for('tenant_admin.clients') }}">&larr; Client settings</a></div>
 <div class="page-head">
   <div>
-    <h1>Onboarding</h1>
+    <h2 class="page-title">Onboarding</h2>
     <div class="sub">{% if total %}{{ counts.connected }} of {{ total|plural('client') }} fully connected.
       {% if waiting %}{{ waiting }} waiting on {{ 'its client' if waiting == 1 else 'their clients' }}.{% endif %}
       {% if counts.not_sent %}{{ counts.not_sent }} not sent yet.{% endif %}

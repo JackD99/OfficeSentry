@@ -2,7 +2,7 @@
 {% from "_macros.html" import icon %}
 {% block title %}Alerts · Office Sentry{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Alerts</h1><div class="sub">Post to Microsoft Teams, Slack or any webhook when a client gets new findings, a collection starts failing or a client's report is ready.</div></div>
+<div class="page-head"><div><h2 class="page-title">Alerts</h2><div class="sub">Post to Microsoft Teams, Slack or any webhook when a client gets new findings, a collection starts failing or a client's report is ready.</div></div>
   {% if s['alerts.enabled'] == '1' %}<span class="pill ok">On</span>{% else %}<span class="pill warn">Off</span>{% endif %}</div>
 <div class="grid-main">
 <form method="post" action="{{ url_for('alerts.save') }}" class="card">

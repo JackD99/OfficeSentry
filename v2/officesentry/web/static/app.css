@@ -276,9 +276,13 @@ details.help > summary { font-size: var(--fs-base); }
 .client-tenant .tiles { margin-bottom: var(--space-3-5); }
 .footnote { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--space-2); max-width: 70ch; }
 
-/* -- Settings: one sidebar entry; on every settings page its four areas as tabs (.tabs), with the open
-   area's pages in a second row (.tab-pages), the way a client's pages are laid out. ------------------- */
-.settings-nav { margin-top: calc(-1 * var(--space-1)); }
+/* -- Settings: one sidebar entry; every settings page opens with the "Settings" heading, its four areas
+   as tabs (.tabs) and the open area's pages in a second row (.tab-pages), the way a client's pages are
+   laid out, then the page's own title (h2.page-title) with its intro and actions. ---------------------- */
+.settings-head .page-head { margin-bottom: var(--space-3); }
+.settings-head .tabs { margin-top: 0; }
+.page-head h2.page-title { margin: 0; }
+h2.page-title .pill { vertical-align: middle; margin-left: var(--space-1-5); font-size: var(--fs-xs); }
 .package-form label.identifiers { align-items: flex-start; }
 .package-form label.identifiers input { margin-top: 4px; }
 .package-form .form-actions { margin-top: var(--space-3); }
@@ -445,7 +449,7 @@ details.accept-risk label { margin-bottom: var(--space-2-5); font-size: var(--fs
 @media (max-width: 640px) { table.stack-sm tr.group { padding: 0; border: 0; } table.stack-sm tr.group td { display: block; text-align: left; padding: var(--space-2) var(--space-4) !important; } }
 .m0 { margin: 0; }
 h2.section-title { font-size: 1.1rem; margin: 0 0 var(--space-0-5); }
-h2.page-title { margin-bottom: var(--space-1-5); } /* a client page's own title, under the client's tabs */
+h2.page-title { font-size: var(--fs-xl); margin-bottom: var(--space-1-5); } /* a page's own title under a client's or Settings' tabs */
 .count-badge { margin-left: var(--space-0-5); font-family: var(--font); font-size: var(--fs-sm); font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
 .jump { display: flex; flex-wrap: wrap; gap: var(--space-1-5) var(--space-4); margin: 0 0 var(--space-4); font-size: var(--fs-base); }
 .jump a { color: var(--text-2); display: inline-flex; gap: var(--space-1-5); align-items: center; }
