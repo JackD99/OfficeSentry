@@ -269,7 +269,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   reports and who to contact at the MSP; they don't see collection internals
   or run logs.
 - **Branding** (`/admin/branding`): the MSP's name, logo and colour on report
-  covers, the portal, the sign-in page and the browser tab icon ("Powered by
+  covers, the portal, the sign-in page and every browser tab's icon and title ("Powered by
   Office Sentry" stays small in the footer), the support contact clients see
   in reports and on the sign-in page,
   and an optional note printed at the end of every report. The name is also
