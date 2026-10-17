@@ -208,13 +208,15 @@
 {%- endmacro %}
 
 {# One "Download" control for a page's formats. links: [(label, href, title)]; only the ones the person
-   opens are drawn (can_open), and nothing when that's none of them. #}
+   opens are drawn (can_open), and nothing when that's none of them. A link without a title gets its
+   format's usual one (DOWNLOAD_TIPS), so every page explains its formats the same way. #}
+{% set DOWNLOAD_TIPS = {'PDF': 'This page as a PDF', 'XLSX': 'This page as a spreadsheet', 'CSV': 'This table as CSV'} %}
 {% macro downloads(links) -%}
 {%- set shown = [] %}{% for link in links if link[1].startswith('#') or can_open(link[1]) %}{% set _ = shown.append(link) %}{% endfor %}
 {%- if shown %}
 <div class="downloads" role="group" aria-label="Download">
   <span class="downloads-label">{{ icon('download') }}<span>Download</span></span>
-  {% for label, href, title in shown %}<a href="{{ href }}"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</a>{% endfor %}
+  {% for label, href, title in shown %}{% set title = title or DOWNLOAD_TIPS.get(label, '') %}<a href="{{ href }}"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</a>{% endfor %}
 </div>
 {%- endif %}
 {%- endmacro %}
