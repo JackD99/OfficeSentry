@@ -2184,8 +2184,12 @@ FLAG_FILLS = workbook.FLAG_FILLS
 
 
 def xlsx_cover(report: DataReport, brand=None) -> workbook.Cover:
-    """The Summary sheet of a detail report's workbook: what it is, for whom, and its headline figures."""
-    facts = [(t.label, t.value, t.foot) for t in report.tiles + report.highlights]
+    """The Summary sheet of a detail report's workbook: what it is, for whom, and its headline figures. Every
+    row (``rollups.all_rows``) covers many clients: the sheet counts them, as the rollups' sheets do, instead
+    of naming a Microsoft 365 tenant."""
+    clients = report.tenant["clients"] if "clients" in report.tenant.keys() else 0
+    facts = [("Clients", clients, "")] if clients else []
+    facts += [(t.label, t.value, t.foot) for t in report.tiles + report.highlights]
     notes = [("Note", report.notice)] if report.notice else []
     notes += [("Not checked", note) for note in report.notes]
     notes += [("Filtered view", line) for line in report.filtered]
@@ -2200,7 +2204,7 @@ def xlsx_cover(report: DataReport, brand=None) -> workbook.Cover:
         report.tenant.get("name", ""),
         report.generated_at,
         brand.display_name if brand else "",
-        report.tenant.get("tenant_ref", ""),
+        "" if clients else report.tenant.get("tenant_ref", ""),
         brand.accent if brand else "",
         report.description,
         facts,
