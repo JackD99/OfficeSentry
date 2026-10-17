@@ -202,7 +202,10 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   one-page PDF of it with a line for the client to sign.
 - **Detail reports** (`/tenants/<id>/data/<report>`, each also as PDF, XLSX and CSV),
   grouped by area as in the report menu ([Detail reports by
-  area](#detail-reports-by-area), below). Every table can be
+  area](#detail-reports-by-area), below). A client's Reports tab (`/tenants/<id>/data`)
+  opens on its report catalogue: the summaries, your custom reports and saved views, and
+  every detail report by area, with a search box; the "All reports" menu above each
+  report and the overview's Reports card list the same. Every table can be
   filtered by the values in it (or by age, for dates), sorted, and have columns
   hidden; headers stay visible while scrolling, and the view can be saved by
   name and reused on any client. Downloads contain the rows and columns shown.
@@ -623,8 +626,8 @@ spend, and what's coming up in the next 90 days) or a blank page.
 
 A custom report belongs to the MSP and works for every client: a block with nothing to show for a client
 (no accepted risks, no commentary yet) is left out of that client's report. Each client's **Reports →
-Custom reports** lists every one as a page and a PDF, the "All reports" menu above a client's reports and
-the Reports page list them too, and a report plan or a client's email schedule
+Custom reports** lists every one as a page and a PDF; the client's Reports tab, the "All reports" menu
+above a client's reports and the Reports page list them too, and a report plan or a client's email schedule
 can send one (as a PDF) alongside or instead of the monthly review. Text blocks and the cover's title
 and subtitle take `{client}`, `{month}`, `{quarter}`, `{msp}` and `{date}`, and a custom report holds up to 60 blocks.
 Anyone who can *Design custom reports* makes and edits them; removing

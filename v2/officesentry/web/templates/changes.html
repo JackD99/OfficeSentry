@@ -22,7 +22,7 @@
 <div class="report-picker">{{ period_tabs('across.changes') }}</div>
 
 {% if not summaries %}
-<div class="card empty"><h3>No clients to show</h3><p>Clients you look after appear here once they're added.</p></div>
+<div class="card empty"><h2>{{ 'No clients yet' if can('clients.manage') else 'No clients to show' }}</h2><p>Clients you look after appear here once they're added.</p></div>
 {% else %}
 <div class="tiles">
   <div class="tile"><div class="label">Clients with changes</div><div class="value">{{ totals.changed }}</div>
