@@ -359,6 +359,17 @@ def test_inactive_accounts(db, p1_tenant):
     assert figures(report)["Inactive members"] == 1
 
 
+def test_inactive_guests_are_listed_by_their_address(db, two_tenants):
+    """A guest is listed by their own address, as the Guests report lists them, not by the #EXT# sign-in name;
+    the fixtures' guest, which has no address, keeps its sign-in name."""
+    alpha, _ = two_tenants
+    guest = next(u for u in USERS if u.get("userType") == "Guest")
+    named = dict(guest, id="u7", userPrincipalName="sam_consultants.example#EXT#@x.com", mail="sam@consultants.example")
+    seed_tenant(db, alpha, users=USERS + [named])
+    rows = sections(build(db, store.get_tenant(db, alpha), "inactive", NOW))["Inactive guests"].rows
+    assert sorted(r[0] for r in rows) == ["g#EXT#@x.com", "sam@consultants.example"]
+
+
 def test_inactive_never_signed_in_wording(db, two_tenants):
     alpha, _ = two_tenants
     new = dict(CARL, id="u7", userPrincipalName="new@x.com", createdDateTime="2026-08-01T00:00:00Z", signInActivity={})

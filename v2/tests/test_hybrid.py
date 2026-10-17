@@ -248,6 +248,12 @@ def test_hybrid_report(db, two_tenants, hybrid):
     domains = sections["Domains"]
     assert [r[0] for r in domains.rows] == ["x.com", "x.co.uk", "x.onmicrosoft.com"]  # default first
     assert dict(zip(domains.columns, domains.rows[1], strict=True))["Sign-in"] == "Federated"
+    # Microsoft's service names in words (OfficeCommunicationsOnline is Teams and Skype for Business).
+    assert dict(zip(domains.columns, domains.rows[0], strict=True))["Used for"].parts == (
+        "Email",
+        "Teams and Skype for Business",
+        "Intune",
+    )
     admins = sections["Synced admin accounts"]
     assert [r[:2] for r in admins.rows] == [
         ["ann@x.com", "Global Administrator"],
