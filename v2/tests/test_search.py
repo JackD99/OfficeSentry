@@ -292,7 +292,7 @@ def test_clients_are_found_by_name_or_domain_first(client, db, two_tenants):
     login(client, "admin")
     page = _page(client, "alpha")
     assert "Nothing found" not in page and '<h2 id="found-clients">Clients</h2>' in page
-    assert f'href="/tenants/{alpha}">Alpha Ltd</a>' in page and "alpha.onmicrosoft.com" in page
+    assert f'href="/tenants/{alpha}">Alpha Ltd</a>' in page and '<div class="desc">alpha.onmicrosoft.com</div>' in page
     assert f'href="/tenants/{bravo}">Bravo Inc</a>' not in page
     # By domain too, and before what's inside the clients: ann@x.com matches no client.
     page = _page(client, "onmicrosoft")
