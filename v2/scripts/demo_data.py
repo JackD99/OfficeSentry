@@ -41,7 +41,7 @@ from officesentry.certs import generate_certificate  # noqa: E402
 from officesentry.db import utcnow  # noqa: E402
 from officesentry.devices import parse_ts  # noqa: E402
 from officesentry.reports import designs  # noqa: E402
-from tests import (  # noqa: E402  # noqa: E402
+from tests import (  # noqa: E402
     adminactivitydata,
     devicedata,
     graphdata,
