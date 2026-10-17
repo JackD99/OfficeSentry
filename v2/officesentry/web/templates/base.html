@@ -38,15 +38,24 @@
 {% set SETTINGS_ENDPOINTS = SETTINGS|map(attribute=0)|list + SETTINGS|map(attribute=2)|sum(start=[]) %}
 {#- The Settings entry shows once there's a settings page beyond the client list. -#}
 {% set SHOW_SETTINGS = current_user and current_user.role != 'client' and SETTINGS|length > 1 %}
-{% macro nav_link(endpoint, label, ico, match=()) -%}
-{% set ep = request.endpoint or '' %}
-<a href="{{ url_for(endpoint) }}"{% if ep == endpoint or ep.split('.')[0] in match or ep in match %} class="active" aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span></a>
+{#- A menu entry is highlighted on its own page and on every page under the paths it owns ("/tenants" owns each
+    client's pages, "/admin" every settings page), so a page added under one later is highlighted without being
+    listed here. A path under one entry that belongs to another (custom reports, at /reporting/designs, are
+    Reports, not Month-end) is named in the first entry's unless. -#}
+{% macro on_path(endpoint, under=(), unless=()) -%}
+{%- set here = namespace(on=request.endpoint == endpoint) -%}
+{%- for prefix in under if request.path == prefix or request.path.startswith(prefix ~ '/') %}{% set here.on = true %}{% endfor -%}
+{%- for prefix in unless if request.path == prefix or request.path.startswith(prefix ~ '/') %}{% set here.on = false %}{% endfor -%}
+{{ 'on' if here.on else '' }}
+{%- endmacro %}
+{% macro nav_link(endpoint, label, ico, under=(), unless=()) -%}
+<a href="{{ url_for(endpoint) }}"{% if on_path(endpoint, under, unless)|trim == 'on' %} class="active" aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span></a>
 {%- endmacro %}
 {% macro navigation() -%}
 <nav class="nav" aria-label="Main">
   {% if current_user.role == 'client' %}
-  {{ nav_link('tenants.dashboard', 'Your reports', 'doc', ('reports.tenant_report', 'reports.tenant_findings', 'reports.data_report', 'reports.evidence_pack', 'tenants', 'across.tenant_changes')) }}
-  {{ nav_link('reports.overview', 'All reports', 'library') }}
+  {{ nav_link('tenants.dashboard', 'Your reports', 'doc', ('/tenants',)) }}
+  {{ nav_link('reports.overview', 'All reports', 'library', ('/reports',)) }}
   {% else %}
   {#- Staff: each entry needs the capability its page needs (web/access.py), so the menu only offers what opens. -#}
   {% set across = can('clients.compare') %}
@@ -60,20 +69,19 @@
   <a class="nav-search-link" href="{{ url_for('search.index') }}">{{ icon('search') }}<span>Search all clients</span></a>
   {% endif %}
   <button type="button" class="nav-search-btn" data-jump-open hidden aria-keyshortcuts="/ Control+K Meta+K">{{ icon('search') }}<span>{{ 'Search all clients' if across else 'Search' }}</span><kbd aria-hidden="true">/</kbd></button>
-  {% if across %}{{ nav_link('home.index', 'Home', 'home', ('home.today', 'home.clients')) }}{% endif %}
-  {#- Clients: every client page, and the Clients page's own pages, which compare one report across clients
-      (across.rollup, Every row and Checks). -#}
-  {{ nav_link('tenants.dashboard', 'Clients', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'designs.tenant_designs', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'tenant_admin.manage', 'tenant_admin.offboard', 'projects.tenant', 'across.rollup', 'across.rows_index', 'across.rows', 'across.checks')) }}
-  {{ nav_link('reports.overview', 'Reports', 'library', ('designs.index', 'designs.edit')) }}
-  {% if across and can('reports.changes') %}{{ nav_link('across.changes', 'What changed', 'clock') }}{% endif %}
-  {% if across and can('reports.tenant') %}{{ nav_link('upcoming.index', 'Coming up', 'calendar') }}{% endif %}
-  {% if can('emails.view') %}{{ nav_link('email.overview', 'Email reports', 'send', ('email.overview', 'email.new_digest', 'email.new_upcoming')) }}{% endif %}
-  {% if can('month_end.review') %}{{ nav_link('reporting.index', 'Month-end', 'check', ('reporting',)) }}{% endif %}
-  {% if across and can('projects.view') %}{{ nav_link('projects.index', 'Projects', 'projects', ('projects.index',)) }}{% endif %}
+  {% if across %}{{ nav_link('home.index', 'Home', 'home', ('/today', '/clients')) }}{% endif %}
+  {#- Clients: the Clients page (/) and the report it swaps to for every client (/across), every client's pages,
+      runs, schedules, alerts and search results. -#}
+  {{ nav_link('tenants.dashboard', 'Clients', 'tenants', ('/', '/across', '/tenants', '/runs', '/schedules', '/alerts', '/search')) }}
+  {{ nav_link('reports.overview', 'Reports', 'library', ('/reports', '/reporting/designs')) }}
+  {% if across and can('reports.changes') %}{{ nav_link('across.changes', 'What changed', 'clock', ('/changes',)) }}{% endif %}
+  {% if across and can('reports.tenant') %}{{ nav_link('upcoming.index', 'Coming up', 'calendar', ('/upcoming',)) }}{% endif %}
+  {% if can('emails.view') %}{{ nav_link('email.overview', 'Email reports', 'send', ('/emails',)) }}{% endif %}
+  {% if can('month_end.review') %}{{ nav_link('reporting.index', 'Month-end', 'check', ('/reporting',), unless=('/reporting/designs',)) }}{% endif %}
+  {% if across and can('projects.view') %}{{ nav_link('projects.index', 'Projects', 'projects', ('/projects',)) }}{% endif %}
   {% endif %}
   {% if SHOW_SETTINGS %}
-  {% set ep = request.endpoint or '' %}
-  <a href="{{ url_for(SETTINGS[0][0]) }}"{% if ep in SETTINGS_ENDPOINTS %} class="active" aria-current="page"{% endif %}>{{ icon('settings') }}<span>Settings</span></a>
+  <a href="{{ url_for(SETTINGS[0][0]) }}"{% if on_path(SETTINGS[0][0], ('/admin',))|trim == 'on' %} class="active" aria-current="page"{% endif %}>{{ icon('settings') }}<span>Settings</span></a>
   {% endif %}
 </nav>
 {%- endmacro %}
@@ -89,7 +97,7 @@
   <span class="name">{{ current_user.username }}</span>
   <span class="role">{{ current_role.name if current_role else current_user.role }}</span>
   <div class="links">
-    <a href="{{ url_for('auth.account') }}">{{ icon('person', 'fold-icon') }}<span>Account</span></a>
+    <a href="{{ url_for('auth.account') }}"{% if on_path('auth.account', ('/account', '/two-step'))|trim == 'on' %} class="active" aria-current="page"{% endif %}>{{ icon('person', 'fold-icon') }}<span>Account</span></a>
     <form method="post" action="{{ url_for('auth.logout') }}" class="inline">{{ csrf() }}<button class="link">{{ icon('sign-out', 'fold-icon') }}<span>Sign out</span></button></form>
   </div>
 </div>
