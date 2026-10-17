@@ -423,13 +423,14 @@ body.pdf .tidy-item:last-child { border-bottom: 1px solid var(--border); }
 /* A heading never ends a page: it keeps its intro and the first rows of its table. */
 body.pdf h2, body.pdf h3, body.pdf .section-intro, body.pdf .check-head { break-after: avoid; }
 body.pdf table { orphans: 3; widows: 3; }
+/* A table that doesn't fit the room left on a page starts where it is, under its heading, and carries on
+   under a repeated header, rather than moving whole and leaving the page half empty. Its last two rows stay
+   together, so no page carries a single row under a repeated header. */
+body.pdf .table-wrap tbody tr:nth-last-child(2) { break-after: avoid; }
 /* The small print follows a table report's last rows rather than taking a page to itself: the last table
-   carries at least two rows onto its last page, and a short one splits to do it, keeping its heading, header
-   row and first two rows together. A short comparison of clients (.whole) moves whole instead. */
+   carries at least two rows onto its last page, and a short one splits to do it. */
 body.pdf section.doc-section:last-of-type + footer.about,
 body.pdf section.doc-section:last-of-type .legend-note { break-before: avoid; }
-body.pdf section.doc-section:last-of-type .table-wrap:not(.whole) { break-inside: auto; }
-body.pdf section.doc-section:last-of-type .table-wrap.keep tbody tr:nth-child(2),
 body.pdf section.doc-section:last-of-type tbody tr:last-child { break-before: avoid; }
 /* A total comes once, under the last rows, rather than at the foot of every page. */
 body.pdf tfoot { display: table-row-group; break-before: avoid; }
