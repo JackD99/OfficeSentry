@@ -1956,6 +1956,27 @@ def breakglass(t: dict, now: datetime) -> dict:
     }
 
 
+def shared_accounts(t: dict) -> list[dict]:
+    """The directory account behind each shared and room mailbox, as Exchange creates them: no licence, sign-in
+    blocked, never signed in. Reception's was left enabled, the open shared mailbox the report flags."""
+    domain = f"{t['base']}.{t['tld']}"
+    return [
+        {
+            "id": sid,
+            "displayName": display,
+            "userPrincipalName": f"{alias}@{domain}",
+            "mail": f"{alias}@{domain}",
+            "userType": "Member",
+            "accountEnabled": alias == "reception",
+            "assignedLicenses": [],
+            "licenseAssignmentStates": [],
+            "usageLocation": "GB",
+            "createdDateTime": "2024-03-04T09:00:00Z",
+        }
+        for sid, alias, display, _kind, _size in SHARED_MAILBOXES
+    ]
+
+
 def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> None:
     """Collect tenant ``t`` from the renamed fixtures. ``seed`` goes to ``tests.seed.seed_tenant`` as well
     (``mark=``, ``ca=``, ...), as the layout checks' stress client does (tests/layout/stress.py)."""
@@ -2003,7 +2024,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> 
                 db,
                 tenant_id,
                 dns=graphdata.fake_dns,
-                users=everyone,
+                users=everyone + shared_accounts(t),  # the mailboxes' accounts: in the directory, not staff
                 ca=seed.pop("ca", None) or ca_policies(t),
                 skus=tenant_skus,
                 registration=graphdata.REGISTRATION_DETAILS + registration,
