@@ -226,12 +226,12 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Tile(
             "Members with no manager",
             no_manager if details is not None else "Not checked",
-            "Sign-in allowed",
+            "Enabled members with no manager set",
             rows=Rows(EVERY, {"Type": "Member", "Sign-in": ALLOWED, "Manager": ""}) if details is not None else None,
         ),
     ]
     report.footnote = (
         "Departments, job titles and managers are whatever is set on each account in Entra ID (or in "
-        "on-premises AD, for synced accounts). Last sign-in is the latest of interactive and "
-        "background sign-ins, and needs Entra ID P1."
+        "on-premises AD, for synced accounts). Last sign-in is the account's last successful sign-in, "
+        "interactive or in the background (failed attempts don't count), and needs Entra ID P1."
     )

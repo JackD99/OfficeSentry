@@ -87,7 +87,7 @@ def test_page_filters_and_actions(client, db, two_tenants):
     page = client.get(f"/tenants/{alpha}/findings").get_data(as_text=True)
     assert 'id="t-open-findings"' in page and 'id="t-accepted-risks"' in page
     assert 'id="check-guest_admins"' in page and 'data-group="check-guest_admins"' in page
-    assert "Accept risk" in page and 'data-groups="tbl-open-findings"' in page
+    assert 'class="sheet-link"' in page and 'data-groups="tbl-open-findings"' in page  # each row opens its sheet
     assert f'href="/tenants/{alpha}/findings.pdf"' in page and f'href="/tenants/{alpha}/findings.xlsx"' in page
     assert f"/tenants/{alpha}/findings.csv?section=1" in page
     high = client.get(f"/tenants/{alpha}/findings?f=open-findings/flag:high").get_data(as_text=True)
@@ -95,6 +95,7 @@ def test_page_filters_and_actions(client, db, two_tenants):
     body = high.split('id="tbl-open-findings"')[1].split("</table>")[0]
     assert 'class="flag-high"' in body and 'class="flag-medium"' not in body and 'class="flag-low"' not in body
     guest = _finding(db, alpha, "guest_admins")
+    assert f'data-key="{guest["id"]}"' in page  # each row carries its finding, for row actions
     check = client.get(f"/tenants/{alpha}/findings?f=open-findings/check:{quote(_title(guest))}").get_data(as_text=True)
     assert check.split('id="tbl-open-findings"')[1].count('class="group"') == 1
     resp = client.post(f"/findings/{guest['id']}/accept", data={"note": "Known partner"})
@@ -128,8 +129,10 @@ def test_lapsed_acceptance_shows_for_review(client, db, two_tenants):
     make_user(db, "admin")
     login(client, "admin")
     page = client.get(f"/tenants/{alpha}/findings").get_data(as_text=True)
-    assert "now due for review" in page and "Accept again" in page
+    assert "now due for review" in page and "Accept again" not in page  # the row says so; its sheet offers it
     assert page.split('id="t-accepted-risks"')[1].count('class="group"') == 0
+    sheet = client.get(f"/tenants/{alpha}/findings/{row['id']}").get_data(as_text=True)
+    assert "Accept again" in sheet and "now due for review" in sheet
 
 
 def test_downloads_apply_the_view(client, db, two_tenants):
@@ -145,8 +148,8 @@ def test_downloads_apply_the_view(client, db, two_tenants):
             )
         )
     )
-    assert rows[0] == ["Account or item", "Check", "Detail", "First seen", "Severity"]
-    assert len(rows) > 1 and {r[-1] for r in rows[1:]} == {"high"}
+    assert rows[0] == ["Severity", "Account or item", "Check", "Detail", "First seen"]
+    assert len(rows) > 1 and {r[0] for r in rows[1:]} == {"High"}
     book = load_workbook(io.BytesIO(client.get(f"/tenants/{alpha}/findings.xlsx?{view}").data))
     assert "Open findings" in book.sheetnames and "Accepted risks" in book.sheetnames
     sheet = book["Open findings"]
@@ -229,7 +232,8 @@ def test_a_review_date_of_today_or_earlier_is_refused(client, db, two_tenants):
     guest = _finding(db, alpha, "guest_admins")
     today = datetime.now(UTC).date()
     tomorrow = (today + timedelta(days=1)).isoformat()
-    assert f'name="until" min="{tomorrow}"' in client.get(f"/tenants/{alpha}/findings").get_data(as_text=True)
+    sheet = client.get(f"/tenants/{alpha}/findings/{guest['id']}").get_data(as_text=True)
+    assert f'name="until" min="{tomorrow}"' in sheet
     for until in (today.isoformat(), (today - timedelta(days=30)).isoformat()):
         resp = client.post(f"/findings/{guest['id']}/accept", data={"note": "Partner", "until": until})
         assert resp.status_code == 302 and "#t-accepted-risks" not in resp.headers["Location"]

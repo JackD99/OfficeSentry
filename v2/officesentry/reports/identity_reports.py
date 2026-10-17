@@ -1019,6 +1019,8 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         uid, label = u["_id"], _label(u)
         licences = [sku_name(skus[s]) for s in u.get("skuIds") or [] if s in skus]  # paid ones only
         guest = u.get("userType") == "Guest"
+        if guest and u.get("mail"):
+            label = u["mail"]  # the guest's own address, as the Guests report shows it, not the #EXT# sign-in name
         if not u.get("accountEnabled"):
             if uid in keep and licences:  # a shared mailbox that needs its licence
                 licences, kept = [], kept + 1
@@ -1094,7 +1096,7 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Highlight(
             "Inactive guests",
             figure(counts["guests"]),
-            f"No sign-in for {STALE_DAYS}+ days" if activity else f"Needs {P1}",
+            f"No sign-in for {STALE_DAYS}+ days, or never" if activity else f"Needs {P1}",
             "warn" if counts["guests"] else None,
         ),
         Highlight(

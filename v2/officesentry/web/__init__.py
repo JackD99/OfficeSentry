@@ -34,6 +34,7 @@ from . import (
     email,
     evidence,
     filters,
+    finding,
     group_pages,
     groups,
     history,
@@ -56,6 +57,7 @@ from . import (
     system,
     tenant_admin,
     tenants,
+    timeline,
     upcoming,
     updates,
 )
@@ -228,6 +230,9 @@ def create_app(cfg: Config | None = None) -> Flask:
         report_areas_open=reports.report_groups,
         report_capability=reports.report_capability,
         entry_capability=reports.entry_capability,
+        # The MSP's custom reports and the person's saved views, as the report menus list them.
+        custom_reports=reports.custom_reports,
+        my_views=reports.my_views,
         # Whether the audit log add-on is switched on for this install (``auditlog/addon.py``): until it is,
         # nothing about it shows.
         audit_addon_on=lambda: g.get("db") is not None and addon_switch.enabled(g.db),
@@ -383,6 +388,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(admin.bp)
     app.register_blueprint(role_pages.bp)
     app.register_blueprint(reports.bp)
+    app.register_blueprint(finding.bp)
     app.register_blueprint(projects.bp)
     app.register_blueprint(email.bp)
     app.register_blueprint(alerts.bp)
@@ -394,6 +400,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(group_pages.bp)
     app.register_blueprint(site_pages.bp)
     app.register_blueprint(history.bp)
+    app.register_blueprint(timeline.bp)
     app.register_blueprint(saved_views.bp)
     app.register_blueprint(tenant_admin.bp)
     app.register_blueprint(onboarding.bp)

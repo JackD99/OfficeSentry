@@ -151,8 +151,8 @@ def test_pages_say_a_failure_is_being_tried_again(client, db, two_tenants):
     latest = tenant_health.latest_runs(db, alpha)
     tenant = store.get_tenant(db, alpha)
     assert data_health(tenant, latest)[:2] == ("warn", "1 failed, trying again")
-    reason = home.today(db, [tenant]).rows[0].reasons[0]
-    assert (reason.tone, reason.text) == ("warn", "1 collection failed and will be tried again")
+    entry = home.today(db, [tenant]).entries[0]
+    assert (entry.tone, entry.word, entry.text) == ("warn", "Retrying", "1 collection failed and will be tried again")
     make_user(db, "admin")
     login(client, "admin")
     for page in (f"/tenants/{alpha}/collection", f"/runs/{first['id']}"):

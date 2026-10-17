@@ -51,7 +51,7 @@ the date it will fill at the current rate.
   the largest files nobody has touched for two years, and the largest recycle bin items, each with what to
   do about it.
 - OneDrives over 80% of their own allowance, with their largest files.
-- **All clients** lists every client's storage side by side, and a check fails when a tenant is nearly full,
+- The **Clients** page lists every client's storage side by side when you pick this report from its menu, and a check fails when a tenant is nearly full,
   so it shows up in the client's monthly review.
 
 [Open SharePoint storage in the demo](https://demo.officesentry.co.uk/across/sharepoint-storage) ·

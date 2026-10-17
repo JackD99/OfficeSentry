@@ -41,7 +41,7 @@ def test_overview_changes_are_in_points_and_neutral_when_neither_way_is_better(c
     page = client.get(f"/tenants/{alpha}").get_data(as_text=True)
     assert '<span class="delta better">+7 pts</span> in 4 weeks' in page and "+7%" not in page
     assert '<span class="delta flat">+1</span> in 4 weeks' in page
-    review = client.get("/across/review").get_data(as_text=True)  # All clients: the same figures, a row each
+    review = client.get("/").get_data(as_text=True)  # the Clients page: the same figures, a row each
     assert '<span class="delta better tiny">+7</span>' in review and '<span class="delta flat tiny">+1</span>' in review
 
 
@@ -69,12 +69,12 @@ def test_xlsx_flags_are_coloured(db, two_tenants):
         c
         for ws in wb.worksheets
         for row in ws.iter_rows(min_row=2)
-        for c in row[-1:]
-        if c.value in data_reports.FLAG_FILLS
+        for c in row[:1]  # the flag column comes first, capitalised
+        if isinstance(c.value, str) and c.value.lower() in data_reports.FLAG_FILLS
     ]
     assert flagged
     for cell in flagged:
-        assert cell.fill.fgColor.rgb.endswith(data_reports.FLAG_FILLS[cell.value][0])
+        assert cell.fill.fgColor.rgb.endswith(data_reports.FLAG_FILLS[cell.value.lower()][0])
 
 
 def test_reports_not_compared_are_grouped_by_reason(client, db, two_tenants):

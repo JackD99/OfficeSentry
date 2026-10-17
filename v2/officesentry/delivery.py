@@ -164,7 +164,7 @@ def catalog(conn=None) -> list[ReportOption]:
                 ReportOption(
                     designs.key_of(row["id"]),
                     row["name"],
-                    row["description"] or "A report design: blocks you chose, as a PDF.",
+                    row["description"] or "Your custom report, built from blocks, as a PDF.",
                     True,
                     False,
                 )

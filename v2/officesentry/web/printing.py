@@ -28,6 +28,20 @@ PDF_MAX_ROWS = 2_000  # per table
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+MIMETYPES = {
+    "pdf": "application/pdf",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "csv": "text/csv",
+}
+
+
+def file_response(body: bytes, filename: str, ext: str) -> Response:
+    """A download of ``body`` as ``<filename>.<ext>`` (``filename`` from ``tables.filename``, without its
+    extension). Every CSV and workbook goes through here so the name is always quoted, as the PDFs' is."""
+    return Response(
+        body, mimetype=MIMETYPES[ext], headers={"Content-Disposition": f'attachment; filename="{filename}.{ext}"'}
+    )
+
 
 def pdf_response(template: str, filename: str, **context) -> Response:
     """``filename`` without ``.pdf``. ``context`` is what the template needs besides the PDF flags."""

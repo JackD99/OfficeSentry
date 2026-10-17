@@ -1,52 +1,52 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, csrf, page_link with context %}
-{% block title %}Report designs · Office Sentry{% endblock %}
+{% block title %}Custom reports · Office Sentry{% endblock %}
 {% block content %}
 {% set admin = can('designs.manage') and can('settings.manage') %}
-<div class="crumbs">{{ page_link(url_for('reporting.index'), 'Month-end') }}<span>/</span><span>Report designs</span></div>
+<div class="crumbs"><a href="{{ url_for('reports.overview') }}">Reports</a><span>/</span><span>Custom reports</span></div>
 <div class="page-head">
-  <div><h1>Report designs</h1>
-    <div class="sub">Client reports built from blocks: drag in the pieces, set each one up, see it on a real client. A design works for every client, and a report plan or schedule can send it.</div></div>
+  <div><h1>Custom reports</h1>
+    <div class="sub">Your own client reports, built from blocks: drag in the pieces, set each one up, see it on a real client. One custom report works for every client, and a report plan or a client's email schedule can send it.</div></div>
 </div>
 
 <div class="grid-main">
 <div>
 <section class="card flush">
-  <div class="card-head toolbar"><h2>Designs</h2></div>
+  <div class="card-head toolbar"><h2>Your custom reports</h2></div>
   {% if designs %}
   <table class="stack-sm">
-    <thead><tr><th>Design</th><th class="num">Blocks</th><th>Sent by</th><th>Changed</th><th></th></tr></thead>
+    <thead><tr><th>Report</th><th class="num">Blocks</th><th>Sent by</th><th>Changed</th><th></th></tr></thead>
     <tbody>
     {% for d in designs %}
     <tr>
       <td><a class="strong" href="{{ url_for('designs.edit', design_id=d.id) }}">{{ d.name }}</a>
         {% if d.description %}<span class="sub">{{ d.description }}</span>{% endif %}</td>
       <td data-label="Blocks" class="num">{{ counts[d.id] }}</td>
-      <td data-label="Sent by">{% if used.get(d.id) %}{{ used[d.id]|plural('plan or schedule', 'plans and schedules') }}{% else %}<span class="faint">Nothing yet</span>{% endif %}</td>
+      <td data-label="Sent by">{% if used.get(d.id) %}{{ page_link(url_for('reporting.plans'), used[d.id]|plural('plan or schedule', 'plans and schedules')) }}{% else %}<span class="faint">Nothing yet</span>{% endif %}</td>
       <td data-label="Changed" class="nowrap small muted">{{ (d.updated_at or d.created_at)|ago }}</td>
       <td class="num"><div class="row-actions">
-        {% if tenants %}<a class="btn sm ghost" href="{{ url_for('designs.tenant_design', tenant_id=tenants[0].id, design_id=d.id) }}">View</a>{% endif %}
+        {% if tenants %}<a class="btn sm ghost" href="{{ url_for('designs.tenant_design', tenant_id=tenants[0].id, design_id=d.id) }}" title="Open it on {{ tenants[0].name }}">View</a>{% endif %}
         <form method="post" action="{{ url_for('designs.duplicate', design_id=d.id) }}" class="inline">{{ csrf() }}<button class="sm ghost">Duplicate</button></form>
-        {% if admin %}<form method="post" action="{{ url_for('designs.delete', design_id=d.id) }}" class="inline" data-confirm="Remove this design? Plans and schedules that send it will stop.">{{ csrf() }}<button class="sm ghost danger">Remove</button></form>{% endif %}
+        {% if admin %}<form method="post" action="{{ url_for('designs.delete', design_id=d.id) }}" class="inline" data-confirm="Remove this custom report? Plans and schedules that send it will stop.">{{ csrf() }}<button class="sm ghost danger">Remove</button></form>{% endif %}
       </div></td>
     </tr>
     {% endfor %}
     </tbody>
   </table>
   {% else %}
-  <div class="empty"><h3>No designs yet</h3>
-    <p>Start from one of the templates on the right, or from a blank page, then drag in the blocks you want.</p></div>
+  <div class="empty"><h3>No custom reports yet</h3>
+    <p>Build a client report from blocks once and it works for every client. Start from one of the templates on the right, or from a blank page, then drag in the blocks you want.</p></div>
   {% endif %}
 </section>
 </div>
 
 <div>
 <section class="card">
-  <h2>New design</h2>
+  <h2>New custom report</h2>
   <form method="post" action="{{ url_for('designs.create') }}">
     {{ csrf() }}
     <label>Name <input name="name" maxlength="100" placeholder="Quarterly review">
-      <span class="hint">Shown on the cover unless the design sets its own title.</span></label>
+      <span class="hint">Shown on the cover unless the report sets its own title.</span></label>
     <fieldset class="choices">
       <legend class="label-sm">Start from</legend>
       {% for key, (label, description, _doc) in starters.items() %}
@@ -61,8 +61,9 @@
   <h2>How it works</h2>
   <ul class="small muted">
     <li>Every block draws on data the portal already has: the monthly review, the checks, the detail reports, licences and this month's commentary.</li>
-    <li>A block with nothing to show for a client is left out of their report, so one design fits every client.</li>
-    <li>To send a design, tick it in a report plan (Month-end → Report plans) or a client's email schedule. It goes as a PDF.</li>
+    <li>A block with nothing to show for a client is left out of their report, so one custom report fits every client.</li>
+    <li>Each client's Reports tab lists every custom report on that client's data, as a page and a PDF.</li>
+    <li>To send one, tick it in {{ page_link(url_for('reporting.plans'), 'a report plan') }} or a client's email schedule, or choose <em>Send on a schedule</em> beside it on the client's Custom reports page. It goes as a PDF.</li>
   </ul>
 </section>
 </div>

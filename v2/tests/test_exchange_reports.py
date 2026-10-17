@@ -19,6 +19,7 @@ from officesentry.collectors import distribution_lists as dl_collector
 from officesentry.collectors.auto_replies import plain_text
 from officesentry.collectors.mobile_devices import owner_name
 from officesentry.exchange import EXCHANGE_ROOT
+from officesentry.formatting import day
 from officesentry.graph import GraphClient
 from officesentry.reports import library, views
 from officesentry.reports.auto_replies import ENDED, ON, SCHEDULED_ON, UPCOMING, state
@@ -544,6 +545,21 @@ def test_mailbox_trend(db, two_tenants):
     assert report.chart.startswith("<svg") and report.chart_title == "Mailbox storage over time"
     months = s["Total size by month"]
     assert months.rows[0][1] == "46.0 GB" and len(months.rows) >= 2
+
+
+def test_mailbox_trend_caps_far_forecasts(db, two_tenants):
+    """A mailbox growing by a few bytes a month is centuries from full: no date, and no date arithmetic."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, users=USERS, exchange=_sizes(37, 1))
+    _backdate(db, db.execute("SELECT id FROM runs WHERE collector = 'mailbox_usage'").fetchone()["id"], 30)
+    _collect(db, alpha, "mailbox_usage", exchange=_sizes(37 + 4 / GB, 1))
+    report, s = _report(db, store.get_tenant(db, alpha), "mailbox-trend")
+    growth = s["Growth by mailbox"]
+    ann = growth.rows[0]
+    assert ann[0] == "ann@x.com" and ann[4] == "+4 bytes" and ann[8] == "More than 2 years away"
+    assert growth.flags == [None, None]
+    assert _tiles(report)["Full within 90 days"].value == 0
+    assert f"30 days earlier ({day(datetime.now(UTC) - timedelta(days=30))})" in growth.intro
 
 
 def test_mailbox_trend_reads_the_daily_history_once_snapshots_are_pruned(db, two_tenants):
