@@ -71,7 +71,11 @@ _SIZE = re.compile(r"^([+\u2212-]?[\d.,]+)\s*(bytes|KB|MB|GB|TB)$")
 _PERCENT = re.compile(r"^[+\u2212-]?[\d.,]+%$")
 _NUMBER = re.compile(r"^[+\u2212-]?\d[\d,]*(?:\.\d+)?%?$")  # strict: "Nan", "inf" and "1e3" stay text
 _SIGNED = re.compile(r"^[+\u2212-]\d[\d,]*(?:\.\d+)?$")
+_UNDER = re.compile(r"^Under (\d[\d,]*(?:\.\d+)?)%?$")  # "Under 1%": a share too small to show, just below it
 NO_CHANGE = "No change"  # what a change column says for zero
+NEVER = "Never"  # what a date column says for something that hasn't happened: it counts with the blanks
+# What a note column says when it has nothing to say: the page leaves the line out (and never repeats it).
+EMPTY_NOTES = frozenset({"", "Nothing", "None", "-", "\u2013", "\u2014"})
 _SIZES = {"bytes": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
 
 Key = tuple[str, str]  # (table slug, column slug)
@@ -280,6 +284,8 @@ def sort_key(cell):
             pass
     if _NUMBER.match(text):
         return _float(text.rstrip("%"))
+    if m := _UNDER.match(text):
+        return _float(m[1]) - 0.5  # "Under 1%" sorts just below 1%, not among the words
     if _PROSE_DATE.match(text) and (d := as_date(text)):
         return d.isoformat()  # "3 Sep 2026" sorts by date, not alphabetically
     return fold(text)
@@ -305,15 +311,20 @@ def _is_measure(cell) -> bool:
     if _is_number(cell):
         return True
     text = str(cell).strip()
-    return bool(_SIZE.match(text) or _PERCENT.match(text) or _SIGNED.match(text) or text == NO_CHANGE)
+    return bool(
+        _SIZE.match(text) or _PERCENT.match(text) or _SIGNED.match(text) or _UNDER.match(text) or text == NO_CHANGE
+    )
 
 
 def _kind(cells: list) -> str:
+    """num when every filled cell is a measure, date when most dated cells are dates ("Never" counts with the
+    blanks, so a last sign-in column keeps its presets however many people never signed in), else text."""
     filled = [c for c in cells if str(c).strip() not in ("", "–")]
     if filled and all(_is_measure(c) for c in filled):
         return "num"
-    dates = sum(1 for c in filled if as_date(c))
-    return "date" if dates and dates * 2 >= len(filled) else "text"
+    dated = [c for c in filled if str(c).strip() != NEVER]
+    dates = sum(1 for c in dated if as_date(c))
+    return "date" if dates and dates * 2 >= len(dated) else "text"
 
 
 # -- Applying a view to one table -----------------------------------------------------
@@ -675,6 +686,31 @@ class TableView:
         return [i for i, c in enumerate(shown) if i and c.name in NOTE_COLUMNS]
 
     @property
+    def repeated(self) -> list[int]:
+        """Indexes into ``shown`` of the note columns (``notes``) that say the same thing under every row shown,
+        two rows or more: the page says it once above the table (``said_once``) instead of under each row.
+        Downloads keep the column."""
+        if len(self.rows) < 2:
+            return []
+        out = []
+        for i in self.notes:
+            at = self._visible_index(i)
+            texts = {str(cells[at]).strip() for cells, _flag in self.rows}
+            if len(texts) == 1 and next(iter(texts)) not in EMPTY_NOTES:
+                out.append(i)
+        return out
+
+    @property
+    def said_once(self) -> list[tuple[str, object]]:
+        """(column name, cell) for each repeated note, as the page says it above the table."""
+        return [(self.shown[i].name, self.rows[0][0][self._visible_index(i)]) for i in self.repeated]
+
+    def _visible_index(self, shown_index: int) -> int:
+        """Where a ``shown`` column's cell is in each row of ``rows`` (which hold every visible column)."""
+        col = self.shown[shown_index]
+        return next(n for n, c in enumerate(self.visible) if c is col)
+
+    @property
     def filters(self) -> list[Column]:
         return [c for c in ([self.flag] if self.flag else []) + self.columns if c.options]
 
@@ -707,6 +743,12 @@ def anchor(table: str) -> str:
     return f"t-{table}"
 
 
+def _option_order(value: str):
+    """Filter values in order: numbers and sizes smallest first, then words A to Z, then blank."""
+    k = sort_key(value)
+    return (value == "", k is None, not isinstance(k, float), k if isinstance(k, float) else str(k or ""))
+
+
 def _options(
     cells: list, key: Key, view: View, path: str, table: str, kind: str, today: date, always: bool = False
 ) -> list[Option]:
@@ -718,15 +760,17 @@ def _options(
             for p, label in AGES.items()
             if counts[p] or active == p
         ]
-    counts: Counter = Counter(v for c in cells for v in values_of(c))
     wanted = view.filters.get(key, [])
+    if kind == "num" and not always and not wanted:
+        return []  # a column of numbers is for sorting; a filter would list every value
+    counts: Counter = Counter(v for c in cells for v in values_of(c))
     if (
         not wanted
         and not (2 <= len(counts) <= MAX_VALUES and len(counts) < len(cells))
         and not (always and len(counts) >= 2)
     ):
         return []
-    values = sorted(counts, key=lambda v: (v == "", sort_key(v) is None, str(sort_key(v) or "")))
+    values = sorted(counts, key=_option_order)
     values += [v for v in wanted if v not in counts]
     return [
         Option(v or "Blank", counts.get(v, 0), v in wanted, link(path, view.toggle_value(key, v), anchor(table)))

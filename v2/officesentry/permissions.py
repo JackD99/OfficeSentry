@@ -86,7 +86,12 @@ CAPABILITIES: tuple[Capability, ...] = (
     ),
     # Work on clients
     Capability("collect", "Refresh data", "Collect now, see collection runs and check the connection.", "work"),
-    Capability("findings.manage", "Accept risks and annotate", "Accept risks, override evidence answers.", "work"),
+    Capability(
+        "findings.manage",
+        "Accept risks and annotate",
+        "Accept risks, keep notes on findings and hand them to colleagues, override evidence answers.",
+        "work",
+    ),
     Capability(
         "emails.manage", "Emailed reports", "Set up a client's schedules, contacts and alerts; send now.", "work"
     ),

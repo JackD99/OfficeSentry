@@ -282,3 +282,28 @@ def test_searches_use_the_indexes(db, two_tenants):
         r["detail"] for r in db.execute("EXPLAIN QUERY PLAN DELETE FROM search_index WHERE tenant_id = ?", (alpha,))
     )
     assert "idx_search_index_tenant" in plan
+
+
+def test_clients_are_found_by_name_or_domain_first(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    seed_tenant(db, alpha, users=[*USERS, ZED])
+    make_user(db, "admin")
+    make_user(db, "alpha-analyst", role="analyst", tenants=[alpha])
+    login(client, "admin")
+    page = _page(client, "alpha")
+    assert "Nothing found" not in page and '<h2 id="found-clients">Clients</h2>' in page
+    assert f'href="/tenants/{alpha}">Alpha Ltd</a>' in page and '<div class="desc">alpha.onmicrosoft.com</div>' in page
+    assert f'href="/tenants/{bravo}">Bravo Inc</a>' not in page
+    # By domain too, and before what's inside the clients: ann@x.com matches no client.
+    page = _page(client, "onmicrosoft")
+    assert page.index("Alpha Ltd") < page.index("Bravo Inc") and "2 matches" in page
+    assert "found-clients" not in _page(client, "ann@x.com")
+    # Searching one client lists what's in it, not clients.
+    assert "found-clients" not in _page(client, "alpha", tenant=alpha)
+    client.post("/logout")
+
+    # Only clients the person sees.
+    login(client, "alpha-analyst")
+    page = _page(client, "onmicrosoft")
+    assert "Alpha Ltd" in page and "Bravo Inc" not in page and f"/tenants/{bravo}" not in page
+    assert "Nothing found" in _page(client, "bravo")

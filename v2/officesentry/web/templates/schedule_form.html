@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, csrf %}
+{% from "_macros.html" import icon, csrf, tenant_header with context %}
 {% from "_email.html" import contact_checks with context %}
 {% set digest = s.kind == 'digest' %}
 {% set coming_up = digest and 'upcoming' in s.reports %}
@@ -32,17 +32,16 @@
 {% if not pdf_available %}<p class="footnote m0">This server can't make PDFs, so a view chosen as PDF goes as a spreadsheet (XLSX).</p>{% endif %}
 {% else %}
 <div class="empty compact"><p>{% if digest %}You haven't saved a view of a detail report yet.{% else %}You haven't saved any views yet.{% endif %} Open a report, filter, sort or hide columns, then choose <strong>Views</strong> and save it. It can then be sent here.</p>
-  <a class="btn sm" href="{{ url_for('across.index') if digest else url_for('reports.data_index', tenant_id=tenant.id) }}">Open {{ 'All clients' if digest else 'detail reports' }}</a></div>
+  <a class="btn sm" href="{{ url_for('tenants.dashboard') if digest else url_for('reports.data_index', tenant_id=tenant.id) }}">Open {{ 'the Clients page' if digest else 'detail reports' }}</a></div>
 {% endif %}
 {%- endmacro %}
 {% block content %}
-<div class="crumbs">
-  {% if tenant %}<a href="{{ url_for('tenants.dashboard') }}">Clients</a><span>/</span>
-  <a href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}">{{ tenant.name }}</a><span>/</span><span>Emailed reports</span>
-  {% else %}<a href="{{ url_for('email.overview') }}">Email reports</a>{% endif %}
-</div>
+{#- A client's email is a page of its Emails tab; the team's digests are pages under Email reports. -#}
+{% if tenant %}{{ tenant_header(tenant, 'schedules', back=('Emailed reports', url_for('email.tenant_emails', tenant_id=tenant.id))) }}
+{% else %}<div class="crumbs"><a href="{{ url_for('email.overview') }}">Email reports</a><span>/</span><span>{{ heading }}</span></div>{% endif %}
+{% set tag = 'h2' if tenant else 'h1' %}
 <div class="page-head">
-  <div><h1>{{ heading }}</h1>
+  <div><{{ tag }}{% if tenant %} class="page-title"{% endif %}>{{ heading }}</{{ tag }}>
     <div class="sub">{% if coming_up %}One email to your team of what falls due in the next 90 days, across every client.{% elif views_email %}Your saved views of a report, with every client's rows (or one group's), for your team.{% elif digest %}One email to your team summarising every client, or one group of them.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
 </div>
 
@@ -60,7 +59,7 @@
         <option value="">Every client</option>
         {% for gr in groups %}<option value="{{ gr.id }}"{% if s.group_id == gr.id %} selected{% endif %}>{{ gr.category ~ ': ' if gr.category }}{{ gr.name }} ({{ gr.tenants|plural('client') }})</option>{% endfor %}
       </select>
-      <span class="hint">Each view stacks these clients' rows under a Client column, like the All clients report.</span></label>
+      <span class="hint">Each view stacks these clients' rows under a Client column, like Every row on the Clients page.</span></label>
     {% endif %}
     <div class="label-sm">Your saved views <span class="muted">· PDF and XLSX have the tables the view shapes; CSV is one file per table</span></div>
     {{ view_choices(view_options) }}
@@ -79,8 +78,15 @@
     {% set options = {} %}{% for o in catalog %}{% set _ = options.update({o.key: o}) %}{% endfor %}
     <fieldset class="choices">
       <legend class="sr-only">Summary reports</legend>
-      {% for o in catalog if not o.key.startswith('data:') %}{{ choice(o) }}{% endfor %}
+      {% for o in catalog if not o.key.startswith(('data:', 'design:')) %}{{ choice(o) }}{% endfor %}
     </fieldset>
+    {% set custom = [] %}{% for o in catalog if o.key.startswith('design:') %}{% set _ = custom.append(o) %}{% endfor %}
+    <div class="label-sm">Custom reports <span class="muted">· your own, built from blocks, as a PDF</span></div>
+    {% if custom %}<fieldset class="choices">
+      <legend class="sr-only">Custom reports</legend>
+      {% for o in custom %}{{ choice(o) }}{% endfor %}
+    </fieldset>
+    {% else %}<div class="empty compact"><p>No custom reports yet. {% if can_open('designs.index') %}<a href="{{ url_for('designs.index') }}">Make one</a> from blocks and it can be sent here, to any client.{% else %}Someone who can <em>Design custom reports</em> makes them under Reports.{% endif %}</p></div>{% endif %}
     <div class="label-sm">Detail reports <span class="muted">· one spreadsheet each</span></div>
     {% for gr in report_groups %}
     {% set n = namespace(chosen=0) %}{% for key, title, desc in gr.reports %}{% if ('data:' ~ key) in s.reports %}{% set n.chosen = n.chosen + 1 %}{% endif %}{% endfor %}

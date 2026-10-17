@@ -419,12 +419,18 @@ def test_detail_reports_build(db, two_tenants):
     assert mail["Forwarding"].flagged == 2
     assert [r[2] for r in mail["What stops forwarding"].rows] == ["Blocked (Microsoft's default)", "Allowed"]
     apps = {s.title: s for s in build(db, tenant, "apps").sections}
-    assert apps["Third-party apps with access"].rows[0][0] == "Mail Sync Pro"
+    third = apps["Third-party apps with access"]
+    assert third.rows[0][0] == "Mail Sync Pro" and third.flags[0] == "high"
+    # Every Risk value is a level, with what earns it after the colon.
+    assert third.rows[0][5] == "High: Mail.Read" and {r[5] for r in third.rows[1:]} <= {"Low"}
     ca = {s.title: s for s in build(db, tenant, "conditional-access").sections}
     assert ca["Policies"].rows[0][:2] == ["Require MFA for all users", "On"]
     assert ca["Coverage by account"].intro.startswith("3 of 3")
     guests = {s.title: s for s in build(db, tenant, "guests").sections}
     assert ["Who can invite guests", "Everyone, including guests"] in guests["External access settings"].rows
+    listed = guests["Guest accounts"]
+    assert listed.columns[:2] == ["Guest", "Name"]  # who the guest is, not only the address
+    assert [r[:2] for r in listed.rows] == [["g#EXT#@x.com", "Guest"]]
     for key in REPORTS:
         assert build(db, store.get_tenant(db, two_tenants[1]), key).unavailable  # never collected
 

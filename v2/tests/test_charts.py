@@ -275,7 +275,7 @@ def test_dashboard_shows_the_lines(client, db, two_tenants):
     login(client, "admin")
     page = client.get("/").get_data(as_text=True)
     assert 'class="kpi-cell"' in page and '<svg class="spark' in page
-    assert "The line beside a figure is its last 90 days." in page
+    assert "the line under a figure is its last 90 days" in page
 
 
 def test_month_columns_draws_two_columns_a_month_with_counts_and_no_data_tracks():

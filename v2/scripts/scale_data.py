@@ -120,7 +120,10 @@ def add_tenant(db, n: int, template: dict, days: int, keep: set[int], cid: int) 
         " WHERE id = ?) WHERE id = ?",
         (_iso(datetime.now(UTC)), template["tenant"], tid),
     )
-    end = datetime.now(UTC).replace(hour=2, minute=0, second=0, microsecond=0)
+    # Each night's collection starts an hour or two before now's time of day, not at 02:00: the change report's
+    # stored rows are keyed on the last run before "30 days ago", which moves run by run while that passes a
+    # night's collection, so between 02:00 and 02:15 every visit rebuilt the report (#200 on 17 October).
+    end = (datetime.now(UTC) - timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
     db.execute(
         "CREATE TEMP TABLE IF NOT EXISTS plan (run_id INTEGER, template_run INTEGER, at TEXT,"
         " objects INTEGER, log INTEGER)"

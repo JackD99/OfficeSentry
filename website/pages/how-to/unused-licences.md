@@ -59,7 +59,7 @@ for one client or all of them.
 - **Licences and subscriptions** shows every subscription with its renewal date, trials about to end and
   group licensing errors in plain words, and **Licence changes** shows who was given or lost a licence each
   month, and by whom.
-- **All clients** puts the waste for every client side by side, largest first.
+- The **Clients** page puts the waste for every client side by side, largest first, when you pick this report from its menu.
 
 [Open Licence waste in the demo](https://demo.officesentry.co.uk/across/licences) ·
 [Example PDF](../../../examples/licence-right-sizing.pdf) ·

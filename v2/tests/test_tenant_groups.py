@@ -142,7 +142,7 @@ def test_picking_a_group_narrows_the_dashboard_until_changed(client, db, three):
     assert "the 2 clients in Gold" in page and 'class="group-picker on"' in page
 
     # The choice follows to the other pages, and to their downloads.
-    assert "Bravo Inc" not in _text(client.get("/across/review"))
+    assert "Bravo Inc" not in _text(client.get("/across/mfa"))
     assert "Bravo Inc" not in _text(client.get("/changes"))
     assert "Bravo Inc" not in _text(client.get("/admin/tenants"))
     rows = list(csv.reader(io.StringIO(client.get("/across/review.csv").get_data(as_text=True).lstrip("﻿"))))

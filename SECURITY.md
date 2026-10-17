@@ -41,6 +41,62 @@ little as possible with that access. Details and code references are in
 [v2/README.md](v2/README.md), [v2/DEPLOY.md](v2/DEPLOY.md) and
 [v2/CLAUDE.md](v2/CLAUDE.md).
 
+### How data flows
+
+```text
+ Each client's Microsoft 365 tenant
+ Microsoft Graph, Exchange Online's admin API and
+ SharePoint's REST API (and the Management Activity
+ feed, for clients on the audit log add-on)
+      │
+      │ HTTPS, signed in as your app with its
+      │ certificate. Reads only: GET requests and
+      │ Exchange Get- commands.
+      ▼
+ ┌─ Your server ─────────────────────────────────┐
+ │ worker: collects every night, sends report    │
+ │ emails and alerts, applies Data retention     │
+ │   │ writes                                    │
+ │   ▼                                           │
+ │ data volume (/data): the database (snapshots, │
+ │ findings, users, settings, and certificate    │
+ │ keys, encrypted), activity history, logs,     │
+ │ nightly backups                               │
+ │   ▲ reads                                     │
+ │   │                                           │
+ │ portal: pages, PDFs and spreadsheets, from    │
+ │ stored data only                              │
+ │                                               │
+ │ keys volume (/keys): secrets.json, the keys   │
+ │ that decrypt those certificate keys; never in │
+ │ /data or a backup                             │
+ └──┬───────────────────────────┬────────────────┘
+    ▲                           │
+    │ HTTPS through Caddy       │ Out: report emails,
+    │ or your own proxy         │ alert webhooks,
+    │                           ▼ off-site backups
+ Your staff and your              (encrypted by restic)
+ clients' people
+```
+
+Only the worker reads a client's data from Microsoft; no page does. The portal talks to Microsoft to
+sign people in, for setup steps an admin starts (creating or updating the app, testing a new
+certificate) and to send an email someone sends from a page. Every permission the app asks for, why, and which reports use
+it, is in [What Office Sentry reads](v2/docs/what-office-sentry-reads.md).
+
+| What | Where it's kept | How it's protected |
+|---|---|---|
+| Collected data: snapshots, findings, reports sent to clients, users and settings | The database, `/data/officesentry.db` | Compressed, not encrypted by Office Sentry. Protect the server and its disk, and encrypt the disk if your policy asks for encryption at rest. |
+| Sign-in and directory audit history | A file per month beside the database, `/data/events` | As the database. |
+| The app certificates' private keys, the sign-in app's key, two-step secrets, mail passwords and secrets, the alert webhook and its signing secret | In the database | Encrypted with the encryption key (Fernet: AES with an integrity check). Never written to disk as a file, never sent to a browser; only an app's public `.cer` can be downloaded. |
+| Passwords, recovery codes, session tokens | In the database | Only as hashes: scrypt for passwords, an HMAC under an encrypted key for recovery codes. |
+| Session key and encryption key | `secrets.json`, in its own volume (`/keys`), readable only by Office Sentry | Never in the data volume or a backup. Keep a copy apart, in a password manager say. |
+| Nightly backups | `/data/backups`, or a folder you give it | Compressed. They hold the encrypted keys but not the key that decrypts them. |
+| Off-site backups (optional) | S3-compatible storage you choose | Encrypted by restic with your password before they leave the server. |
+
+[v2/DEPLOY.md](v2/DEPLOY.md#backups) covers backups, restoring, moving to a new server and rotating
+keys.
+
 ### Access to Microsoft 365
 
 - **Read-only by construction.** One multi-tenant Entra app requests only
@@ -93,7 +149,7 @@ little as possible with that access. Details and code references are in
 | Control | Implementation |
 |---|---|
 | Tenant isolation | Deny by default. Users see only clients granted to them; others return 404. One gate (`web/access.py`) loads every client. |
-| Roles | A role is a set of capabilities and a scope (every client, or those granted). Seven built-in roles (Administrator, Team leader, Second line, First line, Account manager, Auditor, Client viewer), custom roles, and per-person capabilities added or taken away, everywhere or on one client; taking away wins. Every page and download checks on the server. Someone who manages users without being an Administrator can only give out what they hold on every client they see, can't change an account, or a role held by one, that sees or does more, and isn't shown client accounts of other clients. A role limited to some clients manages clients, users and the activity log within those clients only; client groups, Settings, System status and installing updates need every client. A report area someone can't open on a client stays closed wherever that client's data goes: scheduled emails and their previews, the report history, report designs, the home pages and What changed. Clients see only their own organisation's reports. |
+| Roles | A role is a set of capabilities and a scope (every client, or those granted). Seven built-in roles (Administrator, Team leader, Second line, First line, Account manager, Auditor, Client viewer), custom roles, and per-person capabilities added or taken away, everywhere or on one client; taking away wins. Every page and download checks on the server. Someone who manages users without being an Administrator can only give out what they hold on every client they see, can't change an account, or a role held by one, that sees or does more, and isn't shown client accounts of other clients. A role limited to some clients manages clients, users and the activity log within those clients only; client groups, Settings, System status and installing updates need every client. A report area someone can't open on a client stays closed wherever that client's data goes: scheduled emails and their previews, the report history, custom reports, the home pages and What changed. Clients see only their own organisation's reports. |
 | Client contacts and alerts | New contacts get a client's report plan emails, so only someone who can open everything the plan sends adds a contact. New-finding alerts name the findings, so choosing who gets them needs security findings. |
 | Approved reports | Once a month's report is approved, its client sees that approved copy. Commentary, recommendations and notes changed afterwards reach them only with a new version. |
 | Sign in with Microsoft | Optional, off until an admin sets it up. OpenID Connect against a single-tenant app in the MSP's own tenant with no API permissions, authorization code with PKCE, a certificate-signed client assertion (`private_key_jwt`; the private key is encrypted in the database) and the ID token verified against the tenant's published keys: signature, audience, issuer, tenant, lifetime and nonce. Roles are app roles assigned in Entra (one per built-in role, and values an admin gives custom roles) and read at every sign-in; client access is still granted in Office Sentry. Passwords stay as the break-glass route until an admin signed in with Microsoft turns them off; `python -m officesentry staff-sign-in --passwords on` turns them back on from the server. An account with no password confirms a security change by signing in to Microsoft again (`prompt=login`, the same Microsoft account), which counts for ten minutes on that session. |
@@ -214,6 +270,42 @@ place, but nobody can sign in with the old one.
   backups never hold it.
 - Review the Entra app's permissions and sign-in logs in your own tenant
   from time to time.
+
+## How security is checked
+
+Every change goes through the same checks, whoever wrote it, and isn't merged until they pass
+([CONTRIBUTING.md](CONTRIBUTING.md#how-changes-are-checked)). The ones that guard security (the tests are
+in `v2/tests/`):
+
+- **Access control.** `test_roles.py` opens every page as every built-in role and expects a
+  refusal exactly where the role lacks what the page needs (`test_limited_roles.py` does the same for
+  roles limited to some clients). `test_isolation_walk.py` opens every page and download that
+  names a client with another client's IDs, and posts every form with them, as staff and as a client,
+  and fails if anything of the other client shows. `test_access.py` checks every page needs a sign-in,
+  and `test_report_areas_everywhere.py` that a report someone can't open stays closed inside every
+  other page that shows it.
+- **Sign-in.** `test_login_security.py` covers two-step codes, sign-in limits, sessions and cookies;
+  `test_client_sign_in_attacks.py` tries to reach another client, a staff account or a new account
+  through client sign-in with Microsoft, with tokens a client's own administrator could make.
+- **Read-only.** `test_no_writes.py` fails on any request other than GET outside its named exceptions,
+  and runs a whole collection to check every request is a read.
+- **Secrets.** `test_no_secrets_downloadable.py` plants one of every kind of secret and searches every
+  page and download for it, as an admin, an analyst and a client; `test_support.py` does the same for
+  every byte of the support package; `test_key_rotation.py` fails on an encrypted value `rotate-keys`
+  wouldn't re-encrypt.
+- **Injection.** `test_injection_walk.py` puts markup in every name a client's tenant sends and fails
+  if any page, report or PDF shows it unescaped.
+- **Code scanning.** GitHub's CodeQL scans the code on every pull request, on every change to `main`
+  and every week.
+- **Dependencies.** Python packages come from hash-pinned lock files, which `pip-audit` checks for known
+  vulnerabilities on every pull request and every Monday. Dependabot proposes updates weekly, and
+  security fixes as soon as GitHub publishes them. GitHub Actions are pinned to commit hashes and base
+  images by digest.
+- **Releases.** A release is built from a commit on `main` that passed the full CI run, scanned for
+  known vulnerabilities, and signed (below). The Update button installs only a release whose signature
+  checks out.
+- **The public demo.** `test_public_demo.py` opens every page as the demo's visitor, who can't change
+  anything: the demo refuses every request but GET, HEAD and OPTIONS.
 
 ## Checking a release
 

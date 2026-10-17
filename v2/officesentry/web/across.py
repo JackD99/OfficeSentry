@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
 from ..checks import RULES
 from ..db import audit
@@ -27,22 +27,21 @@ from ..reports.registry import DECLARED
 from . import as_of
 from .access import by_report, can, need_also, needs, opens_on, require, tenant_or_404
 from .groups import group_aware, scope, scoped_tenants
-from .printing import pdf_response
+from .printing import file_response, pdf_response
 from .reports import exists, hidden_reports, report_capability
 from .saved_views import MAX_VIEWS
 from .saved_views import store as store_view
 
 bp = Blueprint("across", __name__)
 
-XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 RULE_TITLES = {r.key: r.title for r in RULES}
 
 
-def _download(body: bytes, filename: str, ext: str) -> Response:
-    mimetype = XLSX if ext == "xlsx" else "text/csv"
-    return Response(
-        body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{filename}.{ext}"'}
-    )
+def _across_name(*parts) -> str:
+    """A cross-tenant download's name: ``all-clients-<report>...``, or ``clients-<group>-<report>...`` when a
+    group is chosen, so a folder of downloads says which clients each file covers."""
+    chosen = scope().group
+    return tables.filename("all-clients" if chosen is None else f"clients-{chosen.name}", *parts)
 
 
 def _cover(title: str, client: str, intro: str = "", tenant_ref: str = "", facts=()) -> workbook.Cover:
@@ -64,16 +63,15 @@ def _days() -> int:
 @bp.get("/across")
 @needs("clients.compare")
 def index():
+    """Where the picker's select on phones and older links go: the Clients page shows the monthly review
+    across every client, and ``/across/<report>`` any other report."""
     key = request.args.get("key", "")
     if request.args.get("mode") == "rows" and key in data_reports.REPORTS:
         return redirect(url_for("across.rows_index", key=key))
-    if key == "checks" and can("reports.security"):  # the picker's select on phones
+    if key == "checks" and can("reports.security"):
         return redirect(url_for("across.checks"))
-    available = _available()
-    if key not in dict(available):
-        if not available:
-            abort(403)
-        key = available[0][0]
+    if key in ("", "review") or key not in dict(_available()):
+        return redirect(url_for("tenants.dashboard"))
     return redirect(url_for("across.rollup", key=key))
 
 
@@ -109,16 +107,60 @@ def _rollup_or_404(key: str):
 
 
 def _picker() -> dict:
-    """What the All clients report picker needs beyond the catalogue: the summaries this person may open."""
-    return {"main": _available()[:2] if can("reports.security") else []}
+    """What the Clients page's report picker needs beyond the catalogue: the summaries this person may open,
+    and nothing at all for someone who can't compare clients (the picker's pages are closed to them). The
+    monthly review is the Clients page itself, open to every staff role; the insurance evidence and Checks
+    need the security capability."""
+    if not can("clients.compare"):
+        return {"main": [], "picker": False}
+    main = [(k, title) for k, title in rollups.available()[:2] if k == "review" or can(_rollup_capability(k))]
+    return {"main": main, "picker": True}
+
+
+def column_capability(rollup: rollups.Rollup, column: rollups.Column) -> str:
+    """The capability a column's figures need on a client: the monthly review's figures each belong to the
+    report they open (findings and changes to the security area), so on the Clients page someone sees a
+    client's MFA figure but not its findings when that's what they hold there; any other rollup is one
+    report's, so every column needs that report's area."""
+    if rollup.key != "review":
+        return _rollup_capability(rollup.key)
+    target = rollups.REVIEW_LINKS.get(column.key, ("findings", ""))[0]
+    return "reports.security" if target in ("findings", "changes") else report_capability(target)
+
+
+def rollup_page(data: rollups.Rollup, tenants: list | None = None, **extra):
+    """The Clients page for one rollup: the columns this person opens somewhere, the capability each cell
+    needs on its client, and the total row only over columns nobody listed is denied (``tenants``, when
+    rows may stay for a client some figures are closed on; a rollup opened through ``need_also`` has
+    already left those clients out)."""
+    capability = {c.key: column_capability(data, c) for c in data.columns}
+    columns = [c for c in data.columns if can(capability[c.key])]
+    total = data.total_row()
+    if total is not None and tenants is not None:
+        for c in columns:
+            if not all(can(capability[c.key], t["id"]) for t in tenants):
+                total.values.pop(c.key, None)
+        if not total.values:
+            total = None
+    return render_template(
+        "clients.html",
+        rollup=data,
+        key=data.key,
+        columns=columns,
+        cell_capability=capability,
+        total=total,
+        **_picker(),
+        **extra,
+    )
 
 
 @bp.get("/across/<key>")
 @needs("clients.compare", also=_by_rollup)
 @group_aware
 def rollup(key: str):
-    data = _rollup_or_404(key)
-    return render_template("rollup.html", rollup=data, key=key, **_picker())
+    if key == "review":  # the Clients page
+        return redirect(url_for("tenants.dashboard"))
+    return rollup_page(_rollup_or_404(key))
 
 
 # -- Every row of a detail report, across tenants ---------------------------------------
@@ -158,7 +200,16 @@ def rows_index(key: str):
         )
     if not table:
         return render_template(
-            "rollup_rows.html", data=data, key=key, tv=None, table="", tables=[], saved=[], view_query="", **_picker()
+            "rollup_rows.html",
+            data=data,
+            key=key,
+            tv=None,
+            table="",
+            tables=[],
+            saved=[],
+            view_query="",
+            count=len(_tenants_for(key)),
+            **_picker(),
         )
     query = views.View.parse(request.args).query()
     return redirect(url_for("across.rows", key=key, table=table) + (f"?{query}" if query else ""))
@@ -186,6 +237,7 @@ def rows(key: str, table: str):
         max_rows=rollups.MAX_ROWS,
         view_query=view.query(),
         saved=saved,
+        count=len(_tenants_for(key)),
         **_picker(),
     )
 
@@ -203,10 +255,10 @@ def _rows_report(key: str, table: str):
 def rows_download(key: str, table: str, ext: str):
     report = _rows_report(key, table)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}-rows-{table}.{ext}")
-    filename = f"all-tenants-{key}-{table}"
+    filename = _across_name(key, table)
     if ext == "csv":
-        return _download(tables.to_csv(data_reports.section_table(report.sections[0])), filename, ext)
-    return _download(data_reports.to_xlsx(report, brand=branding.load(g.db)), filename, ext)
+        return file_response(tables.to_csv(data_reports.section_table(report.sections[0])), filename, ext)
+    return file_response(data_reports.to_xlsx(report, brand=branding.load(g.db)), filename, ext)
 
 
 @bp.get("/across/<key>/rows/<table>.pdf")
@@ -215,7 +267,7 @@ def rows_download(key: str, table: str, ext: str):
 def rows_pdf(key: str, table: str):
     report = _rows_report(key, table)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}-rows-{table}.pdf")
-    return pdf_response("reports/detail.html", f"all-tenants-{key}-{table}", report=report)
+    return pdf_response("reports/detail.html", _across_name(key, table), report=report)
 
 
 @bp.post("/across/<key>/rows/<table>/views")
@@ -246,19 +298,23 @@ def _check_matrix():
     return rollups.check_matrix(g.db, scoped_tenants())
 
 
+def _chosen_category(matrix: rollups.CheckMatrix):
+    """The category ``?category=`` names (its name and checks), or None for every check."""
+    category = request.args.get("category", "")
+    return next((c for c in matrix.categories if views.slug(c[0]) == category), None)
+
+
 @bp.get("/across/checks")
 @needs("clients.compare", "reports.security")
 @group_aware
 def checks():
     matrix = _check_matrix()
     categories = matrix.categories
-    category = request.args.get("category", "")
-    chosen = next((c for c in categories if views.slug(c[0]) == category), None)
     return render_template(
         "check_matrix.html",
         matrix=matrix,
         categories=categories,
-        chosen=chosen,
+        chosen=_chosen_category(matrix),
         slugs={c[0]: views.slug(c[0]) for c in categories},
         **_picker(),
     )
@@ -269,23 +325,32 @@ def checks():
 @needs("clients.compare", "reports.security", "export")
 @group_aware
 def checks_download(ext: str):
+    """The matrix as the page shows it: every check, or one category's with ``?category=``."""
     matrix = _check_matrix()
-    table = matrix.to_table()
-    audit(g.db, g.user["username"], "rollup_downloaded", None, f"checks.{ext}")
+    chosen = _chosen_category(matrix)
+    checks = chosen[1] if chosen else matrix.checks
+    table = matrix.to_table(checks)
+    category = views.slug(chosen[0]) if chosen else ""
+    audit(g.db, g.user["username"], "rollup_downloaded", None, f"{tables.filename('checks', category)}.{ext}")
     body = (
         tables.to_csv(table)
         if ext == "csv"
         else tables.to_xlsx(
             [table],
             cover=_cover(
-                "Checks",
+                f"{chosen[0]} checks" if chosen else "Checks",
                 scope().label,
-                "Every check's result for every client.",
-                facts=[("Clients", len(matrix.rows), ""), ("With failing checks", matrix.with_failures, "")],
+                f"Every {chosen[0].lower()} check's result for every client."
+                if chosen
+                else "Every check's result for every client.",
+                facts=[
+                    ("Clients", len(matrix.rows), ""),
+                    ("With failing checks", matrix.with_failures_in(checks), ""),
+                ],
             ),
         )
     )
-    return _download(body, "all-tenants-checks", ext)
+    return file_response(body, _across_name("checks", category), ext)
 
 
 @bp.get("/across/<key>.csv", defaults={"ext": "csv"})
@@ -313,7 +378,7 @@ def rollup_download(key: str, ext: str):
             ),
         )
     )
-    return _download(body, f"all-tenants-{tables.slug(data.title)}", ext)
+    return file_response(body, _across_name(key), ext)
 
 
 @bp.get("/across/<key>.pdf")
@@ -322,7 +387,7 @@ def rollup_download(key: str, ext: str):
 def rollup_pdf(key: str):
     data = _rollup_or_404(key)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}.pdf")
-    return pdf_response("reports/rollup.html", f"all-tenants-{tables.slug(data.title)}", rollup=data)
+    return pdf_response("reports/rollup.html", _across_name(key), rollup=data)
 
 
 # -- Month-over-month changes ----------------------------------------------------------
@@ -364,7 +429,7 @@ def changes_pdf():
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"changes-{days}d.pdf")
     return pdf_response(
         "reports/changes.html",
-        f"all-tenants-changes-{days}-days",
+        _across_name("changes", f"{days}-days"),
         summaries=summaries,
         totals=totals,
         days=days,
@@ -392,7 +457,7 @@ def changes_download(ext: str):
             ),
         )
     )
-    return _download(body, f"all-tenants-changes-{days}-days", ext)
+    return file_response(body, _across_name("changes", f"{days}-days"), ext)
 
 
 def _tenant_changes(t) -> dict:
@@ -451,7 +516,7 @@ def tenant_changes_pdf(tenant_id: int):
     t = tenant_or_404(tenant_id)
     page = _tenant_changes(t)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"changes-{page['slug']}.pdf")
-    return pdf_response("reports/tenant_changes.html", f"changes-{page['slug']}-{tables.slug(t['name'])}", **page)
+    return pdf_response("reports/tenant_changes.html", tables.filename("changes", page["slug"], t["name"]), **page)
 
 
 @bp.get("/tenants/<int:tenant_id>/changes.csv", defaults={"ext": "csv"})
@@ -470,6 +535,8 @@ def tenant_changes_download(tenant_id: int, ext: str):
             cover=_cover(
                 page["title"],
                 t["name"],
+                f"Changes in {t['name']}'s Microsoft 365 {page['title'].removeprefix('What changed ')}: new and fixed "
+                "findings, key changes, and what each report shows differently.",
                 tenant_ref=t["tenant_ref"],
                 facts=[("Changes", report.total, "")]
                 + (
@@ -479,7 +546,7 @@ def tenant_changes_download(tenant_id: int, ext: str):
                 ),
             ),
         )
-    return _download(body, f"changes-{page['slug']}-{tables.slug(t['name'])}", ext)
+    return file_response(body, tables.filename("changes", page["slug"], t["name"]), ext)
 
 
 # -- CSV for per-tenant reports -------------------------------------------------------
@@ -500,8 +567,9 @@ def data_report_csv(tenant_id: int, key: str):
         abort(404)
     table = report_tables[index - 1]
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.csv")
-    name = f"{key}-{tables.slug(table.title)}-{tables.slug(t['name'])}" + (f"-{day.on.isoformat()}" if day.on else "")
-    return _download(tables.to_csv(table), name, "csv")  # a past day is named, as the PDF and workbook are
+    # The table is named only when the report has several; a past day is named, as the PDF and workbook are.
+    name = tables.filename(key, table.title if len(report_tables) > 1 else "", t["name"], on=day.on)
+    return file_response(tables.to_csv(table), name, "csv")
 
 
 @bp.get("/tenants/<int:tenant_id>/report.csv")
@@ -520,4 +588,4 @@ def review_csv(tenant_id: int):
         ],
     )
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "findings.csv")
-    return _download(tables.to_csv(table), f"security-review-findings-{tables.slug(t['name'])}", "csv")
+    return file_response(tables.to_csv(table), tables.filename("security-review-findings", t["name"]), "csv")
