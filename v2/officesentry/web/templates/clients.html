@@ -5,7 +5,10 @@
 {% from "_macros.html" import icon, sev_counts, sev_legend, downloads, page_link with context %}
 {% from "_across.html" import clients_head, across_bar with context %}
 {% from "_get_started.html" import get_started as get_started_card %}
+{% from "_grade.html" import badge %}
 {% set review = key == 'review' %}
+{#- The grade column (grades.py) on the Clients page itself, for someone who sees findings on some client. -#}
+{% set shown_grades = grade_rows if review and grade_rows is defined and grade_rows else none %}
 {% block title %}{% if not review %}{{ rollup.title }} · {% endif %}Clients · Office Sentry{% endblock %}
 {% macro cell(row, c) -%}
 {% set v = row.values.get(c.key) %}
@@ -105,6 +108,7 @@
   <table class="stack-sm sortable" id="rollup-table">
     <thead><tr>
       <th aria-sort="none"><button type="button" class="sort">Client</button></th>
+      {% if shown_grades %}<th aria-sort="none" title="A to E, the worst of five parts: open a grade to see how it is worked out"><button type="button" class="sort">Grade</button></th>{% endif %}
       {% for c in columns %}<th class="{{ 'num' if c.kind in ('num', 'pct', 'money') or c.key in figures }}" aria-sort="none"{% if c.hint %} title="{{ c.hint }}"{% endif %}><button type="button" class="sort">{{ c.label }}</button></th>{% endfor %}
       {% if reviews %}<th title="Each client's monthly review as a PDF">Review</th>{% endif %}
     </tr></thead>
@@ -116,6 +120,9 @@
         {% if review %}<span class="sub">{{ t.tenant_ref|wrappable }}</span>{% endif %}
         {% if state and state[0] != 'ok' %}<span class="pill {{ state[0] }}"{% if state[2] %} title="{{ state[2] }}"{% endif %}>{{ state[1] }}</span>
         {% elif row.note %}<span class="sub muted">{{ row.note }}</span>{% endif %}</td>
+      {% if shown_grades %}{% set letter = shown_grades.get(t.id) %}
+      <td data-label="Grade" data-sort="{{ 'ABCDE'.index(letter) if letter else 9 }}">{% if letter %}{{ badge(letter, 'xs', href=url_for('grade.page', tenant_id=t.id), title='Grade ' ~ letter ~ ': how ' ~ t.name ~ ' is graded') }}{% else %}<span class="faint" title="{{ 'Not graded yet' if t.id in shown_grades else 'Findings are closed to you on this client' }}">–</span>{% endif %}</td>
+      {% endif %}
       {% if row.note %}
       <td colspan="{{ columns|length + (1 if reviews else 0) }}" class="muted" data-label="Status">{{ 'No data yet' if review else 'Not available' }}</td>
       {% else %}
@@ -134,6 +141,7 @@
     {% if total %}
     <tfoot><tr class="total-row">
       <th scope="row" class="tenant-col">Total <span class="sub muted">{{ (rollup.rows|length - rollup.without_data)|plural('client') }}</span></th>
+      {% if shown_grades %}<td></td>{% endif %}
       {% for c in columns %}{% set v = total.values.get(c.key) %}
       <td class="{{ 'num' if c.kind in ('num', 'pct', 'money') or c.key in figures }}" data-label="{{ c.label }}">{% if v is none %}<span class="faint" title="Not added up: this figure isn't a count or amount in every client">–</span>
         {%- elif c.kind == 'status' %}<span class="small" title="Clients with this control in place">{{ v }} in place</span>

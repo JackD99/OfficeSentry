@@ -103,6 +103,24 @@ def test_the_overview_leads_with_the_grade_and_every_client_page_carries_it(clie
     assert f'class="grade sm e" href="/tenants/{alpha}/grade"' in _page(client, f"/tenants/{alpha}/findings")
 
 
+def test_the_clients_page_has_a_grade_column_for_staff_who_see_findings(client, db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    make_user(db, "admin")
+    login(client, "admin")
+    assert 'class="grade xs' not in _page(client, "/")  # the list never builds a grade
+    grades.rows(db, db.execute("SELECT * FROM tenants").fetchall())  # as the worker does
+    page = _page(client, "/")
+    assert '<button type="button" class="sort">Grade</button>' in page
+    assert f'class="grade xs e" href="/tenants/{alpha}/grade"' in page
+    assert 'title="Not graded yet"' in page  # Bravo has no data yet
+    client.post("/logout")
+    role_user(db, "first", "first_line", all_tenants=True)
+    login(client, "first")
+    page = _page(client, "/")
+    assert ">Grade</button>" not in page and 'class="grade' not in page
+
+
 def test_no_badge_until_a_grade_is_stored(client, db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)

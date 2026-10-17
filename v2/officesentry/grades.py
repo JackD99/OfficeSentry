@@ -777,6 +777,15 @@ def stored_letter(conn, tenant_id: int) -> str | None:
     return json.loads(row["data"]).get("letter") if row else None
 
 
+def stored_letters(conn, tenant_ids) -> dict[int, str | None]:
+    """Each of these tenants' grade as last stored (None when there's none yet): for the Clients page, which
+    lists every client and so never builds a grade or waits to store one."""
+    wanted = set(tenant_ids)
+    rows = conn.execute("SELECT tenant_id, data FROM summary_cache WHERE kind = ?", (KIND,)).fetchall()
+    found = {r["tenant_id"]: json.loads(r["data"]).get("letter") for r in rows if r["tenant_id"] in wanted}
+    return {tid: found.get(tid) for tid in wanted}
+
+
 # -- Settings ------------------------------------------------------------------------------------
 
 

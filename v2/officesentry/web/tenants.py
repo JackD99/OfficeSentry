@@ -149,6 +149,7 @@ def dashboard():
         g.db, tenants, datetime.now(UTC), cached=True, built={r["tenant"]["id"]: r for r in rows}
     )
     review.rows.sort(key=lambda r: (bool(r.note), -r.attention, r.tenant["name"].lower()))
+    secure_tenants = [t for t in tenants if can("reports.security", t["id"])]
     return rollup_page(
         review,
         tenants,
@@ -156,6 +157,8 @@ def dashboard():
         health={r["tenant"]["id"]: r["health"] for r in rows},
         sparks={r["tenant"]["id"]: r["kpis"] for r in rows},
         get_started=get_started(),
+        # The grade column (grades.py): only clients whose findings the person sees, as last stored.
+        grade_rows=grades.stored_letters(g.db, [t["id"] for t in secure_tenants]),
     )
 
 

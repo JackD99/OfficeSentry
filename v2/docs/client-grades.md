@@ -3,8 +3,8 @@
 
 Every client gets a grade from **A** to **E**: one letter to put in front of a client, worked out the same
 way for everyone, with the rules published so you can explain exactly why a client is a C and what would
-make it a B. The grade sits beside the client's name on every page about them, first among the figures on
-their Overview, and on its own page (**Grade**, from that figure) with how it was worked out, twelve months
+make it a B. The grade sits beside the client's name on every page about them, in its own column on the
+Clients page (sort by it to see the weakest first), first among the figures on their Overview, and on its own page (**Grade**, from that figure) with how it was worked out, twelve months
 of history and how the client compares with others you look after.
 
 ## How a grade is worked out
