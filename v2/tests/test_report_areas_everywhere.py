@@ -359,11 +359,11 @@ def test_home_pages_count_only_what_the_person_sees(client, db, two_tenants):
     assert _tile(client.get("/").data.decode(), "Critical and high findings") == "0"
     accounts = client.get("/clients").data.decode()
     assert "Bravo Inc" in accounts and f"/tenants/{bravo}/projects" not in accounts
-    # First line holds no security findings: Today doesn't count them.
+    # First line holds no security findings: Today doesn't count them, nor show a figure of 0 for them.
     role_user(db, "fl", "first_line", tenants=[bravo])
     _switch(client, "fl")
     today = client.get("/today").data.decode()
-    assert _tile(today, "New critical and high") == "0" and 'data-kind="finding"' not in today
+    assert "New critical and high" not in today and 'data-kind="finding"' not in today
 
 
 @pytest.mark.parametrize("how", HOW)
