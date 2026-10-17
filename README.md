@@ -232,7 +232,6 @@ changed. Site addresses in reports and on group pages open it.
   </tr>
 </table>
 
-<!-- since 2.5.0 -->
 ### Acting on a finding
 
 Open any row of a client's Findings tab and the finding's sheet opens beside the table: the evidence behind it
@@ -244,7 +243,6 @@ keep a note on a finding and hand it to a colleague who sees that client; notes 
 team and never reach a client's reports or emails. Nothing is ever written to the client's tenant.
 
 ![A finding's sheet beside the Findings table: evidence, history, where else it fails, the fix and the ticket text](docs/screenshots/finding-sheet.png)
-<!-- /since -->
 
 ### Across all clients, and what changed
 
@@ -334,7 +332,6 @@ for. A project drops off by itself once its findings are fixed.
   </tr>
 </table>
 
-<!-- since 2.5.0 -->
 ### A grade for every client
 
 Every client gets a **grade from A to E**: one letter to put in front of a client, worked out the same way for
@@ -347,7 +344,6 @@ of the last twelve month-ends, and how the client compares with the others you l
 (the median grade, Secure Score, MFA coverage, open critical and high findings and licence waste per user), without
 naming any of them. Nothing about a client leaves your install. The rules are in
 [Client grades](v2/docs/client-grades.md).
-<!-- /since -->
 
 ### A view for clients
 
@@ -504,7 +500,7 @@ from there.
   work account
 - [Onboarding a client](v2/docs/onboarding-a-client.md): consent, Global Reader, the first collection, connection
   health and offboarding
-- [Client grades](v2/docs/client-grades.md): how a client's A to E grade is worked out, its history and comparison <!-- since 2.5.0 -->
+- [Client grades](v2/docs/client-grades.md): how a client's A to E grade is worked out, its history and comparison
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes

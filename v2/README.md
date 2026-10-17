@@ -47,13 +47,11 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
 - **Clients** (`/`): every client you look after in one sortable, filterable
   table, worst first, with the monthly review's figures, each client's data
   health and its review as a PDF.
-  <!-- since 2.5.0 -->
   Its *All reports* menu swaps the table to any other report for every client
   (`/across/<report>`): the insurance evidence pack and every detail report
   (its headline figures as the columns), limited to the clients you can see.
   New detail reports appear automatically, and `/across/review` opens the
   Clients page.
-  <!-- /since -->
   **Every row** (`/across/<report>/rows/<table>`) stacks every client's rows of one table of
   a detail report under a Client column, with the same filters, sorting, saved
   views and PDF, XLSX and CSV downloads (up to 10,000 rows a table; it says when
@@ -77,7 +75,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   default): how far back each is detailed, the last 30 days, sign-ins per day,
   each month with a CSV of every sign-in, and admin changes worth a second
   look. Each person's page shows their sign-ins by month from it.
-<!-- since 2.5.0 -->
 - **Timeline** (`/tenants/<id>/timeline`, a client's *Changes → Timeline*,
   staff only): the client's year month by month, for a review meeting. Each
   month opens with a one-line summary (findings found and fixed, Secure Score
@@ -89,7 +86,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   licences at each month's end over twelve months. Filter by kind, look back
   12 or 24 months or everything kept, and download it as PDF, XLSX or CSV.
   Each person sees only the parts whose report they open on that client.
-<!-- /since -->
 - **Coming up** (`/upcoming`): what falls due in the next 90 days across your
   clients, sorted into now, 30, 60 and 90 days and no date: subscription
   renewals and trials (lapsing ones need attention now), client app secrets and
@@ -100,14 +96,13 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   (PDF, XLSX, CSV) like a report table, and comes as a weekly email too (below).
 - **Search all clients** (the box at the top of the menu, `/search`, for
   staff): one search through the latest data of every client you can see, for
-  clients by name or domain (listed first), <!-- since 2.5.0 -->
+  clients by name or domain (listed first),
   people, groups, mailboxes, addresses mail is forwarded to (by an admin or an
   inbox rule), SharePoint sites, sign-in IP addresses, apps and app
   registrations, devices and domains. "Which clients forward to this address?"
   or "who signed in from this IP?" is one search. Each result opens the
   person's or object's page, or the detail report filtered to that row, and it
   only finds what you can open.
-  <!-- since 2.5.0 -->
   Press `/` (or Ctrl+K, ⌘K on a Mac), or click that box, to open the **jump
   box** over any page: type a few letters to land on a client, a report for
   a client ("north mfa"), a report across every client, a custom report, one
@@ -116,7 +111,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   ("north mfa pdf") for the report's file.
   Enter opens the highlighted row, and the last row searches everything for
   what you typed. While the box is empty it shows the places you opened last.
-  <!-- /since -->
 - **Home pages** (staff): **Today** (`/today`, for technicians) is a ledger of
   what happened across your clients, one line per thing, worst first, each with
   the time it happened: critical and high findings first seen or back,
@@ -141,7 +135,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   leader and Administrator by default) can accept one with a reason and an
   optional review date after today, when it comes back for review; accepted
   risks leave the totals and get their own section.
-<!-- since 2.5.0 -->
 - **A finding's sheet** (`/tenants/<id>/findings/<finding id>`, or Open on any
   row of the Findings tab, in place beside the table): the evidence behind the
   finding (for an account, the facts from its page), its history, where else
@@ -152,8 +145,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   who sees that client (`findings.note`, `hand` and `snooze`; migration 0048).
   Notes and hand-offs stay with the team: never on a client's pages, in a
   report or in an email. Nothing is ever written to the client's tenant.
-<!-- /since -->
-  <!-- since 2.5.0 -->
 - **Client grades** (`/tenants/<id>/grade`, staff with *Security findings and
   reviews*): every client's grade from A to E, the worst of five parts (admin
   accounts, sign-in and accounts, mail, devices, sharing and apps), each part
@@ -165,7 +156,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   findings table, nothing extra stored) and the comparison with the other
   clients the person sees of about the same size, none of them named. The
   rules are in [docs/client-grades.md](docs/client-grades.md).
-  <!-- /since -->
 - **Since last month**: new and fixed findings, admin role changes, new,
   disabled and deleted accounts, licences people were given or lost, and
   Conditional Access policies added, switched or edited, compared with the
