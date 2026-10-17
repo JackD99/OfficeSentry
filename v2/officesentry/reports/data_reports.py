@@ -2146,12 +2146,14 @@ def _no_longer_held(conn, snap: TenantSnapshot, collectors, report: DataReport) 
 
 
 def section_table(section: Section) -> Table:
+    """A section as one CSV table. The flag column comes first and reads as the page does ("High"), so a
+    spreadsheet is laid out like the report."""
     flagged = any(section.flags)
     rows = [
-        [str(v) if isinstance(v, Link) else v for v in row] + ([flag or ""] if flagged else [])
+        ([(flag or "").capitalize()] if flagged else []) + [str(v) if isinstance(v, Link) else v for v in row]
         for row, flag in zip(section.rows, section.flags or [None] * len(section.rows), strict=False)
     ]
-    return Table(section.title, section.columns + ([section.flag_name] if flagged else []), rows)
+    return Table(section.title, ([section.flag_name] if flagged else []) + section.columns, rows)
 
 
 def to_tables(report: DataReport) -> list[Table]:

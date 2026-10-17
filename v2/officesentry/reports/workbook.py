@@ -77,6 +77,8 @@ def _number_format(value, source) -> str | None:
     elif isinstance(value, (int, float)) and signed:
         decimals = len(text.partition(".")[2])
         shown = "0." + "0" * decimals if decimals else "0"
+    elif isinstance(value, int) and abs(value) >= 10_000:
+        return "#,##0"  # 113280 items reads as 113,280; smaller counts need no separator
     elif isinstance(value, float):
         return "#,##0.00"
     else:
@@ -136,15 +138,16 @@ class Book:
         wrap: bool = True,
         flag_name: str = "Flag",
     ):
-        """A sheet of ``rows`` under ``columns``. ``flags`` (a severity per row) add a coloured Flag column
-        (called ``flag_name``);
+        """A sheet of ``rows`` under ``columns``. ``flags`` (a severity per row) add a coloured first column
+        (called ``flag_name``) reading as the page does ("High");
         ``links`` maps (row index, column index) to an https address."""
         from openpyxl.styles import Alignment, Font, PatternFill
         from openpyxl.utils import get_column_letter
 
         ws = self.wb.create_sheet(self._name(title))
         flagged = bool(flags) and any(flags)
-        header = [printable(str(c)) for c in columns] + ([flag_name] if flagged else [])
+        first = 2 if flagged else 1  # the column the row's own values start in
+        header = ([flag_name] if flagged else []) + [printable(str(c)) for c in columns]
         ws.append(header)
         self.header(ws, 1, len(header))
         widths = [len(str(c)) + 3 for c in header]  # room for the filter button
@@ -155,11 +158,11 @@ class Book:
         for i, row in enumerate(rows):
             values = [xlsx_value(v) for v in row]
             flag = (flags[i] if flags and i < len(flags) else None) if flagged else None
-            ws.append(values + ([flag or None] if flagged else []))
+            ws.append(([flag.capitalize() if flag else None] if flagged else []) + values)
             r = ws.max_row
-            for col, v in enumerate(values, 1):
+            for col, v in enumerate(values, first):
                 cell = ws.cell(r, col)
-                if number_format := _number_format(v, row[col - 1]):
+                if number_format := _number_format(v, row[col - first]):
                     cell.number_format = number_format
                 w = _width(v)
                 if col <= len(widths):
@@ -167,11 +170,12 @@ class Book:
                     if w > MAX_WIDTH or (isinstance(v, str) and "\n" in v):
                         long_cols.add(col)
             if flag in FLAG_FILLS:
-                cell = ws.cell(r, len(header))
+                cell = ws.cell(r, 1)
                 cell.fill = PatternFill("solid", fgColor=FLAG_FILLS[flag][0])
                 cell.font = Font(bold=True, color=FLAG_FILLS[flag][1])
+                widths[0] = max(widths[0], len(flag) + 1)
             for ci, href in by_row.get(i, ()):
-                cell = ws.cell(r, ci + 1)
+                cell = ws.cell(r, ci + first)
                 cell.hyperlink = href
                 cell.font = Font(color="1D4ED8", underline="single")
         for col, w in enumerate(widths, 1):

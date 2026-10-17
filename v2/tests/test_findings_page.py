@@ -145,8 +145,8 @@ def test_downloads_apply_the_view(client, db, two_tenants):
             )
         )
     )
-    assert rows[0] == ["Account or item", "Check", "Detail", "First seen", "Severity"]
-    assert len(rows) > 1 and {r[-1] for r in rows[1:]} == {"high"}
+    assert rows[0] == ["Severity", "Account or item", "Check", "Detail", "First seen"]
+    assert len(rows) > 1 and {r[0] for r in rows[1:]} == {"High"}
     book = load_workbook(io.BytesIO(client.get(f"/tenants/{alpha}/findings.xlsx?{view}").data))
     assert "Open findings" in book.sheetnames and "Accepted risks" in book.sheetnames
     sheet = book["Open findings"]

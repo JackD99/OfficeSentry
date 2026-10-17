@@ -126,17 +126,17 @@ def test_rows_downloads_keep_the_view(client, db, two_tenants, widgets):
     resp = client.get("/across/widgets/rows/widgets.csv?f=widgets/state:bad&hide=widgets/count")
     assert resp.mimetype == "text/csv" and "attachment" in resp.headers["Content-Disposition"]
     rows = _csv(resp.data)
-    assert rows[0] == ["Client", "Widget", "State", "Flag"]
-    assert rows[1:] == [["Alpha Ltd", "Alpha w2", "bad", "high"], ["Bravo Inc", "Bravo w2", "bad", "high"]]
+    assert rows[0] == ["Flag", "Client", "Widget", "State"]  # the flag first, as on the page
+    assert rows[1:] == [["High", "Alpha Ltd", "Alpha w2", "bad"], ["High", "Bravo Inc", "Bravo w2", "bad"]]
     resp = client.get("/across/widgets/rows/widgets.xlsx?sort=widgets/widget:desc")
     assert resp.status_code == 200
     wb = load_workbook(io.BytesIO(resp.data))
     assert wb["Summary"]["A2"].value == "All clients"
     sheet = wb.worksheets[1]
     values = [[c.value for c in row] for row in sheet.iter_rows()]
-    header = next(i for i, row in enumerate(values) if row[0] == "Client")
-    assert values[header][:3] == ["Client", "Widget", "State"]
-    assert [row[1] for row in values[header + 1 : header + 5]] == ["Bravo w2", "Bravo w1", "Alpha w2", "Alpha w1"]
+    header = next(i for i, row in enumerate(values) if row[0] == "Flag")
+    assert values[header][:4] == ["Flag", "Client", "Widget", "State"]
+    assert [row[2] for row in values[header + 1 : header + 5]] == ["Bravo w2", "Bravo w1", "Alpha w2", "Alpha w1"]
     assert len(wb.sheetnames) == 2  # only the table asked for
     assert client.get("/across/widgets/rows/widgets.pdf").status_code == 200
     assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'rollup_downloaded'").fetchone()[0] == 3
