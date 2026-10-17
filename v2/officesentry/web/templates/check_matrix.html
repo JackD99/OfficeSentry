@@ -3,7 +3,7 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, sev_counts, downloads %}
 {% from "_across.html" import across_head with context %}
-{% block title %}Checks · All clients · Office Sentry{% endblock %}
+{% block title %}Checks · Clients · Office Sentry{% endblock %}
 {% macro check_href(t, key, c) -%}
 {% if c.status == 'accepted' %}{{ url_for('reports.tenant_findings', tenant_id=t.id, view='accepted') }}#check-{{ key }}
 {%- else %}{{ url_for('reports.tenant_findings', tenant_id=t.id) }}#check-{{ key }}{% endif %}
@@ -21,7 +21,7 @@
 {%- else %}<span class="muted" title="{{ c.summary }}"><span class="chk unavailable"></span> Not checked</span>{% endif %}
 {%- endmacro %}
 {% block content %}
-{{ across_head('checks', main) }}
+{{ across_head('checks', main, count=matrix.rows|length) }}
 
 {% if not matrix.rows %}
 <div class="card empty">

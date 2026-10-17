@@ -1,0 +1,154 @@
+{#- The Clients page (tenants.dashboard, key 'review'): every client the person looks after with the monthly
+    review's figures side by side, data health and the monthly review; and the same page for any other report
+    picked above the table (across.rollup): that report's headline figures, one row per client. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, sev_counts, sev_legend, downloads, page_link with context %}
+{% from "_across.html" import clients_head, across_bar with context %}
+{% from "_get_started.html" import get_started as get_started_card %}
+{% set review = key == 'review' %}
+{% block title %}{% if not review %}{{ rollup.title }} · {% endif %}Clients · Office Sentry{% endblock %}
+{% macro cell(row, c) -%}
+{% set v = row.values.get(c.key) %}
+{% if c.kind == 'sev' %}{% if v is not none %}{{ sev_counts(v) }}{% else %}<span class="faint">–</span>{% endif %}
+{% elif v is none or v == '' %}<span class="faint">–</span>
+{% elif c.kind == 'status' %}<span class="pill {{ row.tones.get(c.key, '') }}">{{ v }}</span>
+{% elif c.kind == 'money' %}{{ v|money(rollup.currency) }}
+{% elif c.kind == 'pct' %}{{ '%g'|format(v) }}%
+{% elif c.kind == 'num' %}{{ '%g'|format(v) }}
+{% else %}{% if row.tones.get(c.key) %}<span class="dot {{ row.tones[c.key] }}"></span> {% endif %}{{ v }}{% endif %}
+{% set d = row.deltas.get(c.key) %}{% if d %} <span class="delta {{ 'flat' if not c.better else ('better' if (d > 0) == (c.better == 'up') else 'worse') }} tiny">{{ '%+g'|format(d) }}</span>{% endif %}
+{%- endmacro %}
+{#- On the Clients page a Secure Score or MFA figure carries its last 90 days under it, as the tiles do. -#}
+{% macro figure(row, c) -%}
+{% set k = sparks[row.tenant.id][c.key] if review and sparks and row.tenant.id in sparks and c.key in sparks[row.tenant.id] else none %}
+{% if k and k.spark_label and row.values.get(c.key) is not none %}<span class="kpi-cell"><span>{{ cell(row, c) }}</span>{{ sparkline(k.spark, label=row.tenant.name ~ ': ' ~ k.spark_label, width=64, height=16)|safe }}</span>{% else %}{{ cell(row, c) }}{% endif %}
+{%- endmacro %}
+{% macro tenant_href(t) -%}
+{% if rollup.tenant_link == 'evidence' %}{{ url_for('reports.evidence_pack', tenant_id=t.id) }}
+{% elif rollup.tenant_link == 'data' %}{{ url_for('reports.data_report', tenant_id=t.id, key=rollup.key) }}
+{% else %}{{ url_for('tenants.tenant', tenant_id=t.id) }}{% endif %}
+{%- endmacro %}
+{% macro figure_href(t, link) -%}
+{% if link[0] == 'findings' %}{{ url_for('reports.tenant_findings', tenant_id=t.id) }}
+{%- elif link[0] == 'changes' %}{{ url_for('across.tenant_changes', tenant_id=t.id) }}
+{%- else %}{{ url_for('reports.data_report', tenant_id=t.id, key=link[0]) }}{{ link[1] }}{% endif %}
+{%- endmacro %}
+{% block content %}
+{{ clients_head(rollup.rows|length) }}
+{% if get_started %}{{ get_started_card(get_started) }}{% endif %}
+
+{% if not rollup.rows %}
+{% if not review %}{{ across_bar(key, main, 'tenants' if rollup.tenant_link == 'data' else '') }}{% endif %}
+{% if not get_started %}
+<div class="card empty">
+  {% if review and can('settings.manage') %}
+  <h3>No clients yet</h3>
+  <p>Sign in to Microsoft once so Office Sentry can create its read-only app, then add each client.</p>
+  <a class="btn primary" href="{{ url_for('admin.connections') }}">Set up the app connection</a>
+  {% elif can('clients.manage') %}
+  <h3>No clients yet</h3>
+  <p>Add a client to see it here.</p>
+  <a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add client</a>
+  {% else %}
+  <h3>No clients to show</h3>
+  <p>You haven't been given access to any clients yet. Ask an admin to grant access.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% else %}
+{% set sec = can('reports.security') %}
+{#- The report picked, then its figures and its table, as on Every row and Checks. -#}
+{{ across_bar(key, main, 'tenants' if rollup.tenant_link == 'data' else '') }}
+{% if review %}
+{#- The answer first: how the clients stand, counted over the ones whose figures this person opens. -#}
+<div class="tiles">
+  <div class="tile"><div class="label">Clients</div><div class="value">{{ rollup.rows|length }}</div>
+    <div class="foot">{{ summary.up_to_date }} up to date{% if summary.data_issues %}, <span class="warn-text">{{ summary.data_issues }} with data problems</span>{% endif %}</div></div>
+  {% if sec %}<div class="tile{{ ' tone-warn' if summary.urgent }}"><div class="label">Need urgent attention</div><div class="value">{{ summary.urgent }}</div>
+    <div class="foot">with critical or high findings</div></div>
+  <div class="tile{{ ' tone-bad' if summary.severe }}"><div class="label">Critical and high findings</div>
+    <div class="value{{ ' has-spark' if summary.severe_trend }}"><span>{{ summary.severe }}</span>{% if summary.severe_trend %}{{ sparkline(summary.severe_trend.values, label=summary.severe_trend.label)|safe }}{% endif %}</div>
+    <div class="foot">across {{ group_scope.group.name if group_scope and group_scope.group else 'all clients' }}</div></div>{% endif %}
+  {% if can('reports.tenant') %}<div class="tile"><div class="label">Average Secure Score</div>
+    <div class="value{{ ' has-spark' if summary.score_trend }}"><span>{{ '%.0f%%'|format(summary.avg_score) if summary.avg_score is not none else '–' }}</span>{% if summary.score_trend %}{{ sparkline(summary.score_trend.values, label=summary.score_trend.label)|safe }}{% endif %}</div>
+    <div class="foot">{% if summary.scored %}across {{ summary.scored|plural('client') }} with a score{% else %}no scores collected yet{% endif %}</div></div>{% endif %}
+</div>
+{% else %}
+<div class="tiles">
+  <div class="tile"><div class="label">Clients</div><div class="value">{{ rollup.rows|length }}</div>
+    <div class="foot">that you look after</div></div>
+  <div class="tile{% if rollup.with_attention %} tone-warn{% endif %}"><div class="label">Need attention</div><div class="value">{{ rollup.with_attention }}</div>
+    <div class="foot">{% if rollup.key == 'evidence' %}with controls partly or not in place{% else %}with rows flagged for review{% endif %}</div></div>
+  <div class="tile"><div class="label">No data for this report</div><div class="value">{{ rollup.without_data }}</div>
+    <div class="foot">{% if rollup.without_data %}the reason is under each client's name{% else %}every client has data{% endif %}</div></div>
+</div>
+{% endif %}
+
+{#- The monthly review column: each client's review to open or download, for someone who reads findings. -#}
+{% set reviews = review and sec %}
+<div class="card flush">
+  <div class="card-head toolbar">
+    <div>
+      <h2>{{ rollup.title }} <span class="count-badge">{{ rollup.rows|length }}</span></h2>
+      <p class="muted small m0">{{ rollup.description }}</p>
+      {% if columns|selectattr('kind', 'equalto', 'sev')|first %}{{ sev_legend('Coloured counts') }}{% endif %}
+    </div>
+    <div class="toolbar-actions">
+      {% if rollup.rows|length > 5 %}<input class="search sm" type="search" data-filter="rollup-table" placeholder="Filter clients…" aria-label="Filter clients">{% endif %}
+      {{ downloads([('PDF', url_for('across.rollup_pdf', key=rollup.key), ''),
+                    ('XLSX', url_for('across.rollup_download', key=rollup.key, ext='xlsx'), ''),
+                    ('CSV', url_for('across.rollup_download', key=rollup.key, ext='csv'), '')]) }}
+    </div>
+  </div>
+  <div class="table-scroll{{ ' tall' if rollup.rows|length > 12 }}"{% if rollup.scrolls %} data-scrolls="{{ rollup.scrolls }}"{% endif %}>
+  {% set figures = rollup|figure_columns %}
+  <table class="stack-sm sortable" id="rollup-table">
+    <thead><tr>
+      <th aria-sort="none"><button type="button" class="sort">Client</button></th>
+      {% for c in columns %}<th class="{{ 'num' if c.kind in ('num', 'pct', 'money') or c.key in figures }}" aria-sort="none"{% if c.hint %} title="{{ c.hint }}"{% endif %}><button type="button" class="sort">{{ c.label }}</button></th>{% endfor %}
+      {% if reviews %}<th title="Each client's monthly review as a PDF">Review</th>{% endif %}
+    </tr></thead>
+    <tbody>
+    {% for row in rollup.rows %}{% set t = row.tenant %}
+    {% set state = health[t.id] if review and health and t.id in health else none %}
+    <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}">
+      <td class="tenant-col" data-sort="{{ t.name|lower }}">{{ page_link(tenant_href(t)|trim, t.name, 'strong') }}
+        {% if review %}<span class="sub">{{ t.tenant_ref|wrappable }}</span>{% endif %}
+        {% if state and state[0] != 'ok' %}<span class="pill {{ state[0] }}"{% if state[2] %} title="{{ state[2] }}"{% endif %}>{{ state[1] }}</span>
+        {% elif row.note %}<span class="sub muted">{{ row.note }}</span>{% endif %}</td>
+      {% if row.note %}
+      <td colspan="{{ columns|length + (1 if reviews else 0) }}" class="muted" data-label="Status">{{ 'No data yet' if review else 'Not available' }}</td>
+      {% else %}
+      {% for c in columns %}{% set sv = row.sort_value(c) %}
+      {% set link = row.links.get(c.key) %}
+      <td class="{{ 'num' if c.kind in ('num', 'pct', 'money') or c.key in figures }}" data-label="{{ c.label }}" data-sort="{{ '' if sv is none else sv }}">
+        {%- if not can(cell_capability[c.key], t.id) %}<span class="faint">–</span>
+        {%- elif link and row.values.get(c.key) not in (none, '') and can_open(figure_href(t, link)) %}<a class="figure-link" href="{{ figure_href(t, link) }}" title="Open {{ t.name }}: {{ c.label }}">{{ figure(row, c) }}</a>{% else %}{{ figure(row, c) }}{% endif %}</td>
+      {% endfor %}
+      {% if reviews %}<td data-label="Review">{% if t.consented_at and can('reports.security', t.id) %}{% if can('export', t.id) %}<a class="btn sm ghost" href="{{ url_for('reports.tenant_report_pdf', tenant_id=t.id) }}" title="Download {{ t.name }}'s monthly review as a PDF">{{ icon('download') }} PDF</a>{% else %}<a class="btn sm ghost" href="{{ url_for('reports.tenant_report', tenant_id=t.id) }}" title="Open {{ t.name }}'s monthly review">Open</a>{% endif %}
+        {% else %}<span class="faint">–</span>{% endif %}</td>{% endif %}
+      {% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+    {% if total %}
+    <tfoot><tr class="total-row">
+      <th scope="row" class="tenant-col">Total <span class="sub muted">{{ (rollup.rows|length - rollup.without_data)|plural('client') }}</span></th>
+      {% for c in columns %}{% set v = total.values.get(c.key) %}
+      <td class="{{ 'num' if c.kind in ('num', 'pct', 'money') or c.key in figures }}" data-label="{{ c.label }}">{% if v is none %}<span class="faint" title="Not added up: this figure isn't a count or amount in every client">–</span>
+        {%- elif c.kind == 'status' %}<span class="small" title="Clients with this control in place">{{ v }} in place</span>
+        {%- elif c.kind == 'num' and v == v|int %}{{ '{:,}'.format(v|int) }}
+        {%- else %}{{ cell(total, c) }}{% endif %}</td>
+      {% endfor %}
+      {% if reviews %}<td></td>{% endif %}
+    </tr></tfoot>
+    {% endif %}
+  </table>
+  </div>
+</div>
+<p class="footnote">{% if review %}The small figure after a value (such as +2) is its change over the last 4 weeks: green is better, red is worse; the line under a figure is its last 90 days. Licence waste counts licences that are unassigned or held by disabled or inactive users, priced under <em>Licence prices</em>.{% else %}{{ rollup.footnote }}{% endif %} Select a column heading to sort, or a figure to open the rows behind it.{% if rollup.tenant_link == 'data' and picker %} To filter or download the rows themselves from every client, use <a href="{{ url_for('across.rows_index', key=rollup.key) }}">Every row</a>.{% endif %}</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

@@ -44,11 +44,17 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   job ("Offboarding check", "Insurance renewal", "Storage cleanup"...), opened
   for one client or across all of them, with your custom reports and saved
   views at the top. The search also finds clients and settings.
-- **All clients** (`/across/<report>`): a sortable, filterable table with one row
-  per client for the monthly review, the insurance evidence pack and every
-  detail report (its headline figures as the columns), limited to the clients
-  you can see. New detail reports appear automatically. **Every row**
-  (`/across/<report>/rows/<table>`) stacks every client's rows of one table of
+- **Clients** (`/`): every client you look after in one sortable, filterable
+  table, worst first, with the monthly review's figures, each client's data
+  health and its review as a PDF.
+  <!-- since 2.5.0 -->
+  Its *All reports* menu swaps the table to any other report for every client
+  (`/across/<report>`): the insurance evidence pack and every detail report
+  (its headline figures as the columns), limited to the clients you can see.
+  New detail reports appear automatically, and `/across/review` opens the
+  Clients page.
+  <!-- /since -->
+  **Every row** (`/across/<report>/rows/<table>`) stacks every client's rows of one table of
   a detail report under a Client column, with the same filters, sorting, saved
   views and PDF, XLSX and CSV downloads (up to 10,000 rows a table; it says when
   it stops there). **Checks** (`/across/checks`) is every check for every client
@@ -217,7 +223,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   name and reused on any client. Downloads contain the rows and columns shown.
   The busiest tables have a bar chart that follows the filters (click a bar for
   its rows), and headline figures carry a line of their last 90 days.
-  Every headline number opens the rows behind it, here and on All clients.
+  Every headline number opens the rows behind it, here and on the Clients page.
   *Show as it was on* (`?on=`) shows a report, its PDF and its XLSX as the
   client was at the end of any earlier day the kept data reaches back to (the
   daily history, 25 months by default), with a link to what changed since then.
@@ -856,7 +862,7 @@ and follows it through consent, Global Reader and its first collection.
   users; restorable).
 - **Client groups** (*Settings → Client groups*) sort clients by tier, region,
   service level or anything else; a client can be in several. Pick a group at
-  the top of the Clients dashboard, All clients, What changed, Month-end or
+  the top of the Clients page, What changed, Month-end or
   Client settings to see only those clients, with downloads to match, and give
   a digest one group instead of every client. Groups never show anyone more:
   the only way a group grants access is someone who manages users ticking it

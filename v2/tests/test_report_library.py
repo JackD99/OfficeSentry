@@ -435,7 +435,7 @@ def test_rollup_figures_open_the_tenant_rows(client, db, two_tenants):
     )
     page = unescape(client.get("/across/mailboxes").get_data(as_text=True))
     assert f'href="/tenants/{alpha}/data/mailboxes?f=forwarding%2Fflag%3Amedium#t-forwarding"' in page
-    page = client.get("/across/review").get_data(as_text=True)
+    page = client.get("/").get_data(as_text=True)
     assert re.search(rf'href="/tenants/{alpha}/data/inactive#t-inactive-members"', page)
 
 
