@@ -12,7 +12,7 @@ from flask_wtf.csrf import CSRFError, CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.routing import IntegerConverter
 
-from .. import __version__, logs, system_alerts, system_health, totp, worker
+from .. import __version__, grades, logs, system_alerts, system_health, totp, worker
 from .. import sso as staff_sign_in
 from ..auditlog import addon as addon_switch
 from ..config import Config, load_config, setup_token
@@ -35,6 +35,7 @@ from . import (
     evidence,
     filters,
     finding,
+    grade,
     group_pages,
     groups,
     history,
@@ -236,6 +237,8 @@ def create_app(cfg: Config | None = None) -> Flask:
         # Whether the audit log add-on is switched on for this install (``auditlog/addon.py``): until it is,
         # nothing about it shows.
         audit_addon_on=lambda: g.get("db") is not None and addon_switch.enabled(g.db),
+        # A client's grade as last stored (grades.py), for the badge in the client header: never built there.
+        client_grade=lambda tenant_id: grades.stored_letter(g.db, tenant_id) if g.get("db") is not None else None,
     )
 
     @app.context_processor
@@ -390,6 +393,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(reports.bp)
     app.register_blueprint(finding.bp)
     app.register_blueprint(projects.bp)
+    app.register_blueprint(grade.bp)
     app.register_blueprint(email.bp)
     app.register_blueprint(alerts.bp)
     app.register_blueprint(branding.bp)
