@@ -170,6 +170,24 @@ def test_every_kind_found_needs_a_capability(app, db, two_tenants):
         assert not search_tenant(db, tenant, "zed.quinn", allowed=lambda cap: cap != "reports.people").hits
 
 
+def test_a_hit_links_only_to_a_report_its_capability_opens(app, db, two_tenants):
+    # Someone who holds one report area finds only what opens in it: a domain is found by those who open the
+    # Domains report (Email), not by everyone who opens the client's tenant reports.
+    from officesentry.web.access import report_capability
+
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, users=[*USERS, gd.INFO_USER, ZED])
+    tenant = store.get_tenant(db, alpha)
+    with app.test_request_context():
+        for cap in set(COLLECTOR_CAPABILITY.values()):
+            for q in ("x.com", ".com", "ann", "zed", "203.0.113", "app", "laptop", "parked"):
+                for hit in search_tenant(db, tenant, q, allowed=lambda c, cap=cap: c == cap).hits:
+                    path = hit.href.partition("?")[0]
+                    if "/data/" in path:
+                        assert report_capability(path.rsplit("/", 1)[1]) == cap, (cap, q, hit.href)
+        assert any(h.label == "Domain" for h in search_tenant(db, tenant, "x.com").hits)
+
+
 def test_ip_like_queries():
     assert looks_like_ip("203.0.113") and looks_like_ip("2001:db8") and looks_like_ip("10.")
     assert not looks_like_ip("ann") and not looks_like_ip("cafe") and not looks_like_ip("2026")
