@@ -241,7 +241,7 @@ def test_detail_report_csv_downloads_one_table(client, db, two_tenants):
     report = data_reports.build(db, db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone(), "guests")
     for i, section in enumerate(report.sections, 1):
         rows = _csv(client.get(f"/tenants/{alpha}/data/guests.csv?section={i}").data)
-        assert rows[0][: len(section.columns)] == section.columns
+        assert rows[0][-len(section.columns) :] == section.columns  # after the flag column, when there is one
         assert len(rows) == len(section.rows) + 1
     assert client.get(f"/tenants/{alpha}/data/guests.csv?section=99").status_code == 404
     assert client.get(f"/tenants/{alpha}/data/nope.csv").status_code == 404
