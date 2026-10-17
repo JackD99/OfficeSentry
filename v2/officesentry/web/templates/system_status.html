@@ -4,7 +4,7 @@
 {% set TONE = {'ok': 'ok', 'warn': 'warn', 'fail': 'bad'} %}
 {% set WORD = {'ok': 'Working', 'warn': 'Needs attention', 'fail': 'Not working'} %}
 {% block content %}
-<div class="page-head"><div><h1>System status</h1>
+<div class="page-head"><div><h2 class="page-title">System status</h2>
   <div class="sub">Whether Office Sentry itself is working: the worker, collection, backups and disk. Checked {{ ts(health.checked_at.strftime('%Y-%m-%dT%H:%M:%SZ')) }}.</div></div>
   <span class="pill {{ TONE[health.status] }}">{{ WORD[health.status] }}</span></div>
 

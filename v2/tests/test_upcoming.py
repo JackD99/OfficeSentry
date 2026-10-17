@@ -324,7 +324,7 @@ def test_empty_state(client, db):
     make_user(db, "admin")
     login(client, "admin")
     page = client.get("/upcoming").get_data(as_text=True)
-    assert "No clients to show" in page
+    assert "No clients yet" in page  # an admin can add one; anyone else sees "No clients to show"
 
 
 # -- The weekly email -----------------------------------------------------------------------------

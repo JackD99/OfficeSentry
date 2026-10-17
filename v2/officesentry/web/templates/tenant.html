@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, tenant_header, change_tag with context %}
+{% from "_macros.html" import icon, ts, tenant_header, change_tag, report_directory with context %}
 {% from "_tenant_health.html" import checklist with context %}
 {% from "_grade.html" import badge %}
 {% block title %}{{ tenant.name }} · Office Sentry{% endblock %}
@@ -115,29 +115,7 @@
 <section class="card">
   <div class="card-head"><h2>Reports</h2>
     <input class="search sm" type="search" data-report-search="report-directory" placeholder="Find a report…" aria-label="Find a report"></div>
-  {% if can('reports.security', tenant.id) or can('projects.view', tenant.id) %}
-  <div class="report-links featured">
-    {% if can('reports.security', tenant.id) %}
-    <a class="report-link primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">
-      <span class="title">Monthly review {{ icon('arrow') }}</span><span class="desc">Security and licensing summary with recommendations. PDF and XLSX.</span></a>
-    <a class="report-link" href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}">
-      <span class="title">Evidence and certifications {{ icon('arrow') }}</span><span class="desc">Cyber Essentials readiness with the fixes, and answers for insurance and supplier forms.</span></a>
-    {% endif %}
-    {% if can('projects.view', tenant.id) %}
-    <a class="report-link" href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}">
-      <span class="title">Recommended projects {{ icon('arrow') }}</span><span class="desc">Work the findings call for, to propose to the client.</span></a>
-    {% endif %}
-  </div>
-  {% endif %}
-  <p class="muted small m0 no-match" hidden>No report matches that. Try a word like mailbox, admin or licence.</p>
-  <div class="report-directory" id="report-directory">
-    {% for gr in report_groups %}
-    <div class="report-group">
-      <h3>{{ gr.title }}</h3>
-      <ul>{% for key, title, desc in gr.reports %}<li data-name="{{ (title ~ ' ' ~ desc ~ ' ' ~ gr.title)|lower }}"><a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=key) }}" title="{{ desc }}">{{ title }}</a></li>{% endfor %}</ul>
-    </div>
-    {% endfor %}
-  </div>
+  {{ report_directory(tenant) }}
 </section>
 
 <p class="footnote data-line">

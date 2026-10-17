@@ -35,7 +35,7 @@
 </form></li>
 {%- endmacro %}
 {% block content %}
-<div class="crumbs"><a href="{{ url_for('reporting.queue', period=period) }}">Month-end · {{ label }}</a><span>/</span><span>{{ tenant.name }}</span></div>
+<div class="crumbs"><a href="{{ url_for('reporting.index') }}">Month-end</a><span>/</span><a href="{{ url_for('reporting.queue', period=period) }}">{{ label }}</a><span>/</span><span>{{ tenant.name }}</span></div>
 <div class="page-head">
   <div><h1>{{ tenant.name }} · {{ label }}</h1>
     <div class="sub"><span class="pill {{ STATE_PILLS[state] }}">{{ 'Published' if state == 'sent' and plan and plan.delivery == 'portal' else states[state] }}</span>

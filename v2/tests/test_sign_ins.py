@@ -2,6 +2,7 @@
 
 import copy
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from urllib.parse import parse_qs, urlsplit
@@ -225,6 +226,8 @@ def test_report_leads_with_what_to_act_on(db, two_tenants):
         "Every account",
     ]
     assert not any(sec.compare for sec in report.sections)
+    # The footnote dates the window in words, as the rest of the page does, not as an ISO date.
+    assert re.search(r"Interactive sign-ins since \d{1,2} [A-Z][a-z]{2} \d{4}, from", report.footnote), report.footnote
     repeated = s["Accounts with repeated failures"]
     assert [r[0] for r in repeated.rows] == ["bob@x.com"] and repeated.flags == ["high"]
     assert repeated.rows[0][1:5] == [9, 8, 1, 0] and repeated.rows[0][-1] == "Account is disabled"

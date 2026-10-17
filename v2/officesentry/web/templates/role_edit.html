@@ -2,8 +2,8 @@
 {% from "_macros.html" import icon, csrf %}
 {% block title %}{{ role.name }} · Roles{% endblock %}
 {% block content %}
-<div class="crumbs"><a href="{{ url_for('admin.users') }}">Users</a><span>/</span><a href="{{ url_for('roles.index') }}">Roles</a><span>/</span><span>{{ role.name }}</span></div>
-<div class="page-head"><div><h1>{{ role.name }}</h1>
+<div class="crumbs"><a href="{{ url_for('roles.index') }}">&larr; Roles</a></div>
+<div class="page-head"><div><h2 class="page-title">{{ role.name }}</h2>
   <div class="sub">{{ 'Built-in' if role.built_in else 'Custom' }} role for {{ 'everyone who runs Office Sentry' if role.kind == 'admin' else 'staff' if role.kind == 'staff' else "a client's people" }}
     · {{ holders|length|plural('person', 'people') }} hold{{ 's' if holders|length == 1 else '' }} it{% if role.changed_from_template %} · changed from its default{% endif %}</div></div></div>
 

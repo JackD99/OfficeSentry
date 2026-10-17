@@ -3,7 +3,7 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, sev_counts, downloads %}
 {% from "_across.html" import across_head with context %}
-{% block title %}Checks · All clients · Office Sentry{% endblock %}
+{% block title %}Checks · Clients · Office Sentry{% endblock %}
 {% macro check_href(t, key, c) -%}
 {% if c.status == 'accepted' %}{{ url_for('reports.tenant_findings', tenant_id=t.id, view='accepted') }}#check-{{ key }}
 {%- else %}{{ url_for('reports.tenant_findings', tenant_id=t.id) }}#check-{{ key }}{% endif %}
@@ -21,7 +21,7 @@
 {%- else %}<span class="muted" title="{{ c.summary }}"><span class="chk unavailable"></span> Not checked</span>{% endif %}
 {%- endmacro %}
 {% block content %}
-{{ across_head('checks', main) }}
+{{ across_head('checks', main, count=matrix.rows|length) }}
 
 {% if not matrix.rows %}
 <div class="card empty">
@@ -57,8 +57,11 @@
     </div>
     <div class="toolbar-actions">
       {% if matrix.rows|length > 5 %}<input class="search sm" type="search" data-filter="check-matrix" placeholder="Filter clients…" aria-label="Filter clients">{% endif %}
-      {{ downloads([('XLSX', url_for('across.checks_download', ext='xlsx'), 'Every check for every client'),
-                    ('CSV', url_for('across.checks_download', ext='csv'), 'Every check for every client')]) }}
+      {#- The downloads cover what the page shows: one category's checks, or every check. -#}
+      {% set picked = {'category': slugs[chosen[0]]} if chosen else {} %}
+      {% set tip = (chosen[0] ~ ' checks for every client') if chosen else 'Every check for every client' %}
+      {{ downloads([('XLSX', url_for('across.checks_download', ext='xlsx', **picked), tip),
+                    ('CSV', url_for('across.checks_download', ext='csv', **picked), tip)]) }}
     </div>
   </div>
   <div class="table-scroll{{ ' tall' if matrix.rows|length > 12 }}">

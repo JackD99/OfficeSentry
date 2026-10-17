@@ -106,14 +106,14 @@
   'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports', 'designs': 'reports',
   'schedules': 'emails', 'projects': 'findings', 'grade': 'overview', 'collection': 'settings', 'manage': 'settings',
   'client_sign_in': 'settings', 'audit_addon': 'settings',
-  'activity': 'changes', 'mailboxes': 'users', 'group_pages': 'users', 'site_pages': 'users',
+  'activity': 'changes', 'timeline': 'changes', 'mailboxes': 'users', 'group_pages': 'users', 'site_pages': 'users',
 } %}
 
 {# Header shared by every tenant page: breadcrumb, name, actions and the tab bar. On laptops the tab bar
    stays pinned to the top of the window as the page scrolls, with the tenant's name in it (app.js).
    Staff who see more than one client get a switcher beside the name: this page for another client
    (web/switcher.py), with a filter box like the report picker's. #}
-{% macro tenant_header(tenant, active, title=None, counts=None, pin=true) -%}
+{% macro tenant_header(tenant, active, title=None, counts=None, pin=true, back=None) -%}
 {% set staff = current_user.role != 'client' %}
 {% set tid = tenant.id %}
 {% set others = client_switch(tenant.id) if staff else [] %}
@@ -179,6 +179,7 @@
 {% elif tab == 'changes' and staff %}
   {% if can('reports.changes', tid) %}{% set _ = pages.append(('changes', 'What changed', url_for('across.tenant_changes', tenant_id=tenant.id))) %}{% endif %}
   {% if can('reports.activity', tid) %}{% set _ = pages.append(('activity', 'Activity history', url_for('history.activity', tenant_id=tenant.id))) %}{% endif %}
+  {% if can('reports.changes', tid) %}{% set _ = pages.append(('timeline', 'Timeline', url_for('timeline.page', tenant_id=tenant.id))) %}{% endif %}
 {% elif tab == 'settings' and staff %}
   {% if can('collect', tid) %}{% set _ = pages.append(('collection', 'Data collection', url_for('tenants.collection', tenant_id=tenant.id))) %}{% endif %}
   {% set _ = pages.append(('manage', 'Manage', url_for('tenant_admin.manage', tenant_id=tenant.id))) %}
@@ -192,7 +193,10 @@
 </nav>
 {% endif %}
 {#- The client's name is every client page's heading; a page the tabs don't name (Recommended projects,
-    Report history) gives its own title under them, as a report does under its picker. -#}
+    Report history, a run) says which page it was opened from (back: (label, href), drawn as "← Data
+    collection" the way a person's page shows "← People") and gives its own title under them, as a report
+    does under its picker. -#}
+{% if back %}<div class="crumbs"><a href="{{ back[1] }}">&larr; {{ back[0] }}</a></div>{% endif %}
 {% if title %}<h2 class="section-title page-title">{{ title }}</h2>{% endif %}
 {%- endmacro %}
 
@@ -206,13 +210,15 @@
 {%- endmacro %}
 
 {# One "Download" control for a page's formats. links: [(label, href, title)]; only the ones the person
-   opens are drawn (can_open), and nothing when that's none of them. #}
+   opens are drawn (can_open), and nothing when that's none of them. A link without a title gets its
+   format's usual one (DOWNLOAD_TIPS), so every page explains its formats the same way. #}
+{% set DOWNLOAD_TIPS = {'PDF': 'This page as a PDF', 'XLSX': 'This page as a spreadsheet', 'CSV': 'This table as CSV'} %}
 {% macro downloads(links) -%}
 {%- set shown = [] %}{% for link in links if link[1].startswith('#') or can_open(link[1]) %}{% set _ = shown.append(link) %}{% endfor %}
 {%- if shown %}
 <div class="downloads" role="group" aria-label="Download">
   <span class="downloads-label">{{ icon('download') }}<span>Download</span></span>
-  {% for label, href, title in shown %}<a href="{{ href }}"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</a>{% endfor %}
+  {% for label, href, title in shown %}{% set title = title or DOWNLOAD_TIPS.get(label, '') %}<a href="{{ href }}"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</a>{% endfor %}
 </div>
 {%- endif %}
 {%- endmacro %}
@@ -228,6 +234,11 @@
 {% set areas = report_catalogue(tenant.id) %}
 {% set shown = ('data', 'review', 'evidence') %}
 {% set here = namespace(area='') %}
+{#- Custom reports (the MSP's own, staff only) and the person's saved views join the menu after the
+    summaries. current is 'designs' on the list of custom reports, 'design:<id>' on one of them. -#}
+{% set custom = custom_reports(tenant.id) if staff else [] %}
+{% set mine = my_views(tenant.id) %}
+{% if current == 'designs' or current.startswith('design:') %}{% set here.area = 'Custom reports' %}{% endif %}
 <nav class="report-menu" aria-label="Reports">
   <a class="skip-picker" href="#report">Skip to the report</a>
   <details class="menu report-switch" id="report-switch">
@@ -244,9 +255,28 @@
           <ul aria-labelledby="picker-{{ area.key }}">
             {% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ _picker_href(tenant, e, on) }}" title="{{ e.description }}"{% if e.key == current %} aria-current="page"{% endif %}>{{ e.title }}</a></li>
             {% endfor %}
-            {% if loop.first and staff %}<li data-name="custom reports report designs blocks"><a href="{{ url_for('designs.tenant_designs', tenant_id=tenant.id) }}" title="Your report designs, on this client's data"{% if current == 'designs' %} aria-current="page"{% endif %}>Custom reports</a></li>{% if current == 'designs' %}{% set here.area = area.title %}{% endif %}{% endif %}
           </ul>
         </div>
+        {% if loop.first and staff %}
+        <div class="report-group">
+          <p class="picker-label" id="picker-custom">Custom reports</p>
+          <ul aria-labelledby="picker-custom">
+            {% for c in custom %}<li data-name="{{ c.search }}"><a href="{{ c.href }}" title="{{ c.description or 'A custom report, on ' ~ tenant.name ~ "'s data" }}"{% if current == c.key %} aria-current="page"{% endif %}>{{ c.name }}</a></li>
+            {% endfor %}
+            <li data-name="custom reports designs blocks all"><a href="{{ url_for('designs.tenant_designs', tenant_id=tenant.id) }}" title="Every custom report, on {{ tenant.name }}'s data"{% if current == 'designs' %} aria-current="page"{% endif %}>{{ 'All custom reports' if custom else 'Custom reports' }}</a></li>
+            {% if can_open('designs.index') %}<li data-name="new custom report design blocks make build"><a class="picker-new" href="{{ url_for('designs.index') }}" title="Build a client report from blocks; it then works for every client">{{ icon('plus') }} New custom report</a></li>{% endif %}
+          </ul>
+        </div>
+        {% endif %}
+        {% if loop.first and mine %}
+        <div class="report-group">
+          <p class="picker-label" id="picker-views">Your views</p>
+          <ul aria-labelledby="picker-views">
+            {% for v in mine %}<li data-name="{{ v.search }}"><a href="{{ v.href }}" title="{{ v.report }} with the filters, columns and sort you saved as “{{ v.name }}”">{{ v.name }} <span class="picker-sub">{{ v.report }}</span></a></li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
         {% endif %}{% endfor %}
       </div>
       <p class="no-match" hidden>No report matches. The <a href="{{ url_for('reports.overview', tenant=tenant.id) }}">Reports page</a> searches by job too.</p>
@@ -257,9 +287,67 @@
 <form method="get" action="{{ url_for('reports.data_index', tenant_id=tenant.id) }}" class="picker-form report-menu-sm" data-autosubmit>
   <label for="report-key">Report</label>
   <select id="report-key" name="key">
-    {% for area in areas %}{% set entries = [] %}{% for e in area.entries if e.kind in shown and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}<optgroup label="{{ area.title }}">{% for e in entries %}<option value="{{ e.key }}"{% if e.key == current %} selected{% endif %}>{{ e.title }}</option>{% endfor %}{% if loop.first and staff %}<option value="designs"{% if current == 'designs' %} selected{% endif %}>Custom reports</option>{% endif %}</optgroup>{% endif %}{% endfor %}
+    {% for area in areas %}{% set entries = [] %}{% for e in area.entries if e.kind in shown and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}<optgroup label="{{ area.title }}">{% for e in entries %}<option value="{{ e.key }}"{% if e.key == current %} selected{% endif %}>{{ e.title }}</option>{% endfor %}</optgroup>
+    {% if loop.first and staff %}<optgroup label="Custom reports">{% for c in custom %}<option value="{{ c.key }}"{% if current == c.key %} selected{% endif %}>{{ c.name }}</option>{% endfor %}<option value="designs"{% if current == 'designs' %} selected{% endif %}>{{ 'All custom reports' if custom else 'Custom reports' }}</option></optgroup>{% endif %}
+    {% if loop.first and mine %}<optgroup label="Your views">{% for v in mine %}<option value="view:{{ v.id }}">{{ v.name }} · {{ v.report }}</option>{% endfor %}</optgroup>{% endif %}{% endif %}{% endfor %}
   </select>
   {% if on %}<input type="hidden" name="on" value="{{ on }}">{% endif %}
   <noscript><button class="btn sm">Show</button></noscript>
 </form>
+{%- endmacro %}
+{% macro report_directory(tenant) -%}
+{#- Every report for one client, as the Reports tab (report_index.html) and the overview's Reports card show
+    it: the summaries as featured cards, the MSP's custom reports and the person's saved views, then every
+    detail report by area; the same entries as report_picker. Each item carries data-name for the card's
+    search box (data-report-search="report-directory"), whose no-match line sits beside this. -#}
+{% set staff = current_user.role != 'client' and can('reports.security', tenant.id) %}
+{% set areas = report_catalogue(tenant.id) %}
+{% set custom = custom_reports(tenant.id) if staff else [] %}
+{% set mine = my_views(tenant.id) %}
+{% set projects = can('projects.view', tenant.id) %}
+{% set featured = [] %}{% for e in areas[0].entries if e.kind in ('review', 'evidence') and can(entry_capability(e), tenant.id) %}{% set _ = featured.append(e) %}{% endfor %}
+<p class="muted small m0 no-match" hidden>No report matches that. Try a word like mailbox, admin or licence.</p>
+<div id="report-directory">
+  {% if featured or projects %}
+  <div class="report-group report-links featured">
+    {% for e in featured %}
+    <a class="report-link{% if loop.first %} primary{% endif %}" href="{{ _picker_href(tenant, e, none) }}" data-name="{{ e.search }}">
+      <span class="title">{{ e.title }} {{ icon('arrow') }}</span><span class="desc">{{ e.description }}</span></a>
+    {% endfor %}
+    {% if projects %}
+    <a class="report-link" href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}" data-name="recommended projects proposal quote work the findings call for">
+      <span class="title">Recommended projects {{ icon('arrow') }}</span><span class="desc">Work the findings call for, to propose to the client.</span></a>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if staff or mine %}
+  <div class="report-own">
+    {% if staff %}
+    <div class="report-group">
+      <h3>Custom reports</h3>
+      <div class="opts">
+        {% for c in custom %}<a class="opt" href="{{ c.href }}" data-name="{{ c.search }}" title="{{ c.description or 'A custom report, on ' ~ tenant.name ~ "'s data" }}">{{ c.name }}</a>
+        {% endfor %}<a class="opt" href="{{ url_for('designs.tenant_designs', tenant_id=tenant.id) }}" data-name="custom reports designs blocks all" title="Every custom report, on {{ tenant.name }}'s data{% if not custom %}: none yet{% endif %}">{{ 'All custom reports' if custom else 'Custom reports' }}</a>
+        {% if can_open('designs.index') %}<a class="opt new" href="{{ url_for('designs.index') }}" data-name="new custom report design blocks make build" title="Build a client report from blocks; it then works for every client">{{ icon('plus') }} New custom report</a>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% if mine %}
+    <div class="report-group">
+      <h3>Your views</h3>
+      <div class="opts">{% for v in mine %}<a class="opt" href="{{ v.href }}" data-name="{{ v.search }}" title="{{ v.report }} with the filters, columns and sort you saved as “{{ v.name }}”">{{ v.name }}<span class="n">{{ v.report }}</span></a>
+        {% endfor %}</div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+  <div class="report-directory">
+    {% for area in areas[1:] %}{% set entries = [] %}{% for e in area.entries if e.kind == 'data' and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}
+    <div class="report-group">
+      <h3>{{ area.title }}</h3>
+      <ul>{% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=e.key) }}" title="{{ e.description }}">{{ e.title }}</a></li>{% endfor %}</ul>
+    </div>
+    {% endif %}{% endfor %}
+  </div>
+</div>
 {%- endmacro %}

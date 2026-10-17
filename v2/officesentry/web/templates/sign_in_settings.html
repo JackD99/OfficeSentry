@@ -6,7 +6,7 @@
 {% set status = sign_in.status if sign_in else none %}
 {% set active = status in ('waiting', 'working') %}
 {% set c = cloud_of({'cloud': s.sso_cloud or 'commercial'}) %}
-<div class="page-head"><div><h1>Microsoft sign-in</h1>
+<div class="page-head"><div><h2 class="page-title">Microsoft sign-in</h2>
   <div class="sub">How your team, and your clients' people if you like, sign in to Office Sentry with their Microsoft work account.</div></div>
   {% if enabled %}<div class="actions"><a class="btn" href="{{ admin_centre }}" target="_blank" rel="noopener noreferrer">Assign people in Entra {{ icon('arrow') }}</a></div>{% endif %}</div>
 
