@@ -838,11 +838,15 @@ td.tenant-col { min-width: 190px; max-width: 20em; } /* a long client name wraps
 .report-menu-sm { display: none; margin: 0 0 var(--space-4); }
 .report-menu-sm label { font-weight: 500; }
 .report-menu-sm select { flex: 1; min-width: 0; font-weight: 600; }
-.toolbar.report-title { align-items: flex-end; }
-/* The title and its description share a row with the report's buttons, which keep to the right. */
-.report-main > .toolbar.report-title { flex-wrap: nowrap; align-items: flex-start; margin-bottom: var(--space-3-5); }
-.report-main > .toolbar.report-title > div:first-child { flex: 1 1 auto; min-width: 0; max-width: 760px; }
-.report-main > .toolbar.report-title .toolbar-actions { flex: none; justify-content: flex-end; padding-top: var(--space-0-5); }
+/* The title row of a report (a client's, Every row, evidence): the title and its description share a row with the
+   page's buttons, which keep to the right. The description keeps to the footnote's measure, as do the notices and
+   the "Not available" note under it, so a line stays readable at any width. */
+.toolbar.report-title { flex-wrap: nowrap; align-items: flex-start; margin-bottom: var(--space-3-5); }
+.toolbar.report-title > div:first-child { flex: 1 1 auto; min-width: 0; max-width: 760px; }
+.toolbar.report-title .toolbar-actions { flex: none; justify-content: flex-end; padding-top: var(--space-0-5); }
+.toolbar.report-title > div:first-child > p { max-width: 70ch; }
+.report-main > .callout:not(.verdict-callout) > div, .report-main > .card.empty > p { max-width: 70ch; }
+.report-main > .card.empty > p { margin-left: auto; margin-right: auto; }
 /* Headline figures sit in one row beside the picker, so the table starts higher. */
 .report-main .tiles { grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); margin-bottom: var(--space-4); }
 .report-main .tile { padding: var(--space-3) var(--space-3-5); }
@@ -850,8 +854,8 @@ td.tenant-col { min-width: 190px; max-width: 20em; } /* a long client name wraps
 .report-main .tile .value.wordy { white-space: normal; }
 @media (max-width: 640px) { .report-main .tile .value { white-space: normal; } } /* "+3.8 GB a month" wraps in a half-width tile */
 @media (max-width: 1100px) {
-  .report-main > .toolbar.report-title { flex-wrap: wrap; }
-  .report-main > .toolbar.report-title .toolbar-actions { flex: 1 1 auto; justify-content: flex-start; }
+  .toolbar.report-title { flex-wrap: wrap; }
+  .toolbar.report-title .toolbar-actions { flex: 1 1 auto; justify-content: flex-start; }
 }
 @media (max-width: 960px) {
   .report-menu { display: none; }

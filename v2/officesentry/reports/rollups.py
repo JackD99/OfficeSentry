@@ -339,6 +339,13 @@ def _decode(value):
     return value
 
 
+def to_review(report: DataReport) -> set[str]:
+    """What a report flags for review, each once: the first-column value of every row flagged critical, high
+    or medium, across its tables. A mailbox that both forwards outside and is over its quota is one mailbox
+    to review, so the All clients count never exceeds what the client has."""
+    return {str(s.rows[i][0]) for s in report.sections for i, f in enumerate(s.flags) if f in views.REVIEW}
+
+
 def _data_row(
     conn, tenant, key: str, now: datetime, stored: Rows | None, snap: TenantSnapshot | None = None, built=None
 ) -> dict:
@@ -354,7 +361,7 @@ def _data_row(
         report = data_reports.build(conn, tenant, key, now, snap=snap)
     data = {"note": report.unavailable or "", "flagged": 0, "flag_link": "", "headlines": [], "tables": []}
     if not report.unavailable:
-        data["flagged"] = sum(s.flagged for s in report.sections)
+        data["flagged"] = len(to_review(report))
         data["flag_link"] = views.flagged_link(report) if data["flagged"] else ""
         targets = views.headline_links(report)
         for h, href in zip(
@@ -397,7 +404,9 @@ def data_rollup(
     for _t, data in built:
         items = [h[0] for h in data["headlines"]] if use_headlines else [tb[0] for tb in data["tables"]]
         labels += [x for x in items if x not in labels]
-    columns = [Column("_flagged", "To review", hint="Rows flagged critical, high or medium")]
+    columns = [
+        Column("_flagged", "To review", hint="Accounts, mailboxes or items flagged critical, high or medium, each once")
+    ]
     columns += [Column(f"c:{name}", name, "text" if use_headlines else "num") for name in labels]
     rows = []
     for t, data in built:
@@ -601,19 +610,31 @@ class CheckMatrix:
 
     @property
     def with_failures(self) -> int:
-        return sum(1 for r in self.rows if r.count("fail"))
+        return self.with_failures_in(self.checks)
 
-    def to_table(self) -> Table:
+    def with_failures_in(self, checks: list[tuple[str, str, str]]) -> int:
+        """Clients with a failing check among ``checks``."""
+        return sum(1 for r in self.rows if any(c.status == "fail" for c in self._cells(r, checks)))
+
+    @staticmethod
+    def _cells(row: CheckRow, checks: list[tuple[str, str, str]]) -> list[CheckCell]:
+        return [row.cells[k] for k, _t, _c in checks if k in row.cells]
+
+    def to_table(self, checks: list[tuple[str, str, str]] | None = None) -> Table:
+        """Every client's result for every check, or for ``checks`` alone (one category, as the page shows it),
+        with the counts over those checks."""
+        checks = self.checks if checks is None else checks
         header = ["Client", "Tenant ID", "Failing", "Accepted", "Not checked", "Note"]
-        header += [f"{category}: {title}" for _key, title, category in self.checks]
+        header += [f"{category}: {title}" for _key, title, category in checks]
         rows = []
         for r in self.rows:
             line = [r.tenant["name"], r.tenant["tenant_ref"]]
             if r.note:
-                rows.append(line + ["", "", "", r.note] + [""] * len(self.checks))
+                rows.append(line + ["", "", "", r.note] + [""] * len(checks))
                 continue
-            line += [r.count("fail"), r.count("accepted"), r.count("unavailable"), ""]
-            line += [r.cells[k].label if k in r.cells else "" for k, _t, _c in self.checks]
+            cells = self._cells(r, checks)
+            line += [sum(1 for c in cells if c.status == status) for status in ("fail", "accepted", "unavailable")]
+            line += [""] + [r.cells[k].label if k in r.cells else "" for k, _t, _c in checks]
             rows.append(line)
         return Table("Checks", header, rows)
 
