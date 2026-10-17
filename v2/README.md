@@ -42,13 +42,19 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   summary pages on their own.
 - **Reports** (`/reports`): every report in one searchable page, by area and by
   job ("Offboarding check", "Insurance renewal", "Storage cleanup"...), opened
-  for one client or across all of them. The search also finds clients and
-  settings, and lists your saved views.
-- **All clients** (`/across/<report>`): a sortable, filterable table with one row
-  per client for the monthly review, the insurance evidence pack and every
-  detail report (its headline figures as the columns), limited to the clients
-  you can see. New detail reports appear automatically. **Every row**
-  (`/across/<report>/rows/<table>`) stacks every client's rows of one table of
+  for one client or across all of them, with your custom reports and saved
+  views at the top. The search also finds clients and settings.
+- **Clients** (`/`): every client you look after in one sortable, filterable
+  table, worst first, with the monthly review's figures, each client's data
+  health and its review as a PDF.
+  <!-- since 2.5.0 -->
+  Its *All reports* menu swaps the table to any other report for every client
+  (`/across/<report>`): the insurance evidence pack and every detail report
+  (its headline figures as the columns), limited to the clients you can see.
+  New detail reports appear automatically, and `/across/review` opens the
+  Clients page.
+  <!-- /since -->
+  **Every row** (`/across/<report>/rows/<table>`) stacks every client's rows of one table of
   a detail report under a Client column, with the same filters, sorting, saved
   views and PDF, XLSX and CSV downloads (up to 10,000 rows a table; it says when
   it stops there). **Checks** (`/across/checks`) is every check for every client
@@ -71,6 +77,19 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   default): how far back each is detailed, the last 30 days, sign-ins per day,
   each month with a CSV of every sign-in, and admin changes worth a second
   look. Each person's page shows their sign-ins by month from it.
+<!-- since 2.5.0 -->
+- **Timeline** (`/tenants/<id>/timeline`, a client's *Changes → Timeline*,
+  staff only): the client's year month by month, for a review meeting. Each
+  month opens with a one-line summary (findings found and fixed, Secure Score
+  and MFA then and now, admin changes, reports sent, failed nights) over its
+  dated entries: findings found, fixed, come back or accepted, admin changes
+  from the activity history, reports sent and approved, month-end notes and
+  next steps, failed collections and the client's own milestones. Beside it,
+  Secure Score, MFA, open critical and high findings and unassigned paid
+  licences at each month's end over twelve months. Filter by kind, look back
+  12 or 24 months or everything kept, and download it as PDF, XLSX or CSV.
+  Each person sees only the parts whose report they open on that client.
+<!-- /since -->
 - **Coming up** (`/upcoming`): what falls due in the next 90 days across your
   clients, sorted into now, 30, 60 and 90 days and no date: subscription
   renewals and trials (lapsing ones need attention now), client app secrets and
@@ -88,10 +107,13 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   person's or object's page, or the detail report filtered to that row, and it
   only finds what you can open.
   Press `/` (or Ctrl+K, ⌘K on a Mac) on any page to start typing in it.
-- **Home pages** (staff): **Today** (`/today`, for technicians) lists the
-  clients that need someone today and why: critical and high findings new in
-  the last day, collections that failed or are out of date, access not granted
-  yet, and Coming up items due within a week. **Accounts** (`/clients`, for
+- **Home pages** (staff): **Today** (`/today`, for technicians) is a ledger of
+  what happened across your clients, one line per thing, worst first, each with
+  the time it happened: critical and high findings first seen or back,
+  collections that failed or are out of date, access not granted yet, Coming up
+  items due within a week, and the critical and high findings a collection no
+  longer saw. What's new since yesterday sits above a line; what you'd seen
+  before and is still open sits below it. **Accounts** (`/clients`, for
   account managers) shows each client's licence waste, renewals in the next 30
   days, this month's month-end reports to approve and projects to propose. Each
   opens with one sentence saying what needs attention. Pick yours on the
@@ -105,6 +127,18 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   leader and Administrator by default) can accept one with a reason and an
   optional review date after today, when it comes back for review; accepted
   risks leave the totals and get their own section.
+<!-- since 2.5.0 -->
+- **A finding's sheet** (`/tenants/<id>/findings/<finding id>`, or Open on any
+  row of the Findings tab, in place beside the table): the evidence behind the
+  finding (for an account, the facts from its page), its history, where else
+  the same check fails across the clients the person sees, the fix as steps,
+  *Copy for a ticket*, *Email the contact* (a `mailto:` link for the person's
+  own mail app; Office Sentry sends nothing) and *Accept risk*. Anyone who can
+  accept risks can also keep a note on a finding and hand it to a colleague
+  who sees that client (`findings.note`, `hand` and `snooze`; migration 0048).
+  Notes and hand-offs stay with the team: never on a client's pages, in a
+  report or in an email. Nothing is ever written to the client's tenant.
+<!-- /since -->
 - **Since last month**: new and fixed findings, admin role changes, new,
   disabled and deleted accounts, licences people were given or lost, and
   Conditional Access policies added, switched or edited, compared with the
@@ -180,13 +214,16 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   one-page PDF of it with a line for the client to sign.
 - **Detail reports** (`/tenants/<id>/data/<report>`, each also as PDF, XLSX and CSV),
   grouped by area as in the report menu ([Detail reports by
-  area](#detail-reports-by-area), below). Every table can be
+  area](#detail-reports-by-area), below). A client's Reports tab (`/tenants/<id>/data`)
+  opens on its report catalogue: the summaries, your custom reports and saved views, and
+  every detail report by area, with a search box; the "All reports" menu above each
+  report and the overview's Reports card list the same. Every table can be
   filtered by the values in it (or by age, for dates), sorted, and have columns
   hidden; headers stay visible while scrolling, and the view can be saved by
   name and reused on any client. Downloads contain the rows and columns shown.
   The busiest tables have a bar chart that follows the filters (click a bar for
   its rows), and headline figures carry a line of their last 90 days.
-  Every headline number opens the rows behind it, here and on All clients.
+  Every headline number opens the rows behind it, here and on the Clients page.
   *Show as it was on* (`?on=`) shows a report, its PDF and its XLSX as the
   client was at the end of any earlier day the kept data reaches back to (the
   daily history, 25 months by default), with a link to what changed since then.
@@ -585,9 +622,9 @@ Approving a month again re-issues it, with a reason, as the next version.
 Clients never see the queue, the reviewers or staff-only notes, and nothing
 written for the month reaches them until it's approved or sent.
 
-### Report designs: your own client reports
+### Custom reports: your own client reports
 
-**Month-end → Report designs** builds a client report from blocks, the way a website builder builds a
+**Reports → Custom reports** builds a client report from blocks, the way a website builder builds a
 page. Drag a block in from the list (a status verdict, key figures, checks by severity, the Secure Score
 trend, recommended next steps, failing checks, what changed, licences, a table from any detail report,
 the insurance questionnaire answers, this month's commentary, headings, your own text, a contact card, a
@@ -599,20 +636,23 @@ from an executive summary, a full security review, a licensing review, a quarter
 of Secure Score and findings, what was fixed, the projects on the table and where each stands, licence
 spend, and what's coming up in the next 90 days) or a blank page.
 
-A design belongs to the MSP and works for every client: a block with nothing to show for a client (no
-accepted risks, no commentary yet) is left out of that client's report. Each client's **Reports →
-Custom reports** lists every design as a page and a PDF, and a report plan or a client's email schedule
-can send a design (as a PDF) alongside or instead of the monthly review. Text blocks and the cover's title
-and subtitle take `{client}`, `{month}`, `{quarter}`, `{msp}` and `{date}`, and a design holds up to 60 blocks.
-Anyone who can *Design custom reports* makes and edits designs; removing
+A custom report belongs to the MSP and works for every client: a block with nothing to show for a client
+(no accepted risks, no commentary yet) is left out of that client's report. Each client's **Reports →
+Custom reports** lists every one as a page and a PDF; the client's Reports tab, the "All reports" menu
+above a client's reports and the Reports page list them too, and a report plan or a client's email schedule
+can send one (as a PDF) alongside or instead of the monthly review: *Send on a schedule* beside a custom
+report on a client's Custom reports page starts a schedule with it ticked, and that page says which of the
+client's emails already send each one. Text blocks and the cover's title
+and subtitle take `{client}`, `{month}`, `{quarter}`, `{msp}` and `{date}`, and a custom report holds up to 60 blocks.
+Anyone who can *Design custom reports* makes and edits them; removing
 one also needs *Settings*, since it comes out of any plan or schedule that sent it.
 
 Setup notes written for your team (a detail report saying Microsoft is hiding people's names, and how to
-sign in as a Global Admin to show them) stay out of the client's copy unless the design's **Include setup
+sign in as a Global Admin to show them) stay out of the client's copy unless the report's **Include setup
 notes in the client's copy** is ticked; the portal and the previews show them, marked "Only your team sees
-this". On the month-end review screen, **What's in the report** leaves any block of a design, any part of
+this". On the month-end review screen, **What's in the report** leaves any block of a custom report, any part of
 the monthly review or any key figure out of one client's copy for that month, and **Leave out** does the
-same for one check or recommendation. The design and other clients stay as they are, the preview beside
+same for one check or recommendation. The custom report and other clients stay as they are, the preview beside
 it shows the client's copy, and the sent PDFs, spreadsheet, email and portal copy never have what was left
 out.
 
@@ -793,7 +833,7 @@ and follows it through consent, Global Reader and its first collection.
 
 ## Managing clients
 
-- **Settings** in the menu opens *Client settings*. Its pages are in four areas, shown as tabs with the open area's pages under them: *Clients* (Client settings, Client groups, App connection), *Reports and email* (Branding, Licence prices, Email delivery, Alerts), *Team* (Users, Microsoft sign-in, Activity log) and *System* (System status, Data retention, Updates, Support). These docs name the page, as in *Settings → Email delivery*.
+- **Settings** in the menu opens *Client settings*. Every settings page opens with the Settings heading, its four areas as tabs and the open area's pages under them, then the page's own title: *Clients* (Client settings, Client groups, App connection), *Reports and email* (Branding, Licence prices, Email delivery, Alerts), *Team* (Users, Microsoft sign-in, Activity log) and *System* (System status, Data retention, Updates, Support). These docs name the page, as in *Settings → Email delivery*.
 - **Switch client**, beside a client's name (staff who see more than one client): opens the page you're on for another client you see, within the client group you picked, with a box to find one by name. From an account, mailbox, group or site it opens that client's list, and a report the other client doesn't have, or that you can't open there, opens its Reports tab.
 - **Client settings** (*Settings → Client settings*, or *Connection health* on
   the Clients page) lists every client with its status (*Onboarding*,
@@ -822,7 +862,7 @@ and follows it through consent, Global Reader and its first collection.
   users; restorable).
 - **Client groups** (*Settings → Client groups*) sort clients by tier, region,
   service level or anything else; a client can be in several. Pick a group at
-  the top of the Clients dashboard, All clients, What changed, Month-end or
+  the top of the Clients page, What changed, Month-end or
   Client settings to see only those clients, with downloads to match, and give
   a digest one group instead of every client. Groups never show anyone more:
   the only way a group grants access is someone who manages users ticking it

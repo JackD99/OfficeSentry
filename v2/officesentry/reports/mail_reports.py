@@ -287,7 +287,15 @@ def mailbox_permissions(snap: TenantSnapshot, now: datetime, report: DataReport)
     )
     for p in sorted(by_person.values(), key=lambda p: (-len({m for r in RIGHTS for m in p[r]}), p["label"].lower())):
         status, flag = _account(p["user"], p["label"], domains)
-        people.add([p["label"], status, len({m for r in RIGHTS for m in p[r]}), *(p[r] for r in RIGHTS)], flag)
+        people.add(
+            [
+                p["label"],
+                status,
+                len({m for r in RIGHTS for m in p[r]}),
+                *(sorted(p[r], key=str.lower) for r in RIGHTS),
+            ],
+            flag,
+        )
 
     mailboxes = Section(
         "By mailbox",
@@ -296,7 +304,7 @@ def mailbox_permissions(snap: TenantSnapshot, now: datetime, report: DataReport)
         empty="No mailbox is shared with anyone.",
     )
     for b in sorted(by_box.values(), key=lambda b: b["label"].lower()):
-        mailboxes.add([b["label"], b["type"], *(b[r] or "" for r in RIGHTS)])
+        mailboxes.add([b["label"], b["type"], *(sorted(b[r], key=str.lower) or "" for r in RIGHTS)])
 
     every = Section(
         "Every permission",

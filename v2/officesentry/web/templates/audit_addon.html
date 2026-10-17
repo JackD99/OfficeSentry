@@ -7,8 +7,8 @@
 {% set ready = connections|selectattr('client_id')|list %}
 {% set status = sign_in.status if sign_in else none %}
 {% set active = status in ('waiting', 'working') %}
-<div class="crumbs"><a href="{{ url_for('admin.connections') }}">App connection</a><span>/</span><span>Audit log add-on</span></div>
-<div class="page-head"><div><h1>Audit log add-on {% if on %}<span class="pill ok">On</span>{% else %}<span class="pill">Off</span>{% endif %}</h1>
+<div class="crumbs"><a href="{{ url_for('admin.connections') }}">&larr; App connection</a></div>
+<div class="page-head"><div><h2 class="page-title">Audit log add-on {% if on %}<span class="pill ok">On</span>{% else %}<span class="pill">Off</span>{% endif %}</h2>
   <div class="sub">Who deleted, downloaded and shared files, and who opened someone else's mailbox, from each client's Microsoft 365 audit log. It uses a second app, with one read-only permission, that each client approves only if they want it. Clients who don't keep everything they have today.</div></div></div>
 
 {% if not ready or sign_in %}

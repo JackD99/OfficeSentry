@@ -55,11 +55,16 @@
 {%- endmacro %}
 
 {# The Views menu: a person's saved views of this page (saved_views rows), and saving the current one.
-   key: the saved_views report key; tenant: the tenant the page is for. #}
-{#- base: the page the views apply to, when it carries its own query (a past day, ?on=...). -#}
-{% macro saved_views(saved, view_query, key, tenant, placeholder='e.g. Forwarding outside', base='') -%}
+   key: the saved_views report key; tenant: the tenant the page is for, or none on a cross-client page.
+   base: the page the views apply to, when it carries its own query (a past day, ?on=...).
+   save_action: where the form posts (views.save for a client's report); email: (endpoint, kwargs) of the
+   page that emails the current view, given its id as view=, with email_label as its words, or false for
+   none (a client's report offers a schedule to whoever manages its emails); empty_note: the words when the
+   person has no views yet. #}
+{% macro saved_views(saved, view_query, key, tenant=none, placeholder='e.g. Forwarding outside', base='', save_action='', email=none, email_label='Email this view on a schedule', empty_note='') -%}
 {% set base = base or request.path %}{% set sep = '&' if '?' in base else '?' %}
 {% set current = saved|selectattr('query', 'equalto', view_query)|first if view_query else none %}
+{% if email is none %}{% set email = ('email.new_schedule', {'tenant_id': tenant.id}) if tenant and can('emails.manage', tenant.id) else false %}{% endif %}
 <details class="menu" id="views-menu">
   <summary class="btn sm{{ ' on' if view_query }}" title="Save the filters, columns and sort you use often">{{ icon('eye') }} {{ current.name if current else ('Custom view' if view_query else 'Views') }}</summary>
   <div class="menu-panel right">
@@ -70,14 +75,14 @@
       <form method="post" action="{{ url_for('views.delete', view_id=v.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="next" value="{{ request.full_path }}"><button class="link faint" title="Delete this view" aria-label="Delete {{ v.name }}">×</button></form>
     </div>
     {% else %}
-    <p class="muted small m0">None yet. Filter, sort or hide columns, then save the view here to use it on any client.</p>
+    <p class="muted small m0">{{ empty_note or 'None yet. Filter, sort or hide columns, then save the view here to use it on any client.' }}</p>
     {% endfor %}
-    {% if current and can('emails.manage', tenant.id) %}
-    <a class="menu-link small" href="{{ url_for('email.new_schedule', tenant_id=tenant.id, view=current.id) }}">{{ icon('send') }} Email this view on a schedule</a>
+    {% if current and email %}
+    <a class="menu-link small" href="{{ url_for(email[0], view=current.id, **email[1]) }}">{{ icon('send') }} {{ email_label }}</a>
     {% endif %}
     {% if view_query and not current %}
-    <form method="post" action="{{ url_for('views.save', key=key) }}" class="save-view">{{ csrf() }}
-      <input type="hidden" name="query" value="{{ view_query }}"><input type="hidden" name="tenant_id" value="{{ tenant.id }}">
+    <form method="post" action="{{ save_action or url_for('views.save', key=key) }}" class="save-view">{{ csrf() }}
+      <input type="hidden" name="query" value="{{ view_query }}">{% if tenant %}<input type="hidden" name="tenant_id" value="{{ tenant.id }}">{% endif %}
       <label class="small">Save this view as <input name="name" maxlength="80" required placeholder="{{ placeholder }}"></label>
       <button class="sm primary">Save view</button>
     </form>
@@ -108,6 +113,8 @@
     </div>
   </div>
   {% if section.intro %}<p class="intro">{{ section.intro }}</p>{% endif %}
+  {#- A note column that says the same thing under every row is said once here instead (tv.repeated). -#}
+  {% for name, v in tv.said_once %}<p class="intro note-once"><strong>{{ name }}:</strong> {{ cell(v) }}</p>{% endfor %}
   {% if filtered %}
   <div class="chips" aria-label="Filters">
     {% for chip in tv.chips %}<a class="chip" href="{{ chip.href }}" data-view title="Remove this filter">{{ chip.label }}<span aria-hidden="true">×</span><span class="sr-only">Remove</span></a>{% endfor %}
@@ -123,6 +130,7 @@
       (Severity, Priority) keeps its own column, since people sort by it. -#}
   {% set flagcol = tv.flag and section.flag_name != 'Flag' %}
   {% set notes = tv.notes %}
+  {% set once = tv.repeated %}
   {% set width = tv.shown|length - notes|length + (1 if flagcol else 0) + (1 if acts else 0) %}
   <div class="table-scroll{{ ' tall' if tv.rows|length > 12 }}" data-key="{{ tv.slug }}">
   <table class="stack-sm{{ ' grouped' if tv.groups }}" id="tbl-{{ tv.slug }}">
@@ -131,13 +139,14 @@
       {% for c in tv.shown %}{% if loop.index0 not in notes %}<th class="{{ 'num' if c.kind == 'num' }}" aria-sort="{{ {'asc': 'ascending', 'desc': 'descending'}.get(c.sort, 'none') }}">{% if sortable %}<a class="sort" href="{{ c.sort_href }}" data-view>{{ c.heading }}</a>{% else %}{{ c.heading }}{% endif %}{% if c.filtered %}<span class="filter-dot" title="Filtered"></span>{% endif %}</th>{% endif %}{% endfor %}
       {% if acts %}<th>{{ action }}</th>{% endif %}
     </tr></thead>
+    {#- A row's key (Section.keys), when the section carries them, is on the row for scripts that act on it. -#}
     {% macro row(cells, flag, key) -%}
-    <tr{% if flag %} class="flag-{{ flag }}"{% endif %} data-name="{{ cells|join(' ')|lower }}{{ (' ' ~ flag) if flag }}">
+    <tr{% if flag %} class="flag-{{ flag }}"{% endif %}{% if key is not none %} data-key="{{ key }}"{% endif %} data-name="{{ cells|join(' ')|lower }}{{ (' ' ~ flag) if flag }}">
       {% if flagcol %}<td class="flagcol">{% if flag %}<span class="sevtext {{ flag }}">{{ flag }}</span>{% endif %}</td>{% endif %}
       {% for v in cells %}{% if loop.index0 not in notes %}{% set c = tv.shown[loop.index0] %}<td class="{{ 'nowrap' if c.kind == 'date' else 'wrap' }} w-{{ c.width }}{{ ' num' if c.kind == 'num' }}{{ ' short' if (v|string)|length <= 32 }}"{% if not loop.first %} data-label="{{ c.name }}"{% endif %}>{{ cell(v) }}{% if loop.first and flag and not flagcol %} <span class="flag-pill {{ flag }}">{{ flag }}</span>{% endif %}</td>{% endif %}{% endfor %}
       {% if acts %}<td class="row-action" data-label="{{ action }}">{{ act(key) }}</td>{% endif %}
     </tr>
-    {%- set said = [] %}{% for i in notes if (cells[i]|string) not in ('', 'Nothing', 'None', '-', '–', '—') %}{% set _ = said.append(i) %}{% endfor %}
+    {%- set said = [] %}{% for i in notes if i not in once and (cells[i]|string) not in ('', 'Nothing', 'None', '-', '–', '—') %}{% set _ = said.append(i) %}{% endfor %}
     {%- if said %}
     <tr class="row-note{{ (' flag-' ~ flag) if flag }}"><td colspan="{{ width }}"><div class="note">{% for i in said %}<span><strong>{{ tv.shown[i].name }}:</strong> {{ cell(cells[i]) }}</span>{% endfor %}</div></td></tr>
     {%- endif %}

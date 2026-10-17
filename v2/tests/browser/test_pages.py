@@ -43,7 +43,8 @@ def test_page(spec, viewport, theme, site, contexts, request):
     server, ids, _ = site
     page = contexts(spec.user, viewport, theme).new_page()
     try:
-        response = page.goto(server.url + spec.path.format(t=ids[0], o=ids[-1]))
+        finding = server.finding_id(ids[0]) if "{f}" in spec.path else None
+        response = page.goto(server.url + spec.path.format(t=ids[0], o=ids[-1], f=finding))
         assert response is not None and response.status == 200, f"{spec.path} returned {response and response.status}"
         page.wait_for_load_state("networkidle")
         page.evaluate("document.fonts.ready")
