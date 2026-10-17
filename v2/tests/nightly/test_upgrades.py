@@ -23,6 +23,9 @@ from .conftest import V2, crawl, portal
 
 ROOT = V2.parent
 PASSWORD = "nightly upgrade check"  # noqa: S105 (a throwaway demo database)
+# Each test builds a release's demo database and opens over two thousand pages: about 80 seconds, and past the
+# suite's usual two minutes a test on a slow runner (v2.4.0 on #200, 17 October), so give each five.
+pytestmark = pytest.mark.timeout(300)
 
 
 def _tags() -> list[str]:
