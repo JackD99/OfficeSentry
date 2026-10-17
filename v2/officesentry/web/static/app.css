@@ -1234,6 +1234,74 @@ textarea.copy-text { font-size: var(--fs-sm); resize: vertical; margin: var(--sp
 .search-group .list > li { align-items: flex-start; }
 .search-group .list .pill { min-width: 120px; justify-content: center; margin-top: var(--space-0-5); }
 .search-more { margin: var(--space-2-5) 0 0; font-size: var(--fs-base); }
+
+/* -- The jump box (templates/_jump.html, static/jump.js) ------------------------------------------------
+   With script, the menu's search box is this button, which opens the box; folded, it's an icon like the
+   entries under it. The "/" key shows where there's a keyboard. */
+.nav-search-btn { display: flex; align-items: center; gap: var(--space-2); width: 100%; margin: 0 0 var(--space-2-5); padding: 7px 10px;
+  border: 1px solid var(--sidebar-active); border-radius: var(--radius-sm); background: var(--sidebar-active); color: var(--sidebar-muted);
+  font: inherit; font-size: var(--fs-sm); font-weight: 500; line-height: 1.4; text-align: left; cursor: pointer; }
+.nav-search-btn:hover { color: var(--sidebar-strong); border-color: var(--sidebar-line); }
+.nav-search-btn:focus-visible { border-color: var(--sidebar-marker); outline: none; }
+.nav-search-btn .icon { width: 15px; height: 15px; flex: none; }
+.nav-search-btn > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-search-btn kbd, .jump-box kbd { display: none; min-width: 20px; padding: 0 var(--space-1); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  color: var(--muted); font: inherit; font-size: var(--fs-xs); line-height: 18px; text-align: center; }
+.nav-search-btn kbd { border-color: color-mix(in srgb, var(--sidebar-muted) 50%, transparent); color: var(--sidebar-muted); }
+@media (hover: hover) and (pointer: fine) { .nav-search-btn kbd, .jump-box kbd { display: inline-block; } }
+.mobile-bar .nav-search-btn { margin: var(--space-1-5) 0 var(--space-2-5); }
+@media (min-width: 961px) {
+  .menu-folded .sidebar .nav-search-btn { justify-content: center; padding: 9px 0; border-color: transparent; background: none; color: var(--sidebar-text); }
+  .menu-folded .sidebar .nav-search-btn:hover { background: var(--sidebar-active); color: var(--sidebar-strong); }
+  .menu-folded .sidebar .nav-search-btn .icon { width: 16px; height: 16px; opacity: .75; }
+  .menu-folded .sidebar .nav-search-btn > span, .menu-folded .sidebar .nav-search-btn kbd { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+.jump-box { width: min(640px, calc(100vw - 2 * var(--space-4))); max-height: calc(100vh - 2 * var(--space-4)); margin: 12vh auto auto; padding: 0;
+  border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); box-shadow: var(--shadow-menu); overflow: hidden; }
+.jump-box::backdrop { background: var(--scrim); }
+.jump-form { display: flex; flex-direction: column; max-height: calc(100vh - 2 * var(--space-4)); margin: 0; }
+.jump-field { position: relative; display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+.jump-field:focus-within { border-bottom-color: var(--rule); }
+.jump-field > .icon { position: absolute; left: 16px; width: 18px; height: 18px; color: var(--muted); pointer-events: none; }
+.jump-field input[type=text] { flex: 1; min-width: 0; margin: 0; padding: 14px 48px 14px 46px; border: 0; border-radius: 0; background: none; color: var(--text);
+  font-size: var(--fs-lg); caret-color: var(--accent); }  /* [type=text]: as specific as the rule every input gets */
+.jump-field input:focus { outline: none; box-shadow: none; }
+.jump-field input::placeholder { color: var(--muted); }
+.jump-close { position: absolute; right: 10px; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted); cursor: pointer; }
+.jump-close:hover { background: var(--sunken); color: var(--text); }
+.jump-close .icon { width: 16px; height: 16px; }
+.jump-list { overflow-y: auto; overscroll-behavior: contain; max-height: min(60vh, 520px); padding: var(--space-1) 0; scrollbar-width: thin; }
+.jump-list:empty { display: none; }
+.jump-label { padding: var(--space-2) var(--space-4) var(--space-1); color: var(--muted); font-size: var(--fs-md); font-variant-caps: all-small-caps; letter-spacing: .04em; line-height: 1.2; }
+.jump-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-4); color: var(--text); text-decoration: none; }
+.jump-row:hover { text-decoration: none; color: var(--text); }
+.jump-row.sel { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.jump-ico { flex: none; display: grid; place-items: center; width: 18px; height: 18px; color: var(--muted); }
+.jump-ico .icon { width: 18px; height: 18px; }
+.jump-row.sel .jump-ico { color: var(--accent); }
+.jump-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.jump-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-base); font-weight: 500; }
+.jump-title mark { background: none; color: inherit; font-weight: 700; }
+.jump-where { color: var(--text-2); font-weight: 400; }
+.jump-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-sm); }
+.jump-enter { visibility: hidden; flex: none; }
+.jump-row.sel .jump-enter { visibility: visible; }
+.jump-empty { padding: var(--space-4); color: var(--text-2); font-size: var(--fs-sm); }
+.jump-empty p { margin: 0; }
+.jump-empty p + p { margin-top: var(--space-1); }
+.jump-empty code { font-size: var(--fs-xs); }
+.jump-foot { display: flex; align-items: center; gap: var(--space-4); min-height: 36px; padding: var(--space-1-5) var(--space-4); border-top: 1px solid var(--border); color: var(--muted); font-size: var(--fs-xs); }
+.jump-keys { display: flex; align-items: center; gap: var(--space-1-5); white-space: nowrap; }
+.jump-keys kbd + kbd { margin-left: calc(-1 * var(--space-1)); }
+.jump-status { margin-left: auto; text-align: right; }
+@media (max-width: 640px) {
+  .jump-box { width: calc(100vw - 2 * var(--space-4)); margin: var(--space-2) auto auto; }
+  .jump-field input[type=text] { padding: 12px 44px 12px 42px; font-size: 16px; }  /* 16px: phones zoom into smaller fields */
+  .jump-list { max-height: 55vh; }
+  .jump-row { padding: var(--space-2-5) var(--space-3); }
+  .jump-label, .jump-empty, .jump-foot { padding-left: var(--space-3); padding-right: var(--space-3); }
+}
+@media (hover: none) { .jump-keys, .jump-enter { display: none; } }
 @media (max-width: 640px) {
   .search-group .list > li { flex-direction: column; gap: var(--space-1); }
   .search-group .list .pill { min-width: 0; }
