@@ -966,6 +966,30 @@ def usage(conn) -> dict[int, int]:
     return counts
 
 
+def sent_to(conn, tenant_id: int) -> dict[int, list[str]]:
+    """Which of one client's email schedules send each design, as a label per schedule ("Monthly email",
+    "Report plan" for the schedule a report plan gave the client, "(paused)" when it's off), for the
+    client's Custom reports page."""
+    out: dict[int, list[str]] = {}
+    rows = conn.execute(
+        "SELECT reports, frequency, plan_id, enabled FROM email_schedules"
+        " WHERE tenant_id = ? AND reports LIKE '%\"design:%' ORDER BY id",
+        (tenant_id,),
+    )
+    for row in rows:
+        try:
+            keys = json.loads(row["reports"] or "[]")
+        except ValueError:
+            continue
+        label = "Report plan" if row["plan_id"] else f"{row['frequency'].capitalize()} email"
+        if not row["enabled"]:
+            label += " (paused)"
+        for k in keys:
+            if (did := id_of(k)) is not None:
+                out.setdefault(did, []).append(label)
+    return out
+
+
 # -- Starting points -----------------------------------------------------------------------------------
 
 

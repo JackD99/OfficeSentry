@@ -7,7 +7,7 @@
 <div class="page-head">
   <div><h1>Report plans</h1>
     <div class="sub">Set up the monthly report once and apply it to many clients. Each client gets its own scheduled email.</div></div>
-  <div class="actions">{% if can_open('designs.index') %}<a class="btn" href="{{ url_for('designs.index') }}">Report designs</a>{% endif %}
+  <div class="actions">{% if can_open('designs.index') %}<a class="btn" href="{{ url_for('designs.index') }}">Custom reports</a>{% endif %}
     <a class="btn primary" href="{{ url_for('reporting.new_plan') }}">{{ icon('plus') }} New plan</a></div>
 </div>
 

@@ -216,13 +216,12 @@ def preview(design_id: int):
 @needs("reports.security", kind="staff")
 def tenant_designs(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    rows = designs.list_designs(g.db)
     return render_template(
         "tenant_designs.html",
         tenant=t,
-        designs=rows,
+        designs=designs.list_designs(g.db),
         pdf_available=pdf_available(),
-        counts={r["id"]: len(designs.document(r)["blocks"]) for r in rows},
+        sent=designs.sent_to(g.db, t["id"]),  # which of the client's emails already send each one
     )
 
 

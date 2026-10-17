@@ -529,8 +529,9 @@ def test_money_cells_are_numbers_in_xlsx(client, db, p1_tenant):
     make_user(db, "admin")
     login(client, "admin")
     wb = load_workbook(BytesIO(client.get(f"/tenants/{p1_tenant['id']}/data/licences.xlsx").data))
+    header = [c.value for c in wb["Waste by subscription"][1]]
     row = [c.value for c in wb["Waste by subscription"][2]]
-    assert row[6] == 10 and row[7] == 50
+    assert header[0] == "Flag" and row[7] == 10 and row[8] == 50  # the flag column first, then the table's own
     assert "£50.00" in client.get(f"/tenants/{p1_tenant['id']}/data/licences").get_data(as_text=True)
 
 

@@ -472,12 +472,15 @@ def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             "addresses. The strictest one wins.",
             empty="No settings found.",
         )
+        others = any(not is_default_policy(p) for p in policies or [])
         for p in sorted(policies or [], key=lambda p: (not is_default_policy(p), str(p.get("Name") or ""))):
             on = p.get("AutoForwardingMode") == "On"
             controls.add(
                 [
                     f"Outbound spam policy: {p.get('Name')}",
-                    "Everyone else" if is_default_policy(p) else "Mailboxes it's assigned to",
+                    ("Everyone no other policy covers" if others else "Everyone")
+                    if is_default_policy(p)
+                    else "Mailboxes it's assigned to",
                     modes.get(p.get("AutoForwardingMode"), p.get("AutoForwardingMode")),
                 ],
                 # Allowing it for named mailboxes only is what the auto_forward_policy check recommends.
@@ -1235,7 +1238,9 @@ def domains(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                 (f"{h.dmarc_from}'s: {h.dmarc}" if h.dmarc_from else h.dmarc) or "None",
                 _mta_sts_text(h),
                 h.tls_rpt or ("None" if h.transport_checked else "Not checked"),
-                h.mx if h.sends_mail or not h.mx else "Null MX (accepts no mail)",
+                (h.mx or (dnscheck.UNKNOWN if "MX" in h.failed else "None"))
+                if h.sends_mail or not h.mx
+                else "Null MX (accepts no mail)",
             ]
         )
     report.sections = [overview, records]
@@ -2158,12 +2163,14 @@ def _no_longer_held(conn, snap: TenantSnapshot, collectors, report: DataReport) 
 
 
 def section_table(section: Section) -> Table:
+    """A section as one CSV table. The flag column comes first and reads as the page does ("High"), so a
+    spreadsheet is laid out like the report."""
     flagged = any(section.flags)
     rows = [
-        [str(v) if isinstance(v, Link) else v for v in row] + ([flag or ""] if flagged else [])
+        ([(flag or "").capitalize()] if flagged else []) + [str(v) if isinstance(v, Link) else v for v in row]
         for row, flag in zip(section.rows, section.flags or [None] * len(section.rows), strict=False)
     ]
-    return Table(section.title, section.columns + ([section.flag_name] if flagged else []), rows)
+    return Table(section.title, ([section.flag_name] if flagged else []) + section.columns, rows)
 
 
 def to_tables(report: DataReport) -> list[Table]:

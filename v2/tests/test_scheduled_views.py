@@ -246,7 +246,7 @@ def test_views_email_stacks_a_groups_tenants_for_the_team_only(client, db, two_t
     assert to_addrs == ["me@msp.com"] and "Tier 1" in msg["Subject"] and "Forwarding outside" in msg["Subject"]
     files = _attachments(msg)
     rows = _csv(files["mailboxes-forwarding-outside-tier-1-forwarding.csv"])
-    assert rows[0][0] == "Client" and rows[1:] and {r[0] for r in rows[1:]} == {"Alpha Ltd"}
+    assert rows[0][:2] == ["Flag", "Client"] and rows[1:] and {r[1] for r in rows[1:]} == {"Alpha Ltd"}
     assert db.execute("SELECT COUNT(*) FROM issued_reports").fetchone()[0] == 0  # not a client's report
     preview = client.get(f"/schedules/{s['id']}/preview/body").get_data(as_text=True)
     assert "Saved views: Tier 1" in preview and "Bravo" not in preview

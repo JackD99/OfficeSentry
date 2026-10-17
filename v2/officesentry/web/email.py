@@ -550,6 +550,10 @@ def new_schedule(tenant_id: int):
         values["views"] = [
             delivery.ScheduledView(picked["report_key"], picked["name"], picked["query"], "pdf", picked["id"])
         ]
+    # "Send on a schedule" from a client's Custom reports page (``?report=design:<id>``, or any report the
+    # schedule form offers): start with that report ticked and no other.
+    elif (report := request.args.get("report", "")) and report in {o.key for o in _catalog(t["id"])}:
+        values["reports"] = [report]
     return _render_form(t, values, team_default)
 
 

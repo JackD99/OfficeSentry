@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from officesentry.reports import data_reports
+from officesentry.reports import data_reports, designs
 from tests import auditdata
 from tests import sharepoint_data as sd
 from tests.conftest import login, make_user
@@ -49,6 +49,11 @@ def _user_href(client, alpha):
     return re.search(rf'href="(/tenants/{alpha}/users/[^".]+)"', page).group(1)
 
 
+def _run_href(client, alpha):
+    page = client.get(f"/tenants/{alpha}/collection").get_data(as_text=True)
+    return re.search(r'href="(/runs/\d+)"', page).group(1)
+
+
 def test_every_tenant_page_opens_one_tab(client, db, seeded):
     alpha = seeded
     make_user(db, "admin")
@@ -59,6 +64,8 @@ def test_every_tenant_page_opens_one_tab(client, db, seeded):
         f"/tenants/{alpha}/projects": ("Findings", None),
         f"/tenants/{alpha}/changes": ("Changes", "What changed"),
         f"/tenants/{alpha}/activity": ("Changes", "Activity history"),
+        f"/tenants/{alpha}/timeline": ("Changes", "Timeline"),
+        f"/tenants/{alpha}/data": ("Reports", None),
         f"/tenants/{alpha}/data/mailboxes": ("Reports", None),
         f"/tenants/{alpha}/evidence": ("Reports", None),
         f"/tenants/{alpha}/users": ("Users", "People"),
@@ -73,6 +80,9 @@ def test_every_tenant_page_opens_one_tab(client, db, seeded):
         f"/tenants/{alpha}/collection": ("Settings", "Data collection"),
         f"/tenants/{alpha}/manage": ("Settings", "Manage"),
         f"/tenants/{alpha}/offboard": ("Settings", "Manage"),
+        f"/tenants/{alpha}/report-history": ("Emails", None),
+        f"/tenants/{alpha}/schedules/new": ("Emails", None),
+        _run_href(client, alpha): ("Settings", "Data collection"),
     }
     for url, (tab, sub) in pages.items():
         resp = client.get(url)
@@ -116,7 +126,92 @@ def test_report_picker_links_every_report(client, db, vault, seeded):
     assert client.get(f"/tenants/{alpha}/data?key=review").headers["Location"].endswith(f"/tenants/{alpha}/report")
     assert client.get(f"/tenants/{alpha}/data?key=designs").headers["Location"].endswith(f"/tenants/{alpha}/designs")
     page = client.get(f"/tenants/{alpha}/designs").get_data(as_text=True)
-    assert re.findall(r'aria-current="page">([^<]+)<', _picker(page)) == ["Custom reports"]
+    picker = _picker(page)
+    assert re.findall(r'aria-current="page">([^<]+)<', picker) == ["Custom reports"]
+    assert "Custom reports" in picker and 'href="/reporting/designs"' in picker  # the group, and making one
+    assert "Your views" not in picker  # nothing saved yet
+
+
+def test_report_picker_lists_custom_reports_and_saved_views(client, db, seeded):
+    """The MSP's custom reports and the person's saved views join the menu, and the phone select's keys for
+    them open the same pages."""
+    alpha = seeded
+    make_user(db, "admin")
+    login(client, "admin")
+    did = designs.create(db, "Board pack", "admin", designs.STARTERS["executive"][2], "For the board")
+    client.post(
+        "/reports/mailboxes/views",
+        data={"name": "Leaving us", "query": "f=forwarding/outside-the-organisation:Yes", "tenant_id": alpha},
+    )
+    vid = db.execute("SELECT id FROM saved_views").fetchone()[0]
+    view_href = f"/tenants/{alpha}/data/mailboxes?f=forwarding%2Foutside-the-organisation%3AYes"
+    picker = _picker(client.get(f"/tenants/{alpha}/data/inbox-rules").get_data(as_text=True))
+    assert f'href="/tenants/{alpha}/designs/{did}" title="For the board"' in picker
+    assert f'href="{view_href}"' in picker and "Leaving us" in picker and "Your views" in picker
+    assert ">All custom reports<" in picker and "New custom report</a>" in picker
+    page = client.get(f"/tenants/{alpha}/designs/{did}").get_data(as_text=True)
+    assert f'<option value="design:{did}" selected>Board pack</option>' not in page  # a report page, no picker
+    page = client.get(f"/tenants/{alpha}/data/inbox-rules").get_data(as_text=True)
+    assert f'<option value="design:{did}">Board pack</option>' in page
+    assert f'<option value="view:{vid}">Leaving us · Mail forwarding</option>' in page
+    assert (
+        client.get(f"/tenants/{alpha}/data?key=design:{did}")
+        .headers["Location"]
+        .endswith(f"/tenants/{alpha}/designs/{did}")
+    )
+    assert client.get(f"/tenants/{alpha}/data?key=view:{vid}").headers["Location"].endswith(view_href)
+    assert client.get(f"/tenants/{alpha}/data?key=design:999").status_code == 404
+    assert client.get(f"/tenants/{alpha}/data?key=view:999").status_code == 404
+    # Another person's view isn't theirs to open, and a client account sees no custom reports.
+    make_user(db, "other", role="analyst", all_tenants=True)
+    client.post("/logout")
+    login(client, "other")
+    assert client.get(f"/tenants/{alpha}/data?key=view:{vid}").status_code == 404
+    client.post("/logout")
+    make_user(db, "client", role="client", tenants=[alpha])
+    login(client, "client")
+    page = client.get(f"/tenants/{alpha}/data/inbox-rules").get_data(as_text=True)
+    assert "Custom reports" not in page and "Board pack" not in page
+    assert client.get(f"/tenants/{alpha}/data?key=design:{did}").status_code == 404
+
+
+def _directory(page: str) -> str:
+    return page.split('id="report-directory"')[1].split("</section>")[0]
+
+
+def test_reports_tab_opens_on_the_catalogue(client, db, vault, seeded):
+    """The Reports tab is the client's report catalogue: the summaries, the MSP's custom reports and the
+    person's saved views, then every detail report by area, with one search box; the overview's Reports card
+    is the same list. A key that isn't there shows it too."""
+    alpha = seeded
+    auditdata.everywhere(db, vault)  # the add-on's report too
+    make_user(db, "admin")
+    login(client, "admin")
+    did = designs.create(db, "Board pack", "admin", designs.STARTERS["executive"][2], "For the board")
+    client.post(
+        "/reports/mailboxes/views",
+        data={"name": "Leaving us", "query": "f=forwarding/outside-the-organisation:Yes", "tenant_id": alpha},
+    )
+    for url in (f"/tenants/{alpha}/data", f"/tenants/{alpha}", f"/tenants/{alpha}/data?key=nothing"):
+        page = client.get(url).get_data(as_text=True)
+        directory = _directory(page)
+        hrefs = re.findall(r'href="(/tenants/[^"]+)"', directory)
+        assert hrefs[:3] == [f"/tenants/{alpha}/report", f"/tenants/{alpha}/evidence", f"/tenants/{alpha}/projects"]
+        assert {f"/tenants/{alpha}/data/{key}" for key in data_reports.REPORTS} <= set(hrefs)
+        assert f"/tenants/{alpha}/designs/{did}" in hrefs and f"/tenants/{alpha}/designs" in hrefs
+        assert f"/tenants/{alpha}/data/mailboxes?f=forwarding%2Foutside-the-organisation%3AYes" in hrefs
+        assert "New custom report" in directory and 'href="/reporting/designs"' in directory
+        assert 'data-report-search="report-directory"' in page and ">Your views</h3>" in directory
+    page = client.get(f"/tenants/{alpha}/data").get_data(as_text=True)
+    assert _active(_tab_bar(page)) == ["Reports"] and '<nav class="report-menu"' not in page
+    assert re.search(r"\d+ reports on .*'s data\. Pick one, or search", page)
+    # A client account gets its own areas, and neither custom reports nor anyone's views.
+    make_user(db, "client", role="client", tenants=[alpha])
+    client.post("/logout")
+    login(client, "client")
+    directory = _directory(client.get(f"/tenants/{alpha}/data").get_data(as_text=True))
+    assert f"/tenants/{alpha}/report" in directory and f"/tenants/{alpha}/data/mailboxes" in directory
+    assert "Custom reports" not in directory and "Your views" not in directory and "Board pack" not in directory
 
 
 def test_tenant_header_pins_its_tab_bar(client, db, seeded):
@@ -158,3 +253,43 @@ def test_landmarks(client, db, seeded):
     assert 'class="skip-link" href="#main"' in person and '<main id="main"' in person
     dashboard = client.get("/").get_data(as_text=True)
     assert re.search(r'<span class="sevbar" role="img" aria-label="\d+ critical, \d+ high', dashboard)
+
+
+def test_a_page_opened_from_a_list_says_where_it_came_from(client, db, seeded):
+    """A client page that isn't a tab or a second-row page shows "← <the page it was opened from>" above
+    its title, as a person's page shows "← People"; a page that isn't a client's shows crumbs from its
+    menu entry ending with itself, and no page has both crumbs and a Back button."""
+    alpha = seeded
+    make_user(db, "admin")
+    login(client, "admin")
+    backs = {
+        _run_href(client, alpha): f'<a href="/tenants/{alpha}/collection">&larr; Data collection</a>',
+        f"/tenants/{alpha}/schedules/new": f'<a href="/tenants/{alpha}/schedules">&larr; Emailed reports</a>',
+        f"/tenants/{alpha}/report-history": f'<a href="/tenants/{alpha}/schedules">&larr; Emailed reports</a>',
+        f"/tenants/{alpha}/offboard": f'<a href="/tenants/{alpha}/manage">&larr; Manage</a>',
+        f"/tenants/{alpha}/projects": f'<a href="/tenants/{alpha}/findings">&larr; Findings</a>',
+    }
+    for url, back in backs.items():
+        page = client.get(url).get_data(as_text=True)
+        assert f'<div class="crumbs">{back}</div>' in page, url
+        assert page.count("<h1") == 1 and f"<h1>{'Alpha Ltd'}</h1>" in page, url  # the client's name
+        assert ">Back</a>" not in page, url
+    sid = db.execute(
+        "INSERT INTO email_schedules (kind, tenant_id, reports, include_xlsx, frequency, day_of_week, day_of_month,"
+        " hour, timezone, created_at) VALUES ('report', ?, '[\"review\"]', 1, 'monthly', 0, 1, 8, 'UTC', ?)",
+        (alpha, "2026-01-01T00:00:00Z"),
+    ).lastrowid
+    db.commit()
+    for url in (f"/schedules/{sid}/edit", f"/schedules/{sid}/preview"):
+        page = client.get(url).get_data(as_text=True)
+        assert f'<div class="crumbs"><a href="/tenants/{alpha}/schedules">&larr; Emailed reports</a></div>' in page, url
+        assert _active(_tab_bar(page)) == ["Emails"] and ">Back</a>" not in page, url
+    digest = client.get("/emails/digests/new").get_data(as_text=True)
+    assert (
+        '<div class="crumbs"><a href="/emails">Email reports</a><span>/</span><span>New digest</span></div>' in digest
+    )
+    plan = client.get("/reporting/plans/new").get_data(as_text=True)
+    assert (
+        "<span>/</span><span>New report plan</span></div>" in plan
+        and 'href="/reporting/plans">Report plans</a>' in plan
+    )

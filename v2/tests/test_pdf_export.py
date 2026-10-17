@@ -74,15 +74,16 @@ def test_detail_page_shows_its_group_and_downloads(client, db, two_tenants):
     assert '<optgroup label="Identity and access">' in page
 
 
-def test_detail_reports_tab_opens_the_first_report_or_the_picked_one(client, db, two_tenants):
+def test_detail_reports_tab_opens_the_catalogue_or_the_picked_report(client, db, two_tenants):
     alpha, bravo = two_tenants
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")
     first = data_reports.grouped()[0].reports[0][0]
-    assert client.get(f"/tenants/{alpha}/data").headers["Location"].endswith(f"/tenants/{alpha}/data/{first}")
+    resp = client.get(f"/tenants/{alpha}/data")
+    assert resp.status_code == 200 and f'href="/tenants/{alpha}/data/{first}"' in resp.get_data(as_text=True)
     resp = client.get(f"/tenants/{alpha}/data?key=devices")
     assert resp.headers["Location"].endswith(f"/tenants/{alpha}/data/devices")
-    assert client.get(f"/tenants/{alpha}/data?key=../admin").headers["Location"].endswith(f"/data/{first}")
+    assert client.get(f"/tenants/{alpha}/data?key=../admin").status_code == 200  # the catalogue again
     assert client.get(f"/tenants/{bravo}/data").status_code == 404
 
 

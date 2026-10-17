@@ -25,6 +25,8 @@ SPANS = (30, 90)  # days back each mailbox is compared with
 MIN_SPAN = 7  # a comparison needs at least this many days of history
 SOON_DAYS = 30
 WATCH_DAYS = 90
+FAR_DAYS = 2 * 365  # a forecast further off than this is noise, not a date to plan for
+FAR = "More than 2 years away"
 
 GROWTH = "Growth by mailbox"
 MONTHS = "Total size by month"
@@ -143,10 +145,16 @@ def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
             if size >= quota:
                 forecast, flag = "Full now", "high"
             elif per_month and per_month > 0:
-                full = latest + timedelta(days=(quota - size) / per_month * 30)
-                forecast = full.date().isoformat()
-                days = (full - now).days
-                flag = "high" if days <= SOON_DAYS else ("medium" if days <= WATCH_DAYS else None)
+                # Days to go as a number first: a mailbox growing by a few bytes a month is centuries from full,
+                # further than a date can reach.
+                to_go = (quota - size) / per_month * 30
+                if to_go > FAR_DAYS:
+                    forecast = FAR
+                else:
+                    full = latest + timedelta(days=to_go)
+                    forecast = full.date().isoformat()
+                    days = (full - now).days
+                    flag = "high" if days <= SOON_DAYS else ("medium" if days <= WATCH_DAYS else None)
         if flag:
             soon += 1
         if per_month and per_month > 0 and (fastest is None or per_month > fastest[0]):
@@ -185,12 +193,12 @@ def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     if not month_base:
         out.notice = (
             "The trend needs a collection at least a week old to compare with"
-            + (f"; the first was on {history[0][0].date().isoformat()}" if history else "")
+            + (f"; the first was on {day(history[0][0])}" if history else "")
             + ". Sizes show now and growth fills in as nightly collections build up."
         )
     growth.intro = (
         f"Each mailbox now, against Office Sentry's collection from {span} days earlier"
-        f" ({month_base[0].date().isoformat()}), fastest-growing first. "
+        f" ({day(month_base[0])}), fastest-growing first. "
         if month_base
         else "Each mailbox now. "
     ) + (

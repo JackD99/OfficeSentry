@@ -17,7 +17,7 @@
 
 {% if not tenants %}
 <div class="card empty">
-  <h3>No clients yet</h3>
+  <h2>{{ 'No clients yet' if can('clients.manage') else 'No clients to show' }}</h2>
   <p>{% if can('clients.manage') %}<a href="{{ url_for('tenants.new_tenant') }}">Add a client</a> and its reports appear here once data has been collected.{% else %}You haven't been given access to any clients yet. Ask an admin to grant access.{% endif %}</p>
 </div>
 {% else %}
@@ -43,15 +43,41 @@
 </nav>
 {% if use %}<p class="use-intro">{{ use.description }}</p>{% endif %}
 
-{% if tenant and saved %}
-<section class="card saved-views">
-  <div class="card-head"><h2>{{ icon('eye') }} Your saved views</h2><span class="meta">Open on {{ tenant.name }}</span></div>
-  <div class="opts">{% for v in saved %}<a class="opt" href="{{ saved_view_url(v.report_key, tenant.id) }}?{{ v.query }}">{{ v.name }}<span class="n">{{ titles[v.report_key] }}</span></a>{% endfor %}</div>
-</section>
-{% endif %}
-
+{% set makes = can_open('designs.index') %}
 <p class="muted no-match" hidden>Nothing matches that. Try a word like mailbox, admin, guest or licence.</p>
 <div class="library" id="library">
+  {% if not use and (custom or makes) %}
+  {#- The MSP's own reports, built from blocks (web/designs.py); each opens on the chosen client. -#}
+  <section class="report-group lib-area lib-custom">
+    <h2>Custom reports{% if custom %}<span class="n">{{ custom|length }}</span>{% endif %}
+      {% if makes %}<a class="btn sm lib-new" href="{{ url_for('designs.index') }}">{{ icon('plus') }} New custom report</a>{% endif %}</h2>
+    {% if custom %}
+    <div class="lib-grid">
+      {% for c in custom %}
+      <article class="lib-card" data-name="{{ c.search }}">
+        <a class="lib-main" href="{{ c.href }}">
+          <span class="title">{{ c.name }}{{ icon('arrow', 'go') }}</span>
+          <span class="desc">{{ c.description or 'Your own client report, built from blocks.' }}</span>
+        </a>
+        <span class="lib-foot"><span class="muted">{% if c.sent_by %}Sent by {{ c.sent_by|plural('plan or schedule', 'plans and schedules') }}{% else %}Not sent yet{% endif %}</span>
+          {% if c.edit %}<a href="{{ c.edit }}">{{ icon('edit') }} Edit</a>{% endif %}</span>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card empty compact" data-name="custom reports new design blocks">
+      <p class="m0">None yet. Build a client report from blocks once, with your branding, and it works for every client; a report plan or a client's email schedule sends it as a PDF.</p>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+  {% if saved %}
+  {#- The person's saved views (web/saved_views.py): a report with their filters, columns and sort. -#}
+  <section class="report-group lib-area lib-views">
+    <h2>Your views<span class="n">{{ saved|length }}</span><span class="meta">{% if tenant %}Open on {{ tenant.name }}{% else %}Every client's rows{% endif %}</span></h2>
+    <div class="opts">{% for v in saved %}<a class="opt" href="{{ v.href }}" data-name="{{ v.search }}" title="{{ v.report }} with the filters, columns and sort you saved">{{ v.name }}<span class="n">{{ v.report }}</span></a>{% endfor %}</div>
+  </section>
+  {% endif %}
   {% for area in areas %}
   <section class="report-group lib-area">
     <h2>{{ area.title }}<span class="n">{{ area.entries|length }}</span></h2>
@@ -91,7 +117,7 @@
   </section>
   {% endif %}
 </div>
-<p class="footnote">{% if tenant %}Reports open for <strong>{{ tenant.name }}</strong>.{% if staff %} Use “All clients” on a report to compare every client.{% endif %}{% else %}Each report opens across all your clients, one row per client. Pick a client above to open its own reports.{% endif %}</p>
+<p class="footnote">{% if tenant %}Reports open for <strong>{{ tenant.name }}</strong>.{% if staff %} Use “All clients” on a report to compare every client.{% endif %}{% else %}Each report opens across all your clients, one row per client{% if custom %}; a custom report opens on your first client{% endif %}. Pick a client above to open its own reports.{% endif %}</p>
 {% endif %}
 {% endblock %}
 {% block scripts %}
