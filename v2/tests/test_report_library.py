@@ -10,8 +10,8 @@ from html import unescape
 
 from openpyxl import load_workbook
 
-from officesentry import text
-from officesentry.reports import data_reports, library, rollups, views
+from officesentry import roles, text
+from officesentry.reports import data_reports, designs, library, rollups, views
 from officesentry.reports.data_reports import DataReport, Many, Rows, Section
 from tests import auditdata
 from tests.conftest import login, make_user
@@ -273,8 +273,8 @@ def test_report_page_filters_hides_and_downloads_the_same_rows(client, db, two_t
     assert f"/tenants/{alpha}/data/mailboxes.pdf?{q}" in page.replace("%2F", "/").replace("%3A", ":")
     body = client.get(f"{base}.csv?section=1&{q}").get_data(as_text=True).lstrip("\ufeff")
     rows = list(csv.reader(io.StringIO(body)))
-    assert rows[0] == ["Mailbox", "Forwards to", "Set by", "Outside the organisation", "Reaches outside", "Flag"]
-    assert len(rows) == 3 and all(r[3] == "Yes" for r in rows[1:])
+    assert rows[0] == ["Flag", "Mailbox", "Forwards to", "Set by", "Outside the organisation", "Reaches outside"]
+    assert len(rows) == 3 and all(r[4] == "Yes" for r in rows[1:])
     wb = load_workbook(io.BytesIO(client.get(f"{base}.xlsx?{q}").data))
     assert wb["Forwarding"].max_row == 3
     assert any("Filtered view" == r[0] for r in wb["Summary"].iter_rows(values_only=True))
@@ -375,6 +375,42 @@ def test_library_lists_every_report_by_area_and_use(client, db, vault, two_tenan
         assert all(k in data_reports.REPORTS or k in dict((s[0], s) for s in library.SUMMARIES) for k in use.reports)
 
 
+def test_library_lists_custom_reports_and_saved_views(client, db, two_tenants):
+    """Custom reports and the person's saved views sit at the top of the Reports page, for one client or
+    across all of them (a custom report then opens on the first client; a view on Every row)."""
+    alpha, bravo = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    page = client.get("/reports").get_data(as_text=True)
+    assert "New custom report" in page and 'href="/reporting/designs"' in page and "Your views" not in page
+    did = designs.create(db, "Board pack", "admin", designs.STARTERS["executive"][2], "For the board")
+    client.post(
+        "/reports/mailboxes/views",
+        data={"name": "Leaving us", "query": "f=forwarding/outside-the-organisation:Yes", "tenant_id": alpha},
+    )
+    query = "f=forwarding%2Foutside-the-organisation%3AYes"
+    page = client.get("/reports").get_data(as_text=True)
+    assert f'href="/tenants/{alpha}/designs/{did}"' in page and "For the board" in page and "Not sent yet" in page
+    assert f'href="/reporting/designs/{did}?tenant={alpha}"' in page  # Edit
+    assert f'href="/across/mailboxes/rows?{query}"' in page and "Leaving us" in page
+    page = client.get(f"/reports?tenant={bravo}").get_data(as_text=True)
+    assert f'href="/tenants/{bravo}/designs/{did}"' in page
+    assert f'href="/tenants/{bravo}/data/mailboxes?{query}"' in page
+    assert "Board pack" not in client.get(f"/reports?tenant={bravo}&use=offboarding").get_data(as_text=True)
+    # Someone who can't make one (an auditor) still finds the ones there are; a client account sees none.
+    uid = make_user(db, "auditor", role="analyst", all_tenants=True)
+    db.execute("UPDATE users SET role_id = ? WHERE id = ?", (roles.by_key(db, "auditor").id, uid))
+    client.post("/logout")
+    login(client, "auditor")
+    page = client.get("/reports").get_data(as_text=True)
+    assert "Board pack" in page and "New custom report" not in page and f"/reporting/designs/{did}" not in page
+    client.post("/logout")
+    make_user(db, "client", role="client", tenants=[alpha])
+    login(client, "client")
+    page = client.get("/reports").get_data(as_text=True)
+    assert "Board pack" not in page and "Custom reports" not in page and "/reporting/designs" not in page
+
+
 def test_library_for_a_client_shows_only_their_tenant(client, db, two_tenants):
     alpha, bravo = two_tenants
     make_user(db, "client", role="client", tenants=[alpha])
@@ -399,7 +435,7 @@ def test_rollup_figures_open_the_tenant_rows(client, db, two_tenants):
     )
     page = unescape(client.get("/across/mailboxes").get_data(as_text=True))
     assert f'href="/tenants/{alpha}/data/mailboxes?f=forwarding%2Fflag%3Amedium#t-forwarding"' in page
-    page = client.get("/across/review").get_data(as_text=True)
+    page = client.get("/").get_data(as_text=True)
     assert re.search(rf'href="/tenants/{alpha}/data/inactive#t-inactive-members"', page)
 
 
@@ -411,3 +447,74 @@ def test_no_filter_with_only_one_choice():
     report.sections = [s]
     tv = views.table_view(report, 0, views.View(), "/p")
     assert tv.flag is not None and tv.flag.options == [] and tv.filters == [] and tv.flagged_href == ""
+
+
+def test_numbers_are_for_sorting_not_filtering():
+    """A column of numbers or sizes gets no value filter unless its section asks for one, and then (or once a
+    value is picked) its values are offered smallest first, not as text."""
+    report = sample()
+    size = {c.slug: c for c in views.table_view(report, 0, views.View(), "/p").columns}["size"]
+    assert size.kind == "num" and size.options == []
+    report.sections[0].filter_columns = ("Size",)
+    size = {c.slug: c for c in views.table_view(report, 0, views.View(), "/p").columns}["size"]
+    assert [o.label for o in size.options] == ["900.0 MB", "2.0 GB", "10.0 GB", "Blank"]
+    picked = views.table_view(sample(), 0, views.View.parse("f=people/size:2.0+GB"), "/p")
+    size = {c.slug: c for c in picked.columns}["size"]
+    assert [o.label for o in size.options] == ["900.0 MB", "2.0 GB", "10.0 GB", "Blank"] and size.options[1].active
+
+
+def test_under_one_percent_is_a_small_number():
+    report = DataReport("x", "Sample", "", {"name": "T"}, NOW)
+    s = Section("Sites", ["Site", "Share"])
+    for row in (["A", "6%"], ["B", "Under 1%"], ["C", "12%"], ["D", "1%"]):
+        s.add(row)
+    report.sections = [s]
+    assert views.table_view(report, 0, views.View(), "/p").columns[1].kind == "num"
+    assert names(views.apply(report, views.View.parse("sort=sites/share:asc"))) == ["B", "D", "A", "C"]
+
+
+def test_a_date_column_keeps_its_presets_however_many_never_signed_in():
+    report = DataReport("x", "Sample", "", {"name": "T"}, NOW)
+    s = Section("People", ["Name", "Last sign-in"])
+    for name, when in (("Ann", "Never"), ("Bob", "Never"), ("Cara", "Never"), ("Dev", "2026-09-30")):
+        s.add([name, when])
+    report.sections = [s]
+    col = views.table_view(report, 0, views.View(), "/p").columns[1]
+    assert col.kind == "date"
+    assert [(o.label, o.count) for o in col.options] == [("In the last 30 days", 1), ("Never or blank", 3)]
+    assert names(views.apply(report, views.View.parse("age=people/last-sign-in:none"))) == ["Ann", "Bob", "Cara"]
+
+
+def _coverage() -> Section:
+    s = Section("Coverage", ["Name", "Method", "Count", "Policy", "State", "What it means", "Why"])
+    s.add(["Ann", "App", 1, "P1", "On", "Covered by a policy", "Admin"], "high", key="u1")
+    s.add(["Bob", "SMS", 2, "P2", "Off", "Covered by a policy", ""], None, key="u2")
+    s.add(["Cara", "App", 3, "P1", "On", "Covered by a policy", "Guest"], None, key="u3")
+    return s
+
+
+def test_a_note_the_same_under_every_row_is_said_once():
+    report = DataReport("x", "Sample", "", {"name": "T"}, NOW)
+    report.sections = [_coverage()]
+    tv = views.table_view(report, 0, views.View(), "/p")
+    assert tv.notes == [5, 6]
+    assert tv.repeated == [5] and tv.said_once == [("What it means", "Covered by a policy")]
+    # One row keeps its note under it, and downloads keep the column.
+    assert views.table_view(report, 0, views.View.parse("f=coverage/name:Ann"), "/p").repeated == []
+    assert views.apply(report, views.View()).sections[0].columns == report.sections[0].columns
+
+
+def test_the_page_says_a_repeated_note_once_and_marks_rows_with_their_keys(client, db, two_tenants, monkeypatch):
+    def builder(snap, now, report):
+        report.sections = [_coverage()]
+
+    monkeypatch.setitem(data_reports.REPORTS, "coverage-test", ("Coverage test", "Test", (), builder))
+    alpha, _ = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    page = client.get(f"/tenants/{alpha}/data/coverage-test").get_data(as_text=True)
+    table = page.split('id="t-coverage"')[1]
+    assert table.count("Covered by a policy") == 1
+    assert '<p class="intro note-once"><strong>What it means:</strong> Covered by a policy</p>' in table
+    assert "<strong>Why:</strong> Admin" in table  # a note that differs stays under its row
+    assert 'data-key="u1"' in table and 'data-key="u2"' in table

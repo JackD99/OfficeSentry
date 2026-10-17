@@ -9,14 +9,14 @@ from urllib.parse import urlsplit
 import responses
 from openpyxl import load_workbook
 
-from officesentry import state_history, store
+from officesentry import formatting, state_history, store
 from officesentry.collectors import sharepoint
 from officesentry.collectors.sharepoint import anyone_can_edit, concealed, describe_permissions, outside_can_edit
 from officesentry.collectors.sharepoint_lookup import is_system_site
 from officesentry.graph import GraphClient
 from officesentry.reports import data_reports
 from officesentry.reports.data_reports import Link
-from officesentry.reports.sharepoint import nice_max, size, storage_points
+from officesentry.reports.sharepoint import nice_max, site_name, size, storage_points
 from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
 from officesentry.worker import execute_run
@@ -452,11 +452,30 @@ def test_sites_report(db, two_tenants):
     assert tiles["Storage used"].foot.startswith("+")  # Microsoft's 180-day history gives growth on day one
     assert "<svg" in report.chart and not report.notice
     shared = _section(report, "Sites shared outside the organisation")
-    assert str(shared.rows[0][0]) == sd.FINANCE and shared.flags == ["high"]
+    assert str(shared.rows[0][0]) == "Finance" and shared.rows[0][0].href == sd.FINANCE and shared.flags == ["high"]
+    assert shared.intro.endswith(f"Microsoft's figures as of {formatting.day(sd.days_ago(2))}.")
     idle = _section(report, "Inactive sites")
-    assert [str(r[0]) for r in idle.rows] == [sd.OLD]  # system sites are never "inactive"
+    assert [str(r[0]) for r in idle.rows] == ["Old Projects"]  # system sites are never "inactive"
     every = _section(report, "All sites")
-    assert str(every.rows[0][0]) == sd.FINANCE and every.rows[0][3] == "5.0 GB"
+    assert str(every.rows[0][0]) == "Finance" and every.rows[0][3] == "5.0 GB"
+    # Downloads keep the address, in a column the page leaves out until someone shows it.
+    assert every.columns[-1] == "Address" and every.optional == ("Address",) and every.rows[0][-1] == sd.FINANCE
+    assert [str(r[0]) for r in every.rows][-1] == "https://x-admin.sharepoint.com"  # no name: the address
+
+
+def test_sites_are_named_from_their_address_until_storage_names_them(db, two_tenants):
+    """The usage report only has addresses; the last part of one reads as a name, keeping its own capitals."""
+    alpha, _ = two_tenants
+    extra = [
+        sd._site("https://x.sharepoint.com/teams/IT-helpdesk", "Team Site", storage=3 * 1024**3),
+        sd._site("https://x.sharepoint.com/sites/hr_policies/", "Team Site", storage=2 * 1024**3),
+    ]
+    seed_tenant(db, alpha, sharepoint_kw={"sites": [*sd.SITE_USAGE, *extra]})
+    every = _section(_report(db, alpha, "sharepoint"), "All sites")
+    names = [str(r[0]) for r in every.rows]
+    assert names[:4] == ["Finance", "IT helpdesk", "Hr Policies", "Old Projects"]
+    assert every.rows[1][0].href == "https://x.sharepoint.com/teams/IT-helpdesk"
+    assert site_name({"url": None}) == "" and site_name({}) == ""
 
 
 def test_site_growth_against_a_month_ago(db, two_tenants):
@@ -469,7 +488,7 @@ def test_site_growth_against_a_month_ago(db, two_tenants):
     )
     store.add_objects(db, cur.lastrowid, "site", [(sd.FINANCE, {"storageUsed": 4 * 1024**3})])
     seed_tenant(db, alpha)
-    row = next(r for r in _section(_report(db, alpha, "sharepoint"), "All sites").rows if str(r[0]) == sd.FINANCE)
+    row = next(r for r in _section(_report(db, alpha, "sharepoint"), "All sites").rows if str(r[0]) == "Finance")
     assert row[4] == "+1.0 GB"
 
 
@@ -484,7 +503,7 @@ def test_site_growth_reads_the_daily_history_once_that_snapshot_is_pruned(db, tw
     assert state_history.record_run(db, db.execute("SELECT * FROM runs WHERE id = ?", (old,)).fetchone())
     db.execute("DELETE FROM objects WHERE run_id = ?", (old,))  # as the retention policy does
     seed_tenant(db, alpha)
-    row = next(r for r in _section(_report(db, alpha, "sharepoint"), "All sites").rows if str(r[0]) == sd.FINANCE)
+    row = next(r for r in _section(_report(db, alpha, "sharepoint"), "All sites").rows if str(r[0]) == "Finance")
     assert row[4] == "+1.0 GB"
 
 
@@ -624,5 +643,5 @@ def test_xlsx_keeps_links(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     wb = load_workbook(io.BytesIO(data_reports.to_xlsx(_report(db, alpha, "shared-files"))))
-    cell = wb["Shared with anyone"]["A2"]
+    cell = wb["Shared with anyone"]["B2"]  # after the flag column
     assert cell.value == "Clients (folder)" and cell.hyperlink.target == "https://x/Clients"

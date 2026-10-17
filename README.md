@@ -86,14 +86,15 @@ check, a key figure, a whole part of the report), with a preview of the client's
 one client or many: each is frozen as it is and emailed or published to the client's portal.
 Anything you change after approving waits for a new version, so the client's portal always matches what they were sent.
 
-**Report designs** let an account manager build their own client report without code: drag in blocks (a
+**Custom reports** let an account manager build their own client report without code: drag in blocks (a
 verdict, key figures, failing checks, what changed, licences, a table from any detail report, your own text),
-set each one up, see it on a real client as you go, and send it with a report plan. Start from an executive
-summary, a full review, a licensing review or a **Quarterly review**: three months of Secure Score and findings,
-what was fixed, the projects on the table and where each stands, licence spend and what's coming up in the next
-90 days ([example PDF](examples/quarterly-review.pdf)).
+set each one up, see it on a real client as you go, and send it with a report plan or a client's email
+schedule (*Send on a schedule* on the client's Custom reports page starts one with it ticked). Start from an
+executive summary, a full review, a licensing review or a **Quarterly review**: three months of Secure Score
+and findings, what was fixed, the projects on the table and where each stands, licence spend and what's coming
+up in the next 90 days ([example PDF](examples/quarterly-review.pdf)).
 
-![The report designer with the Quarterly review: blocks, the layout, and a preview on a real client](docs/screenshots/design-editor.png)
+![The custom report editor with the Quarterly review: blocks, the layout, and a preview on a real client](docs/screenshots/design-editor.png)
 
 ### SharePoint storage: why it's full and what to clean up
 
@@ -231,20 +232,34 @@ changed. Site addresses in reports and on group pages open it.
   </tr>
 </table>
 
+<!-- since 2.5.0 -->
+### Acting on a finding
+
+Open any row of a client's Findings tab and the finding's sheet opens beside the table: the evidence behind it
+(for an account, the facts from its page), its history (first seen, came back, accepted and by whom), where else
+the same check fails across your clients, the fix as numbered steps, and the text to act on it. **Copy for a
+ticket** puts a ready-made ticket on the clipboard, **Email the contact** opens a prefilled email to the client's
+contact in your own mail app (Office Sentry sends nothing itself), and **Accept risk** is there too. The team can
+keep a note on a finding and hand it to a colleague who sees that client; notes and hand-offs stay inside the
+team and never reach a client's reports or emails. Nothing is ever written to the client's tenant.
+
+![A finding's sheet beside the Findings table: evidence, history, where else it fails, the fix and the ticket text](docs/screenshots/finding-sheet.png)
+<!-- /since -->
+
 ### Across all clients, and what changed
 
-The **Clients** page puts every client side by side, worst first. **All clients** compares any report across every
-client (one row each, every figure clickable), and **What changed** lists month-over-month changes: new and fixed
-findings, admin, account, Conditional Access, forwarding, app, device and group changes, and a row-by-row comparison
-of every detail report.
+The **Clients** page puts every client side by side, worst first, with the monthly review's figures; pick any
+report from its menu to compare it across every client (one row each, every figure clickable). **What changed**
+lists month-over-month changes: new and fixed findings, admin, account, Conditional Access, forwarding, app, device
+and group changes, and a row-by-row comparison of every detail report.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/all-tenants.png" alt="All clients rollup"></td>
+    <td width="50%"><img src="docs/screenshots/all-tenants.png" alt="The Clients page showing MFA coverage for every client"></td>
     <td width="50%"><img src="docs/screenshots/what-changed.png" alt="What changed across all clients"></td>
   </tr>
   <tr>
-    <td>All clients: the monthly review's figures for every client (<a href="examples/all-clients-monthly-review.pdf">PDF</a>)</td>
+    <td>Clients, with MFA coverage picked: one report for every client (the monthly review's figures as a <a href="examples/all-clients-monthly-review.pdf">PDF</a>)</td>
     <td>What changed in the last 30 days, most important first (<a href="examples/what-changed-all-clients.pdf">PDF</a>)</td>
   </tr>
 </table>
@@ -319,6 +334,21 @@ for. A project drops off by itself once its findings are fixed.
   </tr>
 </table>
 
+<!-- since 2.5.0 -->
+### A grade for every client
+
+Every client gets a **grade from A to E**: one letter to put in front of a client, worked out the same way for
+everyone, with the rules published so you can say exactly why they are a C and what makes them a B. The checks are
+grouped into five parts (admin accounts, sign-in and accounts, mail, devices, and sharing and apps); a part's grade
+is its worst open finding after accepted risks are set aside, and the grade is the worst part, so one critical gap
+keeps a client out of A and B whatever else is in good shape. The grade sits beside the client's name on every page
+about them, shows on the Clients page and leads the figures on their Overview, and its own page shows what moves each part, the grade on each
+of the last twelve month-ends, and how the client compares with the others you look after of about the same size
+(the median grade, Secure Score, MFA coverage, open critical and high findings and licence waste per user), without
+naming any of them. Nothing about a client leaves your install. The rules are in
+[Client grades](v2/docs/client-grades.md).
+<!-- /since -->
+
 ### A view for clients
 
 Client users can sign in too. They see only their own organisation's reports, key numbers and downloads, never
@@ -385,7 +415,7 @@ export and the client's side, then deletes the client and everything stored for 
 [`examples/`](examples/) has real exports from the demo data: the monthly review (PDF and XLSX) and its summary PDF,
 a quarterly review, Cyber Essentials evidence, the insurance evidence pack, SharePoint storage, MFA coverage, mailbox
 permissions, mail forwarding, licence right-sizing, sign-in activity, sign-in methods, subscriptions, Conditional
-Access, an account page, What changed, All clients and a recommended projects proposal. All of it is fictional.
+Access, an account page, What changed, the Clients page and a recommended projects proposal. All of it is fictional.
 
 ## Security model
 
@@ -474,6 +504,7 @@ from there.
   work account
 - [Onboarding a client](v2/docs/onboarding-a-client.md): consent, Global Reader, the first collection, connection
   health and offboarding
+- [Client grades](v2/docs/client-grades.md): how a client's A to E grade is worked out, its history and comparison <!-- since 2.5.0 -->
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes

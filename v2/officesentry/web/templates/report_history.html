@@ -2,7 +2,7 @@
 {% from "_macros.html" import icon, ts, tenant_header with context %}
 {% block title %}Report history · {{ tenant.name }}{% endblock %}
 {% block content %}
-{{ tenant_header(tenant, 'schedules', title='Report history') }}
+{{ tenant_header(tenant, 'schedules', title='Report history', back=('Emailed reports', url_for('email.tenant_emails', tenant_id=tenant.id))) }}
 
 <section class="card flush">
   <div class="card-head toolbar">

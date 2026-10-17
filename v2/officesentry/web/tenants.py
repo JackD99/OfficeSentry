@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
-from .. import clouds, endpoints, lifecycle, store, tenant_groups, tenant_health
+from .. import clouds, endpoints, grades, lifecycle, store, tenant_groups, tenant_health
 from ..collectors import REGISTRY, core, for_tenant
 from ..db import audit, transaction, utcnow
 from ..discovery import tenant_id_for_domain
@@ -19,7 +19,6 @@ from ..reports.month_changes import CHANGE_REPORTS
 from ..text import one_line, plural
 from .access import can, is_staff, login_required, manages_groups, needs, opens_on, tenant_or_404, visible_tenants
 from .groups import group_aware, scoped_tenants
-from .reports import report_groups
 
 bp = Blueprint("tenants", __name__)
 
@@ -112,23 +111,23 @@ def data_health(tenant, latest: dict) -> tuple[str, str, str]:
 @login_required
 @group_aware
 def dashboard():
-    from ..reports.monthly_review import dashboard_trends, rollup_row, setting
+    """The Clients page: every client the person looks after, worst first, with the monthly review's figures
+    side by side (the review rollup, ``reports/rollups.py``), each client's data health and its monthly
+    review. The picker above the table opens any other report the same way (``across.rollup``)."""
+    from ..reports import rollups
+    from ..reports.monthly_review import dashboard_trends, rollup_row
 
     if not is_staff():
         from . import client_home
 
         return client_home.render(visible_tenants(g.db, g.user))
-    rows = [rollup_row(g.db, t, cached=True) for t in scoped_tenants()]
+    from .across import rollup_page
+    from .home import get_started
+
+    tenants = scoped_tenants()
+    rows = [rollup_row(g.db, t, cached=True) for t in tenants]
     for row in rows:
         row["health"] = data_health(row["tenant"], _latest_runs(row["tenant"]["id"]))
-    rows.sort(
-        key=lambda r: (
-            -r["counts"]["critical"],
-            -r["counts"]["high"],
-            -r["counts"]["medium"],
-            r["tenant"]["name"].lower(),
-        )
-    )
     # The tiles add up only the clients whose cells the person may see: findings, and Secure Score (tenant).
     secure = [r for r in rows if can("reports.security", r["tenant"]["id"])]
     scored = [r for r in rows if can("reports.tenant", r["tenant"]["id"])]
@@ -146,14 +145,20 @@ def dashboard():
         "data_issues": sum(r["health"][0] in ("bad", "warn") for r in rows),
         **trends,
     }
-    from .home import get_started
-
-    return render_template(
-        "dashboard.html",
-        rows=rows,
+    review = rollups.review_rollup(
+        g.db, tenants, datetime.now(UTC), cached=True, built={r["tenant"]["id"]: r for r in rows}
+    )
+    review.rows.sort(key=lambda r: (bool(r.note), -r.attention, r.tenant["name"].lower()))
+    secure_tenants = [t for t in tenants if can("reports.security", t["id"])]
+    return rollup_page(
+        review,
+        tenants,
         summary=summary,
-        currency=setting(g.db, "currency", "GBP"),
+        health={r["tenant"]["id"]: r["health"] for r in rows},
+        sparks={r["tenant"]["id"]: r["kpis"] for r in rows},
         get_started=get_started(),
+        # The grade column (grades.py): only clients whose findings the person sees, as last stored.
+        grade_rows=grades.stored_letters(g.db, [t["id"] for t in secure_tenants]),
     )
 
 
@@ -274,6 +279,11 @@ def tenant(tenant_id: int):
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
     latest = _latest_runs(t["id"])
     report = build(g.db, t)
+    # The grade leads the figures (grades.py), from the review's results with accepted risks already set aside;
+    # storing its row keeps the badge in every client page's header current.
+    grade_row = None
+    if can("reports.security", t["id"]):
+        grade_row = grades.rows(g.db, [t], graded={t["id"]: grades.grade(report.results)})[t["id"]]
     sev_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
     attention = sorted(report.failing, key=lambda r: (sev_rank.get(r.severity, 5), -len(r.findings)))
     from .tenant_admin import _check_problem
@@ -295,7 +305,7 @@ def tenant(tenant_id: int):
         key_changes=key_changes,
         attention=attention,
         health=data_health(t, latest),
-        report_groups=report_groups(t["id"]),
+        grade_row=grade_row,
         setup=None if setup.onboarded else setup,
         setup_can_check=_check_problem(t) is None and can("collect", t["id"]),
         cloud_problem=cloud_problem,

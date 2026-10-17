@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% from "_macros.html" import ts, csrf %}
-{% block title %}Your account · Office Sentry{% endblock %}
+{% block title %}Account · Office Sentry{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Your account</h1>
+<div class="page-head"><div><h1>Account</h1>
   <div class="sub">Signed in as {{ current_user.username }} ({{ current_role.name if current_role else current_user.role }}).</div></div></div>
 
 {% if not current_user.totp_enabled_at and has_password %}

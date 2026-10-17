@@ -219,7 +219,8 @@ def add_project_statuses(db, ids: list[int]) -> None:
 @dataclass
 class Shot:
     name: str
-    path: str  # "{t}" is the showcase tenant's id, "{o}" the one being onboarded, "{u}" a first-line technician
+    path: str  # "{t}" is the showcase tenant's id, "{o}" the one being onboarded, "{u}" a first-line technician,
+    # "{f}" the showcase tenant's finding to open a sheet on (Server.finding_id)
     height: int = 900  # viewport height: the picture is what fits in it
     width: int = 1440
     scroll_to: str | None = None  # CSS selector (or text=...) to bring to the top first
@@ -234,6 +235,7 @@ SHOTS = [
     Shot("tenant-overview", "/tenants/{t}", height=1000),
     Shot("review", "/tenants/{t}/report", height=1100),
     Shot("review-attention", "/tenants/{t}/report", height=1000, scroll_to="#month"),
+    Shot("finding-sheet", "/tenants/{t}/findings/{f}", height=1000),
     Shot("sharepoint-storage", "/tenants/{t}/data/sharepoint-storage", height=1100),
     Shot("site-access", "/tenants/{t}/data/site-access", height=1100),
     Shot("site-permissions", "/tenants/{t}/data/site-permissions", height=1100),
@@ -268,7 +270,7 @@ SHOTS = [
     Shot("mail-flow", "/tenants/{t}/data/mail-flow", height=1000),
     Shot("report-designs", "/reporting/designs", height=900),
     Shot("design-editor", "/reporting/designs/1", height=1000),  # the demo's Quarterly review
-    Shot("all-tenants", "/across/review", height=760),
+    Shot("all-tenants", "/across/mfa", height=760),  # the Clients page with a report picked
     Shot("what-changed", "/changes", height=640),
     Shot("upcoming", "/upcoming", height=900),
     Shot("activity-history", "/tenants/{t}/activity", height=1000),
@@ -318,7 +320,7 @@ EXAMPLES = {
     ),
     "quarterly-review.pdf": (
         "/tenants/{t}/designs/1.pdf",
-        "The Quarterly review design from the report designer: three months of score and findings, what was "
+        "The Quarterly review custom report, built from blocks: three months of score and findings, what was "
         "fixed, projects, licence spend and what's coming up.",
     ),
     "insurance-evidence-pack.pdf": (
@@ -382,7 +384,7 @@ def build_site(data_dir: Path):
     """Seed a new, empty data directory; returns (config, tenant ids, passwords by username, names)."""
     from datetime import UTC, datetime, timedelta
 
-    from officesentry import backups, system_health, worker
+    from officesentry import backups, grades, system_health, worker
     from officesentry.config import load_config
     from officesentry.crypto import Vault
     from officesentry.db import connect, migrate
@@ -394,6 +396,9 @@ def build_site(data_dir: Path):
     db = connect(cfg.db_path)
     migrate(db)
     ids = seed(db, Vault(cfg.encryption_keys))
+    # Each client's grade as the worker would have stored it, so the badge beside the name is on every page from
+    # the first one captured (a page builds it otherwise, and only the pages after it would carry the badge).
+    grades.rows(db, db.execute("SELECT * FROM tenants ORDER BY id").fetchall())
     passwords = {ADMIN: secrets.token_urlsafe(12), CLIENT: secrets.token_urlsafe(12)}
     for username, role, all_tenants in ((ADMIN, "admin", 1), (CLIENT, "client", 0)):
         uid = db.execute(
@@ -464,6 +469,23 @@ class Server:
         finally:
             db.close()
 
+    def finding_id(self, tenant_id: int) -> int:
+        """The finding to open a sheet on: the worst open one about an account (its page gives the evidence),
+        by severity, then check and account, so it is the same one every time."""
+        from officesentry.db import connect
+
+        db = connect(self.cfg.db_path)
+        try:
+            return db.execute(
+                "SELECT id FROM findings WHERE tenant_id = ? AND resolved_at IS NULL AND accepted_at IS NULL"
+                " ORDER BY subject NOT LIKE '%@%',"
+                " CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,"
+                " rule_key, subject LIMIT 1",
+                (tenant_id,),
+            ).fetchone()[0]
+        finally:
+            db.close()
+
 
 # -- Browser -----------------------------------------------------------------------------------
 
@@ -511,6 +533,7 @@ def capture(server: Server, passwords: dict, ids: list[int], shots: list[Shot], 
     saved = []
     executable = chromium_path()
     technician = server.user_id("jordan.desk")
+    finding = server.finding_id(ids[0])
     with sync_playwright() as p:
         browser = p.chromium.launch(executable_path=executable)
         contexts = {}
@@ -530,7 +553,7 @@ def capture(server: Server, passwords: dict, ids: list[int], shots: list[Shot], 
                 server.beat()
                 page = contexts[key].new_page()
                 page.set_viewport_size({"width": shot.width, "height": shot.height})
-                response = page.goto(server.url + shot.path.format(t=ids[0], o=ids[-1], u=technician))
+                response = page.goto(server.url + shot.path.format(t=ids[0], o=ids[-1], u=technician, f=finding))
                 page.wait_for_load_state("networkidle")
                 if response is None or response.status != 200:
                     print(f"  {shot.name}: {shot.path} returned {response.status if response else 'nothing'}")

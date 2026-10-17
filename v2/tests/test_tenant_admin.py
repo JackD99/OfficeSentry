@@ -256,7 +256,7 @@ def test_archived_tenant_is_hidden(client, db, two_tenants):
         assert client.get(f"/tenants/{alpha}/report").status_code == 404
         client.post("/logout")
     login(client, "lead")
-    assert "Alpha Ltd" not in client.get("/across/review").get_data(as_text=True)
+    assert "Alpha Ltd" not in client.get("/across/mfa").get_data(as_text=True)
     client.post("/logout")
     login(client, "admin")
     assert "Alpha Ltd" not in client.get("/").get_data(as_text=True)

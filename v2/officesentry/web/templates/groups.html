@@ -2,7 +2,7 @@
 {% from "_macros.html" import icon, csrf, page_link with context %}
 {% block title %}Client groups · Office Sentry{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Client groups</h1>
+<div class="page-head"><div><h2 class="page-title">Client groups</h2>
   <div class="sub">Group your clients by tier, region or service level, then look at one group at a time.</div></div></div>
 
 <div class="grid-main">
@@ -57,7 +57,7 @@
     <h2>How groups work</h2>
     <ul class="group-help small">
       <li>A client can be in as many groups as you like.</li>
-      <li>Pick a group at the top of the dashboard, All clients, What changed, Month-end and Client settings to see only those clients. Downloads follow the group you picked.</li>
+      <li>Pick a group at the top of Clients, What changed, Month-end and Client settings to see only those clients. Downloads follow the group you picked.</li>
       <li>A digest can cover one group instead of every client.</li>
       <li>Groups never show anyone a client they can't already see. To let an analyst see a whole group, including clients added to it later, tick the group on their page under {{ page_link(url_for('admin.users'), 'Users') }}.</li>
     </ul>

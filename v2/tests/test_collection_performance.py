@@ -183,7 +183,7 @@ def test_dashboard_and_all_tenants_use_the_cache(client, db, two_tenants):
     assert client.get("/").status_code == 200
     assert {r[0] for r in db.execute("SELECT tenant_id FROM rollup_cache")} == {alpha, bravo}
     db.execute("UPDATE rollup_cache SET data = json_set(data, '$.failing', 4242)")
-    assert client.get("/across/review").status_code == 200  # served from the cache, without errors
+    assert client.get("/").status_code == 200  # served from the cache, without errors
 
 
 # -- Run log retention ---------------------------------------------------------------------

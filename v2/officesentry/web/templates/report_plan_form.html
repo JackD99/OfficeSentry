@@ -9,7 +9,7 @@
     <span class="hint">{{ o.description }}</span></span></label>
 {%- endmacro %}
 {% block content %}
-<div class="crumbs"><a href="{{ url_for('reporting.index') }}">Month-end</a><span>/</span><a href="{{ url_for('reporting.plans') }}">Report plans</a></div>
+<div class="crumbs"><a href="{{ url_for('reporting.index') }}">Month-end</a><span>/</span><a href="{{ url_for('reporting.plans') }}">Report plans</a><span>/</span><span>{{ heading }}</span></div>
 <div class="page-head">
   <div><h1>{{ heading }}</h1>
     <div class="sub">One monthly report for every client you tick. Each gets its own scheduled email, kept in step with this plan.</div></div>
@@ -23,9 +23,17 @@
     <div class="label-sm">Reports</div>
     <fieldset class="choices">
       <legend class="sr-only">Summary reports</legend>
-      {% for o in catalog if not o.key.startswith('data:') %}{{ choice(o) }}{% endfor %}
+      {% for o in catalog if not o.key.startswith(('data:', 'design:')) %}{{ choice(o) }}{% endfor %}
     </fieldset>
+    {% set custom = [] %}{% for o in catalog if o.key.startswith('design:') %}{% set _ = custom.append(o) %}{% endfor %}
+    <div class="label-sm">Custom reports <span class="muted">· your own, built from blocks, as a PDF</span></div>
+    {% if custom %}<fieldset class="choices">
+      <legend class="sr-only">Custom reports</legend>
+      {% for o in custom %}{{ choice(o) }}{% endfor %}
+    </fieldset>
+    {% else %}<div class="empty compact"><p>No custom reports yet. {% if can_open('designs.index') %}<a href="{{ url_for('designs.index') }}">Make one</a> from blocks and it can be sent here, to any client.{% else %}Someone who can <em>Design custom reports</em> makes them under Reports.{% endif %}</p></div>{% endif %}
     {% set options = {} %}{% for o in catalog %}{% set _ = options.update({o.key: o}) %}{% endfor %}
+    <div class="label-sm">Detail reports <span class="muted">· one spreadsheet each</span></div>
     {% for gr in report_groups %}
     <details class="report-choices"{% for key, title, desc in gr.reports if ('data:' ~ key) in p.reports %}{% if loop.first %} open{% endif %}{% endfor %}>
       <summary><span class="strong">{{ gr.title }}</span> <span class="muted small">{{ gr.reports|length }} reports</span></summary>

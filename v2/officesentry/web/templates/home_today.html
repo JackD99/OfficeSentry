@@ -1,10 +1,22 @@
-{#- Today (home.today): what needs a technician today, the answer first, then each client and why. -#}
+{#- Today (home.today): the ledger of what happened across a technician's clients, the answer first, then one
+    line per thing, worst first, with what's new above the line and what they'd seen before below it. -#}
 {% extends "base.html" %}
 {% from "_macros.html" import icon, page_link with context %}
 {% from "_groups.html" import group_picker with context %}
 {% from "_home.html" import home_switch, make_home with context %}
 {% from "_get_started.html" import get_started as get_started_card %}
 {% block title %}Today · Office Sentry{% endblock %}
+{% macro line(e) -%}
+<li class="ledger-line{{ ' seen' if not e.new }}" data-kind="{{ e.kind }}">
+  <time class="when" datetime="{{ e.when.isoformat(timespec='minutes') }}" title="{{ e.stamp_full }}">{{ e.stamp }}</time>
+  <div class="what">
+    <div class="line"><span class="sevtext {{ e.level }}">{{ e.word }}</span>
+      <a class="client" href="{{ url_for('tenants.tenant', tenant_id=e.tenant.id) }}">{{ e.tenant.name }}</a>
+      {{ page_link(e.href, e.text, class='what-link') }}</div>
+    {% if e.detail %}<div class="detail">{{ e.detail }}</div>{% endif %}
+  </div>
+</li>
+{%- endmacro %}
 {% block content %}
 <div class="page-head">
   <div class="head-title">
@@ -19,21 +31,23 @@
 {% if not get_started %}
 <div class="card empty">
   <h3>No clients to look after yet</h3>
-  {% if can('clients.manage') %}<p>Add a client, and what needs you each day shows here after its first collection.</p>
+  {% if can('clients.manage') %}<p>Add a client, and what happens across your clients shows here after its first collection.</p>
   <a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">Add a client</a>
   {% else %}<p>You haven't been given access to any active clients yet. Ask an admin to grant access.</p>{% endif %}
 </div>
 {% endif %}
 {% else %}
-<div class="callout lead-answer {{ data.rows[0].tone if data.rows else 'ok' }}" role="status">{{ icon('alert' if data.rows else 'check') }}
+{% set needs = data.new|rejectattr('kind', 'equalto', 'fixed')|list %}
+{% set worst = needs[0].tone if needs else 'ok' %}
+<div class="callout lead-answer {{ worst }}" role="status">{{ icon('alert' if needs else 'check') }}
   <div><strong>{{ data.sentence() }}</strong>
-    <div class="small">New findings are those first seen in the last day; "due this week" comes from Coming up.</div></div>
+    <div class="small">New since {{ data.since_label }}: what the night's collection found, collections that failed and what's due this week. Below the line is what you'd seen before and is still open.</div></div>
 </div>
 
 <div class="tiles">
-  <a class="tile link{{ ' tone-bad' if data.new_critical else (' tone-warn' if data.new_severe) }}" href="#needs-you">
+  <a class="tile link{{ ' tone-bad' if data.new_critical else (' tone-warn' if data.new_severe) }}" href="#ledger">
     <div class="label">New critical and high{{ icon('arrow', 'go') }}</div><div class="value">{{ data.new_severe }}</div>
-    <div class="foot">findings in the last day</div></a>
+    <div class="foot">findings since {{ data.since_label }}</div></a>
   <a class="tile link{{ ' tone-bad' if data.failing }}" href="{{ url_for('tenant_admin.clients') }}">
     <div class="label">Collections failing{{ icon('arrow', 'go') }}</div><div class="value">{{ data.failing }}</div>
     <div class="foot">{% if data.stale %}{{ data.stale }} more out of date{% else %}clients that couldn't be read{% endif %}</div></a>
@@ -41,35 +55,35 @@
   <{{ 'a' if upcoming else 'div' }} class="tile{{ ' link' if upcoming }}{{ ' tone-warn' if data.due }}"{% if upcoming %} href="{{ upcoming }}"{% endif %}>
     <div class="label">Due this week{% if upcoming %}{{ icon('arrow', 'go') }}{% endif %}</div><div class="value">{{ data.due }}</div>
     <div class="foot">renewals, expiring secrets, full mailboxes</div></{{ 'a' if upcoming else 'div' }}>
-  <a class="tile link" href="{{ url_for('tenants.dashboard') }}">
-    <div class="label">Nothing to do{{ icon('arrow', 'go') }}</div><div class="value">{{ data.fine }}</div>
-    <div class="foot">of {{ data.tenants|plural('client') }}</div></a>
+  <div class="tile{{ ' tone-ok' if data.fixed }}">
+    <div class="label">Fixed</div><div class="value">{{ data.fixed }}</div>
+    <div class="foot">critical and high findings no longer seen</div></div>
 </div>
 
-{% if data.rows %}
-<section class="card flush" id="needs-you">
-  <div class="card-head"><h2>Needs you today <span class="count-badge">{{ data.rows|length }}</span></h2>
+{% if data.entries %}
+<section class="card flush ledger-card" id="ledger">
+  <div class="card-head"><h2>Since {{ data.since_label }} <span class="count-badge">{{ data.new|length }}</span></h2>
     <span class="meta small muted">Worst first</span></div>
-  <ul class="today-list">
-    {% for row in data.rows %}{% set t = row.tenant %}
-    <li class="today-client">
-      <div class="today-name"><span class="dot {{ row.tone }}" aria-hidden="true"></span><a href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">{{ t.name }}</a></div>
-      <ul class="today-reasons">
-        {% for r in row.reasons %}
-        <li>{{ page_link(r.href, r.text) }}
-          {% if r.detail %}<div class="small muted">{{ r.detail }}</div>{% endif %}</li>
-        {% endfor %}
-      </ul>
-    </li>
-    {% endfor %}
+  {% if data.new %}
+  <ul class="ledger">
+    {% for e in data.new %}{{ line(e) }}{% endfor %}
   </ul>
+  {% else %}
+  <p class="ledger-quiet">Nothing new since {{ data.since_label }}.</p>
+  {% endif %}
+  {% if data.seen %}
+  <div class="divider" role="separator"><span>Seen before <span class="divider-when">{{ since }}</span> · still open</span></div>
+  <ul class="ledger">
+    {% for e in data.seen %}{{ line(e) }}{% endfor %}
+  </ul>
+  {% endif %}
 </section>
 {% else %}
-<div class="card empty" id="needs-you"><h3>All clear</h3>
+<div class="card empty" id="ledger"><h3>All clear</h3>
   <p>No new critical or high findings, every collection is working and nothing is due this week.</p>
   {% if upcoming %}<a class="btn" href="{{ upcoming }}">{{ icon('calendar') }} See what's coming up</a>{% endif %}</div>
 {% endif %}
 {% if data.without %}<p class="footnote">Couldn't read: {% for t, part in data.without %}{{ part }} for {{ t.name }}{{ ', ' if not loop.last }}{% endfor %}.</p>{% endif %}
-<p class="footnote">{% if data.rows and data.fine %}{{ data.fine|plural('other client') }} {{ 'needs' if data.fine == 1 else 'need' }} nothing today. {% endif %}Every client, worst first, is on <a href="{{ url_for('tenants.dashboard') }}">Clients</a>.</p>
+<p class="footnote">{% if data.entries and data.fine %}{{ data.fine|plural('other client') }} {{ 'needs' if data.fine == 1 else 'need' }} nothing today. {% endif %}Every client, worst first, is on <a href="{{ url_for('tenants.dashboard') }}">Clients</a>.</p>
 {% endif %}
 {% endblock %}

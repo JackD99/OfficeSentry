@@ -43,7 +43,7 @@ MFA, who Conditional Access or Security Defaults requires to use it, and where t
 
 ![MFA coverage: who has set up MFA, who is required to, and where the two differ](../../../docs/screenshots/mfa.png)
 
-- **All clients** puts every client's MFA figures side by side, worst first, and every figure opens the
+- The **Clients** page puts every client's MFA figures side by side, worst first, when you pick this report from its menu, and every figure opens the
   accounts behind it.
 - Each figure carries its change over four weeks, so the monthly review can say "MFA up from 81% to 94%".
 - **Conditional Access coverage** shows each policy in plain words and, for each person, which policy requires

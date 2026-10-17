@@ -1,5 +1,6 @@
 {#- Findings: open findings and accepted risks (or resolved findings) from reports/findings_report.py, on the
-    shared report table, so filters, saved views and the PDF, XLSX and CSV downloads work as on every report. -#}
+    shared report table, so filters, saved views and the PDF, XLSX and CSV downloads work as on every report.
+    Each row opens its sheet (_finding_sheet.html): beside the table on a laptop, first on a phone. -#}
 {% extends "base.html" %}
 {% from "_macros.html" import csrf, icon, tenant_header, downloads with context %}
 {% from "_report_table.html" import report_table, saved_views with context %}
@@ -16,12 +17,12 @@
   </nav>
   <div class="toolbar-actions">
     {% if can('projects.view', tenant.id) and not resolved %}<a class="small" href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}">Recommended projects</a>{% endif %}
-    {{ saved_views(saved, view_query, report.key, tenant, 'e.g. Critical and high') }}
+    {{ saved_views(saved, view_query, report.key, tenant, 'e.g. Critical and high', base=url_for(page, tenant_id=tenant.id)) }}
     {{ downloads([('PDF', url_for('reports.findings_download', tenant_id=tenant.id, ext='pdf', resolved=resolved) ~ q, 'The rows and columns shown, as a PDF' if q else 'Every table, as a PDF'),
                   ('XLSX', url_for('reports.findings_download', tenant_id=tenant.id, ext='xlsx', resolved=resolved) ~ q, 'The rows and columns shown, one sheet per table' if q else 'Every table, one sheet each')]) }}
   </div>
 </div>
-<p class="muted small intro-line">{{ report.description }}{% if staff and not resolved %} If something is intentional, accept the risk so it moves out of the totals.{% endif %}</p>
+<p class="muted small intro-line">{{ report.description }} Open a row for its evidence, history and fix{% if staff and not resolved %}, to accept the risk or to hand it to someone{% endif %}.</p>
 
 {% if report.tiles %}
 <div class="tiles">
@@ -35,6 +36,8 @@
 </div>
 {% endif %}
 
+<div class="findings-layout{{ ' with-sheet' if open_id }}">
+<div class="findings-tables">
 {% for tv in tables %}
 {% if not tv.total %}
 <section class="card flush empty-section" id="t-{{ tv.slug }}">
@@ -43,27 +46,23 @@
 </section>
 {% else %}
 {% set csv = url_for('reports.findings_download', tenant_id=tenant.id, ext='csv', resolved=resolved, section=loop.index) ~ ('&' ~ view_query if view_query) %}
-{% call(key) report_table(tv, csv, action='Action' if staff and not resolved else '') %}
-  {% if tv.section.title == 'Accepted risks' %}
-  <form method="post" action="{{ url_for('reports.unaccept_finding', finding_id=key) }}">{{ csrf() }}<button class="link small" title="Move it back to the open findings">Undo</button></form>
-  {% else %}
-  {% set was = lapsed.get(key) %}
-  {% if was %}<span class="sub">Accepted by {{ was.accepted_by }} until {{ was.accepted_until|day }}, now due for review</span>{% endif %}
-  <details class="accept-risk"><summary>{{ 'Accept again' if was else 'Accept risk' }}</summary>
-    <form method="post" action="{{ url_for('reports.accept_finding', finding_id=key) }}" class="accept">
-      {{ csrf() }}
-      <label>Reason <input name="note" maxlength="500" required placeholder="e.g. Break-glass account, monitored"{% if was %} value="{{ was.accepted_note }}"{% endif %}></label>
-      <label>Review on (optional) <input type="date" name="until" min="{{ first_review_day }}"></label>
-      <button class="sm primary">Accept risk</button>
-    </form>
-  </details>
+{% call(key) report_table(tv, csv, action='Details') %}
+  <a class="sheet-link" href="{{ url_for('reports.finding', tenant_id=tenant.id, finding_id=key) }}{{ q }}" data-finding="{{ key }}"{% if key == open_id %} aria-current="true"{% endif %} title="Evidence, history and the fix">{{ icon('chevron') }} Open</a>
+  {% if tv.section.title == 'Accepted risks' and staff %}
+  <form method="post" action="{{ url_for('reports.unaccept_finding', finding_id=key) }}" class="inline">{{ csrf() }}<button class="link small" title="Move it back to the open findings">Undo</button></form>
+  {% elif lapsed.get(key) %}{% set was = lapsed[key] %}
+  <span class="sub">Accepted by {{ was.accepted_by }} until {{ was.accepted_until|day }}, now due for review</span>
   {% endif %}
 {% endcall %}
 {% endif %}
 {% endfor %}
+</div>
+{% if open_id %}{% include "_finding_sheet.html" %}{% endif %}
+</div>
 
 <p class="footnote">{% if report.sources[0][1] %}Latest collection {{ report.sources[0][1]|when }}. {% endif %}Severity, check and first-seen filters, sorting and hidden columns stay in the address, so a saved view or a download shows the same rows.</p>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+<script src="{{ url_for('static', filename='findings.js') }}" nonce="{{ csp_nonce }}"></script>
 {% endblock %}

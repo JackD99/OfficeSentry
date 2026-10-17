@@ -53,14 +53,20 @@ def _inject():
 
 
 def page_title(title: str) -> str:
-    """A page's <title> with the MSP's name in place of "Office Sentry" ("Users · Office Sentry")."""
-    name = current_brand().display_name
+    """A page's <title> ending with the MSP's name, so every browser tab says whose portal it is.
+
+    "Users · Office Sentry" becomes "Users · Harbour IT", and a title that names something else
+    ("Adele Vance · Fabrikam") gets the name after it.
+    """
+    name = escape(current_brand().display_name)  # the block's text arrives escaped; a plain str wouldn't be
     title = (title or "").strip()
     if title == branding.DEFAULT_NAME or not title:
-        return escape(name)  # a filter block's plain str isn't escaped
+        return name
     if title.endswith(TITLE_SUFFIX):
-        return title[: -len(TITLE_SUFFIX)] + " · " + name
-    return title
+        title = title[: -len(TITLE_SUFFIX)]
+    if title == name or title.endswith(" · " + name):
+        return title
+    return title + " · " + name
 
 
 @bp.record_once
