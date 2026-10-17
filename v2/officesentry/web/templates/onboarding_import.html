@@ -2,8 +2,8 @@
 {% from "_macros.html" import icon, csrf %}
 {% block title %}Import clients · Office Sentry{% endblock %}
 {% block content %}
-<div class="crumbs"><a href="{{ url_for('tenant_admin.clients') }}">Client settings</a><span>/</span><a href="{{ url_for('onboarding.index') }}">Onboarding</a><span>/</span><span>Import</span></div>
-<div class="page-head"><div><h1>Import clients from a CSV</h1>
+<div class="crumbs"><a href="{{ url_for('onboarding.index') }}">&larr; Onboarding</a></div>
+<div class="page-head"><div><h2 class="page-title">Import clients from a CSV</h2>
   <div class="sub">{% if parsed and not parsed.error %}Check the list, then import. Nothing is added until you do.{% else %}Add many clients at once. You'll see the list before anything is added.{% endif %}</div></div></div>
 
 {% if not connections %}

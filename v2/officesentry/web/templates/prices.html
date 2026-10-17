@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Licence prices · Office Sentry{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Licence prices</h1>
+<div class="page-head"><div><h2 class="page-title">Licence prices</h2>
   <div class="sub">What you pay per licence per month. Used to put a cost on unused licences and on right-sizing savings in reports. Leave a price blank to show counts only.</div></div></div>
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

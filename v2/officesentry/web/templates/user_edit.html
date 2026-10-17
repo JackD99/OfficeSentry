@@ -2,8 +2,8 @@
 {% from "_macros.html" import confirm_identity with context %}
 {% block title %}{{ user.username }} · Users{% endblock %}
 {% block content %}
-<div class="crumbs"><a href="{{ url_for('admin.users') }}">Users</a><span>/</span><span>{{ user.username }}</span></div>
-<div class="page-head"><div><h1>{{ user.username }}</h1>
+<div class="crumbs"><a href="{{ url_for('admin.users') }}">&larr; Users</a></div>
+<div class="page-head"><div><h2 class="page-title">{{ user.username }}</h2>
   <div class="sub">{{ 'Last signed in ' ~ (user.last_login_at|ago) if user.last_login_at else 'Has never signed in' }}</div></div></div>
 {% set locked_out = out_of_reach or own_access %}
 {% if locked_out %}<p class="callout narrow-lg">{{ locked_out }}</p>{% endif %}

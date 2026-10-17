@@ -5,14 +5,22 @@
 {% set document = true %}
 {% set wide = (report.sections|map(attribute='columns')|map('length')|list + [0])|max >= 6 %}
 {% set collected = report.sources|map(attribute=1)|select|list %}
+{#- Every row (rollups.all_rows) is one report over many clients: its cover and footer read as the other
+    cross-client PDFs do (Prepared by, Date, Clients; the MSP's internal footer), not as one client's. -#}
+{% set clients = report.tenant.clients if report.tenant.clients is defined else 0 %}
 
 {% block doc_title %}{{ report.title }}{% endblock %}
 {% block client %}{{ report.tenant.name }}{% endblock %}
+{% block footer_note %}{% if clients %}{{ brand.display_name }} internal: {{ 'every client' if report.tenant.name == 'All clients' else 'clients in ' ~ report.tenant.name }}{% else %}Prepared for {{ report.tenant.name }}{% endif %}{% endblock %}
 {% block cover_meta %}
   {{ ui.meta('Prepared by', brand.display_name) }}
   {% if day is defined and day.on %}{{ ui.meta('As it was on', day.label) }}{% else %}{{ ui.meta('Date', report.generated_at|day) }}{% endif %}
+  {% if clients %}
+  {{ ui.meta('Clients', clients) }}
+  {% else %}
   {{ ui.meta('Data collected', (collected|max)|when if collected else 'Not collected yet') }}
   {{ ui.meta('Microsoft 365 tenant', report.tenant.tenant_ref) }}
+  {% endif %}
 {% endblock %}
 
 {% block body %}
