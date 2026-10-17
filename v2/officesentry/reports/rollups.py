@@ -343,7 +343,7 @@ def _decode(value):
 def to_review(report: DataReport) -> set[str]:
     """What a report flags for review, each once: the first-column value of every row flagged critical, high
     or medium, across its tables. A mailbox that both forwards outside and is over its quota is one mailbox
-    to review, so the All clients count never exceeds what the client has."""
+    to review, so the Clients page's count never exceeds what the client has."""
     return {str(s.rows[i][0]) for s in report.sections for i, f in enumerate(s.flags) if f in views.REVIEW}
 
 

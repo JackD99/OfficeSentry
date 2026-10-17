@@ -63,8 +63,8 @@ def _days() -> int:
 @bp.get("/across")
 @needs("clients.compare")
 def index():
-    """Where the All clients menu entry and the picker's select on phones go: the Clients page shows the
-    monthly review across every client, and ``/across/<report>`` any other report."""
+    """Where the picker's select on phones and older links go: the Clients page shows the monthly review
+    across every client, and ``/across/<report>`` any other report."""
     key = request.args.get("key", "")
     if request.args.get("mode") == "rows" and key in data_reports.REPORTS:
         return redirect(url_for("across.rows_index", key=key))
