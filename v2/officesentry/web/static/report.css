@@ -85,8 +85,8 @@ h3 { font-size: var(--fs-lg); font-weight: 600; margin: 0; }
 .answers-table .set-by, .answers-table .source { color: var(--muted); font-size: .9em; }
 .answers-table .source { margin-top: 3px; }
 .verdict .status-pill { background: var(--surface); font-size: .78rem; }
-.new { display: inline-block; font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--brand-ink); background: var(--brand-soft); border-radius: 4px; padding: 0 5px; vertical-align: 1px; margin-left: var(--space-1); }
-.chg { display: inline-block; min-width: 62px; text-align: center; font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border-radius: 4px; padding: 1px 6px; margin-right: var(--space-2); background: var(--sev-low-soft); color: var(--sev-low); }
+.new { display: inline-block; font-size: var(--fs-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--brand-ink); background: var(--brand-soft); border-radius: 4px; padding: 0 5px; vertical-align: 1px; margin-left: var(--space-1); }
+.chg { display: inline-block; min-width: 62px; text-align: center; font-size: var(--fs-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border-radius: 4px; padding: 1px 6px; margin-right: var(--space-2); background: var(--sev-low-soft); color: var(--sev-low); }
 .chg-added { background: var(--brand-soft); color: var(--brand-ink); }
 .chg-removed { background: var(--sev-low-soft); color: var(--sev-low); }
 .chg-changed { background: var(--sev-medium-soft); color: var(--sev-medium); }
@@ -275,7 +275,7 @@ table.data th.flag, table.data td.flag { width: 1%; white-space: nowrap; }
 .signoff .line { border-bottom: 1px solid var(--text-2); height: 11mm; display: flex; align-items: flex-end; }
 .signoff .line span { color: var(--muted); font-size: .8em; padding-bottom: 1mm; }
 @media screen and (max-width: 640px) { .signoff-grid { grid-template-columns: 1fr; } }
-h2 .pill { font-size: .62rem; vertical-align: 3px; margin-left: var(--space-1-5); letter-spacing: 0; }
+h2 .pill { font-size: var(--fs-2xs); vertical-align: 3px; margin-left: var(--space-1-5); letter-spacing: 0; }
 td .sub { display: block; color: var(--muted); font-size: .86em; }
 .sevbar { display: inline-flex; gap: 3px; white-space: nowrap; }
 .sevbar .n { display: inline-block; min-width: 22px; padding: 0 5px; border-radius: var(--radius-pill); text-align: center; font-size: .72rem; font-weight: 700; line-height: 1.6; }
@@ -561,7 +561,7 @@ body.pdf .tl-commentary + section > h2:first-child { margin-top: 6mm; }
 /* -- Quarterly review blocks ---------------------------------------------------------------------------- */
 table.quarter td:first-child { width: 40%; }
 table.upcoming td:first-child { width: 22%; white-space: nowrap; }
-.proj-status { display: inline-block; vertical-align: middle; margin-left: var(--space-2); font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border-radius: 4px; padding: 1px 6px; background: var(--sev-low-soft); color: var(--sev-low); }
+.proj-status { display: inline-block; vertical-align: middle; margin-left: var(--space-2); font-size: var(--fs-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border-radius: 4px; padding: 1px 6px; background: var(--sev-low-soft); color: var(--sev-low); }
 .proj-status.st-proposed { background: var(--brand-soft); color: var(--brand-ink); }
 .proj-status.st-agreed { background: var(--ok-soft); color: var(--ok); }
 .proj-status.st-declined { background: var(--surface-2); color: var(--muted); }
