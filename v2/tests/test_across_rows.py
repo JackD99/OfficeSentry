@@ -293,9 +293,19 @@ def test_check_matrix_page_lists_only_visible_tenants(client, db, two_tenants):
     assert f"/tenants/{alpha}/findings#check-" in page
     page = client.get("/across/checks?category=email").get_data(as_text=True)
     assert "Alpha Ltd" in page and "Every category" in page
+    assert 'href="/across/checks.csv?category=email"' in page and "Email checks for every client" in page
     rows = _csv(client.get("/across/checks.csv").data)
     assert [r[0] for r in rows[1:]] == ["Alpha Ltd"]
     assert client.get("/across/checks.xlsx").status_code == 200
+    # The downloads cover what the page shows: one category's checks, with the counts over those checks.
+    email = _csv(client.get("/across/checks.csv?category=email").data)
+    assert email[0][:6] == rows[0][:6] and email[0][6:] and all(c.startswith("Email: ") for c in email[0][6:])
+    assert len(email[0]) < len(rows[0]) and int(email[1][2]) <= int(rows[1][2])
+    resp = client.get("/across/checks.xlsx?category=email")
+    assert resp.status_code == 200 and 'filename="all-clients-checks-email.xlsx"' in resp.headers["Content-Disposition"]
+    assert _csv(client.get("/across/checks.csv?category=nonsense").data)[0] == rows[0]  # unknown: every check
+    # Downloads without words of their own get the usual ones for their format.
+    assert 'title="This page as a PDF"' in client.get("/changes").get_data(as_text=True)
 
 
 def test_clients_cannot_open_cross_tenant_rows_or_checks(client, db, two_tenants, widgets):

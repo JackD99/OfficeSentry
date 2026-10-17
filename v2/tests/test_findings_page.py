@@ -95,6 +95,7 @@ def test_page_filters_and_actions(client, db, two_tenants):
     body = high.split('id="tbl-open-findings"')[1].split("</table>")[0]
     assert 'class="flag-high"' in body and 'class="flag-medium"' not in body and 'class="flag-low"' not in body
     guest = _finding(db, alpha, "guest_admins")
+    assert f'data-key="{guest["id"]}"' in page  # each row carries its finding, for row actions
     check = client.get(f"/tenants/{alpha}/findings?f=open-findings/check:{quote(_title(guest))}").get_data(as_text=True)
     assert check.split('id="tbl-open-findings"')[1].count('class="group"') == 1
     resp = client.post(f"/findings/{guest['id']}/accept", data={"note": "Known partner"})
