@@ -6,6 +6,8 @@ What it finds:
 
 - a report for a client ("north mfa": MFA coverage at Northwind Traders), a client's own pages ("north
   users"), a report for the client whose page is open, and a report across every client;
+- the MSP's custom reports and the person's own saved views, at a client named beside them or the client whose
+  page is open, and saved views across every client;
 - a report's PDF or workbook, when a word asks for a download ("north mfa pdf"; "contoso download" is the
   monthly review), for someone who may export it;
 - clients, by name or domain;
@@ -42,7 +44,7 @@ from ..reports import library
 from ..reports.registry import KEYWORDS
 from . import search
 from .access import can, can_open, manages_groups, needs, visible_tenants
-from .reports import _library_href, entry_capability, hidden_reports
+from .reports import _library_href, custom_reports, entry_capability, hidden_reports, my_views
 
 bp = Blueprint("jump", __name__)
 
@@ -361,6 +363,7 @@ def results(conn, tenants: list, q: str, here=None) -> Found:
             rows.extend(
                 report.row(t, score, ORDER["report"]) for t in tenants[:5] if report.opens(t["id"], hidden_on(t["id"]))
             )
+    _own(tokens, named, here, across, rows)
     for tab in TABS:
         thing = Thing.of(tab.title, tab.keywords)
         for t, client_thing in named:
@@ -376,6 +379,41 @@ def results(conn, tenants: list, q: str, here=None) -> Found:
     if len(q) >= search.MIN_LENGTH:
         _index(conn, tenants, q.lower(), found)
     return _ranked(found)
+
+
+OWN_CLIENTS = 5  # custom reports and saved views are looked up for at most this many clients named
+
+
+def _own(tokens: list[str], named: list, here, across: bool, rows: list[Row]) -> None:
+    """The MSP's custom reports and the person's saved views (``reports.custom_reports``, ``my_views``, which
+    already leave out what they can't open), at a client named beside them or the client whose page is open,
+    and saved views across every client for someone who compares clients."""
+    clients = {t["id"]: (t, thing) for t, thing in named[:OWN_CLIENTS]}
+    if here is not None:
+        clients.setdefault(here["id"], (here, None))
+    for tid, (t, client_thing) in clients.items():
+        things = [
+            ("design", c["name"], c["href"], "Custom report", Thing.of(c["name"], "custom report", c["description"]))
+            for c in custom_reports(tid)
+            if c["href"]
+        ]
+        things += [_view(v) for v in my_views(tid)]
+        for kind, title, href, detail, thing in things:
+            scores = [client_thing.split(thing, tokens) if client_thing is not None else None]
+            if here is not None and tid == here["id"] and (alone := thing.score(tokens)) is not None:
+                scores.append(alone + CONTEXT_BONUS)
+            score = max((s for s in scores if s is not None), default=None)
+            if score is not None:
+                rows.append(Row(kind, title, href, t["name"], detail, score, ORDER["pair"]))
+    if across and here is None:
+        for kind, title, href, detail, thing in map(_view, my_views(None)):
+            score = thing.score(tokens)
+            if score is not None:
+                rows.append(Row(kind, title, href, "All clients", detail, score, ORDER["across"]))
+
+
+def _view(v: dict) -> tuple:
+    return "view", v["name"], v["href"], f"Saved view · {v['report']}", Thing.of(v["name"], f"saved view {v['report']}")
 
 
 def _ranked(found: Found) -> Found:

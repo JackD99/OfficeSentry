@@ -4,6 +4,8 @@ import re
 from pathlib import Path
 
 from officesentry import roles, search_index, store
+from officesentry.reports import designs
+from officesentry.web import saved_views
 from officesentry.web.jump import PAGES, TABS, Thing, words_of
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -100,6 +102,26 @@ def test_two_words_find_a_report_for_a_client(client, db, two_tenants):
     gone = _ask(client, "xyzzy")
     assert gone["rows"] == [] and gone["more"] == "/search?q=xyzzy"
     assert len(_ask(client, "a")["rows"]) <= 10
+
+
+def test_custom_reports_and_saved_views(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    admin = make_user(db, "admin")
+    other = make_user(db, "other-admin")
+    design = designs.create(db, "Board pack", "admin", designs.STARTERS["executive"][2])
+    saved_views.store(db, admin, "mfa", "Gaps only", "sort=mfa/name")
+    saved_views.store(db, other, "mfa", "Someone else's", "sort=mfa/name")
+    login(client, "admin")
+    board = _ask(client, "alpha board")["rows"][0]
+    assert (board["title"], board["where"], board["kind"]) == ("Board pack", "Alpha Ltd", "design")
+    assert board["href"] == f"/tenants/{alpha}/designs/{design}" and board["detail"] == "Custom report"
+    assert _rows(client, "board", tenant=bravo)[0] == ("Board pack", "Bravo Inc", f"/tenants/{bravo}/designs/{design}")
+    gaps = _ask(client, "alpha gaps")["rows"][0]
+    assert (gaps["title"], gaps["where"], gaps["detail"]) == ("Gaps only", "Alpha Ltd", "Saved view · MFA coverage")
+    assert gaps["href"] == f"/tenants/{alpha}/data/mfa?sort=mfa/name"
+    across = next(r for r in _ask(client, "gaps")["rows"] if r["kind"] == "view")
+    assert (across["where"], across["href"]) == ("All clients", "/across/mfa/rows?sort=mfa/name")
+    assert not any(r["title"] == "Someone else's" for r in _ask(client, "someone")["rows"])  # only their own
 
 
 def test_people_and_the_rest_come_from_the_search_index(app, client, db, two_tenants):
