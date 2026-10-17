@@ -25,9 +25,9 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from . import store
+from .codeversion import code_version as _code_version
 from .db import transaction, utcnow
 from .mailflow import inbox_rule_risk, mailbox_forwarding
-from .reports.monthly_review import _code_version
 from .snapshot import TenantSnapshot
 
 log = logging.getLogger(__name__)
