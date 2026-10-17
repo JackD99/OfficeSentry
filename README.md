@@ -342,7 +342,7 @@ everyone, with the rules published so you can say exactly why they are a C and w
 grouped into five parts (admin accounts, sign-in and accounts, mail, devices, and sharing and apps); a part's grade
 is its worst open finding after accepted risks are set aside, and the grade is the worst part, so one critical gap
 keeps a client out of A and B whatever else is in good shape. The grade sits beside the client's name on every page
-about them, has its own column on the Clients page and leads the figures on their Overview, and its own page shows what moves each part, the grade on each
+about them, shows on the Clients page and leads the figures on their Overview, and its own page shows what moves each part, the grade on each
 of the last twelve month-ends, and how the client compares with the others you look after of about the same size
 (the median grade, Secure Score, MFA coverage, open critical and high findings and licence waste per user), without
 naming any of them. Nothing about a client leaves your install. The rules are in

@@ -146,7 +146,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   accounts, sign-in and accounts, mail, devices, sharing and apps), each part
   its worst open finding after accepted risks are set aside and graded only
   when half its checks could run. The grade sits beside the client's name on
-  every page about them, in a column on the Clients page, and leads the
+  every page about them and on the Clients page, and leads the
   Overview's figures; its page shows what
   moves each part, the grade on each of the last twelve month-ends (from the
   findings table, nothing extra stored) and the comparison with the other
