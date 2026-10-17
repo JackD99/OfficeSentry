@@ -273,8 +273,8 @@ def test_report_page_filters_hides_and_downloads_the_same_rows(client, db, two_t
     assert f"/tenants/{alpha}/data/mailboxes.pdf?{q}" in page.replace("%2F", "/").replace("%3A", ":")
     body = client.get(f"{base}.csv?section=1&{q}").get_data(as_text=True).lstrip("\ufeff")
     rows = list(csv.reader(io.StringIO(body)))
-    assert rows[0] == ["Mailbox", "Forwards to", "Set by", "Outside the organisation", "Reaches outside", "Flag"]
-    assert len(rows) == 3 and all(r[3] == "Yes" for r in rows[1:])
+    assert rows[0] == ["Flag", "Mailbox", "Forwards to", "Set by", "Outside the organisation", "Reaches outside"]
+    assert len(rows) == 3 and all(r[4] == "Yes" for r in rows[1:])
     wb = load_workbook(io.BytesIO(client.get(f"{base}.xlsx?{q}").data))
     assert wb["Forwarding"].max_row == 3
     assert any("Filtered view" == r[0] for r in wb["Summary"].iter_rows(values_only=True))

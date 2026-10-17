@@ -482,6 +482,8 @@ def tenant_changes_download(tenant_id: int, ext: str):
             cover=_cover(
                 page["title"],
                 t["name"],
+                f"Changes in {t['name']}'s Microsoft 365 {page['title'].removeprefix('What changed ')}: new and fixed "
+                "findings, key changes, and what each report shows differently.",
                 tenant_ref=t["tenant_ref"],
                 facts=[("Changes", report.total, "")]
                 + (
