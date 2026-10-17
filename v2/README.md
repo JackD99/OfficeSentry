@@ -116,8 +116,12 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   the time it happened: critical and high findings first seen or back,
   collections that failed or are out of date, access not granted yet, Coming up
   items due within a week, and the critical and high findings a collection no
-  longer saw. What's new since yesterday sits above a line; what you'd seen
-  before and is still open sits below it. **Accounts** (`/clients`, for
+  longer saw. What's new since you last looked (yesterday, on your first visit)
+  sits above a line; what you'd seen before and is still open sits below it.
+  Anyone who can annotate a client's findings hands any line to a colleague who
+  sees it on that client, or snoozes it until tomorrow morning or for a week:
+  snoozed lines leave the list and the counts until the snooze ends, and a hand-off
+  on a failed collection or a renewal goes once that line clears. **Accounts** (`/clients`, for
   account managers) shows each client's licence waste, renewals in the next 30
   days, this month's month-end reports to approve and projects to propose. Each
   opens with one sentence saying what needs attention. Pick yours on the

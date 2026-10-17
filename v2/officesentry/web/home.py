@@ -3,20 +3,39 @@
 Staff only, over the tenants they see narrowed to their chosen group. ``/home`` opens the page the person
 picked in Account settings (``users.home``); sign-in lands there and the logo links to it. Clients keep their
 own home (the dashboard).
+
+Someone who may annotate a client's findings (``findings.manage``) hands any of its lines on Today to a
+colleague who sees that line there, or snoozes it out of the list for a while: a finding line through
+``findings.hand`` and ``findings.snooze`` on each finding behind it, any other line through ``item_state``.
+Nothing is written to a tenant, and the public demo's visitor never changes anything.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 
-from .. import first_run, home, month_end
+from .. import findings, first_run, home, month_end
+from ..db import audit, transaction, try_write
+from ..formatting import parse
 from ..formatting import strftime as datefmt
 from ..issued import period_label
 from ..reports.monthly_review import setting
-from .access import access_of, can, current, is_staff, login_required, needs, safe_next
+from . import finding, public_demo
+from .access import (
+    access_of,
+    can,
+    can_see_tenant,
+    current,
+    is_staff,
+    login_required,
+    needs,
+    require,
+    safe_next,
+    tenant_or_404,
+)
 from .filters import money
 from .groups import group_aware, scoped_tenants
 
@@ -117,11 +136,27 @@ def _homes() -> dict:
 def today():
     a = current()
     now = datetime.now(UTC)
-    data = home.today(g.db, scoped_tenants(), now, shows=lambda kind, tenant_id: a.can(LINE_NEEDS[kind], tenant_id))
+    demo = public_demo.active(g.db)  # every visitor is one account: the line stays the last day for all
+    since, label, keep = home.since_for({} if demo else g.user, now)
+    data = home.today(
+        g.db,
+        scoped_tenants(),
+        now,
+        shows=lambda kind, tenant_id: a.can(LINE_NEEDS[kind], tenant_id),
+        since=since,
+        since_label=label,
+    )
+    if not demo:
+        try_write(g.db, "UPDATE users SET today_opened_at = ?, today_since = ? WHERE id = ?", (*keep, g.user["id"]))
+        for tenant_id, key in data.cleared:
+            try_write(g.db, "DELETE FROM item_state WHERE tenant_id = ? AND item_key = ?", (tenant_id, key))
     zone = _zone()
-    for entry in data.entries:
+    for entry in data.entries + data.snoozed:
         entry.href = _link(entry)
         entry.stamp, entry.stamp_full = stamp(entry.when, now, zone)
+        if entry.snoozed_until:
+            entry.snooze_stamp = stamp(parse(entry.snoozed_until) or now, now, zone)[1]
+    lines = [e for e in data.entries + data.snoozed if e.acts and can("findings.manage", e.tenant["id"])]
     return render_template(
         "home_today.html",
         data=data,
@@ -129,7 +164,135 @@ def today():
         homes=_homes(),
         mine=home.home_of(g.user),
         get_started=get_started(),
+        holders=_holders(lines),
+        snoozes=SNOOZES,
     )
+
+
+# -- Handing a line on and snoozing it ------------------------------------------------------------
+
+SNOOZES = {"tomorrow": "Until tomorrow morning", "week": "For a week"}
+MORNING = time(6)  # a line snoozed until tomorrow comes back at this hour, in the MSP's timezone
+KEY_LENGTH = 300
+
+
+def _holders(lines) -> dict[tuple[int, str], list]:
+    """For each client and kind of line the person can act on: the colleagues it can be handed to (those who
+    see that client and that kind of line there), as ``finding.holders`` gives them."""
+    staff = g.db.execute(
+        "SELECT * FROM users WHERE role <> 'client' AND disabled = 0 ORDER BY username COLLATE NOCASE"
+    ).fetchall()
+    rights = [(u, access_of(u, g.db)) for u in staff]
+    out = {}
+    for tenant_id, kind in {(e.tenant["id"], e.kind) for e in lines}:
+        out[(tenant_id, kind)] = [
+            u for u, r in rights if can_see_tenant(g.db, u, tenant_id) and r.can(LINE_NEEDS[kind], tenant_id)
+        ]
+    return out
+
+
+def snooze_until(choice: str, now: datetime, zone: ZoneInfo) -> str | None:
+    """When a snooze picked on the page ends (ISO, UTC): tomorrow at MORNING in the MSP's timezone, or a week
+    from now. Anything else wakes the line."""
+    if choice == "tomorrow":
+        day = now.astimezone(zone).date() + timedelta(days=1)
+        return datetime.combine(day, MORNING, tzinfo=zone).astimezone(UTC).strftime(findings.ISO)
+    if choice == "week":
+        return (now + timedelta(days=7)).strftime(findings.ISO)
+    return None
+
+
+def _line(tenant_id: int) -> tuple[str, str, list[int]]:
+    """The line the form names on this client: its kind, its key and, for a finding line, the open findings
+    behind it (only this client's, of that check). The person must see that kind of line there."""
+    key = request.form.get("key", "")[:KEY_LENGTH]
+    kind, _, rest = key.partition(":")
+    if kind not in LINE_NEEDS or kind == "fixed":
+        abort(400)
+    require(LINE_NEEDS[kind], tenant_id=tenant_id)
+    if kind != "finding":
+        return kind, key, []
+    wanted = [int(i) for i in request.form.getlist("finding") if i.isdigit()]
+    marks = ",".join("?" * len(wanted))
+    ids = [
+        r["id"]
+        for r in g.db.execute(
+            f"SELECT id FROM findings WHERE id IN ({marks}) AND tenant_id = ? AND rule_key = ? AND resolved_at IS NULL",
+            (*wanted, tenant_id, rest),
+        )
+    ]
+    if not ids:
+        abort(404)
+    return kind, key, ids
+
+
+def _keep_item(tenant_id: int, key: str, column: str, values: tuple) -> None:
+    """Set a non-finding line's hand-off or snooze (``column`` is handed or snoozed)."""
+    cols = {"handed": ("handed_to", "handed_by", "handed_at"), "snoozed": ("snoozed_until", "snoozed_by", "snoozed_at")}
+    names = cols[column]
+    g.db.execute(
+        f"INSERT INTO item_state (tenant_id, item_key, {', '.join(names)}) VALUES (?, ?, ?, ?, ?)"
+        f" ON CONFLICT (tenant_id, item_key) DO UPDATE SET {', '.join(f'{n} = excluded.{n}' for n in names)}",
+        (tenant_id, key, *values),
+    )
+
+
+def _back():
+    return redirect(url_for("home.today") + "#ledger")
+
+
+@bp.post("/tenants/<int:tenant_id>/today/hand")
+@needs("findings.manage", kind="staff")
+def hand_line(tenant_id: int):
+    """Hand a line on Today to a colleague who sees it on this client, or back to nobody."""
+    tenant_or_404(tenant_id)
+    kind, key, ids = _line(tenant_id)
+    to = request.form.get("to", "").strip()
+    who = None
+    if to:
+        who = next((u for u in finding.holders(tenant_id, LINE_NEEDS[kind]) if str(u["id"]) == to), None)
+        if who is None:
+            flash("Pick someone who can see this on the client.", "error")
+            return _back()
+    by, now = g.user["username"], datetime.now(UTC).strftime(findings.ISO)
+    with transaction(g.db):
+        if ids:
+            for finding_id in ids:
+                findings.hand(g.db, finding_id, who["id"] if who else None, by)
+        elif who:
+            _keep_item(tenant_id, key, "handed", (who["id"], by, now))
+        else:
+            _keep_item(tenant_id, key, "handed", (None, None, None))
+        what = f"{key} ({len(ids)} findings)" if ids else key
+        audit(
+            g.db,
+            by,
+            "finding_handed" if ids else "item_handed",
+            tenant_id,
+            f"{what} to {who['username'] if who else 'nobody'}",
+        )
+    flash(f"Handed to {who['username']}." if who else "Handed back: nobody holds it now.", "success")
+    return _back()
+
+
+@bp.post("/tenants/<int:tenant_id>/today/snooze")
+@needs("findings.manage", kind="staff")
+def snooze_line(tenant_id: int):
+    """Keep a line out of Today's list until tomorrow morning or for a week, or bring it back now."""
+    tenant_or_404(tenant_id)
+    _, key, ids = _line(tenant_id)
+    until = snooze_until(request.form.get("until", ""), datetime.now(UTC), _zone())
+    by, now = g.user["username"], datetime.now(UTC).strftime(findings.ISO)
+    with transaction(g.db):
+        if ids:
+            for finding_id in ids:
+                findings.snooze(g.db, finding_id, until, by)
+        else:
+            _keep_item(tenant_id, key, "snoozed", (until, by, now) if until else (None, None, None))
+        what = f"{key} ({len(ids)} findings)" if ids else key
+        audit(g.db, by, "finding_snoozed" if ids else "item_snoozed", tenant_id, f"{what} until {until or 'now'}")
+    flash("Snoozed: it's back in the list when the snooze ends." if until else "Back in the list.", "success")
+    return _back()
 
 
 @bp.get("/clients")

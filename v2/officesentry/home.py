@@ -5,7 +5,10 @@
   and high findings first seen or back, collections that failed or are out of date, access not granted
   yet, anything due within a week (from ``upcoming``) and the critical and high findings a collection no
   longer saw. Every line has the time it happened: the collection that found it, the run that failed, the
-  day the client was added. Until Today knows when the person last looked, new means the last day.
+  day the client was added. New means since the person last looked (the last day on their first visit).
+  Any line can be handed to a colleague who sees that client, or snoozed out of the list for a while: a
+  finding line through its findings' own columns (``findings.hand``, ``findings.snooze``), any other line
+  through ``item_state`` (migration 0049).
 - **Clients**, for account managers: licence waste, renewals in the next 30 days, this month's reports
   waiting for approval and projects to propose, per client.
 
@@ -20,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from . import store, tenant_health, upcoming
+from . import findings, store, tenant_health, upcoming
 from .collectors import REGISTRY
 from .formatting import parse
 from .rules import RULES
@@ -39,7 +42,8 @@ HOMES = {
     ),
 }
 DEFAULT = TODAY
-NEW_SINCE = timedelta(days=1)  # what's new on Today, until it knows when the person last looked
+NEW_SINCE = timedelta(days=1)  # what's new on Today the first time someone opens it
+REVISIT = timedelta(hours=2)  # opening Today again within this keeps the line where it was
 LOOKBACK = timedelta(days=7)  # critical and high findings this recent stay on Today, below the line once seen
 DUE_WITHIN = 7  # days: Coming up items that make Today
 RENEWAL_WITHIN = 30  # days: renewals on Clients
@@ -105,6 +109,16 @@ class Entry:
     href: str = ""  # where to look or fix it (a portal path, set by the page)
     stamp: str = ""  # the time as the page shows it, in the MSP's timezone (set by the page)
     stamp_full: str = ""
+    ids: list[int] = field(default_factory=list)  # the findings behind a finding line
+    handed_to: int | None = None  # the colleague holding it (a user id)
+    holder: str = ""  # their name
+    snoozed_until: str = ""  # out of the list until then (ISO, UTC)
+    snooze_stamp: str = ""  # that time as the page shows it (set by the page)
+
+    @property
+    def acts(self) -> bool:
+        """Whether the line can be handed on or snoozed (a fixed finding can't)."""
+        return bool(self.key) and self.kind != "fixed"
 
     @property
     def tone(self) -> str:
@@ -131,6 +145,8 @@ class Today:
     clients: int = 0  # clients with a line
     since_label: str = "yesterday"  # how the sentence names the line
     without: list[tuple[dict, str]] = field(default_factory=list)  # Coming up parts that couldn't be read
+    snoozed: list[Entry] = field(default_factory=list)  # lines out of the list for now, not counted
+    cleared: list[tuple[int, str]] = field(default_factory=list)  # (tenant, key) of item_state rows whose line went
 
     @property
     def new(self) -> list[Entry]:
@@ -209,7 +225,8 @@ def _finding_entries(conn, tenants: dict[int, dict], since: datetime, now: datet
         return []
     marks = ",".join("?" * len(tenants))
     rows = conn.execute(
-        f"SELECT tenant_id, rule_key, severity, subject, detail, first_seen, reopened_at FROM findings"
+        f"SELECT id, tenant_id, rule_key, severity, subject, detail, first_seen, reopened_at, handed_to,"
+        f" snoozed_until FROM findings"
         f" WHERE tenant_id IN ({marks}) AND resolved_at IS NULL AND severity IN ('critical', 'high')"
         " AND (first_seen >= ? OR IFNULL(reopened_at, '') >= ?)"
         " AND (accepted_at IS NULL OR (accepted_until IS NOT NULL AND accepted_until <= ?))"
@@ -220,9 +237,10 @@ def _finding_entries(conn, tenants: dict[int, dict], since: datetime, now: datet
     groups: dict[tuple, list] = {}
     for r in rows:
         at = max(r["first_seen"], r["reopened_at"] or "")
-        groups.setdefault((r["tenant_id"], r["rule_key"], r["severity"], at >= cut), []).append((at, r))
+        key = (r["tenant_id"], r["rule_key"], r["severity"], at >= cut, findings.is_snoozed(r, now))
+        groups.setdefault(key, []).append((at, r))
     out = []
-    for (tenant_id, rule_key, severity, _), found in groups.items():
+    for (tenant_id, rule_key, severity, _, snoozed), found in groups.items():
         found.sort(key=lambda f: f[0], reverse=True)
         first = found[0][1]
         subjects = [subject_label(f[1]["subject"]) for f in found]
@@ -243,9 +261,18 @@ def _finding_entries(conn, tenants: dict[int, dict], since: datetime, now: datet
                 anchor=f"#check-{rule_key}",
                 count=len(found),
                 key=f"finding:{rule_key}",
+                ids=[f[1]["id"] for f in found],
+                handed_to=_holder([f[1]["handed_to"] for f in found]),
+                snoozed_until=max(f[1]["snoozed_until"] for f in found) if snoozed else "",
             )
         )
     return out
+
+
+def _holder(handed: list[int | None]) -> int | None:
+    """Who holds a line of several findings: the one colleague they're all handed to, else the latest's."""
+    held = [h for h in handed if h]
+    return held[0] if held else None
 
 
 def _fixed_entries(conn, tenants: dict[int, dict], since: datetime, now: datetime) -> list[Entry]:
@@ -416,17 +443,50 @@ def _due(tenant: dict, items: list, when: datetime) -> list[Entry]:
     return out
 
 
+def since_for(user, now: datetime) -> tuple[datetime, str, tuple[str, str]]:
+    """Where Today's line falls for this person, how the page names it, and what to store for next time
+    (``users.today_opened_at`` and ``today_since``). The first visit shows the last day; opening Today again
+    within REVISIT keeps the line where it was; coming back later moves it to the last visit. It never
+    reaches further back than LOOKBACK."""
+    opened, kept = parse(_get(user, "today_opened_at")), parse(_get(user, "today_since"))
+    if opened is None:
+        since, label = now - NEW_SINCE, "yesterday"
+    elif now - opened < REVISIT and kept is not None:
+        since, label = kept, "you last looked"
+    else:
+        since, label = opened, "you last looked"
+    since = max(since, now - LOOKBACK)
+    return since, label, (now.strftime(_ISO), since.strftime(_ISO))
+
+
+def _get(row, key: str):
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return None
+
+
+def _states(conn, tenant_ids) -> dict[tuple[int, str], dict]:
+    """The hand-offs and snoozes on lines that aren't findings, by (tenant, item key)."""
+    if not tenant_ids:
+        return {}
+    marks = ",".join("?" * len(tenant_ids))
+    rows = conn.execute(f"SELECT * FROM item_state WHERE tenant_id IN ({marks})", tuple(tenant_ids)).fetchall()
+    return {(r["tenant_id"], r["item_key"]): dict(r) for r in rows}
+
+
 def today(
     conn,
     tenants,
     now: datetime | None = None,
     shows: Callable[[str, int], bool] | None = None,
     since: datetime | None = None,
+    since_label: str = "yesterday",
 ) -> Today:
     """Today's ledger across ``tenants`` (paused and archived ones are left out): what happened since
     ``since`` (the last day without it) above the line, what was seen before and is still open below it.
     ``shows(kind, tenant id)`` says which kinds of line the person may see on each client; the rest aren't
-    counted."""
+    counted. Snoozed lines are kept apart and not counted either."""
     now = now or datetime.now(UTC)
     shows = shows or (lambda kind, tenant_id: True)
     since = since or now - NEW_SINCE
@@ -445,8 +505,30 @@ def today(
             entries.append(state)
         if soon.get(t["id"]) and shows("due", t["id"]):
             entries += _due(t, soon[t["id"]], _collected_at(latest, now))
+    states = _states(conn, list(by_id))
     for e in entries:
         e.new = e.when >= since
+        state = states.get((e.tenant["id"], e.key)) if e.kind != "finding" else None
+        if state:
+            e.handed_to = state["handed_to"]
+            if (state["snoozed_until"] or "") > now.strftime(_ISO):
+                e.snoozed_until = state["snoozed_until"]
+    names = _names(conn, {e.handed_to for e in entries if e.handed_to})
+    for e in entries:
+        e.holder = names.get(e.handed_to, "")
+    # Hand-offs and snoozes whose line has gone (the collection works again, access was granted, the item is
+    # no longer due), on clients and kinds of line this person sees whole: the page forgets them.
+    present = {(e.tenant["id"], e.key) for e in entries}
+    unread = {t["id"] for t, _ in up.without}
+    cleared = [
+        (tenant_id, key)
+        for tenant_id, key in states
+        if (tenant_id, key) not in present
+        and shows(key.partition(":")[0], tenant_id)
+        and not (key.startswith("due") and tenant_id in unread)
+    ]
+    snoozed = sorted((e for e in entries if e.snoozed_until), key=lambda e: e.order)
+    entries = [e for e in entries if not e.snoozed_until]
     entries.sort(key=lambda e: e.order)
     new = [e for e in entries if e.new]
     collections = [e for e in entries if e.kind == "collection"]
@@ -462,8 +544,19 @@ def today(
         due=sum(e.count for e in entries if e.kind == "due"),
         fixed=sum(e.count for e in new if e.kind == "fixed"),
         clients=len({e.tenant["id"] for e in entries if e.kind != "fixed"}),
+        since_label=since_label,
         without=up.without,
+        snoozed=snoozed,
+        cleared=cleared,
     )
+
+
+def _names(conn, user_ids: set[int]) -> dict[int, str]:
+    if not user_ids:
+        return {}
+    marks = ",".join("?" * len(user_ids))
+    rows = conn.execute(f"SELECT id, username FROM users WHERE id IN ({marks})", tuple(user_ids)).fetchall()
+    return {r["id"]: r["username"] for r in rows}
 
 
 # -- Clients --------------------------------------------------------------------------------------

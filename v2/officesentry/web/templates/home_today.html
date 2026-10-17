@@ -1,20 +1,56 @@
 {#- Today (home.today): the ledger of what happened across a technician's clients, the answer first, then one
     line per thing, worst first, with what's new above the line and what they'd seen before below it. -#}
 {% extends "base.html" %}
-{% from "_macros.html" import icon, page_link with context %}
+{% from "_macros.html" import icon, csrf, page_link with context %}
 {% from "_groups.html" import group_picker with context %}
 {% from "_home.html" import home_switch, make_home with context %}
 {% from "_get_started.html" import get_started as get_started_card %}
 {% block title %}Today · Office Sentry{% endblock %}
+{% macro line_ref(e) -%}
+<input type="hidden" name="key" value="{{ e.key }}">{% for i in e.ids %}<input type="hidden" name="finding" value="{{ i }}">{% endfor %}
+{%- endmacro %}
+{% macro actions(e) -%}
+{% set people = holders.get((e.tenant.id, e.kind)) %}
+{% if people is not none %}
+<details class="menu line-actions">
+  <summary class="btn sm ghost" title="Hand on or snooze">{{ icon('person') }}<span class="sr-only">Hand on or snooze: {{ e.text }}</span></summary>
+  <div class="menu-panel line-menu">
+    <p class="line-menu-what small"><strong>{{ e.tenant.name }}</strong> {{ e.text }}</p>
+    <form method="post" action="{{ url_for('home.hand_line', tenant_id=e.tenant.id) }}">{{ csrf() }}{{ line_ref(e) }}
+      <label class="small">Hand to <select name="to">
+        <option value=""{{ ' selected' if not e.handed_to }}>Nobody</option>
+        {% for u in people %}<option value="{{ u.id }}"{{ ' selected' if e.handed_to == u.id }}>{{ u.username }}{{ ' (me)' if u.id == current_user.id }}</option>{% endfor %}
+      </select></label>
+      <button class="btn sm">Hand on</button>
+    </form>
+    {% if e.snoozed_until %}
+    <form method="post" action="{{ url_for('home.snooze_line', tenant_id=e.tenant.id) }}">{{ csrf() }}{{ line_ref(e) }}
+      <button class="btn sm">{{ icon('undo') }} Back in the list</button>
+    </form>
+    {% else %}
+    <form method="post" action="{{ url_for('home.snooze_line', tenant_id=e.tenant.id) }}">{{ csrf() }}{{ line_ref(e) }}
+      <label class="small">Snooze <select name="until">{% for k, label in snoozes.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select></label>
+      <button class="btn sm">{{ icon('clock') }} Snooze</button>
+    </form>
+    {% endif %}
+  </div>
+</details>
+{% endif %}
+{%- endmacro %}
 {% macro line(e) -%}
-<li class="ledger-line{{ ' seen' if not e.new }}" data-kind="{{ e.kind }}">
+<li class="ledger-line{{ ' seen' if not e.new and not e.snoozed_until }}" data-kind="{{ e.kind }}">
   <time class="when" datetime="{{ e.when.isoformat(timespec='minutes') }}" title="{{ e.stamp_full }}">{{ e.stamp }}</time>
   <div class="what">
     <div class="line"><span class="sevtext {{ e.level }}">{{ e.word }}</span>
       <a class="client" href="{{ url_for('tenants.tenant', tenant_id=e.tenant.id) }}">{{ e.tenant.name }}</a>
       {{ page_link(e.href, e.text, class='what-link') }}</div>
     {% if e.detail %}<div class="detail">{{ e.detail }}</div>{% endif %}
+    {% if e.holder or e.snoozed_until %}<div class="held small">
+      {%- if e.holder %}{{ icon('person') }} {{ 'Handed to you' if e.handed_to == current_user.id else 'Handed to ' ~ e.holder }}{% endif %}
+      {%- if e.holder and e.snoozed_until %} · {% endif %}
+      {%- if e.snoozed_until %}{{ icon('clock') }} Snoozed until {{ e.snooze_stamp }}{% endif %}</div>{% endif %}
   </div>
+  {% if e.acts %}{{ actions(e) }}{% endif %}
 </li>
 {%- endmacro %}
 {% block content %}
@@ -82,6 +118,15 @@
 <div class="card empty" id="ledger"><h3>All clear</h3>
   <p>No new critical or high findings, every collection is working and nothing is due this week.</p>
   {% if upcoming %}<a class="btn" href="{{ upcoming }}">{{ icon('calendar') }} See what's coming up</a>{% endif %}</div>
+{% endif %}
+{% if data.snoozed %}
+<details class="card flush ledger-card part" id="snoozed">
+  <summary class="card-head"><h2>Snoozed <span class="count-badge">{{ data.snoozed|length }}</span></h2>
+    <span class="meta small muted">Out of the list and the counts until the snooze ends</span></summary>
+  <ul class="ledger">
+    {% for e in data.snoozed %}{{ line(e) }}{% endfor %}
+  </ul>
+</details>
 {% endif %}
 {% if data.without %}<p class="footnote">Couldn't read: {% for t, part in data.without %}{{ part }} for {{ t.name }}{{ ', ' if not loop.last }}{% endfor %}.</p>{% endif %}
 <p class="footnote">{% if data.entries and data.fine %}{{ data.fine|plural('other client') }} {{ 'needs' if data.fine == 1 else 'need' }} nothing today. {% endif %}Every client, worst first, is on <a href="{{ url_for('tenants.dashboard') }}">Clients</a>.</p>

@@ -240,3 +240,155 @@ def test_sidebar_home_link(client, db, two_tenants):
     page = client.get("/today").get_data(as_text=True)
     assert '<a href="/home" class="active" aria-current="page">' in page
     assert 'class="brand" href="/home"' in page
+
+
+# -- Since you last looked, Hand to and Snooze -----------------------------------------------------------
+
+
+def _failed_run(db, tenant_id, age=timedelta(hours=1)):
+    at = (datetime.now(UTC) - age).strftime(ISO)
+    db.execute(
+        "INSERT INTO runs (tenant_id, collector, status, trigger, created_at, finished_at, error)"
+        " VALUES (?, 'users', 'failed', 'schedule', ?, ?, 'Graph 500')",
+        (tenant_id, at, at),
+    )
+
+
+def _audits(db, action):
+    return [r["detail"] for r in db.execute("SELECT detail FROM audit_log WHERE action = ?", (action,))]
+
+
+def test_the_line_falls_where_the_person_last_looked():
+    now = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
+    # The first visit shows the last day, and keeps when it was opened and where the line was.
+    assert home.since_for({}, now) == (
+        now - timedelta(days=1),
+        "yesterday",
+        ("2026-10-17T09:00:00Z", "2026-10-16T09:00:00Z"),
+    )
+    # Opening it again within a couple of hours keeps the line where it was.
+    back = {"today_opened_at": "2026-10-17T08:00:00Z", "today_since": "2026-10-16T17:30:00Z"}
+    assert home.since_for(back, now)[:2] == (datetime(2026, 10, 16, 17, 30, tzinfo=UTC), "you last looked")
+    # Coming back later moves it to the last visit, and never further back than a week.
+    back["today_opened_at"] = "2026-10-17T06:00:00Z"
+    assert home.since_for(back, now)[0] == datetime(2026, 10, 17, 6, 0, tzinfo=UTC)
+    away = {"today_opened_at": "2026-09-01T09:00:00Z", "today_since": "2026-08-31T09:00:00Z"}
+    assert home.since_for(away, now)[0] == now - home.LOOKBACK
+
+
+def test_today_page_remembers_the_last_visit(client, db, two_tenants):
+    alpha, _ = two_tenants
+    uid = make_user(db, "admin")
+    login(client, "admin")
+    assert "New since yesterday" in client.get("/today").get_data(as_text=True)
+    row = db.execute("SELECT today_opened_at, today_since FROM users WHERE id = ?", (uid,)).fetchone()
+    assert row["today_since"] < row["today_opened_at"]
+    db.execute(
+        "UPDATE users SET today_opened_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - timedelta(hours=5)).strftime(ISO), uid),
+    )
+    _finding(db, alpha, "mfa_registration", "high", age=timedelta(hours=6))  # before the last visit
+    _finding(db, alpha, "external_forwarding", "critical", age=timedelta(hours=1))
+    page = client.get("/today").get_data(as_text=True)
+    assert "New since you last looked" in page and "Since you last looked" in page
+    assert page.index('class="sevtext critical"') < page.index("Seen before") < page.index('class="ledger-line seen"')
+
+
+def test_hand_a_finding_line_to_a_colleague(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    _finding(db, alpha, "mfa_registration", "high")
+    _finding(db, alpha, "mfa_registration", "high", age=timedelta(hours=3))  # the same line
+    _finding(db, bravo, "mfa_registration", "high")
+    mine = [r["id"] for r in db.execute("SELECT id FROM findings WHERE tenant_id = ? ORDER BY id", (alpha,))]
+    other = db.execute("SELECT id FROM findings WHERE tenant_id = ?", (bravo,)).fetchone()["id"]
+    make_user(db, "admin")
+    ana = make_user(db, "ana", role="analyst", tenants=[alpha])
+    bob = make_user(db, "bob", role="analyst", tenants=[bravo])
+    login(client, "admin")
+    page = client.get("/today").get_data(as_text=True)
+    menu = page.split(f'action="/tenants/{alpha}/today/hand"')[1].split("</form>")[0]
+    assert f'value="{ana}"' in menu and f'value="{bob}"' not in menu and "(me)" in menu
+    assert all(f'name="finding" value="{i}"' in menu for i in mine)
+    form = {"key": "finding:mfa_registration", "finding": [str(i) for i in mine]}
+    # Someone who can't see the client is refused, and so are another client's findings.
+    client.post(f"/tenants/{alpha}/today/hand", data=form | {"to": str(bob)})
+    resp = client.post(f"/tenants/{alpha}/today/hand", data=form | {"finding": str(other), "to": str(ana)})
+    assert resp.status_code == 404
+    assert {r[0] for r in db.execute("SELECT handed_to FROM findings")} == {None}
+    resp = client.post(f"/tenants/{alpha}/today/hand", data=form | {"to": str(ana)})
+    assert resp.headers["Location"] == "/today#ledger"
+    assert [r[0] for r in db.execute("SELECT handed_to FROM findings ORDER BY id")] == [ana, ana, None]
+    assert _audits(db, "finding_handed") == ["finding:mfa_registration (2 findings) to ana"]
+    assert "Handed to ana" in client.get("/today").get_data(as_text=True)
+    client.post("/logout")
+    login(client, "ana")
+    assert "Handed to you" in client.get("/today").get_data(as_text=True)
+
+
+def test_snooze_a_failed_collection_and_bring_it_back(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    _failed_run(db, bravo)
+    make_user(db, "admin")
+    login(client, "admin")
+    client.post(f"/tenants/{bravo}/today/snooze", data={"key": "collection", "until": "tomorrow"})
+    row = db.execute("SELECT * FROM item_state").fetchone()
+    assert (row["tenant_id"], row["item_key"], row["snoozed_by"]) == (bravo, "collection", "admin")
+    assert row["snoozed_until"] > datetime.now(UTC).strftime(ISO)
+    assert _audits(db, "item_snoozed") == [f"collection until {row['snoozed_until']}"]
+    data = home.today(db, db.execute("SELECT * FROM tenants").fetchall())
+    assert data.entries == [] and [e.kind for e in data.snoozed] == ["collection"] and data.failing == 0
+    page = client.get("/today").get_data(as_text=True)
+    assert 'id="snoozed"' in page and "Snoozed until" in page and "Back in the list" in page
+    client.post(f"/tenants/{bravo}/today/snooze", data={"key": "collection", "until": ""})
+    assert db.execute("SELECT snoozed_until FROM item_state").fetchone()[0] is None
+    data = home.today(db, db.execute("SELECT * FROM tenants").fetchall())
+    assert [e.kind for e in data.entries] == ["collection"] and data.failing == 1
+    # A snooze ends by itself.
+    db.execute("UPDATE item_state SET snoozed_until = '2026-01-01T06:00:00Z'")
+    assert home.today(db, db.execute("SELECT * FROM tenants").fetchall()).snoozed == []
+
+
+def test_a_line_that_cleared_forgets_who_held_it(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    _failed_run(db, bravo)
+    uid = make_user(db, "admin")
+    login(client, "admin")
+    client.post(f"/tenants/{bravo}/today/hand", data={"key": "collection", "to": str(uid)})
+    held = db.execute("SELECT * FROM item_state").fetchone()
+    assert (held["handed_to"], held["handed_by"]) == (uid, "admin")
+    assert "Handed to you" in client.get("/today").get_data(as_text=True)
+    # Alpha's collection never failed: someone who sees collections there clears its row; nobody else does.
+    db.execute("INSERT INTO item_state (tenant_id, item_key, handed_to) VALUES (?, 'collection', ?)", (alpha, uid))
+    tenants = db.execute("SELECT * FROM tenants").fetchall()
+    assert home.today(db, tenants).cleared == [(alpha, "collection")]
+    assert home.today(db, tenants, shows=lambda kind, tenant_id: kind != "collection").cleared == []
+    client.get("/today")
+    assert [r["tenant_id"] for r in db.execute("SELECT tenant_id FROM item_state")] == [bravo]
+
+
+def test_hand_and_snooze_need_findings_manage(client, db, two_tenants):
+    from tests.test_roles import role_user
+
+    alpha, _ = two_tenants
+    _finding(db, alpha)
+    _failed_run(db, alpha)
+    role_user(db, "aud", "auditor", tenants=[alpha])
+    login(client, "aud")
+    page = client.get("/today").get_data(as_text=True)
+    assert 'data-kind="finding"' in page and "line-actions" not in page
+    finding_id = db.execute("SELECT id FROM findings").fetchone()["id"]
+    form = {"key": "finding:mfa_registration", "finding": str(finding_id), "to": "", "until": "week"}
+    assert client.post(f"/tenants/{alpha}/today/hand", data=form).status_code == 403
+    assert client.post(f"/tenants/{alpha}/today/snooze", data=form).status_code == 403
+    assert db.execute("SELECT snoozed_until FROM findings").fetchone()[0] is None
+
+
+def test_snooze_ends_tomorrow_morning_in_the_msp_timezone():
+    from zoneinfo import ZoneInfo
+
+    from officesentry.web.home import snooze_until
+
+    now = datetime(2026, 10, 16, 22, 30, tzinfo=UTC)  # 23:30 in London
+    assert snooze_until("tomorrow", now, ZoneInfo("Europe/London")) == "2026-10-17T05:00:00Z"  # 06:00 BST
+    assert snooze_until("week", now, ZoneInfo("Europe/London")) == "2026-10-23T22:30:00Z"
+    assert snooze_until("", now, ZoneInfo("UTC")) is None
