@@ -12,7 +12,7 @@
 <p class="footnote">{% if n %}The next pass would delete <strong>about {{ n|counted(noun) }}</strong>.{% else %}Nothing to delete at the saved settings.{% endif %}</p>
 {%- endmacro %}
 {% block content %}
-<div class="page-head"><div><h1>Data retention</h1><div class="sub">How long Office Sentry keeps personal data about your clients' staff and your own team. The worker applies these settings once a day, deleting in small batches. Deleted rows are overwritten in the database file where that costs nothing extra; backups keep them until they rotate.</div></div></div>
+<div class="page-head"><div><h2 class="page-title">Data retention</h2><div class="sub">How long Office Sentry keeps personal data about your clients' staff and your own team. The worker applies these settings once a day, deleting in small batches. Deleted rows are overwritten in the database file where that costs nothing extra; backups keep them until they rotate.</div></div></div>
 <form method="post" action="{{ url_for('retention.save') }}" class="card">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 

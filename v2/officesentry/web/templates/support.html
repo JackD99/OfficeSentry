@@ -5,7 +5,7 @@
 {% set errors = figures.errors.web + figures.errors.worker %}
 {% set log_kb = (figures.log_bytes.web + figures.log_bytes.worker) // 1024 %}
 {% block content %}
-<div class="page-head"><div><h1>Support</h1>
+<div class="page-head"><div><h2 class="page-title">Support</h2>
   <div class="sub">When something isn't working: where to look, and a package of diagnostics to attach to a bug report. Nothing in it names a client or a person unless you choose to.</div></div></div>
 
 {% if health.attention %}

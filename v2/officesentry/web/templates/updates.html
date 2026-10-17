@@ -12,7 +12,7 @@
 </ol>
 {%- endmacro %}
 {% block content %}
-<div class="page-head"><div><h1>Updates</h1>
+<div class="page-head"><div><h2 class="page-title">Updates</h2>
   <div class="sub">Office Sentry {{ version }} is running. New releases show here with what each one asks of you{% if docker %}, and the Update button installs them{% endif %}.</div></div>
   {% if plan.reason == 'current' %}{% if check.known %}<span class="pill ok">Up to date</span>{% elif check.error %}<span class="pill warn">Couldn't check</span>{% else %}<span class="pill">Not checked yet</span>{% endif %}{% elif target %}<span class="pill accent">{{ target.version }} available</span>{% endif %}</div>
 

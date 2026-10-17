@@ -5,10 +5,10 @@
 {% set contact_set = row and (row.contact_name or row.contact_email) %}
 {% set consented = tenant.consented_at %}
 {% set reader = state.key == 'connected' %}
-<div class="crumbs"><a href="{{ url_for('tenant_admin.clients') }}">Client settings</a><span>/</span><a href="{{ url_for('onboarding.index') }}">Onboarding</a><span>/</span><span>{{ tenant.name }}</span></div>
+<div class="crumbs"><a href="{{ url_for('onboarding.index') }}">&larr; Onboarding</a></div>
 <div class="page-head">
   <div>
-    <h1>{{ tenant.name }} <span class="pill {{ state.tone }}">{{ state.label }}</span></h1>
+    <h2 class="page-title">{{ tenant.name }} <span class="pill {{ state.tone }}">{{ state.label }}</span></h2>
     <div class="sub">{{ state.detail }}</div>
   </div>
   <div class="actions"><a class="btn" href="{{ url_for('tenant_admin.manage', tenant_id=tenant.id) }}">Manage client</a></div>
