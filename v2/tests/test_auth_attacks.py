@@ -52,6 +52,9 @@ WRITES_WHEN_OPENED = {
     # (tenants._use_consent_nonce); opening the page makes it, using it is a separate step.
     "tenants.tenant": {"consent_requests"},
     "tenant_admin.manage": {"consent_requests"},
+    # Today remembers when the person last opened it, for "since you last looked" (a visit from elsewhere is
+    # still the page in front of them), and forgets hand-offs and snoozes on lines that have cleared.
+    "home.today": {"users", "item_state"},
 }
 
 

@@ -30,15 +30,14 @@ def finding_or_404(finding_id: int, tenant_id: int | None = None):
     return tenant_or_404(row["tenant_id"]), row
 
 
-def holders(tenant_id: int) -> list:
+def holders(tenant_id: int, capability: str = "reports.security") -> list:
     """Enabled staff accounts a finding on this client can be handed to: those who see the client and open
-    its findings there. Nobody else is offered, and ``hand`` refuses anyone else."""
+    its findings there (or, for another line on Today, hold ``capability`` there). Nobody else is offered,
+    and ``hand`` refuses anyone else."""
     rows = g.db.execute(
         "SELECT * FROM users WHERE role <> 'client' AND disabled = 0 ORDER BY username COLLATE NOCASE"
     ).fetchall()
-    return [
-        u for u in rows if can_see_tenant(g.db, u, tenant_id) and access_of(u, g.db).can("reports.security", tenant_id)
-    ]
+    return [u for u in rows if can_see_tenant(g.db, u, tenant_id) and access_of(u, g.db).can(capability, tenant_id)]
 
 
 def sheet_for(tenant, row) -> dict:
