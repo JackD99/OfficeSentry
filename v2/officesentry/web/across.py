@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
 from ..checks import RULES
 from ..db import audit
@@ -27,22 +27,21 @@ from ..reports.registry import DECLARED
 from . import as_of
 from .access import by_report, can, need_also, needs, opens_on, require, tenant_or_404
 from .groups import group_aware, scope, scoped_tenants
-from .printing import pdf_response
+from .printing import file_response, pdf_response
 from .reports import exists, hidden_reports, report_capability
 from .saved_views import MAX_VIEWS
 from .saved_views import store as store_view
 
 bp = Blueprint("across", __name__)
 
-XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 RULE_TITLES = {r.key: r.title for r in RULES}
 
 
-def _download(body: bytes, filename: str, ext: str) -> Response:
-    mimetype = XLSX if ext == "xlsx" else "text/csv"
-    return Response(
-        body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{filename}.{ext}"'}
-    )
+def _across_name(*parts) -> str:
+    """A cross-tenant download's name: ``all-clients-<report>...``, or ``clients-<group>-<report>...`` when a
+    group is chosen, so a folder of downloads says which clients each file covers."""
+    chosen = scope().group
+    return tables.filename("all-clients" if chosen is None else f"clients-{chosen.name}", *parts)
 
 
 def _cover(title: str, client: str, intro: str = "", tenant_ref: str = "", facts=()) -> workbook.Cover:
@@ -203,10 +202,10 @@ def _rows_report(key: str, table: str):
 def rows_download(key: str, table: str, ext: str):
     report = _rows_report(key, table)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}-rows-{table}.{ext}")
-    filename = f"all-tenants-{key}-{table}"
+    filename = _across_name(key, table)
     if ext == "csv":
-        return _download(tables.to_csv(data_reports.section_table(report.sections[0])), filename, ext)
-    return _download(data_reports.to_xlsx(report, brand=branding.load(g.db)), filename, ext)
+        return file_response(tables.to_csv(data_reports.section_table(report.sections[0])), filename, ext)
+    return file_response(data_reports.to_xlsx(report, brand=branding.load(g.db)), filename, ext)
 
 
 @bp.get("/across/<key>/rows/<table>.pdf")
@@ -215,7 +214,7 @@ def rows_download(key: str, table: str, ext: str):
 def rows_pdf(key: str, table: str):
     report = _rows_report(key, table)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}-rows-{table}.pdf")
-    return pdf_response("reports/detail.html", f"all-tenants-{key}-{table}", report=report)
+    return pdf_response("reports/detail.html", _across_name(key, table), report=report)
 
 
 @bp.post("/across/<key>/rows/<table>/views")
@@ -285,7 +284,7 @@ def checks_download(ext: str):
             ),
         )
     )
-    return _download(body, "all-tenants-checks", ext)
+    return file_response(body, _across_name("checks"), ext)
 
 
 @bp.get("/across/<key>.csv", defaults={"ext": "csv"})
@@ -313,7 +312,7 @@ def rollup_download(key: str, ext: str):
             ),
         )
     )
-    return _download(body, f"all-tenants-{tables.slug(data.title)}", ext)
+    return file_response(body, _across_name(key), ext)
 
 
 @bp.get("/across/<key>.pdf")
@@ -322,7 +321,7 @@ def rollup_download(key: str, ext: str):
 def rollup_pdf(key: str):
     data = _rollup_or_404(key)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}.pdf")
-    return pdf_response("reports/rollup.html", f"all-tenants-{tables.slug(data.title)}", rollup=data)
+    return pdf_response("reports/rollup.html", _across_name(key), rollup=data)
 
 
 # -- Month-over-month changes ----------------------------------------------------------
@@ -364,7 +363,7 @@ def changes_pdf():
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"changes-{days}d.pdf")
     return pdf_response(
         "reports/changes.html",
-        f"all-tenants-changes-{days}-days",
+        _across_name("changes", f"{days}-days"),
         summaries=summaries,
         totals=totals,
         days=days,
@@ -392,7 +391,7 @@ def changes_download(ext: str):
             ),
         )
     )
-    return _download(body, f"all-tenants-changes-{days}-days", ext)
+    return file_response(body, _across_name("changes", f"{days}-days"), ext)
 
 
 def _tenant_changes(t) -> dict:
@@ -451,7 +450,7 @@ def tenant_changes_pdf(tenant_id: int):
     t = tenant_or_404(tenant_id)
     page = _tenant_changes(t)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"changes-{page['slug']}.pdf")
-    return pdf_response("reports/tenant_changes.html", f"changes-{page['slug']}-{tables.slug(t['name'])}", **page)
+    return pdf_response("reports/tenant_changes.html", tables.filename("changes", page["slug"], t["name"]), **page)
 
 
 @bp.get("/tenants/<int:tenant_id>/changes.csv", defaults={"ext": "csv"})
@@ -479,7 +478,7 @@ def tenant_changes_download(tenant_id: int, ext: str):
                 ),
             ),
         )
-    return _download(body, f"changes-{page['slug']}-{tables.slug(t['name'])}", ext)
+    return file_response(body, tables.filename("changes", page["slug"], t["name"]), ext)
 
 
 # -- CSV for per-tenant reports -------------------------------------------------------
@@ -500,8 +499,9 @@ def data_report_csv(tenant_id: int, key: str):
         abort(404)
     table = report_tables[index - 1]
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.csv")
-    name = f"{key}-{tables.slug(table.title)}-{tables.slug(t['name'])}" + (f"-{day.on.isoformat()}" if day.on else "")
-    return _download(tables.to_csv(table), name, "csv")  # a past day is named, as the PDF and workbook are
+    # The table is named only when the report has several; a past day is named, as the PDF and workbook are.
+    name = tables.filename(key, table.title if len(report_tables) > 1 else "", t["name"], on=day.on)
+    return file_response(tables.to_csv(table), name, "csv")
 
 
 @bp.get("/tenants/<int:tenant_id>/report.csv")
@@ -520,4 +520,4 @@ def review_csv(tenant_id: int):
         ],
     )
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "findings.csv")
-    return _download(tables.to_csv(table), f"security-review-findings-{tables.slug(t['name'])}", "csv")
+    return file_response(tables.to_csv(table), tables.filename("security-review-findings", t["name"]), "csv")
