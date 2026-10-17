@@ -324,4 +324,4 @@ def test_admin_activity_page_and_xlsx(client, db, two_tenants, monkeypatch):
     assert resp.status_code == 200
     wb = load_workbook(BytesIO(resp.data))
     assert wb.sheetnames == ["Summary", "Changes to review", "All admin changes", "Who made changes"]
-    assert wb["Changes to review"]["G2"].value == "high"
+    assert wb["Changes to review"]["A2"].value == "High"  # the flag column first, as on the page
