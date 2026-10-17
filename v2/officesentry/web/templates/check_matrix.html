@@ -57,8 +57,11 @@
     </div>
     <div class="toolbar-actions">
       {% if matrix.rows|length > 5 %}<input class="search sm" type="search" data-filter="check-matrix" placeholder="Filter clients…" aria-label="Filter clients">{% endif %}
-      {{ downloads([('XLSX', url_for('across.checks_download', ext='xlsx'), 'Every check for every client'),
-                    ('CSV', url_for('across.checks_download', ext='csv'), 'Every check for every client')]) }}
+      {#- The downloads cover what the page shows: one category's checks, or every check. -#}
+      {% set picked = {'category': slugs[chosen[0]]} if chosen else {} %}
+      {% set tip = (chosen[0] ~ ' checks for every client') if chosen else 'Every check for every client' %}
+      {{ downloads([('XLSX', url_for('across.checks_download', ext='xlsx', **picked), tip),
+                    ('CSV', url_for('across.checks_download', ext='csv', **picked), tip)]) }}
     </div>
   </div>
   <div class="table-scroll{{ ' tall' if matrix.rows|length > 12 }}">

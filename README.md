@@ -88,10 +88,11 @@ Anything you change after approving waits for a new version, so the client's por
 
 **Custom reports** let an account manager build their own client report without code: drag in blocks (a
 verdict, key figures, failing checks, what changed, licences, a table from any detail report, your own text),
-set each one up, see it on a real client as you go, and send it with a report plan. Start from an executive
-summary, a full review, a licensing review or a **Quarterly review**: three months of Secure Score and findings,
-what was fixed, the projects on the table and where each stands, licence spend and what's coming up in the next
-90 days ([example PDF](examples/quarterly-review.pdf)).
+set each one up, see it on a real client as you go, and send it with a report plan or a client's email
+schedule (*Send on a schedule* on the client's Custom reports page starts one with it ticked). Start from an
+executive summary, a full review, a licensing review or a **Quarterly review**: three months of Secure Score
+and findings, what was fixed, the projects on the table and where each stands, licence spend and what's coming
+up in the next 90 days ([example PDF](examples/quarterly-review.pdf)).
 
 ![The custom report editor with the Quarterly review: blocks, the layout, and a preview on a real client](docs/screenshots/design-editor.png)
 
@@ -230,6 +231,20 @@ changed. Site addresses in reports and on group pages open it.
     <td>A site: storage, sharing, the team behind it and its findings</td>
   </tr>
 </table>
+
+<!-- since 2.5.0 -->
+### Acting on a finding
+
+Open any row of a client's Findings tab and the finding's sheet opens beside the table: the evidence behind it
+(for an account, the facts from its page), its history (first seen, came back, accepted and by whom), where else
+the same check fails across your clients, the fix as numbered steps, and the text to act on it. **Copy for a
+ticket** puts a ready-made ticket on the clipboard, **Email the contact** opens a prefilled email to the client's
+contact in your own mail app (Office Sentry sends nothing itself), and **Accept risk** is there too. The team can
+keep a note on a finding and hand it to a colleague who sees that client; notes and hand-offs stay inside the
+team and never reach a client's reports or emails. Nothing is ever written to the client's tenant.
+
+![A finding's sheet beside the Findings table: evidence, history, where else it fails, the fix and the ticket text](docs/screenshots/finding-sheet.png)
+<!-- /since -->
 
 ### Across all clients, and what changed
 

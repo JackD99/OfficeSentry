@@ -126,17 +126,17 @@ def test_rows_downloads_keep_the_view(client, db, two_tenants, widgets):
     resp = client.get("/across/widgets/rows/widgets.csv?f=widgets/state:bad&hide=widgets/count")
     assert resp.mimetype == "text/csv" and "attachment" in resp.headers["Content-Disposition"]
     rows = _csv(resp.data)
-    assert rows[0] == ["Client", "Widget", "State", "Flag"]
-    assert rows[1:] == [["Alpha Ltd", "Alpha w2", "bad", "high"], ["Bravo Inc", "Bravo w2", "bad", "high"]]
+    assert rows[0] == ["Flag", "Client", "Widget", "State"]  # the flag first, as on the page
+    assert rows[1:] == [["High", "Alpha Ltd", "Alpha w2", "bad"], ["High", "Bravo Inc", "Bravo w2", "bad"]]
     resp = client.get("/across/widgets/rows/widgets.xlsx?sort=widgets/widget:desc")
     assert resp.status_code == 200
     wb = load_workbook(io.BytesIO(resp.data))
     assert wb["Summary"]["A2"].value == "All clients"
     sheet = wb.worksheets[1]
     values = [[c.value for c in row] for row in sheet.iter_rows()]
-    header = next(i for i, row in enumerate(values) if row[0] == "Client")
-    assert values[header][:3] == ["Client", "Widget", "State"]
-    assert [row[1] for row in values[header + 1 : header + 5]] == ["Bravo w2", "Bravo w1", "Alpha w2", "Alpha w1"]
+    header = next(i for i, row in enumerate(values) if row[0] == "Flag")
+    assert values[header][:4] == ["Flag", "Client", "Widget", "State"]
+    assert [row[2] for row in values[header + 1 : header + 5]] == ["Bravo w2", "Bravo w1", "Alpha w2", "Alpha w1"]
     assert len(wb.sheetnames) == 2  # only the table asked for
     assert client.get("/across/widgets/rows/widgets.pdf").status_code == 200
     assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'rollup_downloaded'").fetchone()[0] == 3
@@ -232,6 +232,31 @@ def test_rollup_page_shows_the_total_row(client, db, two_tenants, widgets):
     assert client.get("/across/widgets.pdf").status_code == 200
 
 
+def test_cross_client_pdfs_and_workbooks_read_as_one_report_over_many_clients(
+    client, db, two_tenants, widgets, monkeypatch
+):
+    """Every row's PDF and workbook say how many clients they cover, not one tenant's collection date and
+    Microsoft 365 name, and carry the MSP's internal footer like the other cross-client PDFs."""
+    from officesentry.reports import export
+
+    make_user(db, "admin")
+    login(client, "admin")
+    pages = []
+    monkeypatch.setattr(export, "pdf_available", lambda: True)
+    monkeypatch.setattr(export, "to_pdf", lambda html, base_url: pages.append(html) or b"%PDF-1.7")
+    assert client.get("/across/widgets/rows/widgets.pdf").status_code == 200
+    every_row = pages[-1]
+    assert "<dt>Clients</dt><dd>2</dd>" in every_row
+    assert "Microsoft 365 tenant" not in every_row and "Data collected</dt>" not in every_row
+    assert "internal: every client" in every_row and "Prepared for All clients" not in every_row
+    assert client.get("/across/widgets.pdf").status_code == 200
+    assert "<dt>Report</dt>" not in pages[-1]  # the title already says which report
+    wb = load_workbook(io.BytesIO(client.get("/across/widgets/rows/widgets.xlsx").data))
+    summary = [[c.value for c in row] for row in wb["Summary"].iter_rows()]
+    assert any(row[0] == "Clients" and 2 in row for row in summary)
+    assert not any("2 clients" in str(v) for row in summary for v in row if v)  # no tenant line pretending to be one
+
+
 # -- Checks matrix ------------------------------------------------------------------------
 
 
@@ -268,9 +293,19 @@ def test_check_matrix_page_lists_only_visible_tenants(client, db, two_tenants):
     assert f"/tenants/{alpha}/findings#check-" in page
     page = client.get("/across/checks?category=email").get_data(as_text=True)
     assert "Alpha Ltd" in page and "Every category" in page
+    assert 'href="/across/checks.csv?category=email"' in page and "Email checks for every client" in page
     rows = _csv(client.get("/across/checks.csv").data)
     assert [r[0] for r in rows[1:]] == ["Alpha Ltd"]
     assert client.get("/across/checks.xlsx").status_code == 200
+    # The downloads cover what the page shows: one category's checks, with the counts over those checks.
+    email = _csv(client.get("/across/checks.csv?category=email").data)
+    assert email[0][:6] == rows[0][:6] and email[0][6:] and all(c.startswith("Email: ") for c in email[0][6:])
+    assert len(email[0]) < len(rows[0]) and int(email[1][2]) <= int(rows[1][2])
+    resp = client.get("/across/checks.xlsx?category=email")
+    assert resp.status_code == 200 and 'filename="all-clients-checks-email.xlsx"' in resp.headers["Content-Disposition"]
+    assert _csv(client.get("/across/checks.csv?category=nonsense").data)[0] == rows[0]  # unknown: every check
+    # Downloads without words of their own get the usual ones for their format.
+    assert 'title="This page as a PDF"' in client.get("/changes").get_data(as_text=True)
 
 
 def test_clients_cannot_open_cross_tenant_rows_or_checks(client, db, two_tenants, widgets):

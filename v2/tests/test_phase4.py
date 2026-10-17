@@ -428,6 +428,9 @@ def test_detail_reports_build(db, two_tenants):
     assert ca["Coverage by account"].intro.startswith("3 of 3")
     guests = {s.title: s for s in build(db, tenant, "guests").sections}
     assert ["Who can invite guests", "Everyone, including guests"] in guests["External access settings"].rows
+    listed = guests["Guest accounts"]
+    assert listed.columns[:2] == ["Guest", "Name"]  # who the guest is, not only the address
+    assert [r[:2] for r in listed.rows] == [["g#EXT#@x.com", "Guest"]]
     for key in REPORTS:
         assert build(db, store.get_tenant(db, two_tenants[1]), key).unavailable  # never collected
 

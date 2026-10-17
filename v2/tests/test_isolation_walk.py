@@ -173,6 +173,8 @@ FORMS = {
     "reporting.save_commentary": lambda ids: {"commentary": "A quiet month."},
     "reporting.set_state": lambda ids: {"state": "in_review"},
     "reporting.update_action": lambda ids: {"op": "save", "status": "in_progress", "target_month": ""},
+    "finding.hand": lambda ids: {"to": ""},
+    "finding.note": lambda ids: {"note": "Waiting on the client"},
     "reports.accept_finding": lambda ids: {"note": "Accepted: the account is a break-glass account", "until": ""},
     "reports.evidence_answer": lambda ids: {"answer": next(iter(evidence_answers.ANSWERS)), "note": "Checked"},
     "tenant_admin.delete": lambda ids: {"confirm_name": "Bravo Inc"},

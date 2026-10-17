@@ -908,7 +908,7 @@ def conditional_access(snap: TenantSnapshot, now: datetime, report: DataReport) 
         Tile(
             "MFA not required",
             accounts.flagged,
-            "Members no enforced policy asks for MFA in every app"
+            "Enabled accounts no enforced policy asks for MFA in every app"
             + (f", including {plural(admins, 'admin')}" if admins else ""),
             ("bad" if admins else "warn") if accounts.flagged else "ok",
             Rows(accounts.title, flagged=True),
@@ -1009,7 +1009,7 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         activity = any(u.get("signInActivityAvailable") for u in users)
         guest = Section(
             "Guest accounts",
-            ["Guest", "Invited", "Invitation", "Last sign-in", "Sign-in allowed"],
+            ["Guest", "Name", "Invited", "Invitation", "Last sign-in", "Sign-in allowed"],
             intro="Every external account, oldest activity first."
             + ("" if activity else " Sign-in dates need Entra ID P1."),
             empty="No guest accounts.",
@@ -1024,6 +1024,7 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             guest.add(
                 [
                     u.get("mail") or u.get("userPrincipalName"),
+                    u.get("displayName") or "",
                     _date(u.get("createdDateTime")),
                     "Not accepted" if pending else "Accepted",
                     last.date().isoformat() if last else (never_signed_in(u) if activity else "Unknown"),
@@ -1912,6 +1913,22 @@ def _synced_at(value: str | None, now: datetime) -> str:
     return "Never" if hours is None else f"{value[:16].replace('T', ' ')} ({hybrid.age(hours)})"
 
 
+# What Microsoft says a domain is used for (a domain's supportedServices), in words. Values it hasn't
+# named yet show as they come.
+DOMAIN_SERVICES = {
+    "Email": "Email",
+    "EmailInternalRelayOnly": "Email (internal relay only)",
+    "Sharepoint": "SharePoint",
+    "SharePointDefaultDomain": "SharePoint (default domain)",
+    "SharePointPublic": "SharePoint (public site)",
+    "OfficeCommunicationsOnline": "Teams and Skype for Business",
+    "OrgIdAuthentication": "Sign-in",
+    "Yammer": "Viva Engage",
+    "Intune": "Intune",
+    "FullRedelegation": "DNS delegated to Microsoft",
+}
+
+
 def _sync_word(problem: tuple[str, str] | None, last: str | None) -> str:
     """A sync in a word, for the Value column, so a sync that keeps running isn't a change every month."""
     if not last:
@@ -1981,7 +1998,7 @@ def hybrid_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
                 d.get("authenticationType"),
                 d.get("isVerified"),
                 d.get("isDefault"),
-                d.get("supportedServices") or [],
+                [DOMAIN_SERVICES.get(s, s) for s in d.get("supportedServices") or [] if isinstance(s, str)],
             ]
         )
     sections = [sync, domains]
@@ -2146,12 +2163,14 @@ def _no_longer_held(conn, snap: TenantSnapshot, collectors, report: DataReport) 
 
 
 def section_table(section: Section) -> Table:
+    """A section as one CSV table. The flag column comes first and reads as the page does ("High"), so a
+    spreadsheet is laid out like the report."""
     flagged = any(section.flags)
     rows = [
-        [str(v) if isinstance(v, Link) else v for v in row] + ([flag or ""] if flagged else [])
+        ([(flag or "").capitalize()] if flagged else []) + [str(v) if isinstance(v, Link) else v for v in row]
         for row, flag in zip(section.rows, section.flags or [None] * len(section.rows), strict=False)
     ]
-    return Table(section.title, section.columns + ([section.flag_name] if flagged else []), rows)
+    return Table(section.title, ([section.flag_name] if flagged else []) + section.columns, rows)
 
 
 def to_tables(report: DataReport) -> list[Table]:
@@ -2165,8 +2184,12 @@ FLAG_FILLS = workbook.FLAG_FILLS
 
 
 def xlsx_cover(report: DataReport, brand=None) -> workbook.Cover:
-    """The Summary sheet of a detail report's workbook: what it is, for whom, and its headline figures."""
-    facts = [(t.label, t.value, t.foot) for t in report.tiles + report.highlights]
+    """The Summary sheet of a detail report's workbook: what it is, for whom, and its headline figures. Every
+    row (``rollups.all_rows``) covers many clients: the sheet counts them, as the rollups' sheets do, instead
+    of naming a Microsoft 365 tenant."""
+    clients = report.tenant["clients"] if "clients" in report.tenant.keys() else 0
+    facts = [("Clients", clients, "")] if clients else []
+    facts += [(t.label, t.value, t.foot) for t in report.tiles + report.highlights]
     notes = [("Note", report.notice)] if report.notice else []
     notes += [("Not checked", note) for note in report.notes]
     notes += [("Filtered view", line) for line in report.filtered]
@@ -2181,7 +2204,7 @@ def xlsx_cover(report: DataReport, brand=None) -> workbook.Cover:
         report.tenant.get("name", ""),
         report.generated_at,
         brand.display_name if brand else "",
-        report.tenant.get("tenant_ref", ""),
+        "" if clients else report.tenant.get("tenant_ref", ""),
         brand.accent if brand else "",
         report.description,
         facts,

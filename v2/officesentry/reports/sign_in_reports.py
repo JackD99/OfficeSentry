@@ -12,6 +12,7 @@ import re
 from datetime import datetime
 
 from .. import signins
+from ..formatting import day
 from ..signins import REPEATED_FAILURES, SPRAY_ACCOUNTS
 from ..snapshot import TenantSnapshot
 from ..text import plural
@@ -481,7 +482,7 @@ def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
                 Rows(RISKY),
             )
         )
-    since = _utc(status.get("since"))[:10]
+    since = day(status.get("since")) if _utc(status.get("since")) else ""
     report.footnote = (
         f"Interactive sign-ins {'since ' + since if since else f'in the last {days} days'}, from "
         "the Entra ID sign-in log. Background sign-ins by apps and saved sessions aren't included. "

@@ -298,19 +298,23 @@ def _check_matrix():
     return rollups.check_matrix(g.db, scoped_tenants())
 
 
+def _chosen_category(matrix: rollups.CheckMatrix):
+    """The category ``?category=`` names (its name and checks), or None for every check."""
+    category = request.args.get("category", "")
+    return next((c for c in matrix.categories if views.slug(c[0]) == category), None)
+
+
 @bp.get("/across/checks")
 @needs("clients.compare", "reports.security")
 @group_aware
 def checks():
     matrix = _check_matrix()
     categories = matrix.categories
-    category = request.args.get("category", "")
-    chosen = next((c for c in categories if views.slug(c[0]) == category), None)
     return render_template(
         "check_matrix.html",
         matrix=matrix,
         categories=categories,
-        chosen=chosen,
+        chosen=_chosen_category(matrix),
         slugs={c[0]: views.slug(c[0]) for c in categories},
         **_picker(),
     )
@@ -321,23 +325,32 @@ def checks():
 @needs("clients.compare", "reports.security", "export")
 @group_aware
 def checks_download(ext: str):
+    """The matrix as the page shows it: every check, or one category's with ``?category=``."""
     matrix = _check_matrix()
-    table = matrix.to_table()
-    audit(g.db, g.user["username"], "rollup_downloaded", None, f"checks.{ext}")
+    chosen = _chosen_category(matrix)
+    checks = chosen[1] if chosen else matrix.checks
+    table = matrix.to_table(checks)
+    category = views.slug(chosen[0]) if chosen else ""
+    audit(g.db, g.user["username"], "rollup_downloaded", None, f"{tables.filename('checks', category)}.{ext}")
     body = (
         tables.to_csv(table)
         if ext == "csv"
         else tables.to_xlsx(
             [table],
             cover=_cover(
-                "Checks",
+                f"{chosen[0]} checks" if chosen else "Checks",
                 scope().label,
-                "Every check's result for every client.",
-                facts=[("Clients", len(matrix.rows), ""), ("With failing checks", matrix.with_failures, "")],
+                f"Every {chosen[0].lower()} check's result for every client."
+                if chosen
+                else "Every check's result for every client.",
+                facts=[
+                    ("Clients", len(matrix.rows), ""),
+                    ("With failing checks", matrix.with_failures_in(checks), ""),
+                ],
             ),
         )
     )
-    return file_response(body, _across_name("checks"), ext)
+    return file_response(body, _across_name("checks", category), ext)
 
 
 @bp.get("/across/<key>.csv", defaults={"ext": "csv"})
@@ -522,6 +535,8 @@ def tenant_changes_download(tenant_id: int, ext: str):
             cover=_cover(
                 page["title"],
                 t["name"],
+                f"Changes in {t['name']}'s Microsoft 365 {page['title'].removeprefix('What changed ')}: new and fixed "
+                "findings, key changes, and what each report shows differently.",
                 tenant_ref=t["tenant_ref"],
                 facts=[("Changes", report.total, "")]
                 + (

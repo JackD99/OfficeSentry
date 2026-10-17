@@ -127,6 +127,18 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   leader and Administrator by default) can accept one with a reason and an
   optional review date after today, when it comes back for review; accepted
   risks leave the totals and get their own section.
+<!-- since 2.5.0 -->
+- **A finding's sheet** (`/tenants/<id>/findings/<finding id>`, or Open on any
+  row of the Findings tab, in place beside the table): the evidence behind the
+  finding (for an account, the facts from its page), its history, where else
+  the same check fails across the clients the person sees, the fix as steps,
+  *Copy for a ticket*, *Email the contact* (a `mailto:` link for the person's
+  own mail app; Office Sentry sends nothing) and *Accept risk*. Anyone who can
+  accept risks can also keep a note on a finding and hand it to a colleague
+  who sees that client (`findings.note`, `hand` and `snooze`; migration 0048).
+  Notes and hand-offs stay with the team: never on a client's pages, in a
+  report or in an email. Nothing is ever written to the client's tenant.
+<!-- /since -->
 - **Since last month**: new and fixed findings, admin role changes, new,
   disabled and deleted accounts, licences people were given or lost, and
   Conditional Access policies added, switched or edited, compared with the
@@ -628,7 +640,9 @@ A custom report belongs to the MSP and works for every client: a block with noth
 (no accepted risks, no commentary yet) is left out of that client's report. Each client's **Reports →
 Custom reports** lists every one as a page and a PDF; the client's Reports tab, the "All reports" menu
 above a client's reports and the Reports page list them too, and a report plan or a client's email schedule
-can send one (as a PDF) alongside or instead of the monthly review. Text blocks and the cover's title
+can send one (as a PDF) alongside or instead of the monthly review: *Send on a schedule* beside a custom
+report on a client's Custom reports page starts a schedule with it ticked, and that page says which of the
+client's emails already send each one. Text blocks and the cover's title
 and subtitle take `{client}`, `{month}`, `{quarter}`, `{msp}` and `{date}`, and a custom report holds up to 60 blocks.
 Anyone who can *Design custom reports* makes and edits them; removing
 one also needs *Settings*, since it comes out of any plan or schedule that sent it.
@@ -819,7 +833,7 @@ and follows it through consent, Global Reader and its first collection.
 
 ## Managing clients
 
-- **Settings** in the menu opens *Client settings*. Its pages are in four areas, shown as tabs with the open area's pages under them: *Clients* (Client settings, Client groups, App connection), *Reports and email* (Branding, Licence prices, Email delivery, Alerts), *Team* (Users, Microsoft sign-in, Activity log) and *System* (System status, Data retention, Updates, Support). These docs name the page, as in *Settings → Email delivery*.
+- **Settings** in the menu opens *Client settings*. Every settings page opens with the Settings heading, its four areas as tabs and the open area's pages under them, then the page's own title: *Clients* (Client settings, Client groups, App connection), *Reports and email* (Branding, Licence prices, Email delivery, Alerts), *Team* (Users, Microsoft sign-in, Activity log) and *System* (System status, Data retention, Updates, Support). These docs name the page, as in *Settings → Email delivery*.
 - **Switch client**, beside a client's name (staff who see more than one client): opens the page you're on for another client you see, within the client group you picked, with a box to find one by name. From an account, mailbox, group or site it opens that client's list, and a report the other client doesn't have, or that you can't open there, opens its Reports tab.
 - **Client settings** (*Settings → Client settings*, or *Connection health* on
   the Clients page) lists every client with its status (*Onboarding*,

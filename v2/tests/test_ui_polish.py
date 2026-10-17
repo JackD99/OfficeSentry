@@ -69,12 +69,12 @@ def test_xlsx_flags_are_coloured(db, two_tenants):
         c
         for ws in wb.worksheets
         for row in ws.iter_rows(min_row=2)
-        for c in row[-1:]
-        if c.value in data_reports.FLAG_FILLS
+        for c in row[:1]  # the flag column comes first, capitalised
+        if isinstance(c.value, str) and c.value.lower() in data_reports.FLAG_FILLS
     ]
     assert flagged
     for cell in flagged:
-        assert cell.fill.fgColor.rgb.endswith(data_reports.FLAG_FILLS[cell.value][0])
+        assert cell.fill.fgColor.rgb.endswith(data_reports.FLAG_FILLS[cell.value.lower()][0])
 
 
 def test_reports_not_compared_are_grouped_by_reason(client, db, two_tenants):
