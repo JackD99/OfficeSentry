@@ -40,6 +40,7 @@ from . import (
     groups,
     history,
     home,
+    jump,
     mailboxes,
     onboarding,
     people,
@@ -410,6 +411,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(addon_pages.bp)
     app.register_blueprint(activity.bp)
     app.register_blueprint(search.bp)
+    app.register_blueprint(jump.bp)
     app.register_blueprint(reporting.bp)
     app.register_blueprint(groups.bp)
     app.register_blueprint(upcoming.bp)

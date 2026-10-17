@@ -249,24 +249,6 @@
   });
 })();
 
-/* "/" (or Ctrl+K, ⌘K) puts the cursor in the menu's "Search all clients" box; "/" only when nobody is
- * typing in a field already. Where the box isn't shown (the menu folded, a phone), it opens the search page. */
-(function () {
-  var link = document.querySelector('.nav-search-link');
-  if (!link) return;
-  function typing(el) {
-    return el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
-  }
-  document.addEventListener('keydown', function (e) {
-    var slash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey;
-    var k = (e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey;
-    if (e.defaultPrevented || !(slash || k) || (slash && typing(document.activeElement))) return;
-    var box = Array.prototype.find.call(document.querySelectorAll('.nav-search input[type=search]'), function (el) { return el.offsetParent; });
-    e.preventDefault();
-    if (box) { box.focus(); box.select(); } else window.location.href = link.href;
-  });
-})();
-
 /* Copy buttons: data-copy="#id" copies that element's text (a textarea's value) to the clipboard and says so;
  * data-copy-text="..." copies the attribute's own text (a link). */
 (function () {

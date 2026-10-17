@@ -31,6 +31,7 @@ NOT_PAGES = {
     "branding.logo": "an image",
     "reporting.progress": "JSON polled by the queue page",
     "updates.progress": "JSON polled by the Updates page",
+    "jump.index": "JSON for the jump box's typeahead",
     "finding.sheet": "the finding sheet alone, fetched into the Findings tab (reports.finding is its page)",
     "email.issued_report": "a file download",
     "auth.setup": "only before the first admin exists",
