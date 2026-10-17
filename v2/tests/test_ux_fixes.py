@@ -50,6 +50,12 @@ def test_settings_are_one_sidebar_entry_with_their_areas_as_tabs(client, db):
             assert nav.count('aria-current="page"') == 1, path
             side = page[page.index('<aside class="sidebar"') : page.index("</aside>")]
             assert 'class="active" aria-current="page">' in side and side.count("aria-current") == 1, path
+            # The page opens like a client's: the "Settings" heading above the tabs, its own title under them.
+            main = page[page.index("<main") :]
+            assert main.count("<h1") == 1 and "<h1>Settings</h1>" in main, path
+            assert main.index("<h1>Settings</h1>") < main.index('<nav class="settings-nav"'), path
+            assert main.count('<h2 class="page-title">') == 1, path
+            assert main.index("</nav>") < main.index('<h2 class="page-title">'), path
 
 
 def test_editing_a_user_keeps_users_selected(client, db):
@@ -58,6 +64,17 @@ def test_editing_a_user_keeps_users_selected(client, db):
     login(client, "admin")
     page = client.get(f"/admin/users/{other}").get_data(as_text=True)
     assert 'href="/admin/users" class="active" aria-current="page">Users<' in page
+    # A settings page that isn't in the pages row says which page it was opened from, like a person's page.
+    assert '<div class="crumbs"><a href="/admin/users">&larr; Users</a></div>' in page
+    assert '<h2 class="page-title">someone</h2>' in page
+    roles = client.get("/admin/roles").get_data(as_text=True)
+    assert '<div class="crumbs"><a href="/admin/users">&larr; Users</a></div>' in roles
+    assert 'href="/admin/users" class="active" aria-current="page">Users<' in roles
+    role = client.get("/admin/roles/4").get_data(as_text=True)
+    assert '<div class="crumbs"><a href="/admin/roles">&larr; Roles</a></div>' in role
+    onboarding = client.get("/admin/onboarding").get_data(as_text=True)
+    assert '<div class="crumbs"><a href="/admin/tenants">&larr; Client settings</a></div>' in onboarding
+    assert 'href="/admin/tenants" class="active" aria-current="page">Client settings<' in onboarding
 
 
 def test_staff_who_are_not_admins_see_no_settings(client, db):
