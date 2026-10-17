@@ -1501,6 +1501,20 @@ dd.sg-row { margin-bottom: 0; }
 .ledger .detail { color: var(--muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .ledger-line.seen :is(.when, .line, .line a, .detail, .sevtext) { color: var(--faint); }
 .ledger-quiet { margin: 0; padding: var(--space-4) var(--space-5); color: var(--muted); }
+/* Who holds a line and how long it's snoozed, and the menu that hands it on or snoozes it (staff who manage
+   findings on that client). */
+.ledger-line:has(> .line-actions) { grid-template-columns: 56px minmax(0, 1fr) auto; }
+.ledger .held { display: flex; align-items: center; gap: var(--space-1-5); color: var(--text-2); }
+.ledger .held .icon { color: var(--decor); }
+.line-actions { align-self: start; }
+.line-menu { display: grid; gap: var(--space-3); }
+.line-menu form { display: grid; gap: var(--space-1-5); }
+.line-menu-what { display: none; margin: 0; color: var(--muted); }
+.line-menu form + form { padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.line-menu label { display: grid; gap: var(--space-1); margin: 0; color: var(--muted); }
+.line-menu button { justify-self: start; }
+details.ledger-card[open] > summary.card-head { margin-bottom: 0; }
+details.ledger-card:not([open]) > summary.card-head { border-bottom: 0; }
 /* Status words in the severity shape (Failed, Retrying, Due today, Fixed): the status colours, never a severity's. */
 .sevtext:is(.bad, .now) { color: var(--bad); } .sevtext.warn { color: var(--warn); } .sevtext.ok { color: var(--ok); }
 .divider { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); color: var(--muted); font-size: var(--fs-sm); font-weight: 600; font-variant-caps: all-small-caps; letter-spacing: .05em; background: var(--surface-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
@@ -1509,6 +1523,9 @@ dd.sg-row { margin-bottom: 0; }
 .divider-when { font-variant-caps: normal; letter-spacing: 0; font-weight: 400; }
 @media (max-width: 640px) {
   .ledger-line { grid-template-columns: minmax(0, 1fr); gap: 2px; padding: var(--space-3) var(--space-4); }
+  .ledger-line:has(> .line-actions) { grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-2); }
+  .ledger-line > .line-actions { grid-column: 2; grid-row: 1 / span 2; }
+  .line-menu-what { display: block; }  /* the menu rises from the foot of the screen: say which line it's for */
   .divider { padding-left: var(--space-4); padding-right: var(--space-4); }
   .page-head .actions .home-switch { order: -1; }
 }

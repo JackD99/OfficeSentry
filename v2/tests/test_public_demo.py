@@ -86,6 +86,15 @@ def test_nothing_can_be_changed(demo_app, db):
     assert "nothing can be changed here" in page
 
 
+def test_today_keeps_no_last_visit_for_the_visitor(demo_app, db):
+    """Every visitor is the one demo account, so Today never remembers when it was last opened."""
+    client = demo_app.test_client()
+    before = db.execute("SELECT * FROM users").fetchall()
+    for _ in range(2):
+        assert "New since yesterday" in client.get("/today").get_data(as_text=True)
+    assert db.execute("SELECT * FROM users").fetchall() == before
+
+
 def test_fetches_get_the_notice_as_json(demo_app):
     resp = demo_app.test_client().post("/reports/mfa/views", headers={"X-Requested-With": "fetch"})
     assert resp.status_code == 403
