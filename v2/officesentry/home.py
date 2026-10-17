@@ -227,6 +227,18 @@ class Today:
             clear.append("nothing is due this week")
         return (join(clear).capitalize() + ".") if clear else ""
 
+    @property
+    def what_is_new(self) -> str:
+        """What "new since you last looked" covers, for what the person sees."""
+        new = []
+        if "finding" in self.sees:
+            new.append("what the night's collection found")
+        if "collection" in self.sees:
+            new.append("collections that failed")
+        if "due" in self.sees:
+            new.append("what's due this week")
+        return join(new)
+
 
 def _active(tenants) -> list[dict]:
     return [dict(t) for t in tenants if t["enabled"] and not t["archived_at"]]

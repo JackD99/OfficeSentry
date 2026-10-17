@@ -79,12 +79,14 @@ def test_a_quiet_today_claims_only_what_the_person_sees():
         no_collect.sentence() == "Nothing needs you today: no new critical or high findings and nothing due this week."
     )
     assert no_collect.all_clear == "No new critical or high findings and nothing is due this week."
+    assert no_collect.what_is_new == "what the night's collection found and what's due this week"
     no_findings = home.Today([], 1, since, sees=frozenset({"collection", "access"}))
     assert no_findings.sentence() == "Nothing needs you today. Your client is collecting."
     assert no_findings.all_clear == "Every collection is working."
+    assert no_findings.what_is_new == "collections that failed"
     nothing = home.Today([], 2, since, sees=frozenset())
     assert "doesn't include any of them" in nothing.sentence()
-    assert nothing.all_clear == ""
+    assert nothing.all_clear == "" and nothing.what_is_new == ""
 
 
 def test_today_shows_a_first_line_role_no_figures_it_cannot_see(client, db, two_tenants):
@@ -98,7 +100,7 @@ def test_today_shows_a_first_line_role_no_figures_it_cannot_see(client, db, two_
     page = client.get("/today").get_data(as_text=True)
     assert "no new critical or high findings" not in page.lower()
     assert "New critical and high" not in page and "Due this week" not in page and "Collections failing" not in page
-    assert "Nothing to show" in page
+    assert "Nothing to show" in page and "New since" not in page
 
 
 def test_today_is_a_ledger_of_severe_findings_new_above_the_line(db, two_tenants):

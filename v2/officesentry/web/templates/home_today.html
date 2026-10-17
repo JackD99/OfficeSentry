@@ -77,7 +77,7 @@
 {% set worst = needs[0].tone if needs else 'ok' %}
 <div class="callout lead-answer {{ worst }}" role="status">{{ icon('alert' if needs else 'check') }}
   <div><strong>{{ data.sentence() }}</strong>
-    {% if data.sees %}<div class="small">New since {{ data.since_label }}: what the night's collection found, collections that failed and what's due this week. Below the line is what you'd seen before and is still open.</div>{% endif %}</div>
+    {% if data.what_is_new %}<div class="small">New since {{ data.since_label }}: {{ data.what_is_new }}. Below the line is what you'd seen before and is still open.</div>{% endif %}</div>
 </div>
 
 {#- A figure only for the kinds of line the person sees: a 0 they couldn't see would read as "none". -#}
