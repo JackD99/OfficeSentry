@@ -255,6 +255,83 @@ def test_landmarks(client, db, seeded):
     assert re.search(r'<span class="sevbar" role="img" aria-label="\d+ critical, \d+ high', dashboard)
 
 
+def _menu(page: str) -> tuple[list[str], list[str]]:
+    """The highlighted entries of the sidebar's menu, and of its account links."""
+    side = page[page.index('<aside class="sidebar"') : page.index("</aside>")]
+    nav = side[side.index('<nav class="nav"') : side.index("</nav>")]
+    account = side[side.index('<div class="account">') :]
+
+    def lit(part: str) -> list[str]:
+        links = re.findall(r'<a [^>]*aria-current="page"[^>]*>(.*?)</a>', part, re.S)
+        return [re.sub(r"<[^>]+>", "", a).strip() for a in links]
+
+    return lit(nav), lit(account)
+
+
+def test_every_page_lights_the_menu_entry_it_belongs_to(client, db, seeded):
+    """The menu highlights the entry a page lives under, by its path, so a page a tab or a list opens (a person,
+    resolved findings, a run, a schedule, a settings page's sub-page) keeps its section lit."""
+    alpha = seeded
+    make_user(db, "admin")
+    login(client, "admin")
+    collection = client.get(f"/tenants/{alpha}/collection").get_data(as_text=True)
+    run = re.search(r'href="(/runs/\d+)"', collection).group(1)
+    pages = {
+        "/": "Clients",
+        "/home": "Home",
+        "/today": "Home",
+        "/clients": "Home",
+        f"/tenants/{alpha}/users": "Clients",
+        _user_href(client, alpha): "Clients",
+        f"/tenants/{alpha}/findings/resolved": "Clients",
+        f"/tenants/{alpha}/activity": "Clients",
+        f"/tenants/{alpha}/sign-in": "Clients",
+        f"/tenants/{alpha}/report-history": "Clients",
+        f"/tenants/{alpha}/designs": "Clients",
+        f"/tenants/{alpha}/schedules/new": "Clients",
+        "/tenants/new": "Clients",
+        run: "Clients",
+        "/reports": "Reports",
+        "/reporting/designs": "Reports",
+        "/across": "Clients",
+        "/across/mfa": "Clients",
+        "/across/mfa/rows": "Clients",
+        "/across/checks": "Clients",
+        "/search?q=alpha": "Clients",
+        "/changes": "What changed",
+        "/upcoming": "Coming up",
+        "/emails": "Email reports",
+        "/emails/digests/new": "Email reports",
+        "/emails/views/new": "Email reports",
+        "/reporting": "Month-end",
+        "/reporting/plans/new": "Month-end",
+        "/projects": "Projects",
+        "/admin/roles": "Settings",
+        "/admin/onboarding": "Settings",
+    }
+    for url, entry in pages.items():
+        resp = client.get(url, follow_redirects=True)
+        assert resp.status_code == 200, url
+        menu, account = _menu(resp.get_data(as_text=True))
+        assert menu == [entry] and account == [], url
+    for url in ("/account", "/account/password", "/two-step/setup"):
+        resp = client.get(url, follow_redirects=True)
+        assert resp.status_code == 200, url
+        menu, account = _menu(resp.get_data(as_text=True))
+        assert menu == [] and account == ["Account"], url
+    client.post("/logout")
+    make_user(db, "client", role="client", tenants=[alpha])
+    login(client, "client")
+    for url, entry in {
+        "/": "Your reports",
+        f"/tenants/{alpha}/findings": "Your reports",
+        "/reports": "All reports",
+    }.items():
+        resp = client.get(url, follow_redirects=True)
+        assert resp.status_code == 200, url
+        assert _menu(resp.get_data(as_text=True)) == ([entry], []), url
+
+
 def test_a_page_opened_from_a_list_says_where_it_came_from(client, db, seeded):
     """A client page that isn't a tab or a second-row page shows "← <the page it was opened from>" above
     its title, as a person's page shows "← People"; a page that isn't a client's shows crumbs from its
