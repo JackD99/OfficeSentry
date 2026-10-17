@@ -147,6 +147,7 @@ class Today:
     without: list[tuple[dict, str]] = field(default_factory=list)  # Coming up parts that couldn't be read
     snoozed: list[Entry] = field(default_factory=list)  # lines out of the list for now, not counted
     cleared: list[tuple[int, str]] = field(default_factory=list)  # (tenant, key) of item_state rows whose line went
+    sees: frozenset[str] = frozenset(KINDS)  # the kinds of line the person sees on at least one of the clients
 
     @property
     def new(self) -> list[Entry]:
@@ -194,14 +195,49 @@ class Today:
             if seen:
                 still = f"{plural(len(seen), 'thing')} you'd seen {'is' if len(seen) == 1 else 'are'} still open."
                 return f"Nothing new since {self.since_label}. {still}{fixed}"
-            who = "Your client is" if self.tenants == 1 else f"All {self.tenants} clients are"
-            return (
-                f"Nothing needs you today. {who} collecting, with no new critical or high findings and nothing"
-                f" due this week.{fixed}"
-            )
+            return self.quiet() + fixed
         n = sum(p[0] for p in parts)
         lead = f"{plural(n, 'thing')} {'needs' if n == 1 else 'need'} someone today"
         return f"{lead}: {join([plural(*p) for p in parts])}.{fixed}"
+
+    def quiet(self) -> str:
+        """The opening line when nothing is new or open, claiming only what the person sees: a role that
+        doesn't open a client's findings isn't told there are none."""
+        nothing = []
+        if "finding" in self.sees:
+            nothing.append("no new critical or high findings")
+        if "due" in self.sees:
+            nothing.append("nothing due this week")
+        if "collection" in self.sees:
+            who = "Your client is" if self.tenants == 1 else f"All {self.tenants} clients are"
+            return f"Nothing needs you today. {who} collecting{', with ' + join(nothing) if nothing else ''}."
+        if nothing:
+            return f"Nothing needs you today: {join(nothing)}."
+        return "Today lists findings, collections and what's due, and your access doesn't include any of them."
+
+    @property
+    def all_clear(self) -> str:
+        """The empty list's line, for what the person sees."""
+        clear = []
+        if "finding" in self.sees:
+            clear.append("no new critical or high findings")
+        if "collection" in self.sees:
+            clear.append("every collection is working")
+        if "due" in self.sees:
+            clear.append("nothing is due this week")
+        return (join(clear).capitalize() + ".") if clear else ""
+
+    @property
+    def what_is_new(self) -> str:
+        """What "new since you last looked" covers, for what the person sees."""
+        new = []
+        if "finding" in self.sees:
+            new.append("what the night's collection found")
+        if "collection" in self.sees:
+            new.append("collections that failed")
+        if "due" in self.sees:
+            new.append("what's due this week")
+        return join(new)
 
 
 def _active(tenants) -> list[dict]:
@@ -548,6 +584,7 @@ def today(
         without=up.without,
         snoozed=snoozed,
         cleared=cleared,
+        sees=frozenset(k for k in KINDS if any(shows(k, t["id"]) for t in active)),
     )
 
 

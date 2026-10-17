@@ -77,24 +77,35 @@
 {% set worst = needs[0].tone if needs else 'ok' %}
 <div class="callout lead-answer {{ worst }}" role="status">{{ icon('alert' if needs else 'check') }}
   <div><strong>{{ data.sentence() }}</strong>
-    <div class="small">New since {{ data.since_label }}: what the night's collection found, collections that failed and what's due this week. Below the line is what you'd seen before and is still open.</div></div>
+    {% if data.what_is_new %}<div class="small">New since {{ data.since_label }}: {{ data.what_is_new }}. Below the line is what you'd seen before and is still open.</div>{% endif %}</div>
 </div>
 
+{#- A figure only for the kinds of line the person sees: a 0 they couldn't see would read as "none". -#}
+{% set upcoming = url_for('upcoming.index') if can_open('upcoming.index') %}
+{% if data.sees %}
 <div class="tiles">
+  {% if 'finding' in data.sees %}
   <a class="tile link{{ ' tone-bad' if data.new_critical else (' tone-warn' if data.new_severe) }}" href="#ledger">
     <div class="label">New critical and high{{ icon('arrow', 'go') }}</div><div class="value">{{ data.new_severe }}</div>
     <div class="foot">findings since {{ data.since_label }}</div></a>
+  {% endif %}
+  {% if 'collection' in data.sees %}
   <a class="tile link{{ ' tone-bad' if data.failing }}" href="{{ url_for('tenant_admin.clients') }}">
     <div class="label">Collections failing{{ icon('arrow', 'go') }}</div><div class="value">{{ data.failing }}</div>
     <div class="foot">{% if data.stale %}{{ data.stale }} more out of date{% else %}clients that couldn't be read{% endif %}</div></a>
-  {% set upcoming = url_for('upcoming.index') if can_open('upcoming.index') %}
+  {% endif %}
+  {% if 'due' in data.sees %}
   <{{ 'a' if upcoming else 'div' }} class="tile{{ ' link' if upcoming }}{{ ' tone-warn' if data.due }}"{% if upcoming %} href="{{ upcoming }}"{% endif %}>
     <div class="label">Due this week{% if upcoming %}{{ icon('arrow', 'go') }}{% endif %}</div><div class="value">{{ data.due }}</div>
     <div class="foot">renewals, expiring secrets, full mailboxes</div></{{ 'a' if upcoming else 'div' }}>
+  {% endif %}
+  {% if 'fixed' in data.sees %}
   <div class="tile{{ ' tone-ok' if data.fixed }}">
     <div class="label">Fixed</div><div class="value">{{ data.fixed }}</div>
     <div class="foot">critical and high findings no longer seen</div></div>
+  {% endif %}
 </div>
+{% endif %}
 
 {% if data.entries %}
 <section class="card flush ledger-card" id="ledger">
@@ -115,8 +126,8 @@
   {% endif %}
 </section>
 {% else %}
-<div class="card empty" id="ledger"><h3>All clear</h3>
-  <p>No new critical or high findings, every collection is working and nothing is due this week.</p>
+<div class="card empty" id="ledger"><h3>{{ 'All clear' if data.sees else 'Nothing to show' }}</h3>
+  <p>{{ data.all_clear or "Ask an admin if Today should show you more." }}</p>
   {% if upcoming %}<a class="btn" href="{{ upcoming }}">{{ icon('calendar') }} See what's coming up</a>{% endif %}</div>
 {% endif %}
 {% if data.snoozed %}

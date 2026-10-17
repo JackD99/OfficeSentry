@@ -72,6 +72,37 @@ def test_today_sentence_leads_with_the_answer():
     assert home.Today([], 0, since).sentence() == "No active clients to look after yet."
 
 
+def test_a_quiet_today_claims_only_what_the_person_sees():
+    since = datetime.now(UTC) - timedelta(days=1)
+    no_collect = home.Today([], 2, since, sees=frozenset({"finding", "fixed", "due"}))
+    assert (
+        no_collect.sentence() == "Nothing needs you today: no new critical or high findings and nothing due this week."
+    )
+    assert no_collect.all_clear == "No new critical or high findings and nothing is due this week."
+    assert no_collect.what_is_new == "what the night's collection found and what's due this week"
+    no_findings = home.Today([], 1, since, sees=frozenset({"collection", "access"}))
+    assert no_findings.sentence() == "Nothing needs you today. Your client is collecting."
+    assert no_findings.all_clear == "Every collection is working."
+    assert no_findings.what_is_new == "collections that failed"
+    nothing = home.Today([], 2, since, sees=frozenset())
+    assert "doesn't include any of them" in nothing.sentence()
+    assert nothing.all_clear == "" and nothing.what_is_new == ""
+
+
+def test_today_shows_a_first_line_role_no_figures_it_cannot_see(client, db, two_tenants):
+    # First line opens people, identity, email and device reports: no findings, collections or due items, so
+    # Today mustn't say there are no critical findings or nothing due, nor show those figures as 0.
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    make_user(db, "fl", role="analyst", tenants=[alpha])
+    db.execute("UPDATE users SET role_id = (SELECT id FROM roles WHERE key = 'first_line') WHERE username = 'fl'")
+    login(client, "fl")
+    page = client.get("/today").get_data(as_text=True)
+    assert "no new critical or high findings" not in page.lower()
+    assert "New critical and high" not in page and "Due this week" not in page and "Collections failing" not in page
+    assert "Nothing to show" in page and "New since" not in page
+
+
 def test_today_is_a_ledger_of_severe_findings_new_above_the_line(db, two_tenants):
     alpha, bravo = two_tenants
     _finding(db, alpha, "mfa_registration", "critical")

@@ -1,9 +1,11 @@
 {#- Home pages by role (web/home.py): the switch between Today and Clients, and making one your home page. -#}
 {% from "_macros.html" import csrf %}
 {% macro home_switch(current) -%}
+{% if homes|length > 1 %}{#- one home page (a role without Accounts): nothing to switch to -#}
 <nav class="seg sm home-switch" aria-label="Home pages">
   {% for key, (label, _) in homes.items() %}<a href="{{ url_for('home.' ~ key) }}"{% if key == current %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
 </nav>
+{% endif %}
 {%- endmacro %}
 {% macro make_home(current) -%}
 {% if mine != current %}

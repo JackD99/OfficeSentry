@@ -56,7 +56,7 @@ COLLECTOR_CAPABILITY = {
     "sign_ins": "reports.identity",
     "app_consents": "reports.devices",
     "devices": "reports.devices",
-    "tenant_profile": "reports.tenant",
+    "tenant_profile": "reports.email",  # a domain opens the Domains report, in the Email area
 }
 
 
