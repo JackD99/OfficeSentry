@@ -43,6 +43,7 @@ from officesentry.devices import parse_ts  # noqa: E402
 from officesentry.reports import designs  # noqa: E402
 from tests import (  # noqa: E402
     adminactivitydata,
+    auditdata,
     devicedata,
     graphdata,
     groupdata,
@@ -2442,6 +2443,7 @@ def populate(
     )
     ids = [add_tenant(db, cid, t, now) for t in TENANTS]
     groups(db, ids)
+    audit_log(db, vault, ids, now)
     showcase = next((i for i, t in zip(ids, TENANTS, strict=False) if t["name"] == SHOWCASE), ids[0])
     evidence_answers(db, showcase)
     for part, price in PRICES.items():
@@ -2461,6 +2463,194 @@ def populate(
     for rec, status in zip(recommended, ("agreed", "proposed"), strict=False):
         projects.set_status(db, ids[0], rec.project.key, status, "Discussed on the quarterly call", "demo")
     return ids
+
+
+# -- The audit log add-on -------------------------------------------------------------------------------------------
+
+AUDIT_DAYS = 6  # Microsoft lists seven days of audit content; the demo's feed holds the last six
+AUDIT_FILES = [
+    "Budget 2027.xlsx",
+    "Board minutes.docx",
+    "Supplier contracts.pdf",
+    "Staff rota.xlsx",
+    "Onboarding checklist.docx",
+    "Q3 invoices.pdf",
+    "Insurance renewal.pdf",
+    "Price list 2027.xlsx",
+    "Holiday planner.xlsx",
+    "Welcome pack.pptx",
+]
+
+
+def audit_records(t: dict, people: list[str], now: datetime, rng: random.Random) -> dict:
+    """Six days of audit log batches for tenant ``t`` (``auditdata.collect``'s ``batches``): a SharePoint and an
+    Exchange batch a day, naming the tenant's own people and sites, with enough of each kind for every table of
+    the Files and mailbox access report and the few things it should flag: an anyone link, a mailbox read by an
+    admin, a rule forwarding outside, forwarding set on a mailbox, and one morning's mass delete."""
+    host = f"https://{t['base']}.sharepoint.com"
+    sites = [(slug, title) for slug, title, *_ in (DENTAL_SITES if t.get("sites") == "dental" else OFFICE_SITES)]
+    admin, assistant, boss = _upn(t, "ann"), _upn(t, "carol"), _upn(t, "dan")
+    staff = [p for p in people if p not in (admin, assistant, boss)] or people
+    n = 0
+
+    def sp(when: datetime, operation: str, user: str, slug: str, name: str, **extra) -> dict:
+        nonlocal n
+        n += 1
+        url = f"{host}/sites/{slug}"
+        return auditdata._sp(
+            n,
+            when,
+            operation,
+            user,
+            ClientIP=rng.choice(("203.0.113.7", "203.0.113.20", "198.51.100.4")),
+            SiteUrl=url + "/",
+            SourceFileName=name,
+            ObjectId=f"{url}/Shared Documents/{name}",
+            **extra,
+        )
+
+    def ex(when: datetime, operation: str, user: str, **extra) -> dict:
+        nonlocal n
+        n += 1
+        return auditdata._ex(n, when, operation, user, **extra)
+
+    def minute(day: datetime, start: int = 8, end: int = 18) -> datetime:
+        return day + timedelta(minutes=rng.randint(start * 60, end * 60))
+
+    batches: dict[str, list] = {"Audit.SharePoint": [], "Audit.Exchange": []}
+    for back in range(AUDIT_DAYS, 0, -1):
+        day = (now - timedelta(days=back)).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        files, mail = [], []
+        for _ in range(rng.randint(5, 9)):
+            slug, _title = rng.choice(sites)
+            name = rng.choice(AUDIT_FILES)
+            operation = rng.choice(("FileDeleted", "FileDownloaded", "FileDownloaded", "FileMoved", "FileRestored"))
+            extra = (
+                {"DestinationRelativeUrl": "Shared Documents/Archive", "DestinationFileName": name}
+                if operation == "FileMoved"
+                else {}
+            )
+            files.append(sp(minute(day), operation, rng.choice(staff), slug, name, **extra))
+        for who in rng.sample(staff, k=min(4, len(staff))):  # OneDrive sync, counted per person and day
+            slug, _title = rng.choice(sites)
+            files += [
+                sp(minute(day), "FileSyncDownloadedFull", who, slug, rng.choice(AUDIT_FILES))
+                for _ in range(rng.randint(2, 30))
+            ]
+        slug, _title = rng.choice(sites)
+        files.append(
+            sp(
+                minute(day),
+                "SharingSet",
+                rng.choice(staff),
+                slug,
+                rng.choice(AUDIT_FILES),
+                TargetUserOrGroupName=rng.choice(("accounts@partner.example", "j.reid@advisers.example")),
+                TargetUserOrGroupType="Guest",
+            )
+        )
+        if back == 2:  # an anyone link on a marketing file: needs a look
+            files.append(
+                sp(minute(day), "AnonymousLinkCreated", rng.choice(staff), "marketing", "Price list 2027.xlsx")
+            )
+        if back == 3:  # one person clearing out an old site in a morning: a mass delete
+            slug = "old-projects" if any(s == "old-projects" for s, _ in sites) else sites[-1][0]
+            who = rng.choice(staff)
+            files += [
+                sp(day + timedelta(hours=10, minutes=i // 3), "FileDeleted", who, slug, f"Archive {i:03d}.pdf")
+                for i in range(130)
+            ]
+        for who in rng.sample(staff, k=2):  # delegates sending as the boss
+            mail.append(ex(minute(day), "SendAs", assistant, SendAsUserSmtp=boss, LogonType=2))
+            mail.append(
+                ex(minute(day), "SendOnBehalf", assistant, SendOnBehalfOfUserSmtp=who, LogonType=2, ObjectId=who)
+            )
+        if back == 1:  # the admin reading the boss's mail yesterday: needs a look
+            mail.append(
+                ex(
+                    minute(day, 19, 22),
+                    "MailItemsAccessed",
+                    admin,
+                    LogonType=1,
+                    MailboxOwnerUPN=boss,
+                    ClientInfoString="Client=OWA",
+                    Folders=[
+                        {"Path": "\\Inbox", "FolderItems": [{"InternetMessageId": f"<{n}@{t['base']}.{t['tld']}>"}]}
+                    ],
+                )
+            )
+        if back == 4:  # a rule forwarding outside, the classic sign of a compromised mailbox
+            who = rng.choice(staff)
+            mail.append(
+                ex(
+                    minute(day),
+                    "New-InboxRule",
+                    who,
+                    ObjectId=f"{who}\\Invoices",
+                    Parameters=auditdata._params(Identity=who, Name="Invoices", ForwardTo="payments@mailbox.example"),
+                )
+            )
+        if back == 5 and t.get("forwards"):  # forwarding set on a mailbox by the admin
+            who = rng.choice(staff)
+            mail.append(
+                ex(
+                    minute(day),
+                    "Set-Mailbox",
+                    admin,
+                    ObjectId=who,
+                    Parameters=auditdata._params(
+                        Identity=who, ForwardingSmtpAddress=f"smtp:{who.split('@')[0]}@gmail.example"
+                    ),
+                )
+            )
+        if back == 6:  # the assistant given the boss's mailbox by the admin
+            mail.append(
+                ex(
+                    minute(day),
+                    "Add-MailboxPermission",
+                    admin,
+                    ObjectId=boss,
+                    Parameters=auditdata._params(Identity=boss, User=assistant, AccessRights="FullAccess"),
+                )
+            )
+        if back == 2:  # the boss sharing a calendar
+            mail.append(
+                ex(
+                    minute(day),
+                    "Add-MailboxFolderPermission",
+                    boss,
+                    ObjectId=f"{boss}:\\Calendar",
+                    Parameters=auditdata._params(Identity=f"{boss}:\\Calendar", User=assistant, AccessRights="Editor"),
+                )
+            )
+        batches["Audit.SharePoint"].append((day + timedelta(hours=18, minutes=20), files))
+        batches["Audit.Exchange"].append((day + timedelta(hours=18, minutes=40), mail))
+    return batches
+
+
+def audit_log(db, vault, ids: list[int], now: datetime) -> None:
+    """The audit log add-on switched on, every demo client approved, and six days of its activity collected from a
+    simulated feed, so the Files and mailbox access report has something to show. Demo data only: a real install
+    starts with the add-on off."""
+    from officesentry.snapshot import TenantSnapshot
+
+    # Started a week ago, so the first read takes everything Microsoft still lists and nothing shows as lost.
+    auditdata.addon_on(db, vault, ids, started_at=auditdata.iso(now - timedelta(days=6, hours=23)))
+    for tid, t in zip(ids, TENANTS, strict=False):
+        tenant = store.get_tenant(db, tid)
+        users = TenantSnapshot(db, tenant).objects("users", "user") or []
+        people = sorted(
+            u["userPrincipalName"]
+            for u in users
+            if u.get("accountEnabled")
+            and u.get("userType") == "Member"
+            and "#EXT#" not in (u.get("userPrincipalName") or "")
+        )
+        batches = audit_records(t, people, now, random.Random(t["name"] + "audit"))  # noqa: S311 (demo data)
+        # The feed is asked for by directory ID; the demo's clients have none, so each gets a made-up one.
+        status, _calls = auditdata.collect(db, tid, batches, now, tenant=f"{tid:08x}-0000-4000-8000-000000000000")
+        if status != "succeeded":
+            raise RuntimeError(f"The demo's audit log collection for {t['name']} ended {status}")
 
 
 def team(db, ids: list[int]) -> None:
