@@ -104,7 +104,7 @@
 {# Tab that each tenant page key highlights. Keys not listed are tabs themselves. #}
 {% set TAB_OF = {
   'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports', 'designs': 'reports',
-  'schedules': 'emails', 'projects': 'findings', 'collection': 'settings', 'manage': 'settings',
+  'schedules': 'emails', 'projects': 'findings', 'grade': 'overview', 'collection': 'settings', 'manage': 'settings',
   'client_sign_in': 'settings', 'audit_addon': 'settings',
   'activity': 'changes', 'timeline': 'changes', 'mailboxes': 'users', 'group_pages': 'users', 'site_pages': 'users',
 } %}
@@ -122,6 +122,8 @@
 <div class="page-head">
   <div class="head-title">
     <h1>{{ tenant.name }}</h1>
+    {#- The client's grade as last stored (grades.py), for staff who see findings; the Grade page explains it. -#}
+    {% if staff and can('reports.security', tid) %}{% set letter = client_grade(tid) %}{% if letter %}<a class="grade sm {{ letter|lower }}" href="{{ url_for('grade.page', tenant_id=tid) }}" title="Grade {{ letter }}: how it is worked out"><span class="sr-only">Grade </span>{{ letter }}</a>{% endif %}{% endif %}
     <div class="sub"><span>{{ tenant.tenant_ref }}</span>{% if staff and not cloud_of(tenant).is_default %} <span class="pill info" title="Microsoft national cloud">{{ cloud_of(tenant).label }}</span>{% endif %}{% if tenant.archived_at %} <span class="pill info">Archived</span>{% elif not tenant.enabled %} <span class="pill info" title="No collection or emailed reports until it's resumed">Paused</span>{% endif %}</div>
     {% if others %}
     <details class="menu client-switch" id="client-switch">

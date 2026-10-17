@@ -5,7 +5,11 @@
 {% from "_macros.html" import icon, sev_counts, sev_legend, downloads, page_link with context %}
 {% from "_across.html" import clients_head, across_bar with context %}
 {% from "_get_started.html" import get_started as get_started_card %}
+{% from "_grade.html" import badge %}
 {% set review = key == 'review' %}
+{#- Each client's grade (grades.py) beside its name on the Clients page itself, for someone who sees findings on
+    that client; in the Client cell, since a column of its own doesn't fit a laptop beside the review's figures. -#}
+{% set shown_grades = grade_rows if review and grade_rows is defined and grade_rows else none %}
 {% block title %}{% if not review %}{{ rollup.title }} · {% endif %}Clients · Office Sentry{% endblock %}
 {% macro cell(row, c) -%}
 {% set v = row.values.get(c.key) %}
@@ -113,6 +117,7 @@
     {% set state = health[t.id] if review and health and t.id in health else none %}
     <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}">
       <td class="tenant-col" data-sort="{{ t.name|lower }}">{{ page_link(tenant_href(t)|trim, t.name, 'strong') }}
+        {%- if shown_grades and shown_grades.get(t.id) %}{% set letter = shown_grades.get(t.id) %} {{ badge(letter, 'xs', href=url_for('grade.page', tenant_id=t.id), title='Grade ' ~ letter ~ ': how ' ~ t.name ~ ' is graded') }}{% endif %}
         {% if review %}<span class="sub">{{ t.tenant_ref|wrappable }}</span>{% endif %}
         {% if state and state[0] != 'ok' %}<span class="pill {{ state[0] }}"{% if state[2] %} title="{{ state[2] }}"{% endif %}>{{ state[1] }}</span>
         {% elif row.note %}<span class="sub muted">{{ row.note }}</span>{% endif %}</td>

@@ -140,6 +140,19 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   Notes and hand-offs stay with the team: never on a client's pages, in a
   report or in an email. Nothing is ever written to the client's tenant.
 <!-- /since -->
+  <!-- since 2.5.0 -->
+- **Client grades** (`/tenants/<id>/grade`, staff with *Security findings and
+  reviews*): every client's grade from A to E, the worst of five parts (admin
+  accounts, sign-in and accounts, mail, devices, sharing and apps), each part
+  its worst open finding after accepted risks are set aside and graded only
+  when half its checks could run. The grade sits beside the client's name on
+  every page about them and on the Clients page, and leads the
+  Overview's figures; its page shows what
+  moves each part, the grade on each of the last twelve month-ends (from the
+  findings table, nothing extra stored) and the comparison with the other
+  clients the person sees of about the same size, none of them named. The
+  rules are in [docs/client-grades.md](docs/client-grades.md).
+  <!-- /since -->
 - **Since last month**: new and fixed findings, admin role changes, new,
   disabled and deleted accounts, licences people were given or lost, and
   Conditional Access policies added, switched or edited, compared with the
