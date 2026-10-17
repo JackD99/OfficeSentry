@@ -1,0 +1,137 @@
+{#- The finding sheet (reports/finding_sheet.py, web/finding.py): one finding's evidence, history, where
+    else the check fails, the fix, and the text to act on it. Drawn beside the Findings table by
+    findings.html, first on a phone, and alone when findings.js fetches it in place (fragment).
+    Staff see the team's actions (Email the contact, Accept risk, Note, Hand to); a client sees the evidence,
+    the fix and Copy for a ticket, never the team's notes or who holds it. -#}
+{% from "_macros.html" import icon, csrf %}
+{% from "_report_table.html" import cell %}
+{% set s = sheet %}
+{% set back = url_for('reports.resolved_findings' if s.status == 'resolved' else 'reports.tenant_findings', tenant_id=tenant.id) ~ (('?' ~ view_query) if view_query is defined and view_query else '') %}
+<aside class="sheet card flush" id="finding-sheet" aria-labelledby="sheet-title" data-finding="{{ finding.id }}">
+  <div class="sheet-head">
+    <div class="sheet-top">
+      <span class="sevtext {{ s.severity }}">{{ s.severity }}</span>
+      <span class="muted small">{{ s.category }}{% if s.status == 'resolved' %} · resolved {{ finding.resolved_at|day }}{% elif s.status == 'accepted' %} · accepted risk{% elif s.days_open %} · open {{ s.days_open|plural('day') }}{% else %} · new today{% endif %}</span>
+      <a class="sheet-close" href="{{ back }}#t-{{ 'resolved-findings' if s.status == 'resolved' else ('accepted-risks' if s.status == 'accepted' else 'open-findings') }}" title="Close"><span class="lg">{{ icon('close') }}<span class="sr-only">Close the finding</span></span><span class="sm">{{ icon('undo') }} Back to findings</span></a>
+    </div>
+    <h2 id="sheet-title" tabindex="-1">{% if s.subject_href and can_open(s.subject_href) %}<a href="{{ s.subject_href }}">{{ s.subject|wrappable }}</a>{% else %}{{ s.subject|wrappable }}{% endif %}</h2>
+    {% if s.detail|length > 1 %}<ul class="sheet-detail">{% for d in s.detail %}<li>{{ d }}</li>{% endfor %}</ul>
+    {% elif s.detail %}<p class="sheet-detail">{{ s.detail[0] }}</p>{% endif %}
+    <p class="muted small m0">Check: {{ s.title }}</p>
+    <div class="sheet-actions">
+      <button type="button" class="btn sm primary" data-copy="#ticket-text" data-copied="Copied">{{ icon('copy') }} Copy for a ticket</button>
+      {% if contacts %}
+      <details class="menu">
+        <summary class="btn sm" title="Write to the client's contact from your own mail app">{{ icon('mail') }} Email the contact</summary>
+        <div class="menu-panel" role="group" aria-label="Email the finding to">
+          <div class="menu-head"><strong>Opens in your mail app</strong></div>
+          {% for c, href in contacts %}<a class="menu-link" href="{{ href }}">{{ icon('send') }} <span>{{ c.name or c.email }}{% if c.name %} <span class="muted small">{{ c.email }}</span>{% endif %}</span></a>{% endfor %}
+          <p class="menu-note">The email names the account, the evidence and the fix. Nothing is sent until you press Send there.</p>
+        </div>
+      </details>
+      {% elif adds_contacts and s.status != 'resolved' %}
+      <a class="btn sm" href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}#contacts" title="This client has no contact yet">{{ icon('mail') }} Add a contact to email</a>
+      {% endif %}
+      {% if manages and s.status != 'resolved' %}
+      {% if s.status == 'accepted' %}
+      <form method="post" action="{{ url_for('reports.unaccept_finding', finding_id=finding.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="from" value="sheet"><button class="btn sm" title="Move it back to the open findings">{{ icon('undo') }} Undo accept</button></form>
+      {% else %}
+      <details class="menu">
+        <summary class="btn sm">{{ 'Accept again' if s.status == 'lapsed' else 'Accept risk' }}</summary>
+        <div class="menu-panel wide">
+          <div class="menu-head"><strong>Accept this risk</strong></div>
+          <form method="post" action="{{ url_for('reports.accept_finding', finding_id=finding.id) }}" class="sheet-form">
+            {{ csrf() }}<input type="hidden" name="from" value="sheet">
+            <label class="small">Reason <input name="note" maxlength="500" required placeholder="e.g. Break-glass account, monitored"{% if finding.accepted_note %} value="{{ finding.accepted_note }}"{% endif %}></label>
+            <label class="small">Review on (optional) <input type="date" name="until" min="{{ first_review_day }}"></label>
+            <button class="btn sm primary">Accept risk</button>
+            <p class="menu-note">It leaves the totals and the monthly review's findings, and comes back on its review date.</p>
+          </form>
+        </div>
+      </details>
+      {% endif %}
+      <details class="menu">
+        <summary class="btn sm">{{ icon('edit') }} {{ 'Edit note' if finding.note else 'Note' }}</summary>
+        <div class="menu-panel wide">
+          <div class="menu-head"><strong>A note for the team</strong></div>
+          <form method="post" action="{{ url_for('finding.note', finding_id=finding.id) }}" class="sheet-form">
+            {{ csrf() }}
+            <label class="small"><span class="sr-only">Note</span><textarea name="note" rows="4" maxlength="2000" placeholder="e.g. Waiting on the client's HR to confirm the leaver">{{ finding.note or '' }}</textarea></label>
+            <div class="sheet-form-actions"><button class="btn sm primary">Save note</button>{% if finding.note %}<button class="link small" name="remove" value="1">Remove</button>{% endif %}</div>
+            <p class="menu-note">Only the team sees it: never a client, a review or an email.</p>
+          </form>
+        </div>
+      </details>
+      <details class="menu">
+        <summary class="btn sm">{{ icon('person') }} Hand to</summary>
+        <div class="menu-panel">
+          <div class="menu-head"><strong>Who holds this</strong></div>
+          <form method="post" action="{{ url_for('finding.hand', finding_id=finding.id) }}" class="sheet-form">
+            {{ csrf() }}
+            <label class="small"><span class="sr-only">Hand to</span><select name="to">
+              <option value=""{% if not finding.handed_to %} selected{% endif %}>Nobody</option>
+              {% for u in holders %}<option value="{{ u.id }}"{% if finding.handed_to == u.id %} selected{% endif %}>{{ u.username }}{% if u.id == current_user.id %} (me){% endif %}</option>{% endfor %}
+            </select></label>
+            <button class="btn sm primary">Hand over</button>
+            <p class="menu-note">Only people who open this client's findings are listed. It shows on Today, never to the client.</p>
+          </form>
+        </div>
+      </details>
+      {% endif %}
+    </div>
+    {% if finding.note and manages %}
+    <div class="team-note"><strong>Team note</strong> <span class="muted small">{{ finding.note_by }}, {{ finding.note_at|day }}</span><p class="m0">{{ finding.note }}</p></div>
+    {% endif %}
+  </div>
+
+  <section>
+    <h3>Evidence</h3>
+    {% if s.evidence %}
+    <dl class="kv">{% for label, value in s.evidence %}<dt>{{ label }}</dt><dd>{{ cell(value) }}</dd>{% endfor %}</dl>
+    {% endif %}
+    {% if s.summary %}<p class="small{{ ' mt' if s.evidence }}"><strong>The check today:</strong> {{ s.summary|trim('.') }}.</p>{% endif %}
+    {% if s.attention %}
+    <p class="muted small mt m0">Also on this account</p>
+    <ul class="sheet-list">{% for a in s.attention %}<li><span class="sevtext {{ a.severity }}">{{ a.severity }}</span> <span>{{ a.text }}</span></li>{% endfor %}</ul>
+    {% endif %}
+    {% if s.sources %}
+    <p class="muted small mt m0">Read from {% for name, at in s.sources %}{{ name }}{{ ', ' if not loop.last }}{% endfor %}{% if s.collected_at %}, collected {{ s.collected_at|ago }}{% endif %}.</p>
+    {% elif not s.evidence and not s.summary %}
+    <p class="muted small m0">No data collected for this check yet: the finding is as it was last seen.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h3>History</h3>
+    <dl class="kv">
+      {% for label, text in s.history %}<dt>{{ label }}</dt><dd>{{ text }}</dd>{% endfor %}
+      {% if s.others %}
+      <dt>Elsewhere</dt>
+      <dd>{% if s.elsewhere %}The same check fails at {% for e in s.elsewhere[:8] %}{% if can_open(e.href) %}<a href="{{ e.href }}#check-{{ s.key }}">{{ e.tenant.name }}</a>{% else %}{{ e.tenant.name }}{% endif %}{% if e.count %} ({{ e.count }}){% endif %}{{ ', ' if not loop.last }}{% endfor %}{% if s.elsewhere|length > 8 %} and {{ s.elsewhere|length - 8 }} more{% endif %}{% else %}Passes at the other {{ s.others|plural('client') }} you see{% endif %}</dd>
+      {% endif %}
+      {% if s.actions %}
+      <dt>In reports</dt>
+      <dd>{% for a in s.actions %}"{{ a.title }}" is in this client's What we recommend next{% if a.status == 'done' %} (done){% elif a.target_month %} (by {{ a.target_month }}){% endif %}{{ '; ' if not loop.last }}{% endfor %}</dd>
+      {% endif %}
+      {% if s.notes %}
+      <dt>Review notes</dt>
+      <dd>{% for n in s.notes %}<span class="block">{{ n.body }} <span class="muted small">{{ n.created_by or 'the team' }}, {{ n.created_at|day }}{% if n.visibility == 'staff' %}, staff only{% endif %}</span></span>{% endfor %}</dd>
+      {% endif %}
+      {% if s.project %}
+      <dt>Project</dt>
+      <dd>{% if can_open(s.project[1]) %}<a href="{{ s.project[1] }}">{{ s.project[0] }}</a>{% else %}{{ s.project[0] }}{% endif %}, in Recommended projects</dd>
+      {% endif %}
+    </dl>
+  </section>
+
+  <section>
+    <h3>Fix</h3>
+    {% if s.fix %}<ol class="steps">{% for step in s.fix %}<li>{{ step }}</li>{% endfor %}</ol>{% else %}<p class="muted small m0">No recommendation for this check.</p>{% endif %}
+    <p class="muted small mt m0">Office Sentry changes nothing at the client. The ticket text below names the {{ s.subject_kind|lower }}, the evidence and these steps.</p>
+  </section>
+
+  <section>
+    <h3>Ticket text</h3>
+    <pre class="ticket" id="ticket-text">{{ s.ticket }}</pre>
+  </section>
+</aside>
