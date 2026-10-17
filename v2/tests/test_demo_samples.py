@@ -3,6 +3,7 @@ reading them checks the sums."""
 
 import importlib.util
 import re
+from datetime import datetime
 from pathlib import Path
 
 from officesentry.reports import data_reports, summary
@@ -31,6 +32,45 @@ def _close(a: float, b: float, places: float) -> bool:
     return abs(a - b) <= places
 
 
+def _identity_adds_up(db, tenant) -> None:
+    """The identity reports show what a real tenant's do: nobody signed in before their account existed, every
+    member has a password age, the recycle bin's people have names of their own, sign-ins from abroad come
+    from a city there, and the client with Entra ID P2 has risky users to show and MFA on every admin."""
+    inactive = data_reports.build(db, tenant, "inactive")
+    members = next(s for s in inactive.sections if s.title == "Inactive members")
+    cols = members.columns
+    for row in members.rows:
+        if row[cols.index("Last sign-in")] == "Never":  # a mailbox's account, which nobody signs in to
+            continue
+        last, created = (datetime.strptime(row[cols.index(c)], "%d %b %Y") for c in ("Last sign-in", "Created"))
+        assert created < last, row
+    methods = data_reports.build(db, tenant, "auth-methods")
+    passwords = next(s for s in methods.sections if s.title == "Password age")
+    changed = passwords.columns.index("Password last changed")
+    assert all(r[changed] and r[changed] != "Unknown" for r in passwords.rows), passwords.rows
+    deleted = data_reports.build(db, tenant, "deleted-items")
+    gone = next(s for s in deleted.sections if s.title.startswith("Deleted users"))
+    assert gone.rows and not any(re.search(r"Leaver|Recent|Old Guest|du[123]", str(r)) for r in gone.rows), gone.rows
+    signins = data_reports.build(db, tenant, "sign-ins")
+    abroad = next(s for s in signins.sections if s.title == "Successful sign-ins from unusual countries")
+    country, cities = abroad.columns.index("Country"), abroad.columns.index("Cities")
+    for row in abroad.rows:
+        if row[country] in ("FR", "IE", "US"):
+            assert "London" not in str(row[cities]), row
+    risky = data_reports.build(db, tenant, "risky-users")
+    if tenant["name"] == "Contoso Legal LLP":
+        assert risky.unavailable is None and any(s.rows for s in risky.sections), tenant["name"]
+    else:
+        assert risky.unavailable, tenant["name"]
+    # Contoso Legal is the best-run client: every admin has MFA, so the grades on the demo differ.
+    critical = db.execute(
+        "SELECT COUNT(*) FROM findings WHERE tenant_id = ? AND rule_key = 'admin_mfa' AND severity = 'critical'"
+        " AND resolved_at IS NULL",
+        (tenant["id"],),
+    ).fetchone()[0]
+    assert (critical == 0) == (tenant["name"] == "Contoso Legal LLP"), (tenant["name"], critical)
+
+
 def test_demo_reports_add_up(app, db, vault):
     ids = _populate(db, vault)
     make_user(db, "auditor")
@@ -52,10 +92,13 @@ def test_demo_reports_add_up(app, db, vault):
             assert f"{len(report.resolved)} fixed and {report.new_count} new or returning" in findings
             assert f"{report.new_count} new item" in " ".join(summary.monthly(report).paragraphs)
 
-        # Guests: the fixtures' guest keeps its account type when its name is changed.
+        # Guests: the fixtures' guest keeps its account type when its name is changed, and every guest has an
+        # address, a name and an invitation date, as a real tenant's do.
         guests = data_reports.build(db, tenant, "guests")
         listed = next(s for s in guests.sections if s.title == "Guest accounts")
         assert listed.rows, tenant["name"]
+        assert all("@" in r[0] and "#EXT#" not in r[0] and r[1] and r[2] for r in listed.rows), listed.rows
+        _identity_adds_up(db, tenant)
 
         # SharePoint storage: the parts make up what's used, and used plus free is the tenant's total.
         storage = data_reports.build(db, tenant, "sharepoint-storage")
