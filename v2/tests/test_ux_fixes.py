@@ -199,7 +199,8 @@ def test_headline_figures_are_one_size_and_worded_ones_stay_compact():
     assert "--fs-lead" not in css
     assert ".tile .value.small-value { font-size: var(--fs-lg); line-height: 1.75; }" in css
     phone = css[css.index("  .tile .value { font-size: var(--fs-xl); }") :]
-    assert phone.index("  .tile .value.small-value { font-size: var(--fs-md); line-height: 1.75; }") < phone.index("\n}")
+    worded = "  .tile .value.small-value { font-size: var(--fs-md); line-height: 1.75; }"
+    assert phone.index(worded) < phone.index("\n}")
 
 
 # -- Wording -------------------------------------------------------------------------------------
