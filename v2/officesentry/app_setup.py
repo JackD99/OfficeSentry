@@ -24,6 +24,10 @@ The same sign-in also updates an existing app (purpose ``"update"``, from the Ap
 release adds a batch of permissions, ``permission_batch``; the ``update-app`` command does the same):
 ``update_app`` adds the permissions the app doesn't ask for yet, keeps the rest, and records the batch on
 the connection. Each client then approves them with its own link.
+
+And it reads the MSP's GDAP customers for Onboarding's "Add from Partner Center" (purpose ``"partner"``,
+``partner.py``): read-only, in the MSP's own tenant, kept as ``found`` on the row until the admin adds the
+ones they tick.
 """
 
 from __future__ import annotations
@@ -33,7 +37,7 @@ from datetime import UTC, datetime, timedelta
 
 import requests
 
-from . import clouds, entra, permission_batch, sso, store
+from . import clouds, entra, partner, permission_batch, sso, store
 from .auditlog import addon
 from .certs import generate_certificate
 from .db import audit
@@ -54,9 +58,9 @@ NO_ANSWER = "Microsoft didn't answer just now. Office Sentry will keep checking.
 ACTIVE = ("waiting", "working")
 # What a sign-in is for: creating the read-only app connection, the staff sign-in app (sso.py), adding a
 # permission batch to an existing connection's app (``connection_id`` names it from the start), letting the
-# sign-in app accept other organisations' accounts for client sign-in (``sso.allow_other_organisations``), or
-# creating the audit log add-on's app (``auditlog/``).
-PURPOSES = ("connection", "sign_in", "update", "sign_in_update", "audit")
+# sign-in app accept other organisations' accounts for client sign-in (``sso.allow_other_organisations``),
+# creating the audit log add-on's app (``auditlog/``), or reading the MSP's GDAP customers (``partner.py``).
+PURPOSES = ("connection", "sign_in", "update", "sign_in_update", "audit", "partner")
 SIGN_IN_PURPOSES = ("sign_in", "sign_in_update")
 
 
@@ -200,6 +204,8 @@ def start(
     if purpose in SIGN_IN_PURPOSES:
         asks = sso.UPDATE_PERMISSIONS if purpose == "sign_in_update" else sso.SETUP_PERMISSIONS
         scope = sso.setup_scope(cloud, asks)
+    elif purpose == "partner":
+        scope = partner.scope(cloud)
     code = entra.start_device_sign_in(tenant, cloud, session=session, scope=scope)
     conn.execute("DELETE FROM setup_sign_ins WHERE user_id = ? AND purpose = ?", (user_id, purpose))
     conn.execute(
@@ -226,7 +232,7 @@ def start(
     audit(
         conn,
         actor,
-        "app_update_started" if purpose == "update" else "app_setup_started",
+        {"update": "app_update_started", "partner": "partner_sign_in_started"}.get(purpose, "app_setup_started"),
         detail=(cloud if tenant == ANY_TENANT else f"{cloud} {tenant}")
         + (" (sign-in app)" if purpose in SIGN_IN_PURPOSES else "")
         + (" (audit log add-on)" if purpose == "audit" else ""),
@@ -244,7 +250,12 @@ def _fail(conn, row, message: str, actor: str) -> None:
         "UPDATE setup_sign_ins SET status = 'failed', error = ?, device_code_enc = NULL, updated_at = ? WHERE id = ?",
         (message, _iso(datetime.now(UTC)), row["id"]),
     )
-    audit(conn, actor, "app_setup_failed", detail=row["cloud"])
+    audit(
+        conn,
+        actor,
+        "partner_sign_in_failed" if row["purpose"] == "partner" else "app_setup_failed",
+        detail=row["cloud"],
+    )
 
 
 def check(
@@ -310,6 +321,8 @@ def check(
         return _finish_sign_in_update(conn, row, poll.token, actor, home, now, session)
     if purpose == "audit":
         return _finish_audit_app(conn, vault, row, poll.token, redirect_uri, actor, home, now, session)
+    if purpose == "partner":
+        return _finish_partner(conn, row, poll.token, actor, home, now, session)
     try:
         conn_id, app = register_app(conn, vault, poll.token, redirect_uri, row["name"], row["cloud"], session=session)
     except entra.SignInError as exc:
@@ -368,6 +381,24 @@ def _finish_audit_app(conn, vault, row, token: str, redirect_uri: str, actor: st
     )
     addon.switch(conn, True, actor)
     return current(conn, row["user_id"], "audit")
+
+
+def _finish_partner(conn, row, token: str, actor: str, home, now, session):
+    """The MSP's GDAP customers (``partner.py``), read with the wizard's token and kept on the row for the admin to
+    pick from. Clients added by a domain are looked up too, so they aren't offered again."""
+    try:
+        customers = partner.fold(partner.relationships(token, row["cloud"], session=session))
+    except partner.PartnerError as exc:
+        _fail(conn, row, str(exc), actor)
+        return current(conn, row["user_id"], "partner")
+    domains = partner.known_by_domain(conn, row["cloud"], session=session)
+    conn.execute(
+        "UPDATE setup_sign_ins SET status = 'done', device_code_enc = NULL, error = NULL, home_tenant = ?, found = ?,"
+        " updated_at = ? WHERE id = ?",
+        (home, partner.store_found(customers, domains), _iso(now), row["id"]),
+    )
+    audit(conn, actor, "partner_customers_read", detail=f"{len(customers)} GDAP customers in {home or 'your tenant'}")
+    return current(conn, row["user_id"], "partner")
 
 
 def _finish_sign_in_app(conn, vault, row, token: str, redirect_uri: str, actor: str, home, now, session):
