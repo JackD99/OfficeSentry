@@ -8,7 +8,8 @@
   day the client was added. New means since the person last looked (the last day on their first visit).
   Any line can be handed to a colleague who sees that client, or snoozed out of the list for a while: a
   finding line through its findings' own columns (``findings.hand``, ``findings.snooze``), any other line
-  through ``item_state`` (migration 0049).
+  through ``item_state`` (migration 0049). The lines handed to the person looking are kept together at the
+  top (``Today.handed_to``).
 - **Clients**, for account managers: licence waste, renewals in the next 30 days, this month's reports
   waiting for approval and projects to propose, per client.
 
@@ -112,6 +113,7 @@ class Entry:
     ids: list[int] = field(default_factory=list)  # the findings behind a finding line
     handed_to: int | None = None  # the colleague holding it (a user id)
     holder: str = ""  # their name
+    handed_by: str = ""  # who handed it to them (a username)
     snoozed_until: str = ""  # out of the list until then (ISO, UTC)
     snooze_stamp: str = ""  # that time as the page shows it (set by the page)
 
@@ -152,6 +154,11 @@ class Today:
     @property
     def new(self) -> list[Entry]:
         return [e for e in self.entries if e.new]
+
+    def handed_to(self, user_id: int | None) -> list[Entry]:
+        """The lines handed to this person, new first and worst first: the page keeps them together above the
+        ledger, so a hand-off lands with the person rather than among everything else."""
+        return [e for e in self.entries if user_id is not None and e.handed_to == user_id]
 
     @property
     def seen(self) -> list[Entry]:
@@ -262,7 +269,7 @@ def _finding_entries(conn, tenants: dict[int, dict], since: datetime, now: datet
     marks = ",".join("?" * len(tenants))
     rows = conn.execute(
         f"SELECT id, tenant_id, rule_key, severity, subject, detail, first_seen, reopened_at, handed_to,"
-        f" snoozed_until FROM findings"
+        f" handed_by, snoozed_until FROM findings"
         f" WHERE tenant_id IN ({marks}) AND resolved_at IS NULL AND severity IN ('critical', 'high')"
         " AND (first_seen >= ? OR IFNULL(reopened_at, '') >= ?)"
         " AND (accepted_at IS NULL OR (accepted_until IS NOT NULL AND accepted_until <= ?))"
@@ -279,6 +286,7 @@ def _finding_entries(conn, tenants: dict[int, dict], since: datetime, now: datet
     for (tenant_id, rule_key, severity, _, snoozed), found in groups.items():
         found.sort(key=lambda f: f[0], reverse=True)
         first = found[0][1]
+        held = _holder([f[1] for f in found])
         subjects = [subject_label(f[1]["subject"]) for f in found]
         if len(found) == 1:
             detail = f"{subjects[0]}: {first['detail']}" if first["detail"] else subjects[0]
@@ -298,17 +306,17 @@ def _finding_entries(conn, tenants: dict[int, dict], since: datetime, now: datet
                 count=len(found),
                 key=f"finding:{rule_key}",
                 ids=[f[1]["id"] for f in found],
-                handed_to=_holder([f[1]["handed_to"] for f in found]),
+                handed_to=held["handed_to"] if held else None,
+                handed_by=(held["handed_by"] or "") if held else "",
                 snoozed_until=max(f[1]["snoozed_until"] for f in found) if snoozed else "",
             )
         )
     return out
 
 
-def _holder(handed: list[int | None]) -> int | None:
-    """Who holds a line of several findings: the one colleague they're all handed to, else the latest's."""
-    held = [h for h in handed if h]
-    return held[0] if held else None
+def _holder(found: list):
+    """The finding that says who holds a line of several (latest first): the latest one handed to someone."""
+    return next((f for f in found if f["handed_to"]), None)
 
 
 def _fixed_entries(conn, tenants: dict[int, dict], since: datetime, now: datetime) -> list[Entry]:
@@ -547,6 +555,7 @@ def today(
         state = states.get((e.tenant["id"], e.key)) if e.kind != "finding" else None
         if state:
             e.handed_to = state["handed_to"]
+            e.handed_by = state["handed_by"] or ""
             if (state["snoozed_until"] or "") > now.strftime(_ISO):
                 e.snoozed_until = state["snoozed_until"]
     names = _names(conn, {e.handed_to for e in entries if e.handed_to})

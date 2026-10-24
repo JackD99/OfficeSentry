@@ -284,6 +284,32 @@ def test_hand_to_only_someone_who_sees_the_client(client, db, world):
     assert db.execute("SELECT handed_to FROM findings WHERE id = ?", (row["id"],)).fetchone()[0] is None
 
 
+def test_handed_to_me_on_the_findings_tab(client, db, world):
+    alpha, _ = world
+    ids = {u["username"]: u["id"] for u in db.execute("SELECT id, username FROM users")}
+    mine, theirs = _finding(db, alpha, "guest_admins"), _finding(db, alpha, "smtp_auth")
+    findings.hand(db, mine["id"], ids["analyst"], "admin")
+    findings.hand(db, theirs["id"], ids["both"], "admin")
+    login(client, "analyst")
+    page = client.get(f"/tenants/{alpha}/findings").get_data(as_text=True)
+    assert f'href="/tenants/{alpha}/findings?mine=1"' in page and "Handed to me <span" in page
+    assert "Handed to you</span>" in page and "Handed to both</span>" in page
+    page = client.get(f"/tenants/{alpha}/findings?mine=1").get_data(as_text=True)
+    assert f'data-finding="{mine["id"]}"' in page and f'data-finding="{theirs["id"]}"' not in page
+    assert f'href="/tenants/{alpha}/findings/{mine["id"]}?mine=1"' in page  # the sheet keeps the view
+    assert 'class="tiles"' not in page and "Accepted risks" not in page
+    csv = client.get(f"/tenants/{alpha}/findings.csv?mine=1").get_data(as_text=True)
+    assert len(csv.strip().splitlines()) == 2 and "smtp" not in csv.lower()
+    # Someone holding nothing isn't offered the view; a client account never sees who holds what.
+    client.post("/logout")
+    login(client, "admin")
+    assert "mine=1" not in client.get(f"/tenants/{alpha}/findings").get_data(as_text=True)
+    client.post("/logout")
+    login(client, "client")
+    page = client.get(f"/tenants/{alpha}/findings?mine=1").get_data(as_text=True)
+    assert f'data-finding="{theirs["id"]}"' in page and "Handed to" not in page and "mine=1" not in page
+
+
 def test_snooze(db, world):
     alpha, _ = world
     row = _finding(db, alpha, "admin_mfa")

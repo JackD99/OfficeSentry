@@ -46,7 +46,7 @@
       {{ page_link(e.href, e.text, class='what-link') }}</div>
     {% if e.detail %}<div class="detail">{{ e.detail }}</div>{% endif %}
     {% if e.holder or e.snoozed_until %}<div class="held small">
-      {%- if e.holder %}{{ icon('person') }} {{ 'Handed to you' if e.handed_to == current_user.id else 'Handed to ' ~ e.holder }}{% endif %}
+      {%- if e.holder %}{{ icon('person') }} {% if e.handed_to == current_user.id %}Handed to you{% if e.handed_by and e.handed_by != current_user.username %} by {{ e.handed_by }}{% endif %}{% else %}Handed to {{ e.holder }}{% endif %}{% endif %}
       {%- if e.holder and e.snoozed_until %} · {% endif %}
       {%- if e.snoozed_until %}{{ icon('clock') }} Snoozed until {{ e.snooze_stamp }}{% endif %}</div>{% endif %}
   </div>
@@ -107,24 +107,39 @@
 </div>
 {% endif %}
 
-{% if data.entries %}
-<section class="card flush ledger-card" id="ledger">
-  <div class="card-head"><h2>Since {{ data.since_label }} <span class="count-badge">{{ data.new|length }}</span></h2>
-    <span class="meta small muted">Worst first</span></div>
-  {% if data.new %}
+{#- What's handed to the person looking is kept together above the ledger, and left out of it below. -#}
+{% set mine = data.handed_to(current_user.id) %}
+{% set new = data.new|rejectattr('handed_to', 'equalto', current_user.id)|list %}
+{% set seen = data.seen|rejectattr('handed_to', 'equalto', current_user.id)|list %}
+{% if mine %}
+<section class="card flush ledger-card" id="handed">
+  <div class="card-head"><h2>Handed to you <span class="count-badge">{{ mine|length }}</span></h2>
+    <span class="meta small muted">New first, worst first</span></div>
   <ul class="ledger">
-    {% for e in data.new %}{{ line(e) }}{% endfor %}
+    {% for e in mine %}{{ line(e) }}{% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% if data.entries %}
+{% if new or seen %}
+<section class="card flush ledger-card" id="ledger">
+  <div class="card-head"><h2>Since {{ data.since_label }} <span class="count-badge">{{ new|length }}</span></h2>
+    <span class="meta small muted">Worst first</span></div>
+  {% if new %}
+  <ul class="ledger">
+    {% for e in new %}{{ line(e) }}{% endfor %}
   </ul>
   {% else %}
-  <p class="ledger-quiet">Nothing new since {{ data.since_label }}.</p>
+  <p class="ledger-quiet">Nothing new since {{ data.since_label }}{{ " that isn't handed to you" if mine|selectattr('new')|list }}.</p>
   {% endif %}
-  {% if data.seen %}
+  {% if seen %}
   <div class="divider" role="separator"><span>Seen before <span class="divider-when">{{ since }}</span> · still open</span></div>
   <ul class="ledger">
-    {% for e in data.seen %}{{ line(e) }}{% endfor %}
+    {% for e in seen %}{{ line(e) }}{% endfor %}
   </ul>
   {% endif %}
 </section>
+{% endif %}
 {% else %}
 <div class="card empty" id="ledger"><h3>{{ 'All clear' if data.sees else 'Nothing to show' }}</h3>
   <p>{{ data.all_clear or "Ask an admin if Today should show you more." }}</p>
