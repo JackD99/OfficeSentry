@@ -14,7 +14,7 @@ stops for all of them at once, so:
   until the admin confirms it's gone from Entra (``forget_old``), which is also
   the "certificate leaked" path in SECURITY.md.
 * The ``certificate_expiry`` periodic job sends one warning per threshold to the
-  MSP's team contacts by email and to the alert webhook.
+  MSP's team contacts by email and to the alert destinations (``alerts.deliver``).
 
 Nothing here writes to a client tenant. The only Microsoft call is ``test``,
 which signs in and reads the organisation's name (``connection_check.check``).
@@ -359,6 +359,8 @@ def _message(base_url: str, e: Expiry) -> alerts.Message:
         title=e.headline,
         link=_href(base_url, e),
         text=f"{e.consequence} {fix_steps(e)}",
+        severity={"expired": "critical", "7": "high", "30": "medium"}.get(e.level, "low"),
+        key=f"certificate:{e.kind}:{e.thumbprint}",  # each warning about one certificate shares it
         extra={
             "certificate": {
                 "kind": e.kind,
@@ -419,9 +421,7 @@ def warn(app, conn, vault, base_url: str, now: datetime | None = None) -> int:
         if retry and (at := parse_ts(retry["value"])) and now < at:
             continue  # the last try reached nobody; wait before the next
         error = _email(app, conn, vault, e)
-        hooked = None
-        if s.get("alerts.enabled") == "1" and s.get("alerts.url_enc"):
-            hooked = alerts._deliver(conn, alerts.Alerting(base_url, vault, app), s, _message(base_url, e))
+        hooked = alerts.deliver(conn, alerts.Alerting(base_url, vault, app), _message(base_url, e), s=s)
         # Marked warned once a channel took it, or when none is set up (the banner is all there is). When every
         # channel set up refused it, it goes again after RETRY instead of never.
         nobody = (error is not None or hooked is not None) and error != "" and not hooked
@@ -439,7 +439,7 @@ def warn(app, conn, vault, base_url: str, now: datetime | None = None) -> int:
             "certificate_expiry_warned",
             detail=f"{e.name} {e.thumbprint}: {e.level}"
             + (f"; email failed: {error}"[:300] if error else "")
-            + ("" if hooked is None else f"; webhook {'sent' if hooked else 'failed'}")
+            + ("" if hooked is None else f"; alert {'posted' if hooked else 'not posted'}")
             + ("; trying again in 15 minutes" if nobody else ""),
         )
         sent += 0 if nobody else 1

@@ -32,7 +32,7 @@ def _switch(page: str) -> dict[str, str]:
         return {}
     menu = page[page.index('id="client-switch"') :]
     menu = menu[: menu.index("</details>")]
-    links = re.findall(r'<li data-name="[^"]*"><a href="([^"]+)"( aria-current="page")?>([^<]+)</a>', menu)
+    links = re.findall(r'<li data-name="[^"]*"[^>]*><a href="([^"]+)"( aria-current="page")?>([^<]+)</a>', menu)
     return {name + ("*" if current else ""): href for href, current, name in links}
 
 

@@ -337,23 +337,123 @@ def b_data_table(ctx: Context, s: dict) -> dict:
     if report.unavailable:
         return {"empty": report.unavailable}
     limit, tables = int(s.get("max_rows") or 20), int(s.get("max_tables") or 1)
-    sections = []
-    for section in report.sections[:tables]:
-        rows = section.rows[:limit]
-        sections.append(
-            {
-                "section": section,
-                "rows": rows,
-                "flags": section.flags[:limit] if section.flags else [],
-                "more": max(0, len(section.rows) - limit),
-            }
-        )
     return {
         "report": report,
-        "sections": sections,
+        "sections": [_shown(section, limit) for section in report.sections[:tables]],
         "figures": bool(s.get("figures", True)),
         "tiles": (report.tiles or []) + (report.highlights or []),
     }
+
+
+def _shown(section, limit: int) -> dict:
+    """One of a report's tables as a block draws it: its first ``limit`` rows and how many more there are."""
+    return {
+        "section": section,
+        "columns": section.columns,
+        "rows": section.rows[:limit],
+        "flags": section.flags[:limit] if section.flags else [],
+        "more": max(0, len(section.rows) - limit),
+    }
+
+
+# Client documentation (the "documentation" starter): how a client's Microsoft 365 is set up, one topic per
+# block. Each is the tables of one detail report that describe the setup, without its "needs attention" lists,
+# so it reads as documentation rather than a review: no severity flags, and no column saying what to do about a
+# row (TODO_COLUMNS). Rebuilt whenever it's sent, so it's never out of date.
+TODO_COLUMNS = ("What to check", "What to fix", "What to do", "Problems")
+
+
+@dataclass(frozen=True)
+class Topic:
+    title: str
+    report: str  # a data_reports.REPORTS key
+    sections: tuple[str, ...]  # the report's tables it shows, by title, in this order
+    # Columns left out besides TODO_COLUMNS: what happened lately rather than how it's set up, or too many
+    # columns to fit the page.
+    drop: tuple[str, ...] = ()
+
+
+TOPICS: dict[str, Topic] = {
+    "domains": Topic("Domains and DNS", "domains", ("Domains", "Published records")),
+    "admins": Topic(
+        "Admins", "admins", ("Privileged role holders", "Break-glass accounts", "Other roles"), ("Last sign-in",)
+    ),
+    "conditional_access": Topic("Conditional Access", "conditional-access", ("Policies",)),
+    "sign_in": Topic(
+        "Sign-in methods and passwords",
+        "auth-methods",
+        ("Sign-in methods policy", "Methods registered", "Password expiry policy"),
+    ),
+    "tenant_settings": Topic("Tenant settings", "tenant-settings", ("Settings", "Admin consent requests")),
+    "trusted": Topic(
+        "Trusted organisations and locations",
+        "trusted-access",
+        ("Default for other organisations", "Organisations with their own settings", "Named locations"),
+    ),
+    "mail": Topic(
+        "Mail rules and protection", "mail-protection", ("Mail flow rules", "Connectors", "Protection policies")
+    ),
+    "shared_mailboxes": Topic("Shared mailboxes", "shared-mailboxes", ("Shared and resource mailboxes",)),
+    "distribution_lists": Topic("Distribution lists", "distribution-lists", ("Every list",)),
+    "licences": Topic(
+        "Licences",
+        "subscriptions",
+        ("Subscriptions", "Renewals and expiry"),
+        ("In grace period", "Suspended", "Trial"),  # the status and the renewals table say so
+    ),
+    "licence_features": Topic(
+        "What the licences cover", "licence-features", ("What your licences cover", "What each licence includes")
+    ),
+    "apps": Topic("Apps", "apps", ("Third-party apps with access", "App registrations and their credentials")),
+    "intune": Topic(
+        "Intune policies",
+        "intune-policies",
+        (
+            "Coverage by platform",
+            "Compliance policies",
+            "Windows update rings",
+            "Configuration profiles",
+            "Endpoint security and settings catalog",
+            "App protection for phones",
+        ),
+    ),
+    "devices": Topic("Devices", "devices", ("Operating systems", "Managed devices"), ("Last check-in",)),
+    "teams_groups": Topic("Teams and groups", "groups", ("Settings", "Teams and groups")),
+    "sharepoint": Topic("SharePoint sites", "sharepoint", ("All sites",)),
+}
+
+
+def _topic_options() -> tuple:
+    return tuple((key, t.title) for key, t in TOPICS.items())
+
+
+def _documented(section, limit: int, drop: tuple[str, ...] = ()) -> dict:
+    """One of a report's tables as documentation: without the flags and the columns that say what to do."""
+    keep = [i for i, c in enumerate(section.columns) if c not in TODO_COLUMNS and c not in drop]
+    return {
+        "section": section,
+        "columns": [section.columns[i] for i in keep],
+        "rows": [[row[i] for i in keep] for row in section.rows[:limit]],
+        "flags": [],
+        "more": max(0, len(section.rows) - limit),
+    }
+
+
+def b_doc_topic(ctx: Context, s: dict) -> dict:
+    topic = TOPICS.get(str(s.get("topic") or ""))
+    if topic is None:
+        return {"empty": "Choose what this section documents."}
+    if not ctx.opens(topic.report):
+        return {"empty": "Left out: you can't open this report for this client."}
+    report = ctx.report(topic.report)
+    if report.unavailable:
+        return {"empty": report.unavailable}
+    by_title = {section.title: section for section in report.sections}
+    limit = int(s.get("max_rows") or 50)
+    sections = [_documented(by_title[t], limit, topic.drop) for t in topic.sections if t in by_title]
+    if not sections:
+        return {"empty": f"Nothing to document from {report.title} yet."}
+    return {"report": report, "title": topic.title, "sections": sections, "figures": False, "tiles": []}
 
 
 def b_evidence(ctx: Context, s: dict) -> dict:
@@ -684,6 +784,20 @@ WIDGETS: dict[str, Widget] = {
             halfable=False,
         ),
         Widget(
+            "doc_topic",
+            "Documentation section",
+            "How one part of the client's Microsoft 365 is set up, from the detail report that reads it, without "
+            "its to-do lists.",
+            "Licences and data",
+            (
+                _heading(""),
+                Field("topic", "What it documents", "select", "domains", _topic_options),
+                Field("max_rows", "Rows per table", "number", 50, min=3, max=100),
+            ),
+            b_doc_topic,
+            halfable=False,
+        ),
+        Widget(
             "evidence",
             "Insurance questionnaire answers",
             "The questions cyber insurers ask, answered from the data.",
@@ -876,8 +990,14 @@ def get(conn, design_id: int):
 
 
 def detail_reports(row) -> set[str]:
-    """The detail reports a design's tables show, by report key."""
-    return {b["settings"].get("report") or "" for b in document(row)["blocks"] if b["kind"] == "data_table"} - {""}
+    """The detail reports a design's tables and documentation sections show, by report key."""
+    out = set()
+    for b in document(row)["blocks"]:
+        if b["kind"] == "data_table":
+            out.add(b["settings"].get("report") or "")
+        elif b["kind"] == "doc_topic" and (topic := TOPICS.get(b["settings"].get("topic") or "")):
+            out.add(topic.report)
+    return out - {""}
 
 
 def list_designs(conn) -> list:
@@ -1065,6 +1185,26 @@ STARTERS: dict[str, tuple[str, str, dict]] = {
                 _b("licences"),
                 _b("data_table", heading="Where licences could be cheaper", report="licence-rightsizing", max_rows=25),
                 _b("data_table", heading="Inactive accounts holding licences", report="inactive", max_rows=25),
+                _b("contact"),
+                _b("about"),
+            ],
+        },
+    ),
+    "documentation": (
+        "Client documentation",
+        "How the client's Microsoft 365 is set up today: domains, admins, Conditional Access, sign-in, mail, "
+        "licences, apps and devices. Send it monthly and the copy in Report history is always current.",
+        {
+            # How it's set up, not how it's doing: no verdict on the cover.
+            "settings": {"title": "Microsoft 365 documentation", "subtitle": "As of {date}", "cover_verdict": False},
+            "blocks": [
+                _b(
+                    "text",
+                    heading="About this document",
+                    text="How {client}'s Microsoft 365 is set up, read from Microsoft 365 on {date} with read-only "
+                    "access. It's rebuilt each time it's sent, so the newest copy is the current one.",
+                ),
+                *(_b("doc_topic", heading=t.title, topic=key) for key, t in TOPICS.items()),
                 _b("contact"),
                 _b("about"),
             ],

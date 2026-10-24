@@ -378,3 +378,32 @@
   }
   setTimeout(check, Math.max(parseInt(box.dataset.setupWait, 10) || 5, 2) * 1000);
 })();
+
+/* Switch client (_macros.tenant_header): the clients this person opened last come first, under Recent. Kept in this
+ * browser for this account, as the jump box keeps its recent places; every client still lists below. */
+(function () {
+  var menu = document.querySelector('[data-recent]');
+  if (!menu) return;
+  var store = 'recent-clients:' + menu.getAttribute('data-recent');
+  var here = menu.getAttribute('data-here');
+  var KEEP = 5;
+  var seen;
+  try { seen = JSON.parse(localStorage.getItem(store) || '[]'); } catch (e) { seen = []; }
+  if (!Array.isArray(seen)) seen = [];
+  var group = menu.querySelector('[data-recent-group]');
+  var list = group && group.querySelector('ul');
+  if (list) {
+    seen.forEach(function (id) {
+      var item = id !== here && menu.querySelector('li[data-tenant="' + String(id).replace(/[^0-9]/g, '') + '"]');
+      if (item && list.children.length < KEEP) list.appendChild(item);
+    });
+    // The client being looked at heads the group, so the menu opens at the top rather than scrolled to it.
+    var current = list.children.length && menu.querySelector('li[data-tenant="' + here + '"]');
+    if (current) list.insertBefore(current, list.firstChild);
+    group.hidden = !list.children.length;
+    var rest = menu.querySelector('[data-recent-label]');
+    if (rest) rest.hidden = group.hidden;
+  }
+  seen = [here].concat(seen.filter(function (id) { return id !== here; })).slice(0, KEEP + 1);
+  try { localStorage.setItem(store, JSON.stringify(seen)); } catch (e) { /* not kept */ }
+})();
