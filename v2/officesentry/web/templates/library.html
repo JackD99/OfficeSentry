@@ -11,7 +11,7 @@
 <div class="page-head">
   <div>
     <h1>Reports</h1>
-    <div class="sub">{{ total }} reports{% if staff and tenants %}, for one client or across all {{ tenants|length }}{% endif %}. Search, or pick the job you're doing.</div>
+    <div class="sub">{{ total }} reports{% if staff and tenants %}, for one client or across all {{ tenants|length }}{% endif %}.</div>
   </div>
 </div>
 
@@ -117,7 +117,7 @@
   </section>
   {% endif %}
 </div>
-<p class="footnote">{% if tenant %}Reports open for <strong>{{ tenant.name }}</strong>.{% if staff %} Use “All clients” on a report to compare every client.{% endif %}{% else %}Each report opens across all your clients, one row per client{% if custom %}; a custom report opens on your first client{% endif %}. Pick a client above to open its own reports.{% endif %}</p>
+<p class="footnote">{% if tenant %}Reports open for <strong>{{ tenant.name }}</strong>.{% else %}Reports open across all your clients, one row per client{% if custom %}; a custom report opens on your first client{% endif %}.{% endif %}</p>
 {% endif %}
 {% endblock %}
 {% block scripts %}

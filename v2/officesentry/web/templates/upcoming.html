@@ -67,7 +67,7 @@
 {{ report_table(tv, url_for('upcoming.download', ext='csv') ~ q) }}
 {% endif %}
 {% endfor %}
-<p class="footnote">Built from each client's latest collection; paused clients are left out. Renewal dates come from Microsoft, which doesn't say whether a paid subscription renews automatically. Mailboxes are forecast from their growth since a collection two to eight weeks earlier. {% if can('settings.manage') %}Office Sentry's own certificates are listed too. {% endif %}{% if can('settings.manage') %}<a href="{{ url_for('email.overview') }}#coming-up">Email this to your team every week</a>.{% endif %}</p>
+<p class="footnote">From each client's latest collection, paused clients left out{% if can('settings.manage') %}, with Office Sentry's own certificates{% endif %}. Microsoft doesn't say whether a paid subscription renews automatically. Mailboxes are forecast from their growth over the last two to eight weeks.{% if can('settings.manage') %} <a href="{{ url_for('email.overview') }}#coming-up">Email this to your team every week</a>.{% endif %}</p>
 {% endif %}
 {% endblock %}
 {% block scripts %}

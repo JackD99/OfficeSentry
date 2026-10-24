@@ -81,7 +81,6 @@
       <ul class="link-list">
         {% for title, href in page.reports %}<li>{{ page_link(href, title) }}</li>{% endfor %}
       </ul>
-      <p class="footnote">The reports these facts come from, opened at this {{ page.kind }} where they list it.</p>
     </section>
     {% endif %}
   </aside>
@@ -142,7 +141,7 @@
       {% else %}
       <p class="muted small m0">No changes spotted{% if page.history_since %} since {{ page.history_since|day }}{% endif %}.</p>
       {% endif %}
-      <p class="footnote">Found by comparing collections{% if page.history_since %} since {{ page.history_since|day }}{% endif %}. The date is when Office Sentry first saw the change.</p>
+      <p class="footnote">{% if page.history_since %}Since {{ page.history_since|day }}. {% endif %}Dated by the collection that first saw each change.</p>
     </section>
 </div>
 
