@@ -47,6 +47,7 @@
   'half': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 5v14"/><path d="M5.5 8.5h4M5.5 12h4M5.5 15.5h4"/>',
   'close': '<path d="M6 6l12 12M18 6L6 18"/>',
   'switch': '<path d="M8 9l4-4 4 4M8 15l4 4 4-4"/>',
+  'star': '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/>',
   'info': '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
   'hide': '<path d="M3 3l18 18"/><path d="M10.6 5.1A10 10 0 0112 5c6.5 0 10 7 10 7a17.6 17.6 0 01-3.2 4.2M6.6 6.6C3.8 8.5 2 12 2 12s3.5 7 10 7c1.9 0 3.6-.6 5-1.5"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/>',
 } %}
@@ -126,7 +127,7 @@
     {% if staff and can('reports.security', tid) %}{% set letter = client_grade(tid) %}{% if letter %}<a class="grade sm {{ letter|lower }}" href="{{ url_for('grade.page', tenant_id=tid) }}" title="Grade {{ letter }}: how it is worked out"><span class="sr-only">Grade </span>{{ letter }}</a>{% endif %}{% endif %}
     <div class="sub"><span>{{ tenant.tenant_ref }}</span>{% if staff and not cloud_of(tenant).is_default %} <span class="pill info" title="Microsoft national cloud">{{ cloud_of(tenant).label }}</span>{% endif %}{% if tenant.archived_at %} <span class="pill info">Archived</span>{% elif not tenant.enabled %} <span class="pill info" title="No collection or emailed reports until it's resumed">Paused</span>{% endif %}</div>
     {% if others %}
-    <details class="menu client-switch" id="client-switch">
+    <details class="menu client-switch" id="client-switch" data-recent="{{ current_user.id }}" data-here="{{ tid }}">
       <summary class="btn sm ghost" title="Open this page for another client">{{ icon('switch') }}<span>Switch client</span></summary>
       <div class="menu-panel client-panel">
         <div class="picker-search">
@@ -134,9 +135,14 @@
           <input id="client-find" type="search" placeholder="Find a client" autocomplete="off" maxlength="100" data-report-search="client-list">
         </div>
         <div class="picker-list" id="client-list">
+          <div class="report-group" data-recent-group hidden>
+            <p class="picker-label" id="recent-clients">Recent</p>
+            <ul aria-labelledby="recent-clients"></ul>
+          </div>
           <div class="report-group">
+            <p class="picker-label" data-recent-label hidden>Every client</p>
             <ul aria-label="Clients">
-              {% for c in others %}<li data-name="{{ c.name|lower }}"><a href="{{ c.href }}"{% if c.current %} aria-current="page"{% endif %}>{{ c.name }}</a></li>
+              {% for c in others %}<li data-name="{{ c.name|lower }}" data-tenant="{{ c.tenant_id }}"><a href="{{ c.href }}"{% if c.current %} aria-current="page"{% endif %}>{{ c.name }}</a></li>
               {% endfor %}
             </ul>
           </div>
@@ -238,6 +244,7 @@
     summaries. current is 'designs' on the list of custom reports, 'design:<id>' on one of them. -#}
 {% set custom = custom_reports(tenant.id) if staff else [] %}
 {% set mine = my_views(tenant.id) %}
+{% set favs = favourite_reports(tenant.id) %}
 {% if current == 'designs' or current.startswith('design:') %}{% set here.area = 'Custom reports' %}{% endif %}
 <nav class="report-menu" aria-label="Reports">
   <a class="skip-picker" href="#report">Skip to the report</a>
@@ -249,6 +256,15 @@
         <input id="report-find" type="search" placeholder="Find a report" autocomplete="off" maxlength="100" data-report-search="report-list">
       </div>
       <div class="picker-list" id="report-list">
+        {% if favs %}
+        <div class="report-group">
+          <p class="picker-label" id="picker-favourites">Your favourites</p>
+          <ul aria-labelledby="picker-favourites">
+            {% for e in favs %}<li data-name="{{ e.search }} favourite"><a href="{{ _picker_href(tenant, e, on) }}" title="{{ e.description }}">{{ e.title }}</a></li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
         {% for area in areas %}{% set entries = [] %}{% for e in area.entries if e.kind in shown and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% if e.key == current or (current in ('review', 'evidence') and e.kind == current) %}{% set here.area = area.title %}{% endif %}{% endfor %}{% if entries %}
         <div class="report-group">
           <p class="picker-label" id="picker-{{ area.key }}">{{ area.title }}</p>
@@ -287,6 +303,7 @@
 <form method="get" action="{{ url_for('reports.data_index', tenant_id=tenant.id) }}" class="picker-form report-menu-sm" data-autosubmit>
   <label for="report-key">Report</label>
   <select id="report-key" name="key">
+    {% if favs %}<optgroup label="Your favourites">{% for e in favs %}<option value="{{ e.key }}">{{ e.title }}</option>{% endfor %}</optgroup>{% endif %}
     {% for area in areas %}{% set entries = [] %}{% for e in area.entries if e.kind in shown and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}<optgroup label="{{ area.title }}">{% for e in entries %}<option value="{{ e.key }}"{% if e.key == current %} selected{% endif %}>{{ e.title }}</option>{% endfor %}</optgroup>
     {% if loop.first and staff %}<optgroup label="Custom reports">{% for c in custom %}<option value="{{ c.key }}"{% if current == c.key %} selected{% endif %}>{{ c.name }}</option>{% endfor %}<option value="designs"{% if current == 'designs' %} selected{% endif %}>{{ 'All custom reports' if custom else 'Custom reports' }}</option></optgroup>{% endif %}
     {% if loop.first and mine %}<optgroup label="Your views">{% for v in mine %}<option value="view:{{ v.id }}">{{ v.name }} · {{ v.report }}</option>{% endfor %}</optgroup>{% endif %}{% endif %}{% endfor %}
@@ -304,6 +321,7 @@
 {% set areas = report_catalogue(tenant.id) %}
 {% set custom = custom_reports(tenant.id) if staff else [] %}
 {% set mine = my_views(tenant.id) %}
+{% set favs = favourite_reports(tenant.id) %}
 {% set projects = can('projects.view', tenant.id) %}
 {% set featured = [] %}{% for e in areas[0].entries if e.kind in ('review', 'evidence') and can(entry_capability(e), tenant.id) %}{% set _ = featured.append(e) %}{% endfor %}
 <p class="muted small m0 no-match" hidden>No report matches that. Try a word like mailbox, admin or licence.</p>
@@ -320,8 +338,14 @@
     {% endif %}
   </div>
   {% endif %}
-  {% if staff or mine %}
+  {% if staff or mine or favs %}
   <div class="report-own">
+    {% if favs %}
+    <div class="report-group">
+      <h3>Your favourites</h3>
+      <div class="opts">{% for e in favs %}<a class="opt" href="{{ _picker_href(tenant, e, none) }}" data-name="{{ e.search }} favourite" title="{{ e.description }}">{{ e.title }}</a>{% endfor %}</div>
+    </div>
+    {% endif %}
     {% if staff %}
     <div class="report-group">
       <h3>Custom reports</h3>

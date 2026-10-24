@@ -187,7 +187,7 @@
 {% macro w_data_table(item) -%}
 {{ head(item) }}
 {% set d = item.data %}
-{% if not item.heading %}<h2>{{ d.report.title }}</h2>{% endif %}
+{% if not item.heading %}<h2>{{ d.title or d.report.title }}</h2>{% endif %}
 {#- A setup note is written for the MSP ("sign in as a Global Admin..."): the client's copy has it only when
     the design includes setup notes (client_notes); the portal and the previews always show it. -#}
 {% if d.report.notice %}
@@ -203,7 +203,7 @@
   {% if d.sections|length > 1 or s.section.title != d.report.title %}<h3>{{ s.section.title }} <span class="count">{{ s.section.rows|length }}</span></h3>{% endif %}
   {% if s.section.intro %}<p class="section-intro">{{ s.section.intro }}</p>{% endif %}
   {% if s.rows %}
-  {{ ui.data_table(namespace(title=s.section.title, columns=s.section.columns, rows=s.rows, flags=s.flags, flag_name=s.section.flag_name)) }}
+  {{ ui.data_table(namespace(title=s.section.title, columns=s.columns, rows=s.rows, flags=s.flags, flag_name=s.section.flag_name)) }}
   {% if s.more %}<p class="muted small">…and {{ s.more }} more rows in the full report.</p>{% endif %}
   {% else %}<p class="empty-note">{{ s.section.empty }}</p>{% endif %}
 </div>
@@ -350,7 +350,7 @@
   'verdict': w_verdict, 'summary_text': w_summary_text, 'commentary': w_commentary, 'kpis': w_kpis,
   'breakdown': w_breakdown, 'secure_score': w_secure_score, 'actions': w_actions, 'findings': w_findings,
   'passing': w_passing, 'accepted': w_accepted, 'unavailable': w_unavailable, 'changes': w_changes,
-  'licences': w_licences, 'data_table': w_data_table, 'evidence': w_evidence, 'heading': w_heading,
+  'licences': w_licences, 'data_table': w_data_table, 'doc_topic': w_data_table, 'evidence': w_evidence, 'heading': w_heading,
   'text': w_text, 'contact': w_contact, 'page_break': w_page_break, 'about': w_about,
   'quarter_trend': w_quarter_trend, 'quarter_fixed': w_quarter_fixed, 'projects': w_projects,
   'licence_spend': w_licence_spend, 'upcoming': w_upcoming,

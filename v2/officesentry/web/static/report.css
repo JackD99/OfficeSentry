@@ -565,3 +565,7 @@ table.upcoming td:first-child { width: 22%; white-space: nowrap; }
 .proj-status.st-proposed { background: var(--brand-soft); color: var(--brand-ink); }
 .proj-status.st-agreed { background: var(--ok-soft); color: var(--ok); }
 .proj-status.st-declined { background: var(--surface-2); color: var(--muted); }
+
+/* A long contents list (more than 12 entries, _layout.html) in two columns, so it ends above the cover's foot. */
+body.pdf .toc.long ol { columns: 2; column-gap: 8mm; }
+body.pdf .toc.long li { break-inside: avoid; }

@@ -94,6 +94,14 @@ executive summary, a full review, a licensing review or a **Quarterly review**: 
 and findings, what was fixed, the projects on the table and where each stands, licence spend and what's coming
 up in the next 90 days ([example PDF](examples/quarterly-review.pdf)).
 
+<!-- since 2.6.0 -->
+**Client documentation** is a custom report of its own: how the client's Microsoft 365 is set up today (domains
+and DNS, admins, Conditional Access in plain words, sign-in methods, tenant settings, mail rules and protection,
+licences and what they cover, apps, Intune and devices, Teams and SharePoint), one section per topic, without the
+to-do lists. Send it monthly with a plan or email schedule and the newest copy in the client's Report history is
+always the current one, instead of a document someone wrote once and nobody updated.
+<!-- /since -->
+
 ![The custom report editor with the Quarterly review: blocks, the layout, and a preview on a real client](docs/screenshots/design-editor.png)
 
 ### SharePoint storage: why it's full and what to clean up
@@ -158,6 +166,10 @@ in a file or an email. Every client, with the add-on or not, is also checked for
 53 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
 values (or by age, for dates), sorted and have columns hidden; the view can be saved and reused on any client, and
 the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline figure opens the rows behind it.
+<!-- since 2.6.0 -->
+Star the reports you use most and they list first on every client, and *Switch client* starts with the clients you
+opened last.
+<!-- /since -->
 
 <table>
   <tr>
