@@ -366,6 +366,7 @@ def test_distribution_lists(db, tenant):
     ]
     assert every["Sales"][2:8] == ["Mail-enabled security", 2, "bob@x.com", 1, "No", 1]
     assert every["Old project"][3:9] == [0, "None", 0, "No", 0, ""]
+    assert s["Every list"].columns[9] == "Hidden from address list" and every["Everyone"][9] == "No"
     assert str(every["Everyone"][4]) == "ann@x.com"
 
     attention = {r[0]: r for r in s["Lists that need attention"].rows}
@@ -532,11 +533,12 @@ def test_mailbox_trend(db, two_tenants):
     assert growth.compare is False
     ann, info = growth.rows
     assert ann[:8] == ["ann@x.com", "User", "45.0 GB", "40.0 GB", "+5.0 GB", "37.0 GB", "+5.0 GB", "49.5 GB"]
-    # 4.5 GB left at 5 GB a month: full in about 27 days.
-    full = datetime.fromisoformat(ann[8]).date()
-    assert abs((full - datetime.now(UTC).date()).days - 27) <= 1
+    # 4.5 GB left at 5 GB a month: full in about 27 days, 0.9 months.
+    assert growth.columns[8:] == ["Months until full", "Forecast full"]
+    full = datetime.fromisoformat(ann[9]).date()
+    assert abs((full - datetime.now(UTC).date()).days - 27) <= 1 and ann[8] == 0.9
     assert growth.flags == ["high", None]
-    assert info[4] == "No change" and info[7] == "No limit" and info[8] == ""
+    assert info[4] == "No change" and info[7] == "No limit" and info[8:] == ["", ""]
     tiles = _tiles(report)
     assert tiles["Total mailbox size"].value == "46.0 GB"
     assert tiles["Change in the last month"].value == "+5.0 GB"
@@ -556,7 +558,7 @@ def test_mailbox_trend_caps_far_forecasts(db, two_tenants):
     report, s = _report(db, store.get_tenant(db, alpha), "mailbox-trend")
     growth = s["Growth by mailbox"]
     ann = growth.rows[0]
-    assert ann[0] == "ann@x.com" and ann[4] == "+4 bytes" and ann[8] == "More than 2 years away"
+    assert ann[0] == "ann@x.com" and ann[4] == "+4 bytes" and ann[8:] == ["", "More than 2 years away"]
     assert growth.flags == [None, None]
     assert _tiles(report)["Full within 90 days"].value == 0
     assert f"30 days earlier ({day(datetime.now(UTC) - timedelta(days=30))})" in growth.intro

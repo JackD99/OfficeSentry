@@ -4,7 +4,7 @@ Microsoft only says how big a mailbox is now. Every night's ``mailbox_size`` obj
 are kept in the snapshots and then the daily history (``state_history.py``, 25 months by default), so each
 mailbox's size a month and three months ago is read from those, and the tenant's total from the
 ``mail.storage_bytes`` metric, which is never pruned. Growth over the last month gives each mailbox's forecast
-date for reaching its quota.
+date for reaching its quota, and how many months that is away.
 """
 
 from __future__ import annotations
@@ -28,6 +28,8 @@ WATCH_DAYS = 90
 FAR_DAYS = 2 * 365  # a forecast further off than this is noise, not a date to plan for
 FAR = "More than 2 years away"
 
+UNTIL_FULL = "Months until full"  # a number, to sort and filter on; blank when not growing or years away
+
 GROWTH = "Growth by mailbox"
 MONTHS = "Total size by month"
 
@@ -36,6 +38,12 @@ def _signed(n: float) -> str:
     if not n:
         return "No change"
     return ("+" if n > 0 else "-") + _size(abs(int(n)))
+
+
+def _months(days: float) -> float | int:
+    """Days to go as months: to one decimal place under 10 months, whole months after."""
+    months = days / 30
+    return round(months, 1) if months < 10 else round(months)
 
 
 def _collections(snap: TenantSnapshot, now: datetime) -> list[tuple[datetime, int]]:
@@ -123,6 +131,7 @@ def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
             f"{SPANS[1]} days ago",
             "Growth a month",
             "Stops sending at",
+            UNTIL_FULL,
             "Forecast full",
         ],
         empty="No mailboxes.",
@@ -140,10 +149,10 @@ def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
         before = {d: (b[1].get(mailbox_id) if b else None) for d, b in bases.items()}
         change = size - before[SPANS[0]] if size is not None and before[SPANS[0]] is not None else None
         per_month = change / span * 30 if change is not None and span else None
-        forecast, flag = "", None
+        forecast, months_left, flag = "", None, None
         if size is not None and quota:
             if size >= quota:
-                forecast, flag = "Full now", "high"
+                forecast, months_left, flag = "Full now", 0, "high"
             elif per_month and per_month > 0:
                 # Days to go as a number first: a mailbox growing by a few bytes a month is centuries from full,
                 # further than a date can reach.
@@ -154,6 +163,7 @@ def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
                     full = latest + timedelta(days=to_go)
                     forecast = full.date().isoformat()
                     days = (full - now).days
+                    months_left = _months(max(0.0, (full - now).total_seconds() / 86400))
                     flag = "high" if days <= SOON_DAYS else ("medium" if days <= WATCH_DAYS else None)
         if flag:
             soon += 1
@@ -171,6 +181,7 @@ def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
                     _size(before[SPANS[1]]),
                     "" if per_month is None else _signed(per_month),
                     _size(quota) or "No limit",
+                    months_left,
                     forecast,
                 ],
                 flag,
