@@ -248,6 +248,14 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   collection doesn't alert on what happened before it, and nothing new is
   needed from the client.
 <!-- /since -->
+<!-- since 2.6.0 -->
+- **Generic JSON alerts** also carry the alert's `severity` (`critical` to
+  `low`, or `info` for a report sent or something working again) and a `key`
+  that stays the same for the same problem (a collection that keeps failing, a
+  certificate, a system problem), with `resolves: true` on the message that
+  says it's over, so a ticketing system can update one ticket instead of
+  opening another.
+<!-- /since -->
 - **System status and system alerts** (Settings → System status): whether the
   worker runs, data is being collected, backups are recent and there's room on
   the disk, with what to do about anything that isn't. The team is emailed and
@@ -296,6 +304,13 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   *Show as it was on* (`?on=`) shows a report, its PDF and its XLSX as the
   client was at the end of any earlier day the kept data reaches back to (the
   daily history, 25 months by default), with a link to what changed since then.
+<!-- since 2.6.0 -->
+- **Favourite reports**: *Favourite* on a detail report puts it in your
+  favourites, which list first in the "All reports" menu and on the Reports tab
+  of every client you open that report on, in the order you starred them (up
+  to 30). They're your own, not shared with the team; press it again to take
+  the star off.
+<!-- /since -->
 - **Evidence and certifications** (`/tenants/<id>/evidence`): the client's
   schemes, each judged from the data. **Cyber Essentials** and **CE Plus**
   (`/tenants/<id>/evidence/cyber-essentials`, PDF, Word, text, XLSX, CSV)
@@ -771,6 +786,17 @@ and subtitle take `{client}`, `{month}`, `{quarter}`, `{msp}` and `{date}`, and 
 Anyone who can *Design custom reports* makes and edits them; removing
 one also needs *Settings*, since it comes out of any plan or schedule that sent it.
 
+<!-- since 2.6.0 -->
+The **Client documentation** starting point documents how a client's Microsoft 365 is set up rather than how
+it's doing: a **Documentation section** block per topic (domains and DNS, admins, Conditional Access, sign-in
+methods and passwords, tenant settings, trusted organisations and locations, mail rules and protection, shared
+mailboxes, distribution lists, licences, what the licences cover, apps, Intune policies, devices, Teams and
+groups, SharePoint sites). Each shows the tables of the detail report that describe the setup, without its
+"needs attention" lists, severity flags or "what to check" columns, up to 50 rows a table; there's no verdict on
+the cover, and a long contents list goes in two columns. Sent monthly by a plan or an email schedule, every copy
+is kept in the client's Report history, so the newest is always current.
+<!-- /since -->
+
 Setup notes written for your team (a detail report saying Microsoft is hiding people's names, and how to
 sign in as a Global Admin to show them) stay out of the client's copy unless the report's **Include setup
 notes in the client's copy** is ticked; the portal and the previews show them, marked "Only your team sees
@@ -960,6 +986,11 @@ and follows it through consent, Global Reader and its first collection.
 
 - **Settings** in the menu opens *Client settings*. Every settings page opens with the Settings heading, its four areas as tabs and the open area's pages under them, then the page's own title: *Clients* (Client settings, Client groups, App connection), *Reports and email* (Branding, Licence prices, Email delivery, Alerts), *Team* (Users, Microsoft sign-in, Activity log) and *System* (System status, Data retention, Updates, Support). These docs name the page, as in *Settings → Email delivery*.
 - **Switch client**, beside a client's name (staff who see more than one client): opens the page you're on for another client you see, within the client group you picked, with a box to find one by name. From an account, mailbox, group or site it opens that client's list, and a report the other client doesn't have, or that you can't open there, opens its Reports tab.
+<!-- since 2.6.0 -->
+- **Recent clients**: *Switch client* lists the clients you opened last first, under *Recent*: the client
+  you're on, then up to five more. They're kept in the browser for your account, so another computer starts
+  its own list.
+<!-- /since -->
 - **Client settings** (*Settings → Client settings*, or *Connection health* on
   the Clients page) lists every client with its status (*Onboarding*,
   *Healthy*, *Needs attention*, *Paused*, *Archived*), consent, missing
