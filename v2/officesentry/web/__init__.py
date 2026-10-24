@@ -34,6 +34,7 @@ from . import (
     designs,
     email,
     evidence,
+    favourites,
     filters,
     finding,
     grade,
@@ -245,6 +246,9 @@ def create_app(cfg: Config | None = None) -> Flask:
         # The MSP's custom reports and the person's saved views, as the report menus list them.
         custom_reports=reports.custom_reports,
         my_views=reports.my_views,
+        # The person's favourite reports (favourites.py): first in the report menus, and the star on a report.
+        favourite_reports=favourites.entries,
+        is_favourite=favourites.is_favourite,
         # Whether the audit log add-on is switched on for this install (``auditlog/addon.py``): until it is,
         # nothing about it shows.
         audit_addon_on=lambda: g.get("db") is not None and addon_switch.enabled(g.db),
@@ -421,6 +425,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(history.bp)
     app.register_blueprint(timeline.bp)
     app.register_blueprint(saved_views.bp)
+    app.register_blueprint(favourites.bp)
     app.register_blueprint(tenant_admin.bp)
     app.register_blueprint(onboarding.bp)
     app.register_blueprint(addon_pages.bp)

@@ -38,6 +38,7 @@ class Choice:
     name: str
     href: str
     current: bool
+    tenant_id: int = 0  # for the menu's Recent group (app.js)
 
 
 def _target(endpoint: str, args: dict) -> tuple[str, dict]:
@@ -64,11 +65,11 @@ def choices(tenant_id: int) -> list[Choice]:
     out = []
     for t in tenants:
         if t["id"] == tenant_id:
-            out.append(Choice(t["name"], request.path, True))
+            out.append(Choice(t["name"], request.path, True, t["id"]))
             continue
         here, extra = endpoint, kept
         missing = report is not None and report.shown is not None and not report.shown(g.db, t)
         if missing or not can_open(here, tenant_id=t["id"], **extra):
             here, extra = "reports.data_index" if report is not None and report_groups(t["id"]) else FALLBACK, {}
-        out.append(Choice(t["name"], url_for(here, tenant_id=t["id"], **extra), False))
+        out.append(Choice(t["name"], url_for(here, tenant_id=t["id"], **extra), False, t["id"]))
     return out

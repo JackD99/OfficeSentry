@@ -41,6 +41,7 @@ ANYONE = {
     "tenants.tenant",
     "views.save",
     "views.delete",
+    "favourites.toggle",  # refuses a report the person opens on no client itself (test_favourites.py)
 }
 # Steps of signing in, which send someone already signed in back to the start.
 SIGNING_IN = {"auth.new_password", "auth.login_code"}

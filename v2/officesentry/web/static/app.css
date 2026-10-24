@@ -2027,3 +2027,5 @@ svg.spark .spark-dot { fill: var(--decor); }
   .entry { grid-template-columns: 1fr; gap: 2px; }
   .month-band, .entry, .entry-none, .measures li { padding-left: var(--space-4); padding-right: var(--space-4); }
 }
+/* Favourite reports (_favourite.html): the star fills in when the report is one of the person's favourites. */
+button.fav.on .icon { fill: var(--warn); stroke: var(--warn); }

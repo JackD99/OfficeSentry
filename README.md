@@ -167,6 +167,10 @@ each Autodesk team given to one client. [Setting up Autodesk](v2/docs/autodesk.m
 53 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
 values (or by age, for dates), sorted and have columns hidden; the view can be saved and reused on any client, and
 the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline figure opens the rows behind it.
+<!-- since 2.6.0 -->
+Star the reports you use most and they list first on every client, and *Switch client* starts with the clients you
+opened last.
+<!-- /since -->
 
 <table>
   <tr>
