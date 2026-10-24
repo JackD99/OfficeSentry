@@ -11,12 +11,14 @@ from datetime import UTC, datetime
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
+from .. import permissions
 from ..checks import RULES
 from ..db import audit
 from ..reports import (
     branding,
     data_reports,
     month_changes,
+    over_time,
     rollups,
     tables,
     views,
@@ -70,6 +72,8 @@ def index():
         return redirect(url_for("across.rows_index", key=key))
     if key == "checks" and can("reports.security"):
         return redirect(url_for("across.checks"))
+    if key == "over-time" and _measures():
+        return redirect(url_for("across.over_time_page"))
     if key in ("", "review") or key not in dict(_available()):
         return redirect(url_for("tenants.dashboard"))
     return redirect(url_for("across.rollup", key=key))
@@ -112,9 +116,9 @@ def _picker() -> dict:
     monthly review is the Clients page itself, open to every staff role; the insurance evidence and Checks
     need the security capability."""
     if not can("clients.compare"):
-        return {"main": [], "picker": False}
+        return {"main": [], "picker": False, "over_time": False}
     main = [(k, title) for k, title in rollups.available()[:2] if k == "review" or can(_rollup_capability(k))]
-    return {"main": main, "picker": True}
+    return {"main": main, "picker": True, "over_time": bool(_measures())}
 
 
 def column_capability(rollup: rollups.Rollup, column: rollups.Column) -> str:
@@ -351,6 +355,69 @@ def checks_download(ext: str):
         )
     )
     return file_response(body, _across_name("checks", category), ext)
+
+
+# -- Over time ----------------------------------------------------------------------------------
+
+
+def _measure_capability(measure: over_time.Measure) -> str:
+    return permissions.SUMMARY_CAPABILITY.get(measure.report) or report_capability(measure.report)
+
+
+def _measures() -> list[over_time.Measure]:
+    """The measures this person sees somewhere: each needs its report's area (findings the security one)."""
+    return [m for m in over_time.MEASURES.values() if can(_measure_capability(m))]
+
+
+def _over_time_grid() -> tuple[over_time.Grid, list[over_time.Measure]]:
+    """The grid for the measure ``?measure=`` names, or the first this person sees, over the clients where
+    they see it."""
+    offered = _measures()
+    if not offered:
+        abort(403)
+    named = over_time.MEASURES.get(request.args.get("measure", ""))
+    measure = named if named in offered else next((m for m in offered if m.key == over_time.DEFAULT), offered[0])
+    need_also(_measure_capability(measure))  # so the clients listed leave out those it's closed on
+    return over_time.build(g.db, scoped_tenants(), measure), offered
+
+
+@bp.get("/across/over-time")
+@needs("clients.compare")
+@group_aware
+def over_time_page():
+    grid, offered = _over_time_grid()
+    return render_template("over_time.html", grid=grid, offered=offered, **_picker())
+
+
+@bp.get("/across/over-time.csv", defaults={"ext": "csv"})
+@bp.get("/across/over-time.xlsx", defaults={"ext": "xlsx"})
+@needs("clients.compare", "export")
+@group_aware
+def over_time_download(ext: str):
+    grid, _ = _over_time_grid()
+    m = grid.measure
+    table = grid.to_table()
+    name = _across_name("over-time", views.slug(m.label))
+    audit(g.db, g.user["username"], "rollup_downloaded", None, f"{name}.{ext}")
+    if ext == "csv":
+        return file_response(tables.to_csv(table), name, ext)
+    now, change = grid.now_and_change()
+    body = tables.to_xlsx(
+        [table],
+        cover=_cover(
+            f"{m.label} by month",
+            scope().label,
+            f"{m.label} for every client at each month's end over the last {len(grid.months)} months (this "
+            "month's is the latest), the clients slipping first.",
+            facts=[
+                ("Clients", len(grid.rows), ""),
+                ("Slipped", len(grid.slipped), ""),
+                ("Improved", len(grid.improved), ""),
+                (("Average now" if grid.averages else "Total now"), m.figure(now, unit=True), ""),
+            ],
+        ),
+    )
+    return file_response(body, name, ext)
 
 
 @bp.get("/across/<key>.csv", defaults={"ext": "csv"})
