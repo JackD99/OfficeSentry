@@ -326,6 +326,14 @@ GRAPH: tuple[Endpoint, ...] = (
         fallback="Skipped when the tenant has no Copilot licences",
         beta="Copilot usage is only in beta",
     ),
+    Endpoint(
+        "/copilot/reports/getMicrosoft365CopilotUserCountTrend(period={period})",
+        BETA,
+        "Reports.Read.All",
+        ("usage_reports",),
+        fallback="Only asked for when someone holds Copilot; the Copilot report leaves its daily chart out without it",
+        beta="v1.0 returns CSV only; beta returns JSON",
+    ),
     # Security and devices.
     Endpoint("/security/secureScores", V1, "SecurityEvents.Read.All", ("secure_score",)),
     Endpoint("/security/secureScoreControlProfiles", V1, "SecurityEvents.Read.All", ("secure_score",)),

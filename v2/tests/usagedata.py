@@ -132,7 +132,72 @@ TEAMS = [
 ]
 
 
-def mock_usage(rsps, *, active=None, apps=None, status=200, copilot_status=200, concealed=False):
+# Copilot's per-person report names each app's last activity date "<prefix>LastActivityDate".
+COPILOT_PREFIXES = {
+    "chat": "copilotChat",
+    "teams": "microsoftTeamsCopilot",
+    "word": "wordCopilot",
+    "excel": "excelCopilot",
+    "powerPoint": "powerPointCopilot",
+    "outlook": "outlookCopilot",
+    "oneNote": "oneNoteCopilot",
+    "loop": "loopCopilot",
+}
+
+
+def copilot_user(upn, last=None, **apps):
+    """A row of Copilot's per-person report (Microsoft's sample): ``last`` days since any use, and days since
+    each app's (``word=3``, ``chat=1``)."""
+    row = {
+        "reportRefreshDate": REFRESHED,
+        "userPrincipalName": upn,
+        "displayName": upn.split("@")[0].title(),
+        "lastActivityDate": days_ago(last) or "",
+        "copilotActivityUserDetailsByPeriod": [{"reportPeriod": 90}],
+    }
+    for app, prefix in COPILOT_PREFIXES.items():
+        row[f"{prefix}LastActivityDate"] = days_ago(apps.get(app)) or ""
+    return row
+
+
+def copilot_trend(active_by_day, enabled=3):
+    """Copilot's daily counts, as Microsoft returns them: ``active_by_day`` people per day, oldest first, ending on
+    the report's refresh date."""
+    days = len(active_by_day)
+    return [
+        {
+            "reportRefreshDate": REFRESHED,
+            "reportPeriod": 90,
+            "adoptionByDate": [
+                {
+                    "reportDate": days_ago(2 + days - 1 - i),
+                    "anyAppEnabledUsers": enabled,
+                    "anyAppActiveUsers": active,
+                    "microsoftTeamsEnabledUsers": enabled,
+                    "microsoftTeamsActiveUsers": min(active, 1),
+                    "wordEnabledUsers": enabled,
+                    "wordActiveUsers": active,
+                    "copilotChatEnabledUsers": enabled,
+                    "copilotChatActiveUsers": active,
+                }
+                for i, active in enumerate(active_by_day)
+            ],
+        }
+    ]
+
+
+def mock_usage(
+    rsps,
+    *,
+    active=None,
+    apps=None,
+    status=200,
+    copilot_status=200,
+    concealed=False,
+    copilot=None,
+    trend=None,
+    trend_status=200,
+):
     def get(path, value, code=200):
         body = {"value": value} if code == 200 else {"error": {"code": "Forbidden", "message": "Denied"}}
         rsps.get(f"{BETA}/reports/{path}", json=body, status=code)
@@ -146,7 +211,13 @@ def mock_usage(rsps, *, active=None, apps=None, status=200, copilot_status=200, 
         f"{GRAPH_ROOT}/v1.0/admin/reportSettings",
         json={"id": "reportSettings", "displayConcealedNames": concealed},
     )
-    body = {"value": []} if copilot_status == 200 else {"error": {"code": "BadRequest", "message": "Bad period"}}
+    error = {"error": {"code": "BadRequest", "message": "Bad period"}}
+    body = {"value": copilot or []} if copilot_status == 200 else error
     rsps.get(
         f"{BETA}/copilot/reports/getMicrosoft365CopilotUsageUserDetail(period='D90')", json=body, status=copilot_status
+    )
+    rsps.get(
+        f"{BETA}/copilot/reports/getMicrosoft365CopilotUserCountTrend(period='D90')",
+        json={"value": trend or []} if trend_status == 200 else error,
+        status=trend_status,
     )
