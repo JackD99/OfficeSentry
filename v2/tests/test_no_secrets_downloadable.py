@@ -22,7 +22,7 @@ import pytest
 from cryptography import x509
 from flask import Response
 
-from officesentry import alerts, cert_lifecycle, logs, sso, store, system_health, totp
+from officesentry import alerts, autotask, cert_lifecycle, logs, sso, store, system_health, totp
 from officesentry.certs import generate_certificate
 from officesentry.db import utcnow
 from tests.conftest import PASSWORD, PASSWORD_HASH, login, make_user
@@ -38,6 +38,8 @@ MAIL_SECRET = "MailClientSecretQ8~zLmN3pXv"
 SMTP_PASSWORD = "SmtpPassw0rdKx93hdQQ"
 WEBHOOK_KEY = "hookKeyAa11Bb22Cc33"
 SIGNING_SECRET = "AlertSigningSecret55aa77bb"
+AUTOTASK_SECRET = "AutotaskApiSecret*9q2Wv7"
+AUTOTASK_CODE = "AUTOTASKTRACKINGID7Q3MZ5Y2"
 DEVICE_CODE = "DAQABAAEAAADeviceCodeSecretZZ0123456789"
 OTHER_TOTP = "JBSWY3DPEHPK3PXPVICTIMTOTPAAAAAA"
 OTHER_PENDING_TOTP = "KRSXG5DTNFTW4ZDBMVSXI5DVMVZGKZZA"
@@ -110,6 +112,24 @@ def planted(app, db, vault, cfg, world):  # noqa: F811
         },
     )
     secrets |= {"webhook key": WEBHOOK_KEY, "signing secret": SIGNING_SECRET}
+
+    # Autotask, connected and turned on, so its page shows everything it does.
+    autotask.save_settings(
+        db,
+        {
+            "autotask.enabled": "1",
+            "autotask.username": "officesentry@msp.example",
+            "autotask.secret_enc": vault.encrypt(AUTOTASK_SECRET),
+            "autotask.code_enc": vault.encrypt(AUTOTASK_CODE),
+            "autotask.zone_api": "https://webservices5.autotask.net/ATServicesRest/",
+            "autotask.zone_web": "https://ww5.autotask.net/",
+            "autotask.checked_at": utcnow(),
+            "autotask.choices": '{"status": [[1, "New", true]], "priority": [[1, "High", false], [2, "Medium", true]]}',
+            "autotask.status": "1",
+            **{f"autotask.priority_{p}": "1" for p in autotask.PRIORITY_SEVERITIES},
+        },
+    )
+    secrets |= {"Autotask secret": AUTOTASK_SECRET, "Autotask tracking identifier": AUTOTASK_CODE}
 
     secrets["monitoring token"] = system_health.new_token(db).removeprefix("osh_")
     secrets["monitoring token's hash"] = db.execute(
