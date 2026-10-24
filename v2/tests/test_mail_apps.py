@@ -153,3 +153,15 @@ def test_tenants_only_see_their_own_mail_apps(db, two_tenants):
     assert len(_table(_report(db, alpha), "Everyone's mail apps")) == 3
     assert list(_table(_report(db, bravo), "Everyone's mail apps")) == ["ann@x.com"]
     assert not _section(_report(db, bravo), "People on an unsupported Outlook").rows
+
+
+def test_nobody_on_desktop_outlook(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, usage_kw={"mail_apps": ud.MAIL_APPS[:1]})  # Outlook on the web and a phone over IMAP
+    report = _report(db, alpha)
+    assert not _section(report, "Outlook versions").rows
+    assert not _section(report, "People on an unsupported Outlook").rows
+    tiles = {t.label: (t.value, t.foot, t.tone) for t in report.tiles}
+    assert tiles["Desktop Outlook"][:2] == (0, "Nobody on Windows or Mac")
+    assert tiles["Unsupported Outlook"] == (0, "People on an Outlook Microsoft no longer supports", "ok")
+    assert list(_table(report, "Everyone's mail apps")) == ["ann@x.com"]
