@@ -87,6 +87,7 @@
 {% endif %}
 
 {% if report.footnote and not report.unavailable %}<p class="footnote">{{ report.footnote }}</p>{% endif %}
+{% if price_note and not report.unavailable %}<p class="footnote">{{ price_note }}{% if can('settings.manage') %} <a href="{{ url_for('reports.prices') }}">Licence prices</a>{% endif %}</p>{% endif %}
 <p class="footnote">Data from
 {% for title, finished in report.sources %}{{ title }} ({% if finished %}{{ ts(finished) }}{% else %}not collected yet{% endif %}){% if not loop.last %}, {% endif %}{% endfor %}.</p>
 </div>

@@ -486,7 +486,7 @@ def unassigned_licences(snap: TenantSnapshot, now: datetime):
     if skus is None:
         return _unavailable("Licence data hasn't been collected yet")
     subscriptions = snap.objects("tenant_profile", "company_subscription")
-    summary = licence_summary(skus, None, load_prices(snap.conn), now, subscriptions)
+    summary = licence_summary(skus, None, load_prices(snap.conn, snap.tenant), now, subscriptions)
     row = snap.conn.execute("SELECT value FROM settings WHERE key = 'currency'").fetchone()
     currency = row["value"] if row else "GBP"
     findings = []

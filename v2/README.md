@@ -136,8 +136,27 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   and every finding row tells staff who holds it. Client accounts never see who
   holds what.
 <!-- /since -->
-- **Licence prices** (*Settings → Licence prices*): enter monthly prices per SKU
-  to cost waste and right-sizing savings.
+- **Licence prices** (*Settings → Licence prices*): what a client pays for each
+  licence a month, used to cost licence waste, right-sizing savings, renewals
+  and the Accounts page. A licence's price is your own price for it when you've
+  entered one, else Microsoft's list price, plus your margin. Microsoft's US
+  list prices are built in and dated (`officesentry/list_prices.py`, updated in
+  a release when Microsoft changes them); they apply when the currency is USD,
+  and can be turned off. **Your margin** is one percentage covering what your
+  reseller adds and what you add, applied to every price, negative for a
+  discount. A client with a different reseller or a discount can have **its own
+  margin**, which replaces yours on its licences. Priced reports tell the team
+  where their prices came from; clients and downloads never see the margin.
+<!-- since 2.6.0 -->
+- **Import a price list** (*Settings → Licence prices → Import a price list*):
+  paste or upload whatever your reseller exports, in any currency. The columns
+  don't have to be in any order: the headings on the first row say which holds
+  the licence (a product name or a part number, matched through wording like
+  "NCE" or "Annual commitment") and which holds the price, and a year's prices
+  are divided by 12. You see every row, what it matched and what will change
+  before anything is saved; rows that aren't licences Office Sentry reports on
+  are left out.
+<!-- /since -->
 - **Findings** (`/tenants/<id>/findings`): every finding keeps first seen,
   resolved and reopened dates. Anyone who can accept risks (Second line, Team
   leader and Administrator by default) can accept one with a reason and an

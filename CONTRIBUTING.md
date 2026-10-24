@@ -278,7 +278,11 @@ does the work. To make a release:
    [website/README.md](website/README.md#whats-new)) should list its headlines
    by now. The `<!-- since x.y.z -->` markers for this version can go, and
    text on the website that the release changes (rather than adds) is changed
-   here. Merge it once CI is green.
+   here. Check Microsoft's
+   [licensing news](https://www.microsoft.com/en-us/licensing/news) while
+   you're there: if its list prices have moved, update `PRICES` and `AS_OF` in
+   `v2/officesentry/list_prices.py` in the same pull request. Merge it once CI
+   is green.
 2. On GitHub: **Actions** → **Release** → **Run workflow**, leave "Use
    workflow from" on `main`, type the version (`2.1.0`) and press **Run
    workflow**. (Pushing a tag, `git push origin v2.1.0`, does the same.)
