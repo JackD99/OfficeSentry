@@ -4,8 +4,9 @@
 {% set digest = s.kind == 'digest' %}
 {% set coming_up = digest and 'upcoming' in s.reports %}
 {% set views_email = digest and 'views' in s.reports %}
+{% set ledger = digest and 'today' in s.reports %}
 {% set editing = s.id %}
-{% set heading = ('Edit ' if editing else 'New ') ~ ('Coming up email' if coming_up else ('saved view email' if views_email else ('digest' if digest else 'scheduled email'))) %}
+{% set heading = ('Edit ' if editing else 'New ') ~ ('Coming up email' if coming_up else ('saved view email' if views_email else ("Today's ledger email" if ledger else ('digest' if digest else 'scheduled email')))) %}
 {% block title %}{{ heading }} · Office Sentry{% endblock %}
 {% macro choice(o) -%}
 <label class="choice"><input type="checkbox" name="reports" value="{{ o.key }}" {% if o.key in s.reports %}checked{% endif %}>
@@ -42,10 +43,10 @@
 {% set tag = 'h2' if tenant else 'h1' %}
 <div class="page-head">
   <div><{{ tag }}{% if tenant %} class="page-title"{% endif %}>{{ heading }}</{{ tag }}>
-    <div class="sub">{% if coming_up %}One email to your team of what falls due in the next 90 days, across every client.{% elif views_email %}Your saved views of a report, with every client's rows (or one group's), for your team.{% elif digest %}One email to your team summarising every client, or one group of them.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
+    <div class="sub">{% if coming_up %}One email to your team of what falls due in the next 90 days, across every client.{% elif ledger %}Today's ledger for your team every weekday morning, across every client or one group of them.{% elif views_email %}Your saved views of a report, with every client's rows (or one group's), for your team.{% elif digest %}One email to your team summarising every client, or one group of them.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
 </div>
 
-<form method="post" class="schedule-form narrow-lg" id="schedule-form">
+<form method="post" class="schedule-form narrow-lg" id="schedule-form"{% if ledger %} data-cadence="Every weekday"{% endif %}>
   {{ csrf() }}
   <section class="card">
     <h2><span class="step-no">1</span> What to send</h2>
@@ -63,6 +64,16 @@
     {% endif %}
     <div class="label-sm">Your saved views <span class="muted">· PDF and XLSX have the tables the view shapes; CSV is one file per table</span></div>
     {{ view_choices(view_options) }}
+    {% elif ledger %}
+    <p class="muted small">What happened since the last email, worst first: new critical and high findings, collections that failed, clients waiting for access and what's due this week, then what was fixed, with who each line is handed to. Below them, what was seen before and is still open. Monday's covers the weekend. <a href="{{ url_for('home.today') }}">See Today</a>.</p>
+    {% if groups %}
+    <label>Clients
+      <select name="group_id">
+        <option value="">Every client</option>
+        {% for gr in groups %}<option value="{{ gr.id }}"{% if s.group_id == gr.id %} selected{% endif %}>{{ gr.category ~ ': ' if gr.category }}{{ gr.name }} ({{ gr.tenants|plural('client') }})</option>{% endfor %}
+      </select>
+      <span class="hint">One email per group lets each team start the day with just their own clients.</span></label>
+    {% endif %}
     {% elif digest %}
     <p class="muted small">Which clients need attention, what's new and what's been fixed, with each client's Secure Score. Worst clients first.</p>
     {% if groups %}
@@ -106,17 +117,23 @@
 
   <section class="card">
     <h2><span class="step-no">2</span> When</h2>
+    {% if ledger %}
+    {#- Every weekday whatever the stored frequency (delivery.cadence). -#}
+    <input type="radio" name="frequency" value="weekly" checked hidden>
+    <p>Every weekday, Monday to Friday.</p>
+    {% else %}
     <div class="seg" role="radiogroup" aria-label="How often">
       {% for key, label in frequencies.items() %}
       <label><input type="radio" name="frequency" value="{{ key }}" {% if s.frequency == key %}checked{% endif %}><span>{{ label }}</span></label>
       {% endfor %}
     </div>
+    {% endif %}
     <div class="form-row">
-      <label data-show="weekly">Day
+      {% if not ledger %}<label data-show="weekly">Day
         <select name="day_of_week">{% for d in days %}<option value="{{ loop.index0 }}" {% if s.day_of_week == loop.index0 %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></label>
       <label data-show="monthly quarterly">Day of the month
         <select name="day_of_month">{% for d in range(1, 29) %}<option value="{{ d }}" {% if s.day_of_month == d %}selected{% endif %}>{{ ordinal(d) }}</option>{% endfor %}</select>
-        <span class="hint" data-show="quarterly">In January, April, July and October.</span></label>
+        <span class="hint" data-show="quarterly">In January, April, July and October.</span></label>{% endif %}
       <label>Time
         <select name="hour">{% for h in range(24) %}<option value="{{ h }}" {% if s.hour == h %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select></label>
       <label class="grow-2">Timezone
@@ -144,7 +161,7 @@
     {% else %}
     <p class="footnote m0">New contacts get this client's report plan emails, which have reports you can't open, so someone who can open all of them adds contacts.</p>
     {% endif %}
-    <div class="label-sm">Your team <span class="muted">· {{ 'only your team gets this email' if coming_up or views_email else 'only your team gets digests' if digest else 'get a hidden copy, so clients never see them' }}</span></div>
+    <div class="label-sm">Your team <span class="muted">· {{ 'only your team gets this email' if coming_up or views_email or ledger else 'only your team gets digests' if digest else 'get a hidden copy, so clients never see them' }}</span></div>
     {{ contact_checks(team, chosen, 'No team members yet.' if not digest else 'No team members yet. Add one above.') }}
     {% if not team and not digest and can('settings.manage') %}<p class="footnote m0"><a href="{{ url_for('email.overview') }}#team">Add your team</a> to copy them in on client emails.</p>{% endif %}
   </section>
@@ -157,7 +174,7 @@
   </section>
 
   <div class="sticky-actions form-actions">
-    <button class="primary">{{ 'Save changes' if editing else ('Create email' if coming_up or views_email else 'Create digest' if digest else 'Schedule email') }}</button>
+    <button class="primary">{{ 'Save changes' if editing else ('Create email' if coming_up or views_email or ledger else 'Create digest' if digest else 'Schedule email') }}</button>
     <a class="btn ghost" href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) if tenant else url_for('email.overview') }}">Cancel</a>
     <span class="muted small summary" id="summary" aria-live="polite"></span>
   </div>
@@ -186,8 +203,8 @@
       el.hidden = el.dataset.show.split(' ').indexOf(f) < 0;
     });
     var hour = ('0' + form.hour.value).slice(-2) + ':00';
-    var text = f === 'weekly' ? 'Every ' + days[form.day_of_week.value] :
-      (f === 'monthly' ? 'Monthly on the ' : 'Quarterly on the ') + ordinal(+form.day_of_month.value);
+    var text = form.dataset.cadence || (f === 'weekly' ? 'Every ' + days[form.day_of_week.value] :
+      (f === 'monthly' ? 'Monthly on the ' : 'Quarterly on the ') + ordinal(+form.day_of_month.value));
     var people = form.querySelectorAll('input[name=contacts]:checked').length + (form.new_email && form.new_email.value ? 1 : 0);
     document.getElementById('summary').textContent = text + ' at ' + hour + ' to ' + people + (people === 1 ? ' person' : ' people') + '.';
     form.querySelectorAll('details.report-choices').forEach(function (d) {

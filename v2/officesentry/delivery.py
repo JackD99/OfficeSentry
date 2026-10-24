@@ -5,7 +5,8 @@
   at a time in the schedule's own timezone.
 * **Digests** send the MSP's own team one cross-tenant summary: the tenant
   digest, or (``reports`` is ``["upcoming"]``) the Coming up email of what falls
-  due in the next 90 days (``upcoming.py``).
+  due in the next 90 days (``upcoming.py``), or (``["today"]``) Today's ledger
+  every weekday morning (``home.today``).
 * **Alert emails** go out when a collection opens findings at or above a
   severity: the same event (``alerts.after_sync``) that posts to Teams, Slack
   or a webhook. Failed ones are retried by ``tick()``.
@@ -36,7 +37,7 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
-from . import alerts, issued, mailer, schedule, store, tasks, tenant_groups, upcoming
+from . import alerts, home, issued, mailer, schedule, store, tasks, tenant_groups, upcoming
 from .checks import RULES
 from .db import utcnow
 from .formatting import money
@@ -81,6 +82,12 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 CSV = "text/csv; charset=utf-8"
 VIEW_FORMATS = {"pdf": "PDF", "xlsx": "XLSX", "csv": "CSV"}
 VIEWS_KEY = "views"  # a digest schedule whose reports is ["views"]: saved views across tenants, team only
+# A digest schedule whose reports is ["today"]: Today's ledger for the team, every weekday whatever its stored
+# frequency. email_schedules.frequency only takes weekly, monthly and quarterly (migration 0006's CHECK), and
+# widening a CHECK means rebuilding a table others point at, so the cadence comes from what it sends
+# (``cadence``). It's stored as weekly.
+LEDGER_KEY = "today"
+WEEKDAYS = "weekdays"
 
 # Offered in the schedule form; the server's own timezone and the schedule's
 # current one are always added.
@@ -364,6 +371,8 @@ def schedule_tz(schedule, default_tz: str) -> str:
 
 def schedule_cron(frequency: str, day_of_week: int, day_of_month: int, hour: int) -> str:
     """A schedule's send time as a cron expression for ``schedule.py`` (cron counts Sunday as 0)."""
+    if frequency == WEEKDAYS:
+        return f"0 {hour} * * 1-5"
     if frequency == "weekly":
         return f"0 {hour} * * {(day_of_week + 1) % 7}"
     if frequency == "monthly":
@@ -372,6 +381,8 @@ def schedule_cron(frequency: str, day_of_week: int, day_of_month: int, hour: int
 
 
 def period_key(frequency: str, d: date) -> str:
+    if frequency == WEEKDAYS:
+        return d.isoformat()
     if frequency == "weekly":
         iso_year, week, _ = d.isocalendar()
         return f"{iso_year}-W{week:02d}"
@@ -399,14 +410,19 @@ def period_done(last: str | None, period: str) -> bool:
     if not last:
         return False
 
-    def kind(key: str) -> str:  # "2026-10" monthly, "2026-W41" weekly, "2026-Q4" quarterly
-        return "M" if key[5:6].isdigit() else key[5:6]
+    def kind(key: str) -> str:  # "2026-10" monthly, "2026-W41" weekly, "2026-Q4" quarterly, "2026-10-26" a day
+        return ("D" if len(key) == 10 else "M") if key[5:6].isdigit() else key[5:6]
 
     return last == period or (kind(last) == kind(period) and last > period)
 
 
+def cadence(s) -> str:
+    """How often a schedule sends: its frequency, or every weekday for Today's ledger (``LEDGER_KEY``)."""
+    return WEEKDAYS if is_ledger(s) else s["frequency"]
+
+
 def schedule_slot(s, default_tz: str, now: datetime) -> tuple[str, datetime]:
-    return slot(s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"], schedule_tz(s, default_tz), now)
+    return slot(cadence(s), s["day_of_week"], s["day_of_month"], s["hour"], schedule_tz(s, default_tz), now)
 
 
 def initial_period(frequency: str, day_of_week: int, day_of_month: int, hour: int, tz: str, now: datetime) -> str:
@@ -442,7 +458,7 @@ def next_send(s, default_tz: str, now: datetime | None = None) -> datetime | Non
         if s["retry_at"]:
             due = datetime.fromisoformat(s["retry_at"].replace("Z", "+00:00"))
         return due.astimezone(ZoneInfo(tz))
-    cron = schedule_cron(s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"])
+    cron = schedule_cron(cadence(s), s["day_of_week"], s["day_of_month"], s["hour"])
     return schedule.next_fire(cron, tz, now).astimezone(ZoneInfo(tz))
 
 
@@ -453,6 +469,8 @@ def ordinal(n: int) -> str:
 
 def describe(s) -> str:
     at = f"at {s['hour']:02d}:00"
+    if cadence(s) == WEEKDAYS:
+        return f"Every weekday {at}"
     if s["frequency"] == "weekly":
         return f"Every {DAYS[s['day_of_week']]} {at}"
     if s["frequency"] == "monthly":
@@ -461,8 +479,12 @@ def describe(s) -> str:
 
 
 def period_label(period: str) -> str:
-    """What an email calls its period: "October 2026", "week of 5 Oct 2026" or "Q4 2026" (a ``period_key``)."""
+    """What an email calls its period: "October 2026", "week of 5 Oct 2026", "Q4 2026" or "Monday 26 October 2026"
+    (a ``period_key``)."""
     year, rest = period[:4], period[5:]
+    if len(period) == 10:
+        d = date.fromisoformat(period)
+        return f"{d.strftime('%A')} {d.day} {d.strftime('%B %Y')}"
     if rest.startswith("W"):
         monday = date.fromisocalendar(int(year), int(rest[1:]), 1)
         return f"week of {monday.day} {monday.strftime('%b %Y')}"
@@ -970,8 +992,15 @@ def is_views(schedule) -> bool:
     return schedule["kind"] == "digest" and VIEWS_KEY in json.loads(schedule["reports"] or "[]")
 
 
+def is_ledger(schedule) -> bool:
+    """A digest schedule that sends Today's ledger to the team every weekday morning."""
+    return schedule["kind"] == "digest" and LEDGER_KEY in json.loads(schedule["reports"] or "[]")
+
+
 def digest_builder(schedule):
-    """What builds a digest schedule's email: the tenant digest, Coming up, or saved views."""
+    """What builds a digest schedule's email: the tenant digest, Coming up, saved views or Today's ledger."""
+    if is_ledger(schedule):
+        return build_ledger_email
     if is_views(schedule):
         return build_views_email
     return build_upcoming_email if is_upcoming(schedule) else build_digest_email
@@ -984,6 +1013,8 @@ def schedule_titles(schedule, conn=None) -> list[str]:
         return report_titles(schedule["reports"], conn) + chosen
     if is_views(schedule):
         return chosen or ["Saved views"]
+    if is_ledger(schedule):
+        return [LEDGER_TITLE]
     return [upcoming.TITLE] if is_upcoming(schedule) else ["Client digest"]
 
 
@@ -1066,6 +1097,108 @@ def build_upcoming_email(app, conn, schedule, contacts, *, now: datetime | None 
         ),
         [filename] if schedule["include_xlsx"] else [],
     )
+
+
+LEDGER_TITLE = "Today's ledger"
+LEDGER_ROWS = 25  # new lines listed in the email; Today has the rest
+LEDGER_SEEN = 5  # lines seen before and still open, listed under the new ones
+
+
+def ledger_since(s, default_tz: str, due: datetime) -> datetime:
+    """Where the emailed ledger's line falls: the send before this one (Friday's, for Monday's), never further back
+    than Today looks (``home.LOOKBACK``)."""
+    cron = schedule_cron(WEEKDAYS, 0, 1, s["hour"])
+    before = schedule.previous_fire(cron, schedule_tz(s, default_tz), due - timedelta(minutes=1))
+    return max(before, due - home.LOOKBACK)
+
+
+def ledger_data(conn, schedule, default_tz: str, now: datetime) -> tuple[home.Today, dict | None]:
+    """Today's ledger as the team's email shows it: every active tenant (or the schedule's group), every kind of
+    line, new since the last send. Returns the ledger and the group."""
+    _, due = schedule_slot(schedule, default_tz, now)
+    zone = ZoneInfo(schedule_tz(schedule, default_tz))
+    since = ledger_since(schedule, default_tz, due)
+    days = (now.astimezone(zone).date() - since.astimezone(zone).date()).days  # Send now on a Saturday: "Thursday"
+    local = since.astimezone(zone)
+    label = "yesterday" if days <= 1 else local.strftime("%A") if days < 7 else f"{local.day} {local.strftime('%b')}"
+    group = tenant_groups.get(conn, schedule["group_id"])
+    in_group = " AND id IN (SELECT tenant_id FROM tenant_group_members WHERE group_id = ?)" if group else ""
+    tenants = conn.execute(
+        f"SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL{in_group} ORDER BY name COLLATE NOCASE",
+        (group["id"],) if group else (),
+    ).fetchall()
+    return home.today(conn, tenants, now, since=since, since_label=label), group
+
+
+def ledger_subject(data: home.Today, when: date, group: str | None = None) -> str:
+    """The answer first: "Today's ledger · Mon 26 Oct: 3 things need someone"."""
+    lead = re.split(r"[:.]", data.sentence(), maxsplit=1)[0].removesuffix(" today")
+    lead = lead if lead[:1].isdigit() else lead[:1].lower() + lead[1:]
+    stamp = f"{when.strftime('%a')} {when.day} {when.strftime('%b')}"
+    return " · ".join([LEDGER_TITLE, *([group] if group else []), stamp]) + f": {lead}"
+
+
+def build_ledger_email(app, conn, schedule, contacts, *, now: datetime | None = None, attach: bool = True) -> Built:
+    """Today's ledger for the team, every weekday morning: what happened across the clients since the last
+    email, worst first, then what was seen before and is still open. Like the tenant digest it goes to the MSP's
+    team only, so it lists every kind of line on every client (or the schedule's group)."""
+    from flask import has_request_context, url_for
+
+    from .web.home import line_href, stamp  # the page's own links and times
+
+    now = now or datetime.now(UTC)
+    default_tz = _cfg(app).timezone
+    data, group = ledger_data(conn, schedule, default_tz, now)
+    zone = ZoneInfo(schedule_tz(schedule, default_tz))
+    when = now.astimezone(zone).date()  # the day it's read, though Send now at the weekend records Friday's period
+    label = period_label(period_key(WEEKDAYS, when))
+    subject = ledger_subject(data, when, group["name"] if group else None)
+    look, inline = email_brand(conn)
+    base = _cfg(app).base_url.rstrip("/")
+    # The lines' links, outside a request too; inside one (Send now, Preview) a nested request context would close
+    # the request's database connection (``render``).
+    with nullcontext() if has_request_context() else app.test_request_context(base_url=base):
+        for e in data.entries:
+            e.href = base + line_href(e)
+            e.stamp, e.stamp_full = stamp(e.when, now, zone)
+        today_url = base + url_for("home.today")
+    since = stamp(data.since, now, zone)[1]
+    html = render(
+        app,
+        "emails/ledger.html",
+        subject=subject,
+        data=data,
+        label=label,
+        since=since,
+        group=group["name"] if group else None,
+        message=schedule["message"],
+        shown=LEDGER_ROWS,
+        shown_seen=LEDGER_SEEN,
+        today_url=today_url,
+        **look,
+    )
+    new, seen = data.new, data.seen
+    lines = [f"{LEDGER_TITLE}, {label}" + (f": {group['name']}" if group else ""), ""]
+    if schedule["message"]:
+        lines += [schedule["message"], ""]
+    lines.append(data.sentence())
+    for title, items, limit in (
+        (f"Since {data.since_label}", new, LEDGER_ROWS),
+        ("Seen before, still open", seen, LEDGER_SEEN),
+    ):
+        if not items:
+            continue
+        lines += ["", f"{title}:"]
+        for e in items[:limit]:
+            held = f" Handed to {e.holder}." if e.holder else ""
+            lines.append(
+                f"  {e.stamp} {e.word} · {e.tenant['name']}: {e.text}.{' ' + e.detail if e.detail else ''}{held}"
+            )
+        if len(items) > limit:
+            lines.append(f"  And {len(items) - limit} more on Today.")
+    lines += ["", f"Open Today: {today_url}"]
+    to, bcc = split_recipients(contacts)
+    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html, inline=inline), [])
 
 
 @dataclass

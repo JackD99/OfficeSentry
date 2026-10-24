@@ -145,6 +145,8 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   findings handed to you there, which keeps the sheet, filters and downloads,
   and every finding row tells staff who holds it. Client accounts never see who
   holds what.
+- **Today by email**: an admin can send Today's ledger to the team every weekday
+  morning (*Email reports → Today's ledger*), below.
 <!-- /since -->
 <!-- since 2.6.0 -->
 - **Office board** (`/board`, *Office board* on the Clients page): every client
@@ -230,6 +232,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   - A cross-client **digest** for your team, worst clients first.
   - A weekly **Coming up** email for your team, with the same list as the
     Coming up page above.
+  - **Today's ledger** for your team every weekday morning, at a time in its own timezone: what happened across every client (or one group) since the last email, worst first, with who each line is handed to, then what was seen before and is still open. Monday's covers the weekend, and snoozed lines are left out as on Today. <!-- since 2.6.0 -->
   - **Alert emails** when a scan finds something new and critical (or high), for
     one client or all of them. They come from the same alert event as the
     Teams/Slack alerts below. A client's first scan never emails.

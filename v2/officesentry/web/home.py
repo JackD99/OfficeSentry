@@ -70,8 +70,9 @@ def home_url(user) -> str:
     return url_for(f"home.{chosen if chosen in pages else pages[0]}")
 
 
-def _link(entry: home.Entry) -> str:
-    """Where a line on Today points: the client's page that shows or fixes it."""
+def line_href(entry: home.Entry) -> str:
+    """Where a line on Today (and in its emailed ledger, ``delivery.build_ledger_email``) points: the client's page
+    that shows or fixes it."""
     tenant_id = entry.tenant["id"]
     if entry.target == "findings":
         return url_for("reports.tenant_findings", tenant_id=tenant_id) + entry.anchor
@@ -152,7 +153,7 @@ def today():
             try_write(g.db, "DELETE FROM item_state WHERE tenant_id = ? AND item_key = ?", (tenant_id, key))
     zone = _zone()
     for entry in data.entries + data.snoozed:
-        entry.href = _link(entry)
+        entry.href = line_href(entry)
         entry.stamp, entry.stamp_full = stamp(entry.when, now, zone)
         if entry.snoozed_until:
             entry.snooze_stamp = stamp(parse(entry.snoozed_until) or now, now, zone)[1]

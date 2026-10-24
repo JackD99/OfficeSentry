@@ -308,6 +308,9 @@ The same webhook can tell you when someone makes a risky change in a client's te
 log at each collection: "Contoso: bob@contoso.com made Global Administrator", a Conditional Access policy deleted or
 turned off, security defaults turned off, or a sign-in method removed from an admin. Each change is posted once,
 with who made it and when.
+
+Today's ledger can also go to your team by email every weekday morning: what happened across your clients since
+the last one, worst first, for people who start the day in their inbox.
 <!-- /since -->
 
 <table>
