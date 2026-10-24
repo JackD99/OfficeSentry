@@ -124,10 +124,13 @@ def mock_our_app(rsps, *, found=True, missing=(), roles=None):
         content_type="application/json",
     )
 
-    def assignments(request):
+    def assignments(request):  # an (HTTP status, body) answer in place of the list fails that read
         sid = request.path_url.split("/")[3]
         ours = {gd.OUR_SP["id"]: gd.our_assignments(missing)}
-        return 200, {}, json.dumps({"value": {**gd.APP_ROLE_ASSIGNMENTS, **agd.ASSIGNMENTS, **ours}.get(sid, [])})
+        found = {**gd.APP_ROLE_ASSIGNMENTS, **agd.ASSIGNMENTS, **ours}.get(sid, [])
+        if isinstance(found, tuple):
+            return found[0], {}, json.dumps(found[1])
+        return 200, {}, json.dumps({"value": found})
 
     rsps.add_callback(
         responses.GET,

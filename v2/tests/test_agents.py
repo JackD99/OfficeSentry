@@ -169,6 +169,26 @@ def test_an_unknown_endpoint_is_unavailable_and_an_error_is_a_warning(db, two_te
     assert "couldn't read" in _report(db, bravo).unavailable
 
 
+def test_an_agent_whose_permissions_cant_be_read_is_still_listed(db, two_tenants, monkeypatch):
+    alpha, _ = two_tenants
+    monkeypatch.setitem(agd.ASSIGNMENTS, "ag-mail", (403, idata.DENIED))
+    seed_tenant(db, alpha)
+    run = _run(db, alpha)
+    assert run["status"] == "succeeded"
+    warnings = [
+        r["message"]
+        for r in db.execute("SELECT message FROM run_events WHERE run_id = ? AND level = 'warning'", (run["id"],))
+    ]
+    assert any(w.startswith("Could not read permissions for Inbox triage agent") for w in warnings)
+    assert _status(db, alpha) == {"state": "read", "unread": 1}
+    report = _report(db, alpha)
+    assert report.notes == ["The permissions of 1 agent couldn't be read."]
+    assert _table(report, "AI agents")["Inbox triage agent"]["Application permissions"].parts == ()
+    assert [r[0] for r in next(s for s in report.sections if s.title == "What agents can reach").rows] == [
+        "Old FAQ agent"
+    ]
+
+
 def test_a_cloud_that_may_not_offer_it_says_unavailable(db, two_tenants):
     alpha, _ = two_tenants
     db.execute("UPDATE tenants SET cloud = 'gcc_high' WHERE id = ?", (alpha,))
