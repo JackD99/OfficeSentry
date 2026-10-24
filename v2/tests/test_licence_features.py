@@ -179,3 +179,22 @@ def test_the_report_lists_tag_what_the_licences_block(client, db, two_tenants):
     assert "needs Entra ID P2</span>" in picker
     # A client whose licences haven't been read yet is told nothing about them.
     assert "Needs " not in client.get(f"/tenants/{bravo}/data").get_data(as_text=True).split("report-directory")[-1]
+
+
+def test_what_changed_counts_a_feature_lost_not_the_headcount(db, two_tenants):
+    from dataclasses import replace
+
+    from officesentry.reports.month_changes import compare_sections
+
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    before = _section(_report(db, alpha), "What your licences cover")
+    after = replace(before, rows=[list(r) for r in before.rows])
+    _row(after, "Entra ID P1")[3] = int(_row(before, "Entra ID P1")[3]) + 5  # five more people licensed
+    assert compare_sections(before, after).changes == []
+    _row(after, "Intune")[1] = "No"  # the licence that gave Intune lapsed
+    assert [c.diffs for c in compare_sections(before, after).changes] == [[("Covered", "Yes", "No")]]
+    inside = _section(_report(db, alpha), "What each licence includes")
+    grown = replace(inside, rows=[list(r) for r in inside.rows])
+    _row(grown, "Microsoft 365 Business Premium")[1] = 12
+    assert compare_sections(inside, grown).changes == []

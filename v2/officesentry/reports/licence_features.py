@@ -126,6 +126,9 @@ def _features(caps, provided, people, know_people, report_titles, check_titles) 
         empty="No features to show.",
         optional=("What it is",),
         filter_columns=(COVERED,),
+        # What changed counts a feature gained or lost, not the headcount moving with every joiner and leaver
+        # (the Licences report already counts those).
+        drifts=("People covered",),
     )
     for flag in capabilities.FLAGS:
         has = bool(caps.get(flag))
@@ -154,6 +157,7 @@ def _inside(skus, users, by_sku) -> Section:
         intro="What each licence the client has bought brings with it, so you can see which licence to "
         "change when a feature is missing.",
         empty="The client has no licences.",
+        drifts=("Purchased", "Assigned"),
     )
     held: dict[str, int] = {}
     for user in users or []:
