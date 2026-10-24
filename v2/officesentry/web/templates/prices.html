@@ -19,7 +19,7 @@
       </div>
       <label class="check"><input type="checkbox" name="use_list" value="1" {% if book.use_list %}checked{% endif %}> Use Microsoft's list price for licences you haven't priced</label>
       <p class="footnote">{{ list_source }}, from {{ list_as_of|day }}, updated in an Office Sentry release when Microsoft changes them.
-        {% if currency != list_currency %}They're built in for US dollars only: with {{ currency }}, enter your own prices below (your reseller's price list has them).{% endif %}</p>
+        {% if currency != list_currency %}They're built in for US dollars only: with {{ currency }}, enter your own prices below or <a href="{{ url_for('reports.import_prices') }}">import your reseller's price list</a>.{% endif %}</p>
     </section>
     <section class="card">
       <h2>In use now</h2>
@@ -37,7 +37,8 @@
   </div>
 
   <div class="card flush">
-    <div class="card-head"><h2>{{ rows|length }} licence{{ 's' if rows|length != 1 }} seen across your clients</h2></div>
+    <div class="card-head"><h2>{{ rows|length }} licence{{ 's' if rows|length != 1 }} seen across your clients</h2>
+      <a class="btn ghost" href="{{ url_for('reports.import_prices') }}">Import a price list</a></div>
     {% if rows %}
     <table class="stack-sm">
       <thead><tr><th>Licence</th>{% if currency == list_currency %}<th class="num">Microsoft list price</th>{% endif %}<th class="num">Your price</th><th class="num">Price used</th></tr></thead>

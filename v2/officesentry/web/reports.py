@@ -7,9 +7,10 @@ from datetime import UTC, date, datetime, timedelta
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
-from .. import delivery, findings, licences, list_prices, store, usage
+from .. import delivery, findings, licences, list_prices, price_list, store, usage
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
+from ..onboarding import decode
 from ..permissions import SUMMARY_CAPABILITY, area_capability
 from ..reports import (
     branding,
@@ -25,6 +26,7 @@ from ..reports import (
 )
 from ..reports.monthly_review import SUMMARY_STEM, build, leave_out
 from ..snapshot import TenantSnapshot
+from ..text import plural
 from . import as_of
 from . import finding as finding_pages
 from .access import (
@@ -567,6 +569,39 @@ def prices():
         others=[t for t in clients if licences.own_margin(t) is None],
         margin_of=licences.own_margin,
         example=min((r for r in rows if r["used"]), key=lambda r: (r["part"] not in EXAMPLES, r["name"]), default=None),
+    )
+
+
+@bp.route("/admin/prices/import", methods=["GET", "POST"])
+@needs("settings.manage")
+def import_prices():
+    """Your reseller's price list, read and shown before any price changes."""
+    if request.method == "GET":
+        return render_template("price_import.html", parsed=None, text="", currency=licences.currency(g.db))
+    upload = request.files.get("file")
+    if upload and upload.filename:
+        data = upload.read(price_list.MAX_BYTES + 1)
+        text = decode(data) if len(data) <= price_list.MAX_BYTES else " " * (price_list.MAX_BYTES + 1)
+    else:
+        text = request.form.get("text", "")
+    asked = request.form.get("asked") == "1"  # the page has shown whether these are monthly or yearly prices
+    parsed = price_list.parse(
+        g.db,
+        text,
+        yearly=(request.form.get("yearly") == "1") if asked else None,
+        known={part for part, _ in _known_skus()},
+    )
+    if request.form.get("confirm") == "1" and not parsed.error and parsed.changing:
+        with transaction(g.db):
+            saved = price_list.save(g.db, parsed, g.user["username"])
+        flash(f"Saved {plural(saved, 'price')} from your price list.", "success")
+        return redirect(url_for("reports.prices"))
+    return render_template(
+        "price_import.html",
+        parsed=parsed,
+        text="" if parsed.error else text,
+        currency=licences.currency(g.db),
+        book=licences.price_book(g.db),
     )
 
 
