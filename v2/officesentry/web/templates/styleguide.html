@@ -39,7 +39,7 @@
 
 {# -- Type ------------------------------------------------------------------------------------------ #}
 <section class="card" id="type">
-  <div class="card-head"><h2>Type</h2><span class="meta">Source Sans 3 and Source Serif 4 · body 15px</span></div>
+  <div class="card-head"><h2>Type</h2><span class="meta">Source Sans 3 · body 14px</span></div>
   {% for g in groups if g.title.startswith('Type') %}
   <ul class="list sg-type">
     {% for t in g.tokens %}{% set family = not t.name.startswith('fs-') %}
@@ -113,7 +113,7 @@
     <dt><code>change_tag()</code></dt><dd class="sg-row">{% for k in ('added', 'removed', 'changed') %}{{ change_tag(k) }}{% endfor %}</dd>
     <dt><code>sev_counts()</code></dt><dd class="sg-row">{{ sev_counts({'critical': 1, 'high': 10, 'medium': 12, 'low': 3}) }}{{ sev_counts({'critical': 0, 'high': 2, 'medium': 0, 'low': 0}) }}</dd>
     <dt><code>sev_legend()</code></dt><dd>{{ sev_legend() }}</dd>
-    <dt>Severity text</dt><dd class="sg-row">{% for s in ('critical', 'high', 'medium', 'low') %}<span class="sevtext {{ s }}">{{ s }}</span>{% endfor %}</dd>
+    <dt>Severity text</dt><dd class="sg-row">{% for s in ('critical', 'high', 'medium', 'low') %}<span class="sevtext {{ s }}">{{ s|capitalize }}</span>{% endfor %}</dd>
     <dt>Check squares</dt><dd class="sg-row"><span class="chk pass" title="Pass"></span>{% for s in ('critical', 'high', 'medium', 'low') %}<span class="chk fail {{ s }}" title="Fail: {{ s }}"></span>{% endfor %}<span class="chk accepted" title="Accepted risk"></span><span class="chk unavailable" title="Not checked"></span></dd>
     {% from "_grade.html" import badge %}
     <dt>Grades</dt><dd class="sg-row">{% for letter in 'ABCDE' %}{{ badge(letter) }}{% endfor %}{{ badge(none) }}{{ badge('C', 'sm') }}{{ badge(none, 'sm') }}{% for letter in 'ABCDE' %}{{ badge(letter, 'xs') }}{% endfor %}</dd>

@@ -46,7 +46,7 @@
           {% if rec.action %}<div class="rec-action">{{ rec.action }}</div>{% endif %}
           {% if rec.target %}<div class="small muted">Target: {{ rec.target }}</div>{% endif %}
         </div>
-        {% if rec.severity and rec.severity != 'info' %}<span class="sevtext {{ rec.severity }}">{{ rec.severity }}</span>{% endif %}
+        {% if rec.severity and rec.severity != 'info' %}<span class="sevtext {{ rec.severity }}">{{ rec.severity|capitalize }}</span>{% endif %}
         <span class="pill {{ rec.tone }}">{{ rec.status }}</span>
       </li>
       {% endfor %}

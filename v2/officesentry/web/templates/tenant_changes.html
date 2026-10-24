@@ -73,7 +73,7 @@
     {% if not report.findings_shown %}<div class="empty compact"><p>Left out: you can't open findings for this client.</p></div>
     {% elif report.new_findings or report.fixed_findings %}
     <ul class="change-list">
-      {% for f in report.new_findings[:12] %}<li><span class="chg chg-added">New</span><div><span class="sevtext {{ f.severity }}">{{ f.severity }}</span> {{ titles.get(f.rule_key, f.rule_key) }}<span class="desc">{{ f.subject }}</span></div></li>{% endfor %}
+      {% for f in report.new_findings[:12] %}<li><span class="chg chg-added">New</span><div><span class="sevtext {{ f.severity }}">{{ f.severity|capitalize }}</span> {{ titles.get(f.rule_key, f.rule_key) }}<span class="desc">{{ f.subject }}</span></div></li>{% endfor %}
       {% if report.new_findings|length > 12 %}<li class="muted small">…and {{ report.new_findings|length - 12 }} more new. The download lists them all.</li>{% endif %}
       {% for f in report.fixed_findings[:12] %}<li><span class="chg chg-resolved">Fixed</span><div>{{ titles.get(f.rule_key, f.rule_key) }}<span class="desc">{{ f.subject }}</span></div></li>{% endfor %}
       {% if report.fixed_findings|length > 12 %}<li class="muted small">…and {{ report.fixed_findings|length - 12 }} more fixed.</li>{% endif %}

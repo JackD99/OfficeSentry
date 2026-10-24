@@ -70,7 +70,7 @@
     <p class="intro">Successful changes in the last 90 days worth a second look. <a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key='admin-activity') }}">Admin activity</a> has every change.</p>
     <ul class="change-list">
       {% for e in page.review %}
-      <li><span class="sevtext {{ e.severity }}">{{ e.severity }}</span><div>{{ e.activity }}{% if e.targets %}: {{ e.targets|join(', ') }}{% endif %}
+      <li><span class="sevtext {{ e.severity }}">{{ e.severity|capitalize }}</span><div>{{ e.activity }}{% if e.targets %}: {{ e.targets|join(', ') }}{% endif %}
         <span class="desc">{{ e.time|when }} by {{ e.actor or 'someone' }}{% if e.detail %} · {{ e.detail }}{% endif %}. {{ e.why }}.</span></div></li>
       {% endfor %}
       {% if page.review_total > page.review|length %}<li class="muted small">…and {{ page.review_total - page.review|length }} more in Admin activity.</li>{% endif %}

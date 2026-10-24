@@ -66,7 +66,7 @@
       <td data-label="Today" class="wrap">
         {% if p.grade is none %}<span class="muted">{{ p.reason }}.</span>{% for w in p.why %}<div class="muted small">{{ w|trim('.') }}.</div>{% endfor %}
         {% elif not p.pulls %}Every check passed.
-        {% else %}{% for pull in p.pulls[:3] %}<div><span class="sevtext {{ pull.severity }}">{{ pull.severity }}</span> {{ pull.summary|trim('.') }}.</div>{% endfor %}{% if p.pulls|length > 3 %}<div class="muted small">and {{ p.pulls|length - 3 }} more {{ 'check' if p.pulls|length == 4 else 'checks' }}</div>{% endif %}
+        {% else %}{% for pull in p.pulls[:3] %}<div><span class="sevtext {{ pull.severity }}">{{ pull.severity|capitalize }}</span> {{ pull.summary|trim('.') }}.</div>{% endfor %}{% if p.pulls|length > 3 %}<div class="muted small">and {{ p.pulls|length - 3 }} more {{ 'check' if p.pulls|length == 4 else 'checks' }}</div>{% endif %}
         {% endif %}
       </td>
       <td data-label="What moves it" class="wrap small">

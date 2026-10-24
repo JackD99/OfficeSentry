@@ -16,13 +16,13 @@
 <section class="card project" id="project-{{ p.key }}">
   <div class="card-head">
     <div><h2>{{ p.title }}</h2>
-      <div class="meta"><span class="sevtext {{ rec.severity }}">{{ rec.severity }}</span>{% if rec.size %} · {{ rec.size }}{% endif %} · <span title="A rough estimate from what needs fixing, including planning and handover">{{ rec.effort }}</span> · {{ status_pill(rec) }}</div></div>
+      <div class="meta"><span class="sevtext {{ rec.severity }}">{{ rec.severity|capitalize }}</span>{% if rec.size %} · {{ rec.size }}{% endif %} · <span title="A rough estimate from what needs fixing, including planning and handover">{{ rec.effort }}</span> · {{ status_pill(rec) }}</div></div>
   </div>
   <p>{{ p.pitch }}</p>
   <div class="project-cols">
     <div><h3 class="col-title">What we found</h3>
       <ul class="list compact">{% for r in rec.reasons %}
-        <li><span class="sevtext {{ r.severity }}">{{ r.severity }}</span><span class="grow">{{ reason(tenant, r) }}</span></li>{% endfor %}
+        <li><span class="sevtext {{ r.severity }}">{{ r.severity|capitalize }}</span><span class="grow">{{ reason(tenant, r) }}</span></li>{% endfor %}
       </ul></div>
     <div><h3 class="col-title">What the project covers</h3>
       <ul class="covers">{% for c in rec.covers %}<li>{{ c }}</li>{% endfor %}</ul></div>
@@ -48,7 +48,7 @@
     {% for r in quick %}
     <tr>
       <td>{{ reason(tenant, r, 'sub muted') }}</td>
-      <td data-label="Priority"><span class="sevtext {{ r.severity }}">{{ r.severity }}</span></td>
+      <td data-label="Priority"><span class="sevtext {{ r.severity }}">{{ r.severity|capitalize }}</span></td>
       <td data-label="What to do" class="wrap small">{{ r.action }}</td>
       <td data-label="Estimate" class="nowrap small">{{ r.effort }}</td>
     </tr>

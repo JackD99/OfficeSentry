@@ -15,7 +15,7 @@
 {%- else %}<span class="{{ cls }}" title="{{ tip }}"><span class="sr-only">{{ tip }}</span></span>{% endif %}
 {%- endmacro %}
 {% macro status(t, key, c) -%}
-{% if c.status == 'fail' %}<a class="figure-link" href="{{ check_href(t, key, c) }}" title="{{ c.summary }}"><span class="chk fail {{ c.severity or '' }}"></span> {% if c.severity %}<span class="sevtext {{ c.severity }}">{{ c.severity }}</span> {{ c.count }}{% else %}Fail{% endif %}</a>
+{% if c.status == 'fail' %}<a class="figure-link" href="{{ check_href(t, key, c) }}" title="{{ c.summary }}"><span class="chk fail {{ c.severity or '' }}"></span> {% if c.severity %}<span class="sevtext {{ c.severity }}">{{ c.severity|capitalize }}</span> {{ c.count }}{% else %}Fail{% endif %}</a>
 {%- elif c.status == 'accepted' %}<a class="figure-link" href="{{ check_href(t, key, c) }}" title="{{ c.summary }}"><span class="chk accepted"></span> Accepted</a>
 {%- elif c.status == 'pass' %}<span title="{{ c.summary }}"><span class="chk pass"></span> Pass</span>
 {%- else %}<span class="muted" title="{{ c.summary }}"><span class="chk unavailable"></span> Not checked</span>{% endif %}
