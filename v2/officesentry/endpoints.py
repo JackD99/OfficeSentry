@@ -344,6 +344,15 @@ GRAPH: tuple[Endpoint, ...] = (
         fallback="Only asked for when someone holds Copilot; the Copilot report leaves its daily chart out without it",
         beta="v1.0 returns CSV only; beta returns JSON",
     ),
+    Endpoint(
+        "/copilot/reports/getMicrosoft365CopilotUsageUserDetailByDate(date={date})",
+        BETA,
+        "Reports.Read.All",
+        ("usage_reports",),
+        fallback="One call a day for the last 7 days, only when someone holds Copilot; the Copilot report says "
+        "actions aren't known without it",
+        beta="Microsoft offers it in beta only (a preview)",
+    ),
     # Security and devices.
     Endpoint("/security/secureScores", V1, "SecurityEvents.Read.All", ("secure_score",)),
     Endpoint("/security/secureScoreControlProfiles", V1, "SecurityEvents.Read.All", ("secure_score",)),

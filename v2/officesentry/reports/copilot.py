@@ -16,7 +16,7 @@ from ..devices import parse_day, parse_ts
 from ..licences import last_sign_in, load_prices, never_signed_in, sku_name, trial_seats
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
-from ..usage import ACTIVE_DAYS, APPS, COPILOT_APPS
+from ..usage import ACTIVE_DAYS, APPS, COPILOT_APPS, COPILOT_WEEK
 from .charts import line_chart
 from .data_reports import Chart, DataReport, Rows, Section, Tile, metric_trend
 from .identity_reports import Money, _day
@@ -27,6 +27,8 @@ from .usage_reports import _load, _office_licensed, _product, _share
 NEW_DAYS = 14  # a Copilot licence given this recently isn't called unused yet
 NEXT_PEOPLE = 25  # how many people "Who could use Copilot next" lists
 UNUSED = "Unused Copilot licences"
+ACTIONS = f"Copilot actions, last {COPILOT_WEEK} days"
+DAYS_USED = f"Days used, last {COPILOT_WEEK} days"
 NOT_READ = (
     "Microsoft's Copilot usage report couldn't be read at the last collection, so who uses Copilot isn't known. "
     "The licences below come from the accounts."
@@ -118,7 +120,10 @@ def copilot_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
     read = status.get("read") or {}
     hidden = bool(status.get("concealed"))
     known = read.get("copilot") is True  # Copilot's report was read, so who uses Copilot is known
+    week = status.get("copilotWeek") if isinstance(status.get("copilotWeek"), dict) else None
     report.parts = {"copilot": "read" if known else "failed"}
+    if "copilot_week" in read:  # the daily counts are only asked for once someone in Copilot's report holds it
+        report.parts["week"] = "read" if week else "failed"
     if not known:
         report.notes.append(NOT_READ)
     elif hidden:
@@ -142,7 +147,7 @@ def copilot_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
 
     report.sections = [
         _by_app(holders, ref),
-        _people(holders, unused, ref, known),
+        _people(holders, unused, ref, known, week),
         _unused(unused, prices, currency, trials),
         _licences(skus, holders, unused, prices, currency, trials),
         _next(snap, rows, holders),
@@ -158,7 +163,7 @@ def copilot_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
         report.notes.append(
             "Some Copilot licences are a trial's, free until the trial ends, so they aren't counted as a cost."
         )
-    report.tiles = _tiles(snap, now, holders, unused, skus, prices, currency, trials, known)
+    report.tiles = _tiles(snap, now, holders, unused, skus, prices, currency, trials, known, week, status)
 
     points = [
         (parse_day(d.get("date")), d.get("active"))
@@ -196,14 +201,15 @@ def _licence(h: Holder) -> str:
     return sku_name(h.sku.get("skuPartNumber")) if h.sku else "Microsoft 365 Copilot"
 
 
-def _people(holders: list[Holder], unused: list[Holder], ref: date, known: bool) -> Section:
+def _people(holders: list[Holder], unused: list[Holder], ref: date, known: bool, week: dict | None) -> Section:
     section = Section(
         "People with Copilot",
-        ["Person", "Last used Copilot", f"Apps used, last {ACTIVE_DAYS} days", "Licence"],
-        intro=f"Everyone with a Copilot licence, when they last used it and where. Flagged: not used in the last "
-        f"{ACTIVE_DAYS} days.",
+        ["Person", "Last used Copilot", f"Apps used, last {ACTIVE_DAYS} days", ACTIONS, DAYS_USED, "Licence"],
+        intro=f"Everyone with a Copilot licence, when they last used it and where, and how much they used it in "
+        f"the last {COPILOT_WEEK} days: each thing Copilot did for them counts as an action. Flagged: not used in "
+        f"the last {ACTIVE_DAYS} days.",
         empty="Nobody here has a Copilot licence.",
-        drifts=(f"Apps used, last {ACTIVE_DAYS} days",),
+        drifts=(f"Apps used, last {ACTIVE_DAYS} days", ACTIONS, DAYS_USED),
     )
     idle = {id(h) for h in unused}
     for h in holders:
@@ -214,7 +220,14 @@ def _people(holders: list[Holder], unused: list[Holder], ref: date, known: bool)
             when = _day(last)
         else:
             when = "Never" if (h.row or {}).get("copilotLicensed") else "Not in Microsoft's report yet"
-        section.add([h.label, when, _apps_used(h, ref), _licence(h)], "medium" if id(h) in idle else None)
+        counts = (h.row or {}).get("copilotWeek") if week else None
+        if isinstance(counts, dict):
+            actions, days = counts.get("actions", 0), counts.get("days", 0)
+        else:
+            actions = days = "Not known" if h.row is not None or not known else ""
+        section.add(
+            [h.label, when, _apps_used(h, ref), actions, days, _licence(h)], "medium" if id(h) in idle else None
+        )
     return section
 
 
@@ -381,6 +394,21 @@ def _count(value) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
+def _week_figures(listed: list[Holder], known: bool, week: dict | None, status: dict) -> tuple[object, str]:
+    """The Copilot actions tile's figure and its line."""
+    if week:
+        actions = sum((h.row.get("copilotWeek") or {}).get("actions", 0) for h in listed)
+        return actions, f"In every app, the {plural(week['days'], 'day')} to {_day(week['to'])}"
+    if not known:
+        return "Not known", "Microsoft's Copilot report couldn't be read"
+    if (status.get("read") or {}).get("copilot_week") is False:
+        return "Not known", "Microsoft's daily Copilot report couldn't be read"
+    if "copilotWeek" not in status:  # collected before Office Sentry read the daily report
+        return "Not known", 'Not collected yet: refresh "Microsoft 365 usage" on the client page'
+    # Only asked for once someone in Microsoft's Copilot report holds a licence.
+    return _share(0, len(listed)), f"In every app, the last {COPILOT_WEEK} days"
+
+
 def _tiles(
     snap: TenantSnapshot,
     now: datetime,
@@ -391,6 +419,8 @@ def _tiles(
     currency: str,
     trials: dict[str, int],
     known: bool,
+    week: dict | None,
+    status: dict,
 ) -> list[Tile]:
     lines = _lines(skus, holders, unused, trials)
     bought = sum(line.bought for line in lines)
@@ -412,6 +442,12 @@ def _tiles(
             ("ok" if active == len(listed) else "warn") if known and listed else None,
             Rows("People with Copilot"),
             trend=metric_trend(snap, "copilot.active", now),
+        ),
+        Tile(
+            ACTIONS,
+            *_week_figures(listed, known, week, status),
+            rows=Rows("People with Copilot"),
+            trend=metric_trend(snap, "copilot.actions_7d", now),
         ),
         Tile(
             "Unused licences",
