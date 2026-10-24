@@ -16,7 +16,7 @@ from officesentry.reports import data_reports, month_changes, rollups, tables
 from officesentry.reports.data_reports import Section
 from officesentry.reports.identity_reports import Money
 from officesentry.snapshot import TenantSnapshot
-from tests import auditdata, autodeskdata
+from tests import auditdata
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_collectors import USERS
@@ -143,8 +143,7 @@ def test_new_detail_reports_get_a_rollup_automatically(db, two_tenants, monkeypa
 def test_rollup_pages_and_downloads(client, db, vault, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
-    auditdata.everywhere(db, vault)  # the add-ons' reports too
-    autodeskdata.everywhere(db, vault)
+    auditdata.everywhere(db, vault)  # the add-on's report too
     make_user(db, "admin")
     login(client, "admin")
     # The monthly review across every client is the Clients page itself; its old address goes there.
@@ -181,8 +180,7 @@ def _picker(page: str) -> str:
 def test_all_clients_picks_reports_from_the_all_reports_menu(client, db, vault, two_tenants):
     """The same picker as a client's Reports tab: the summaries and every detail report, the open one marked
     and its area beside the menu; Every row opens a report's rows; phones get the list as a select."""
-    auditdata.everywhere(db, vault)  # the add-ons' reports too
-    autodeskdata.everywhere(db, vault)
+    auditdata.everywhere(db, vault)  # the add-on's report too
     make_user(db, "admin")
     login(client, "admin")
     page = client.get("/").get_data(as_text=True)

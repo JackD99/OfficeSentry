@@ -13,7 +13,6 @@ from contextlib import closing
 from werkzeug.security import generate_password_hash
 
 from . import alerts, logs, mailer, sso, store, totp
-from .autodesk import setup as autodesk_setup
 from .config import clear_setup_token, load_config, new_secrets, setup_token, write_private
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
@@ -151,17 +150,10 @@ ENCRYPTED_COLUMNS = (
     ("users", "id", "totp_secret_enc"),
     ("users", "id", "totp_pending_enc"),
     ("setup_sign_ins", "id", "device_code_enc"),  # the setup wizard's device code, for up to 15 minutes
-    ("autodesk_sign_ins", "id", "pat_enc"),  # an Autodesk team admin's personal access token
 )
 # ...and every encrypted key in the settings table. Encrypted names end in "_enc";
 # tests/test_key_rotation.py fails if one isn't listed here.
-ENCRYPTED_SETTINGS = (
-    *mailer.ENCRYPTED_KEYS,
-    *alerts.ENCRYPTED_KEYS,
-    *sso.ENCRYPTED_KEYS,
-    *totp.ENCRYPTED_KEYS,
-    *autodesk_setup.ENCRYPTED_KEYS,
-)
+ENCRYPTED_SETTINGS = (*mailer.ENCRYPTED_KEYS, *alerts.ENCRYPTED_KEYS, *sso.ENCRYPTED_KEYS, *totp.ENCRYPTED_KEYS)
 
 
 def unregistered_encrypted(conn) -> list[str]:

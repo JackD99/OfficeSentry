@@ -13,7 +13,7 @@ from openpyxl import load_workbook
 from officesentry import roles, text
 from officesentry.reports import data_reports, designs, library, rollups, views
 from officesentry.reports.data_reports import DataReport, Many, Rows, Section
-from tests import auditdata, autodeskdata
+from tests import auditdata
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
@@ -359,8 +359,7 @@ def test_saved_view_needs_a_tenant_the_user_can_see(client, db, two_tenants):
 
 def test_library_lists_every_report_by_area_and_use(client, db, vault, two_tenants):
     alpha, bravo = two_tenants
-    auditdata.everywhere(db, vault)  # the add-ons' reports too
-    autodeskdata.everywhere(db, vault)
+    auditdata.everywhere(db, vault)  # the add-on's report too
     make_user(db, "admin")
     login(client, "admin")
     page = client.get("/reports").get_data(as_text=True)

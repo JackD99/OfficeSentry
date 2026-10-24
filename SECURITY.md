@@ -125,7 +125,6 @@ keys.
   (its token request, creating its sign-in app, and letting that app accept
   other organisations' accounts for client sign-in).
   The audit log add-on adds one more: starting and stopping a client's audit feed (below).
-  Autodesk licences add one more: asking Autodesk to prepare a client's Autodesk report files (below). <!-- since 2.6.0 -->
   `tests/test_isolation_walk.py` opens every tenant-scoped route with
   another client's IDs, as staff and as a client, and expects a refusal.
   `tests/test_roles.py` opens every route as every built-in role and expects
@@ -138,7 +137,6 @@ keys.
   warning until they confirm it, because without that limit a leaked
   credential could send as anyone in the MSP's company.
 - **The audit log add-on is its own app, with one permission.** It's off until an admin turns it on, and each client approves it separately. Its app has only `ActivityFeed.Read` on the Office 365 Management APIs and its own certificate, and Office Sentry keeps only a fixed list of file, sharing and mailbox events from it, without email subjects. Its only requests other than GET start and stop a client's audit feed: they tell Microsoft whether to make that client's audit records available to the add-on, and change nothing in the tenant.
-- **Autodesk licences use the MSP's own Autodesk app, and read one client's team at a time.** They're off until an admin saves the app, which is bound to Autodesk's Business Success Plan Reporting API only. Its client secret and the team admins' personal access tokens are encrypted, never shown again and only sent to Autodesk's API host, on an allow-list of paths. One token can see several clients' Autodesk teams, so each team is given to one client only, by someone who sees every client; every export request names that client's team, an export of another team is refused, and rows naming another team are dropped. Its only requests other than GET are the app's token request and asking Autodesk to prepare a team's report files, which changes nothing in the client's Autodesk account. <!-- since 2.6.0 -->
 - **Bound consent links.** The admin-consent link's signed state carries a
   one-time nonce, stored server-side with the admin and the signed-in
   browser that opened it, and expires after an hour. A client added by

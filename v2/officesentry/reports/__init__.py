@@ -6,7 +6,6 @@ from . import (  # noqa: F401
     all_users,
     auth_methods,
     auto_replies,
-    autodesk,
     copilot,
     data_reports,
     deleted_items,
