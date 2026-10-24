@@ -5,6 +5,7 @@ from . import (  # noqa: F401
     all_users,
     auth_methods,
     auto_replies,
+    copilot,
     data_reports,
     deleted_items,
     distribution_lists,

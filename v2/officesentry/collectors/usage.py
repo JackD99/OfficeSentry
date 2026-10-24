@@ -17,7 +17,18 @@ from .. import clouds
 from ..devices import parse_day
 from ..graph import GraphError, PermissionMissing
 from ..snapshot import TenantSnapshot
-from ..usage import ACTIVE_DAYS, APPS, COLLECTOR, COPILOT, PLATFORMS, SERVICES, blocked, concealed, part_for_product
+from ..usage import (
+    ACTIVE_DAYS,
+    APPS,
+    COLLECTOR,
+    COPILOT,
+    COPILOT_APPS,
+    PLATFORMS,
+    SERVICES,
+    blocked,
+    concealed,
+    part_for_product,
+)
 from ..usage import licensed as is_licensed
 from .base import Collector, RunContext, register
 from .connection import awaiting
@@ -31,6 +42,8 @@ EMAIL = f"/reports/getEmailActivityUserDetail(period='{PERIOD}')"
 TEAMS = f"/reports/getTeamsUserActivityUserDetail(period='{PERIOD}')"
 # Copilot's report doesn't accept D30; D90 still gives each person's last activity date.
 COPILOT_USAGE = "/copilot/reports/getMicrosoft365CopilotUsageUserDetail(period='D90')"
+# How many people with Copilot used it each day, per app, for Microsoft's last 90 days.
+COPILOT_TREND = "/copilot/reports/getMicrosoft365CopilotUserCountTrend(period='D90')"
 
 REPORT_SETTINGS = "ReportSettings.Read.All"  # added in 2.2: says outright whether names are concealed
 
@@ -75,6 +88,10 @@ def _new_row(upn: str, report_date: str | None) -> dict:
         "teamsCounts": None,
         "copilotLastActive": None,
         "copilotActive": None,
+        # Only people with a Copilot licence are in Copilot's report; for them, the last day they used it in
+        # each app (``usage.COPILOT_APPS`` keys).
+        "copilotLicensed": False,
+        "copilotApps": None,
     }
 
 
@@ -168,12 +185,34 @@ def merge_teams(rows: dict[str, dict], items: list[dict]) -> None:
             }
 
 
-def merge_copilot(rows: dict[str, dict], items: list[dict]) -> None:
+def merge_copilot(rows: dict[str, dict], items: list[dict]) -> str | None:
+    """Each Copilot holder's last use, overall and per app. Returns the date Microsoft last refreshed the report."""
+    refreshed = None
     for r in items:
+        refreshed = max(refreshed or "", _day(r.get("reportRefreshDate")) or "") or None
         row = _row(rows, r)
         if row is not None:
             row["copilotLastActive"] = _day(r.get("lastActivityDate"))
             row["copilotActive"] = _recent(row["copilotLastActive"], r.get("reportRefreshDate"))
+            row["copilotLicensed"] = True
+            row["copilotApps"] = {key: _day(r.get(f"{prefix}LastActivityDate")) for key, _, prefix, _ in COPILOT_APPS}
+    return refreshed
+
+
+def copilot_days(items: list[dict]) -> list[tuple[str, dict]]:
+    """One object per day from Copilot's daily counts: people with Copilot, how many used it, and in each app."""
+    days: dict[str, dict] = {}
+    for item in items:
+        for d in (item.get("adoptionByDate") if isinstance(item, dict) else None) or []:
+            day = _day(d.get("reportDate")) if isinstance(d, dict) else None
+            if day:
+                days[day] = {
+                    "date": day,
+                    "enabled": _int(d.get("anyAppEnabledUsers")),
+                    "active": _int(d.get("anyAppActiveUsers")),
+                    "apps": {key: _int(d.get(f"{prefix}ActiveUsers")) for key, _, _, prefix in COPILOT_APPS},
+                }
+    return sorted(days.items())
 
 
 def _has_copilot(rows: dict[str, dict]) -> bool:
@@ -215,13 +254,16 @@ class Usage(Collector):
             except GraphError as exc:
                 read[name] = False
                 ctx.warn(f"Usage report unavailable ({name}): {exc.message}")
+        copilot_date = None
         if why := clouds.missing(cloud, "usage.copilot"):
             read["copilot"] = False
             ctx.log(why)  # nobody there can hold Copilot, so it isn't worth a warning
         else:
             try:
-                merge_copilot(rows, ctx.paged(ctx.graph.get_all(COPILOT_USAGE, JSON, version="beta")))
+                copilot_date = merge_copilot(rows, ctx.paged(ctx.graph.get_all(COPILOT_USAGE, JSON, version="beta")))
                 read["copilot"] = True
+                if any(r["copilotLicensed"] for r in rows.values()):
+                    read["copilot_trend"] = self._copilot_trend(ctx)
             except GraphError as exc:
                 read["copilot"] = False
                 if _has_copilot(rows):  # only matters when someone holds Copilot
@@ -243,6 +285,7 @@ class Usage(Collector):
                         # The tenant's "Display concealed user, group, and site names" setting (None: not read).
                         "concealSetting": setting,
                         "reportDate": report_date,
+                        "copilotReportDate": copilot_date,
                         "days": ACTIVE_DAYS,
                         "read": read,
                     },
@@ -260,6 +303,10 @@ class Usage(Collector):
         ctx.metric("usage.active", sum(any(r["active"].values()) for r in licensed))
         for key, _ in SERVICES:
             ctx.metric(f"usage.active.{key}", sum(r["active"][key] for r in rows.values()))
+        if read["copilot"]:
+            holders = [r for upn, r in rows.items() if r["copilotLicensed"] and upn not in disabled]
+            ctx.metric("copilot.licensed", len(holders))
+            ctx.metric("copilot.active", sum(bool(r["copilotActive"]) for r in holders))
         if read["apps"]:
             ctx.metric(
                 "usage.desktop_apps",
@@ -268,6 +315,17 @@ class Usage(Collector):
                     for r in rows.values()
                 ),
             )
+
+    @staticmethod
+    def _copilot_trend(ctx: RunContext) -> bool:
+        """Copilot's daily counts, for the Copilot report's chart. Only asked for when someone holds Copilot."""
+        try:
+            days = copilot_days(ctx.paged(ctx.graph.get_all(COPILOT_TREND, JSON, version="beta")))
+        except GraphError as exc:
+            ctx.log(f"Copilot's daily counts weren't readable: {exc.message}", "warning")
+            return False
+        ctx.objects("copilot_day", days)
+        return True
 
     @staticmethod
     def _conceal_setting(ctx: RunContext) -> bool | None:
