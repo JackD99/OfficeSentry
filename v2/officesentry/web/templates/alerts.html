@@ -49,7 +49,11 @@
 </form>
 <section class="card">
   <h2>{{ icon('mail') }} By email</h2>
-  <p class="muted small">The same new-finding alerts can go to people by email: for one client on its <em>Emailed reports</em> tab, or for every client under <a href="{{ url_for('email.overview') }}">Email reports</a>.{% if email_alerts %} {{ email_alerts }} email alert{{ 's' if email_alerts != 1 }} on.{% endif %} Changes in a client's tenant go to the webhook only.</p>
+  <p class="muted small">The same new-finding alerts can go to people by email: for one client on its <em>Emailed reports</em> tab, or for every client under <a href="{{ url_for('email.overview') }}">Email reports</a>.{% if email_alerts %} {{ email_alerts }} email alert{{ 's' if email_alerts != 1 }} on.{% endif %} Changes in a client's tenant aren't emailed.</p>
+</section>
+<section class="card">
+  <h2>{{ icon('send') }} In Autotask PSA</h2>
+  <p class="muted small">The same alerts can create tickets in your Autotask, in the client's company, with or without a webhook: <a href="{{ url_for('autotask.settings') }}">Autotask PSA</a>.{% if autotask_on %} Tickets are on.{% endif %}</p>
 </section>
 <section class="card flush">
   <div class="card-head"><h2>Recent alerts</h2></div>

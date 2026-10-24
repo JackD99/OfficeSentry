@@ -27,6 +27,7 @@ BIG_OPEN_LIST = 50  # members above which a list open to outside senders is wort
 EVERY = "Every list"
 ATTENTION = "Lists that need attention"
 MEMBERS = "Members"
+HIDDEN = "Hidden from address list"
 SEVERITY = ("high", "medium", "low")
 NO_OWNER = "No owner"
 LEAVER_OWNERS = "Only leavers own it"
@@ -119,6 +120,7 @@ def lists_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
             "Accepts mail from outside",
             f"Mail in the last {RECENT_DAYS} days",
             "Last mail received",
+            HIDDEN,
             "Synced from AD",
             "Created",
         ],
@@ -175,6 +177,7 @@ def lists_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
                 reasons.append(("low", f"Anyone outside can mail all {count} members"))
         flag = next((sev for sev in SEVERITY if any(s == sev for s, _ in reasons)), None)
         last_day = last.date().isoformat() if last else ""
+        hidden = g.get("HiddenFromAddressListsEnabled")  # not in the address book; mail to it still arrives
         every.add(
             [
                 name,
@@ -186,6 +189,7 @@ def lists_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
                 outside,
                 "Not read" if recent is None else recent,
                 last_day,
+                hidden if isinstance(hidden, bool) else None,
                 bool(g.get("IsDirSynced")),
                 (_text(g.get("WhenCreatedUTC")) or "")[:10],
             ],

@@ -219,6 +219,7 @@ PAGES: tuple[Page, ...] = (
     Page("reports.prices", "Licence prices", "cost money currency sku", EMAIL),
     Page("email.settings", "Email delivery", "smtp mail send graph sender from", EMAIL),
     Page("alerts.settings", "Alerts", "teams slack webhook notifications", EMAIL),
+    Page("autotask.settings", "Autotask PSA", "tickets ticketing psa datto kaseya companies", EMAIL),
     Page("admin.users", "Users", "people access roles accounts staff team sign-in", "Team"),
     Page("roles.index", "Roles", "permissions capabilities access", "Team"),
     Page("sso.settings_page", "Microsoft sign-in", "sso entra staff single sign-on", "Team"),

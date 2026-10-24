@@ -19,7 +19,7 @@ NOW = datetime.now(UTC)
 PERIOD = f"{NOW.year}-{NOW.month:02d}"
 SETTINGS_AREAS = {
     "Clients": ("/admin/tenants", "/admin/groups", "/admin/connections"),
-    "Reports and email": ("/admin/branding", "/admin/prices", "/admin/email", "/admin/alerts"),
+    "Reports and email": ("/admin/branding", "/admin/prices", "/admin/email", "/admin/alerts", "/admin/autotask"),
     "Team": ("/admin/users", "/admin/sign-in", "/admin/activity"),
     "System": ("/admin/status", "/admin/retention", "/admin/updates", "/admin/support"),
 }

@@ -27,6 +27,8 @@ from . import (
     alerts,
     appearance,
     auth,
+    autotask,
+    board,
     branding,
     client_access,
     data_retention,
@@ -401,6 +403,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(auth.bp)
     app.register_blueprint(tenants.bp)
     app.register_blueprint(home.bp)
+    app.register_blueprint(board.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(role_pages.bp)
     app.register_blueprint(reports.bp)
@@ -409,6 +412,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(grade.bp)
     app.register_blueprint(email.bp)
     app.register_blueprint(alerts.bp)
+    app.register_blueprint(autotask.bp)
     app.register_blueprint(branding.bp)
     app.register_blueprint(data_retention.bp)
     app.register_blueprint(across.bp)

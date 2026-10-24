@@ -109,6 +109,11 @@ SECTIONS = [
                 "someone else's mailbox.",
             ),
             Doc(
+                "v2/docs/autotask.md",
+                "autotask",
+                blurb="A ticket in your Autotask, in the client's company, for the alerts you choose.",
+            ),
+            Doc(
                 "v2/docs/troubleshooting.md",
                 "troubleshooting",
                 blurb="The common setup and collection errors, and how to fix them.",

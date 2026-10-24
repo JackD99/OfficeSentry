@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Autotask PSA · Office Sentry{% endblock %}
+{% macro field_select(name, field, label, optional=true, hint='') -%}
+  {% set options = choices.get(field, []) %}
+  <label>{{ label }}{% if optional %} <span class="faint">(optional)</span>{% endif %} <select name="{{ name }}">
+    {% if optional or not s['autotask.' ~ name] %}<option value="">{{ 'Autotask decides' if optional else 'Choose…' }}</option>{% endif %}
+    {% for value, text, _ in options %}<option value="{{ value }}" {% if s['autotask.' ~ name] == value|string %}selected{% endif %}>{{ text }}</option>{% endfor %}
+  </select>{% if hint %}<span class="hint">{{ hint }}</span>{% endif %}</label>
+{%- endmacro %}
+{% block content %}
+{% set connected = s['autotask.zone_api'] and s['autotask.secret_enc'] %}
+<div class="page-head"><div><h2 class="page-title">Autotask PSA</h2><div class="sub">Create a ticket in your Autotask for the alerts you choose: new findings, risky changes in a client's tenant, a collection that starts failing and problems with Office Sentry itself. Each goes to the client's company, with a link back here.</div></div>
+  {% if s['autotask.enabled'] == '1' %}<span class="pill ok">On</span>{% else %}<span class="pill warn">Off</span>{% endif %}</div>
+<div class="grid-main">
+<form method="post" action="{{ url_for('autotask.save') }}" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <h2>Connection</h2>
+  <p class="muted small">In Autotask, add an API user (<em>Admin › Account Settings &amp; Users › Resources/Users › New API User</em>) with the API User (system) security level, and choose <em>Custom (Internal Integration)</em> for its tracking identifier. Office Sentry only reads companies and the ticket fields' choices, and creates tickets and notes.</p>
+  <label>API user's user name <input name="username" value="{{ s['autotask.username'] }}" autocomplete="off" maxlength="200" placeholder="officesentry@yourmsp.example"></label>
+  <label>Secret <input type="password" name="secret" autocomplete="new-password" maxlength="500" placeholder="{{ 'Saved, leave blank to keep' if s['autotask.secret_enc'] else '' }}"></label>
+  <label>Tracking identifier <input type="password" name="code" autocomplete="new-password" maxlength="500" placeholder="{{ 'Saved, leave blank to keep' if s['autotask.code_enc'] else '' }}">
+    <span class="hint">The secret and tracking identifier are stored encrypted and never shown again.</span></label>
+  {% if connected %}
+  <p class="small">{{ icon('check') }} Connected to <span class="mono">{{ s['autotask.zone_web'] }}</span>, checked <time title="{{ s['autotask.checked_at']|when }}">{{ s['autotask.checked_at']|ago }}</time>.</p>
+  {% elif s['autotask.username'] and s['autotask.secret_enc'] %}
+  <p class="small">Not checked yet: press <em>Check connection</em>.</p>
+  {% endif %}
+  {% if s['autotask.username'] or s['autotask.secret_enc'] %}<label class="check"><input type="checkbox" name="disconnect" value="1"> Remove the connection</label>{% endif %}
+
+  <h2>Which alerts make a ticket</h2>
+  {% for key, label in events.items() %}<label class="check"><input type="checkbox" name="events" value="{{ key }}" {% if key in chosen %}checked{% endif %}> {{ label }}</label>
+  {% endfor %}
+  <label>New findings rated <select name="min_severity">
+    {% for v in severities %}<option value="{{ v }}" {% if s['autotask.min_severity'] == v %}selected{% endif %}>{{ v|capitalize }}{{ ' only' if v == 'critical' else ' or worse' }}</option>{% endfor %}
+  </select>
+    <span class="hint">All of a client's new findings from one collection go in one ticket. Accepted risks are left out.</span></label>
+  <p class="footnote">A failing collection or a problem with Office Sentry makes one ticket, however long it lasts. When it clears, Office Sentry adds a note to the ticket and leaves closing it to you (for a collection, when <em>A failing collection works again</em> is ticked under <a href="{{ url_for('alerts.settings') }}">Alerts</a>).</p>
+
+  <h2>New tickets</h2>
+  {% if choices %}
+  {{ field_select('status', 'status', 'Status', optional=false) }}
+  {% for pair in priority_severities|batch(2) %}<div class="form-row">
+  {% for sev in pair %}{{ field_select('priority_' ~ sev, 'priority', sev|capitalize ~ ' priority', optional=false) }}{% endfor %}
+  </div>{% endfor %}
+  <p class="footnote">The priority follows the worst finding or change in the alert. A failing collection is medium; problems with Office Sentry are high.</p>
+  {{ field_select('queue', 'queueID', 'Queue') }}
+  <div class="form-row">
+  {{ field_select('ticket_type', 'ticketType', 'Ticket type') }}
+  {{ field_select('source', 'source', 'Source') }}
+  </div>
+  {% else %}
+  <p class="muted small">Check the connection first: the statuses, priorities, queues, types and sources come from your Autotask.</p>
+  {% endif %}
+  <label>Due in <span class="faint">(optional)</span> <input name="due_hours" inputmode="numeric" value="{{ s['autotask.due_hours'] }}" placeholder="Hours" maxlength="3">
+    <span class="hint">Hours from when the ticket is created. Leave empty to let the ticket category set it.</span></label>
+  <fieldset class="choices"><legend>A client without an Autotask company</legend>
+    <label class="check"><input type="radio" name="unmapped" value="own" {% if s['autotask.unmapped'] != 'skip' %}checked{% endif %}> Create its tickets in your own company</label>
+    <label class="check"><input type="radio" name="unmapped" value="skip" {% if s['autotask.unmapped'] == 'skip' %}checked{% endif %}> Don't create tickets for it</label>
+  </fieldset>
+  <label class="check"><input type="checkbox" name="enabled" value="1" {% if s['autotask.enabled'] == '1' %}checked{% endif %}> Create tickets</label>
+  {% if missing %}<p class="footnote">To turn tickets on, choose {{ missing|join(' and ') }}.</p>{% endif %}
+  <div class="form-actions"><button class="primary">Save</button></div>
+</form>
+<div class="stack">
+<section class="card">
+  <h2>Check and test</h2>
+  <p class="muted small">Checking reads your active companies and the ticket fields' choices again. A test creates a ticket in your own company.</p>
+  <div class="form-actions wrap">
+    <form method="post" action="{{ url_for('autotask.check') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button {% if not s['autotask.secret_enc'] %}disabled{% endif %}>Check connection</button></form>
+    <form method="post" action="{{ url_for('autotask.test') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button {% if missing %}disabled{% endif %}>Create a test ticket</button></form>
+  </div>
+</section>
+<section class="card flush" id="tickets">
+  <div class="card-head"><h2>Recent tickets</h2></div>
+  {% if tickets %}
+  <table class="stack-sm">
+    <thead><tr><th>When</th><th>Client</th><th>Ticket</th></tr></thead>
+    <tbody>
+    {% for t in tickets %}{% set r = t.row %}
+    <tr><td class="nowrap"><time title="{{ r.created_at|when }}">{{ r.created_at|ago }}</time></td>
+      <td data-label="Client">{{ r.tenant_name or ('Test' if r.event == 'test' else 'Office Sentry') }}</td>
+      <td data-label="Ticket">
+        {% if t.state == 'created' %}<span class="pill ok">Created</span>{% elif t.state == 'cleared' %}<span class="pill">Cleared</span>{% elif t.state == 'retrying' %}<span class="pill warn">Trying again</span>{% else %}<span class="pill bad">Failed</span>{% endif %}
+        {% if t.link %}<a href="{{ t.link }}" target="_blank" rel="noopener noreferrer">{{ r.ticket_number or ('Ticket ' ~ r.ticket_id) }}</a>{% endif %}
+        <span class="muted small">{{ r.title }}</span>
+        {% if r.error and not r.ticket_id %}<div class="small">{{ r.error }}</div>{% endif %}
+        {% if t.state == 'failed' %}<form method="post" action="{{ url_for('autotask.retry', ticket_id=r.id) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="sm">Try again</button></form>{% endif %}
+      </td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty compact"><p>No tickets created yet.</p></div>
+  {% endif %}
+</section>
+</div>
+</div>
+
+<form method="post" action="{{ url_for('autotask.companies') }}" class="card" id="clients">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <h2>Clients and their companies</h2>
+  {% if not companies %}
+  <p class="muted small">Check the connection to read your Autotask companies, then match each client to one here.</p>
+  {% elif not tenants %}
+  <p class="muted small">No clients yet.</p>
+  {% else %}
+  <p class="muted small">Type or pick each client's company. Names that match a single company are filled in for you and marked <span class="pill info">Suggested</span>; save to keep them. Clear a box to remove the company. {% if unmapped %}{% set one = unmapped == 1 %}{{ unmapped }} client{{ '' if one else 's' }} without a company {% if s['autotask.unmapped'] != 'skip' %}{{ 'files its' if one else 'file their' }} tickets in your own company.{% else %}{{ 'gets' if one else 'get' }} no tickets.{% endif %}{% endif %}</p>
+  <datalist id="autotask-companies">{% for c in companies %}<option value="{{ listed_name(c.name, c.company_id) }}">{% endfor %}</datalist>
+  <table class="stack-sm">
+    <thead><tr><th>Client</th><th>Autotask company</th></tr></thead>
+    <tbody>
+    {% for t in tenants %}{% set m = mapped.get(t.id) %}{% set guess = suggested.get(t.id) %}
+    <tr><td>{{ t.name }}</td>
+      <td data-label="Autotask company"><input name="company-{{ t.id }}" list="autotask-companies" autocomplete="off" maxlength="300" aria-label="Autotask company for {{ t.name }}"
+        value="{{ listed_name(m.company_name, m.company_id) if m else (listed_name(guess.name, guess.company_id) if guess else '') }}" placeholder="{{ 'Your own company' if s['autotask.unmapped'] != 'skip' else 'No tickets' }}">
+        {% if guess %}<span class="pill info">Suggested</span>{% endif %}
+        {% if m and not m.listed %}<span class="pill warn">Not active in Autotask</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="form-actions sticky-actions"><button class="primary">Save companies</button></div>
+  {% endif %}
+</form>
+{% endblock %}

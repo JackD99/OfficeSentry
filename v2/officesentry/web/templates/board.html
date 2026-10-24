@@ -1,0 +1,54 @@
+{#- The office board (web/board.py, board.py): every client on one dark screen for the office TV, worst first. A
+    page of its own, without the menu, dark whatever the person chose, and reloading itself every few minutes.
+    Without script it lists every client and scrolls; board.js ticks the clock and, when the clients don't fit
+    the screen, keeps the ones that need someone and shows the quiet ones in turn in the space left. -#}
+{% from "_grade.html" import badge %}
+<!doctype html>
+<html lang="en" data-theme="dark" class="board-page"{% if look.accent %} data-accent="{{ look.accent }}"{% endif %}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="{{ refresh }}">
+  <title>{% filter page_title %}Board{% endfilter %}</title>
+  <link rel="icon" href="{{ url_for('branding.logo', v=brand.version) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='themes.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  {% if not brand.is_default %}<link rel="stylesheet" href="{{ url_for('branding.brand_css', v=brand.version) }}">{% endif %}
+</head>
+<body{% if not brand.is_default %} class="branded"{% endif %}>
+<main class="board" id="main">
+  <header class="board-head">
+    <h1>{{ brand.display_name }}{% if group_scope and group_scope.group %} · {{ group_scope.group.name }}{% endif %} · <span class="day">{{ day }}</span></h1>
+    <div class="clock" data-clock data-zone="{{ zone }}" aria-label="Time">{{ clock }}</div>
+  </header>
+  {% if board.tiles %}
+  <div class="tiles">
+    {% for t in board.tiles %}<div class="tile{% if t.tone %} tone-{{ t.tone }}{% endif %}"><div class="label">{{ t.label }}</div><div class="value">{{ t.value }}</div><div class="foot">{{ t.foot }}</div></div>{% endfor %}
+  </div>
+  {% endif %}
+  {% if not board.stamps %}
+  <p class="board-empty">No active clients to show{% if group_scope and group_scope.group %} in {{ group_scope.group.name }}{% endif %}.</p>
+  {% else %}
+  <div class="wall" data-wall>
+    {% for s in board.stamps %}{% set t = s.tenant %}
+    <a class="stamp{{ ' flagged' if s.flagged }}" href="{{ url_for('tenants.tenant', tenant_id=t.id) }}"{% if s.quiet %} data-quiet{% endif %}>
+      <div class="top"><span class="name">{{ t.name }}</span>{% if s.findings %}{{ badge(s.grade, 'sm') }}{% endif %}</div>
+      <div class="line">
+        {% if s.findings %}<span class="sevs"><span class="sev sev-critical{{ ' zero' if not s.critical }}" title="{{ s.critical|plural('open critical finding') }}">{{ s.critical }}</span><span class="sev sev-high{{ ' zero' if not s.high }}" title="{{ s.high|plural('open high finding') }}">{{ s.high }}</span></span>{% else %}<span></span>{% endif %}
+        {% if s.word %}<span class="sevtext {{ s.tone }}">{{ s.word }}</span>{% elif s.score is not none %}<span class="score" title="Secure Score">{{ s.score|round|int }}%</span>{% endif %}
+      </div>
+    </a>
+    {% endfor %}
+    <div class="stamp more" data-more hidden><div class="top"><span class="name" data-more-text></span></div><div class="line"><span>Shown in turn</span></div></div>
+  </div>
+  {% endif %}
+  <footer class="board-foot">
+    <span>Updated {{ clock }}. The board reloads itself every {{ (refresh // 60)|plural('minute') }}.</span>
+    <button type="button" class="link" data-fullscreen hidden>Full screen</button>
+    <a href="{{ url_for('tenants.dashboard') }}">Leave the board</a>
+  </footer>
+</main>
+<script src="{{ url_for('static', filename='board.js') }}" nonce="{{ csp_nonce }}"></script>
+</body>
+</html>

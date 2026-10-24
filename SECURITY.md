@@ -88,7 +88,7 @@ it, is in [What Office Sentry reads](v2/docs/what-office-sentry-reads.md).
 |---|---|---|
 | Collected data: snapshots, findings, reports sent to clients, users and settings | The database, `/data/officesentry.db` | Compressed, not encrypted by Office Sentry. Protect the server and its disk, and encrypt the disk if your policy asks for encryption at rest. |
 | Sign-in and directory audit history | A file per month beside the database, `/data/events` | As the database. |
-| The app certificates' private keys, the sign-in app's key, two-step secrets, mail passwords and secrets, the alert webhook and its signing secret | In the database | Encrypted with the encryption key (Fernet: AES with an integrity check). Never written to disk as a file, never sent to a browser; only an app's public `.cer` can be downloaded. |
+| The app certificates' private keys, the sign-in app's key, two-step secrets, mail passwords and secrets, the alert webhook and its signing secret, the Autotask API user's secret and tracking identifier | In the database | Encrypted with the encryption key (Fernet: AES with an integrity check). Never written to disk as a file, never sent to a browser; only an app's public `.cer` can be downloaded. |
 | Passwords, recovery codes, session tokens | In the database | Only as hashes: scrypt for passwords, an HMAC under an encrypted key for recovery codes. |
 | Session key and encryption key | `secrets.json`, in its own volume (`/keys`), readable only by Office Sentry | Never in the data volume or a backup. Keep a copy apart, in a password manager say. |
 | Nightly backups | `/data/backups`, or a folder you give it | Compressed. They hold the encrypted keys but not the key that decrypts them. |
@@ -125,6 +125,7 @@ keys.
   (its token request, creating its sign-in app, and letting that app accept
   other organisations' accounts for client sign-in).
   The audit log add-on adds one more: starting and stopping a client's audit feed (below).
+  Autotask PSA adds one more: creating tickets, and notes on them, in the MSP's own Autotask (below). <!-- since 2.6.0 -->
   `tests/test_isolation_walk.py` opens every tenant-scoped route with
   another client's IDs, as staff and as a client, and expects a refusal.
   `tests/test_roles.py` opens every route as every built-in role and expects
@@ -137,6 +138,7 @@ keys.
   warning until they confirm it, because without that limit a leaked
   credential could send as anyone in the MSP's company.
 - **The audit log add-on is its own app, with one permission.** It's off until an admin turns it on, and each client approves it separately. Its app has only `ActivityFeed.Read` on the Office 365 Management APIs and its own certificate, and Office Sentry keeps only a fixed list of file, sharing and mailbox events from it, without email subjects. Its only requests other than GET start and stop a client's audit feed: they tell Microsoft whether to make that client's audit records available to the add-on, and change nothing in the tenant.
+- **Autotask PSA is the MSP's own Autotask, written to only with new tickets.** It's off until an admin connects an Autotask API user. Its secret and tracking identifier are encrypted, never shown again and only sent to Autotask's own hosts (`*.autotask.net`; a zone lookup that names any other host is refused). It reads the MSP's active companies (IDs and names) and the ticket fields' choices, and its only requests other than GET create a ticket for an alert and add a note to that ticket when the problem clears. It never changes, closes or deletes anything in Autotask, and its settings need *Manage settings*, which only counts for someone who sees every client. <!-- since 2.6.0 -->
 - **Bound consent links.** The admin-consent link's signed state carries a
   one-time nonce, stored server-side with the admin and the signed-in
   browser that opened it, and expires after an hour. A client added by

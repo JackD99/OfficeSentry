@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 
-from .. import activity_alerts, alerts
+from .. import activity_alerts, alerts, autotask
 from ..db import audit, transaction
 from .access import needs
 
@@ -38,6 +38,7 @@ def settings():
         chosen=alerts.activity_kinds(s),
         recent=recent,
         email_alerts=email_alerts,
+        autotask_on=autotask.ready(autotask.settings(g.db)),
     )
 
 

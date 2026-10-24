@@ -179,6 +179,9 @@ def names_to_hide(conn, cfg: Config | None = None) -> dict[str, str]:
         names[row["tenant_ref"]] = f"[client {row['id']}]"
     for (username,) in conn.execute("SELECT username FROM users").fetchall():
         names[username] = "[user]"
+    # A client's Autotask company is usually named after the client ("Contoso Limited").
+    for row in conn.execute("SELECT tenant_id, company_name FROM autotask_companies").fetchall():
+        names[row["company_name"]] = f"[client {row['tenant_id']}]"
     for key in ("brand_name", "brand_contact", "brand_support_name", "brand_support_email", "brand_support_phone"):
         row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
         if row and row[0]:

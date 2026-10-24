@@ -276,6 +276,13 @@ high findings, Secure Score, users with MFA or unassigned paid licences. Each va
 the clients that slipped come first.
 <!-- /since -->
 
+<!-- since 2.6.0 -->
+**Our work this quarter** shows what your team got done across its clients over the last three months: findings
+fixed (and how many were critical or high), risks accepted with the client, whose Secure Score went up and how many
+unused paid licences were cut, by client, by month, by check and by the person each finding was handed to. Take it
+to the management meeting as a branded PDF, or show a prospect the same PDF with client and team names left out.
+<!-- /since -->
+
 <table>
   <tr>
     <td width="50%"><img src="docs/screenshots/all-tenants.png" alt="The Clients page showing MFA coverage for every client"></td>
@@ -286,6 +293,13 @@ the clients that slipped come first.
     <td>What changed in the last 30 days, most important first (<a href="examples/what-changed-all-clients.pdf">PDF</a>)</td>
   </tr>
 </table>
+
+<!-- since 2.6.0 -->
+The **Office board** puts every client on one dark screen for the office TV: a tile per client with its grade, open
+critical and high findings and Secure Score, the ones with something new, a failed collection or something due
+first, and the day's figures above them. It refreshes itself, and when the clients don't all fit, the quiet ones
+take turns.
+<!-- /since -->
 
 ### Emailed reports and alerts
 
@@ -301,6 +315,16 @@ The same webhook can tell you when someone makes a risky change in a client's te
 log at each collection: "Contoso: bob@contoso.com made Global Administrator", a Conditional Access policy deleted or
 turned off, security defaults turned off, or a sign-in method removed from an admin. Each change is posted once,
 with who made it and when.
+
+Today's ledger can also go to your team by email every weekday morning: what happened across your clients since
+the last one, worst first, for people who start the day in their inbox.
+<!-- /since -->
+
+<!-- since 2.6.0 -->
+With **Autotask PSA** connected, the alerts you choose become tickets in your Autotask, in the client's company:
+new findings, risky changes, a collection that starts failing and Office Sentry's own problems. One ticket per
+problem, with the priority set by its severity and a note added when it clears.
+[Connecting Autotask](v2/docs/autotask.md)
 <!-- /since -->
 
 <table>
@@ -537,6 +561,7 @@ from there.
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
 - [Getting help](v2/docs/getting-help.md): where to look first, the support package and what it leaves out
+- [Autotask PSA](v2/docs/autotask.md): tickets in your Autotask for the alerts you choose <!-- since 2.6.0 -->
 - [Securing the portal](v2/docs/securing-the-portal.md): hardening defaults, what you have to do, reverse proxies
 - [How it compares](website/pages/compare/reporting-tools.md): Office Sentry next to Microsoft's admin centres,
   PowerShell, CIPP and AdminDroid

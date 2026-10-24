@@ -431,6 +431,7 @@ def test_detail_reports_build(db, two_tenants):
     listed = guests["Guest accounts"]
     assert listed.columns[:2] == ["Guest", "Name"]  # who the guest is, not only the address
     assert [r[:2] for r in listed.rows] == [["g#EXT#@x.com", "Guest"]]
+    assert listed.columns[2] == "From" and listed.filter_columns == ("From",)
     for key in REPORTS:
         assert build(db, store.get_tenant(db, two_tenants[1]), key).unavailable  # never collected
 

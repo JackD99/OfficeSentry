@@ -956,6 +956,17 @@ SHARING_SHORT = {
 }
 
 
+def guest_home(u: dict) -> str:
+    """The organisation a guest comes from: their address's domain, or else the one in an ``#EXT#`` sign-in name
+    (``jo_partner.example#EXT#@...``)."""
+    mail = u.get("mail") if isinstance(u.get("mail"), str) else ""
+    if "@" in mail:
+        return mail.rsplit("@", 1)[1].lower()
+    upn = u.get("userPrincipalName") if isinstance(u.get("userPrincipalName"), str) else ""
+    local = upn.split("#EXT#", 1)[0] if "#EXT#" in upn else ""
+    return local.rsplit("_", 1)[1].lower() if "_" in local else ""
+
+
 @report(
     "guests",
     "Guests and sharing",
@@ -1009,10 +1020,12 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         activity = any(u.get("signInActivityAvailable") for u in users)
         guest = Section(
             "Guest accounts",
-            ["Guest", "Name", "Invited", "Invitation", "Last sign-in", "Sign-in allowed"],
-            intro="Every external account, oldest activity first."
+            ["Guest", "Name", "From", "Invited", "Invitation", "Last sign-in", "Sign-in allowed"],
+            intro="Every external account, oldest activity first. From is the organisation the guest comes from"
+            " (their address's domain), so you can see which partners have accounts here."
             + ("" if activity else " Sign-in dates need Entra ID P1."),
             empty="No guest accounts.",
+            filter_columns=("From",),
         )
         rows = [u for u in users if u.get("userType") == "Guest"]
         rows.sort(key=lambda u: (last_sign_in(u) or datetime.min.replace(tzinfo=UTC), u.get("createdDateTime") or ""))
@@ -1025,6 +1038,7 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                 [
                     u.get("mail") or u.get("userPrincipalName"),
                     u.get("displayName") or "",
+                    guest_home(u),
                     _date(u.get("createdDateTime")),
                     "Not accepted" if pending else "Accepted",
                     last.date().isoformat() if last else (never_signed_in(u) if activity else "Unknown"),
