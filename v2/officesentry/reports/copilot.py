@@ -126,7 +126,7 @@ def copilot_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
     ref = parse_day(status.get("copilotReportDate") or status.get("reportDate") or "") or now.date()
     skus = usage.copilot_skus(snap.objects("tenant_profile", "subscribed_sku"))
     holders = _holders(snap, rows, skus, hidden)
-    prices = load_prices(snap.conn)
+    prices = load_prices(snap.conn, snap.tenant)
     currency = setting(snap.conn, "currency", "GBP")
     trials = trial_seats(snap.objects("tenant_profile", "company_subscription"))
 

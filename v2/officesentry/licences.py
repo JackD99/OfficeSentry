@@ -84,7 +84,7 @@ def sku_name(part_number: str | None) -> str:
 # one is a discount. ``prices.list`` "off" leaves licences the MSP hasn't priced unpriced.
 
 # Reports that put money on licences, whose page says where the prices came from.
-PRICED_REPORTS = ("licences", "licence-rightsizing", "subscriptions", "licence-changes")
+PRICED_REPORTS = ("licences", "licence-rightsizing", "subscriptions", "licence-changes", "copilot")
 MARGIN_KEY = "prices.margin"
 LIST_KEY = "prices.list"
 MARGIN_MIN, MARGIN_MAX = -90.0, 500.0

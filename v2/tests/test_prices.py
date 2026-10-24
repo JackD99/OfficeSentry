@@ -164,3 +164,19 @@ def test_cached_rows_follow_a_margin_change(db, two_tenants):
     db.execute("UPDATE tenants SET price_margin = 3 WHERE id = ?", (alpha,))
     tenant = store.get_tenant(db, alpha)
     assert Rows(db, "rollup:licences", [tenant], now).fingerprint(tenant) != middle
+
+
+def test_every_priced_report_uses_the_client_s_own_margin():
+    import re
+    from pathlib import Path
+
+    import officesentry
+
+    # A report that prices licences without its client prices them at the MSP's margin, not the client's own.
+    root = Path(officesentry.__file__).parent
+    calls = [
+        (path.relative_to(root), args)
+        for path in root.rglob("*.py")
+        for args in re.findall(r"(?<!def )load_prices\(([^)]*)\)", path.read_text(encoding="utf-8"))
+    ]
+    assert calls and all("tenant" in args for _, args in calls), calls
