@@ -119,6 +119,25 @@ To create the app by hand (for example because device sign-in is blocked by
 Conditional Access): **Settings → App connection → Other ways to create the
 app**, generate a certificate, then follow the steps shown there.
 
+<!-- since 2.6.0 -->
+## Adding clients from Partner Center fails
+
+*Add from Partner Center* on Onboarding uses the same device sign-in as creating the app, in your own
+(partner) tenant, and only reads your GDAP relationships. So the device code, Conditional Access and guest
+notes above apply to it too. Besides those:
+
+- **"That account can't read your GDAP relationships"**: Microsoft answered 401 or 403. Sign in with an
+  account in your partner tenant that sees your GDAP relationships in Partner Center (an Admin agent, for
+  example). Microsoft may also ask a Global Administrator of your tenant to approve *Microsoft Graph Command
+  Line Tools* for `DelegatedAdminRelationship.Read.All`; that's the sign-in tool, not Office Sentry.
+- **"No GDAP relationships found"**: the tenant you signed in to has none. Make sure you signed in to your
+  partner tenant, not a client's, and that you have GDAP (not only the older DAP) relationships.
+- **A customer shows "The client" under Who approves**: none of its active GDAP relationships includes
+  Privileged Role Administrator or Global Administrator, the only roles that can approve Office Sentry's
+  read-only application permissions. Add the role to the relationship in Partner Center, or send the client's
+  Global Administrator their link.
+<!-- /since -->
+
 ## Two app connections, one marked "Needs client ID"
 
 Older versions made a second connection when you pressed **Generate

@@ -13,10 +13,22 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, url_for
+from flask import (
+    Blueprint,
+    Response,
+    abort,
+    current_app,
+    flash,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from itsdangerous import BadSignature, URLSafeSerializer
 
-from .. import clouds, onboarding, permission_batch, store, tenant_health
+from .. import app_setup, clouds, entra, onboarding, partner, permission_batch, store, tenant_health
 from ..auditlog import addon
 from ..db import audit, audit_counted
 from ..entra import GRAPH_APP_ID, PERMISSIONS, admin_consent_url
@@ -281,6 +293,161 @@ def import_tenants():
         cloud_of=clouds.get,
         granted=granted,
     )
+
+
+# -- Adding clients from Partner Center (partner.py) -------------------------------------------
+
+PARTNER = "partner"  # the setup wizard's purpose for this sign-in (app_setup)
+
+
+def _to_partner():
+    return redirect(url_for("onboarding.partner_customers"))
+
+
+def _partner_found(sign_in):
+    """The customers the admin's sign-in found, and how each one is already in Office Sentry: tenant ID -> (client
+    id, name), the name blank for a client the person doesn't see (only said to be there, never named), and
+    tenant ID -> the name of a client with the same name that may be it (added by a domain Microsoft couldn't
+    look up)."""
+    customers, domains = partner.load_found(sign_in["found"] if sign_in and sign_in["status"] == "done" else None)
+    sees = None if current().sees_all else {t["id"] for t in visible_tenants(g.db, g.user, archived=True)}
+    rows = g.db.execute("SELECT id, name, tenant_ref FROM tenants").fetchall()
+    by_ref = {r["tenant_ref"].lower(): r for r in rows}
+    by_id = {r["id"]: r for r in rows}
+    by_name = {r["name"].lower(): r for r in rows if sees is None or r["id"] in sees}
+    there, similar = {}, {}
+    for c in customers:
+        row = by_ref.get(c.tenant_id) or by_id.get(domains.get(c.tenant_id, -1))
+        if row is not None:
+            there[c.tenant_id] = (row["id"], row["name"] if sees is None or row["id"] in sees else "")
+        elif (same := by_name.get(c.name.lower())) is not None and "." in same["tenant_ref"]:
+            similar[c.tenant_id] = same["name"]
+    return customers, there, similar
+
+
+@bp.get("/partner")
+@needs("clients.manage", kind="staff")
+def partner_customers():
+    """Add clients from Partner Center: sign in once in the MSP's own tenant, then tick the GDAP customers to add."""
+    from .. import tenant_groups
+
+    sign_in = app_setup.current(g.db, g.user["id"], PARTNER)
+    customers, there, similar = _partner_found(sign_in)
+    cloud = sign_in["cloud"] if sign_in else clouds.DEFAULT
+    connection = onboarding.connection_for(store.list_connections(g.db), cloud)
+    return render_template(
+        "onboarding_partner.html",
+        sign_in=sign_in,
+        seconds_left=app_setup.seconds_left(sign_in) if sign_in else 0,
+        customers=customers,
+        there=there,
+        similar=similar,
+        new=[c for c in customers if c.tenant_id not in there],
+        cloud=clouds.get(cloud),
+        connection=connection,
+        groups=tenant_groups.all_groups(g.db) if manages_groups() else [],
+    )
+
+
+@bp.post("/partner/start")
+@needs("clients.manage", kind="staff")
+def partner_start():
+    cloud = request.form.get("cloud", clouds.DEFAULT)
+    if not clouds.valid(cloud):
+        abort(400)
+    tenant = app_setup.tenant_ref(request.form.get("tenant", ""))
+    if tenant is None:
+        flash("Enter your tenant's domain or Directory (tenant) ID, or leave it blank.", "error")
+        return _to_partner()
+    try:
+        app_setup.start(
+            g.db,
+            current_app.extensions["officesentry.vault"],
+            g.user["id"],
+            g.user["username"],
+            tenant,
+            cloud,
+            "Partner Center",
+            purpose=PARTNER,
+        )
+    except entra.SignInError as exc:
+        flash(str(exc), "error")
+    return _to_partner()
+
+
+@bp.post("/partner/check")
+@needs("clients.manage", kind="staff")
+def partner_check():
+    """One step of the sign-in: JSON for the page's script, a redirect without JavaScript."""
+    row = app_setup.check(
+        g.db, current_app.extensions["officesentry.vault"], g.user["id"], g.user["username"], "", purpose=PARTNER
+    )
+    if request.accept_mimetypes.best == "application/json":
+        if row is None:
+            return jsonify(status="none")
+        return jsonify(
+            status=row["status"],
+            note=row["error"] if row["status"] == "waiting" else None,
+            wait=row["poll_seconds"],
+            seconds_left=app_setup.seconds_left(row),
+        )
+    if row is not None and row["status"] == "waiting" and not row["error"]:
+        flash(
+            "Microsoft says sign-in hasn't finished yet. Enter the code on Microsoft's page, then check again.",
+            "warning",
+        )
+    return _to_partner()
+
+
+@bp.post("/partner/cancel")
+@needs("clients.manage", kind="staff")
+def partner_cancel():
+    """Forget the sign-in, and with it the customers it found."""
+    app_setup.cancel(g.db, g.user["id"], PARTNER)
+    return _to_partner()
+
+
+@bp.post("/partner/add")
+@needs("clients.manage", kind="staff")
+def partner_add():
+    """Add the GDAP customers the admin ticked as clients, as the CSV import adds its rows."""
+    from .. import tenant_groups
+
+    sign_in = app_setup.current(g.db, g.user["id"], PARTNER)
+    customers, there, _ = _partner_found(sign_in)
+    found = {c.tenant_id: c for c in customers}
+    picked = [found[t] for t in dict.fromkeys(request.form.getlist("customer")) if t in found]
+    if not customers:
+        flash("Sign in to Microsoft again to read your Partner Center customers.", "error")
+        return _to_partner()
+    if not picked:
+        flash("Tick at least one customer first.", "error")
+        return _to_partner()
+    names = []
+    if manages_groups():
+        wanted = {int(x) for x in request.form.getlist("groups") if x.isdigit()}
+        names = [gr["name"] for gr in tenant_groups.all_groups(g.db) if gr["id"] in wanted]
+    rows = [
+        onboarding.Row(
+            line=i,
+            name=c.name,
+            tenant_ref=c.tenant_id,
+            cloud=clouds.get(sign_in["cloud"]).key,
+            groups=list(names),
+            skip="Already in Office Sentry." if c.tenant_id in there else "",
+        )
+        for i, c in enumerate(picked, 1)
+    ]
+    ids = onboarding.create(g.db, onboarding.Parsed(rows=rows), g.user["username"], how="Partner Center")
+    if ids:
+        flash(
+            f"Added {len(ids)} {'client' if len(ids) == 1 else 'clients'} from Partner Center. Next: approve Office "
+            "Sentry for each one, below.",
+            "success",
+        )
+    else:
+        flash("Every customer you ticked is already in Office Sentry.", "success")
+    return redirect(url_for("onboarding.index", show="waiting"))
 
 
 # -- One client: the link, the email and the pack ----------------------------------------------

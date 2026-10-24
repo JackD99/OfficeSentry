@@ -231,6 +231,8 @@ can't provide. A large tenant can take a while. To collect again later, use
 *Settings → Client settings → Onboarding* (needs *Manage clients*) is for adding clients in
 bulk and following each one through consent.
 
+If you manage your clients through Partner Center with GDAP, you can pick them from your customer list instead: see [Adding clients from Partner Center](#adding-clients-from-partner-center-gdap) below. <!-- since 2.6.0 -->
+
 1. **Import from CSV.** One row per client with column names on the first
    row: `name` and `tenant` (the tenant ID or any domain the tenant uses), and
    optionally `group` (several separated by `;`; missing groups are created),
@@ -280,6 +282,45 @@ Imported clients are ordinary clients: people whose role covers every client
 (Administrators and Team leaders) see them; everyone else only once they're
 given access, one by one or through a group (someone given a group sees the
 imported clients in it).
+
+<!-- since 2.6.0 -->
+### Adding clients from Partner Center (GDAP)
+
+If you're a Microsoft partner with GDAP relationships, Office Sentry can read your customer list so you don't
+type any tenant IDs. *Onboarding → Add from Partner Center* (or *Use GDAP? Add from Partner Center* on *Add
+client*):
+
+1. **Sign in to Microsoft** with your own partner account, in your MSP's tenant: someone who sees your GDAP
+   relationships in Partner Center, such as an Admin agent. It's the same device sign-in as *Settings → App
+   connection*: Office Sentry shows a code, and you enter it on Microsoft's page. The first time, Microsoft may
+   ask a Global Administrator of your tenant to let *Microsoft Graph Command Line Tools* (Microsoft's own app)
+   read your GDAP relationships for you.
+2. **Tick the customers to add.** Office Sentry lists every customer you have a GDAP relationship with: its
+   name and tenant ID, the relationship's status and end date, and **who approves** Office Sentry for it:
+   *You can* when an active relationship includes Privileged Role Administrator or Global Administrator,
+   otherwise *The client*. Customers with an active relationship start ticked. Customers already in Office
+   Sentry are listed apart (also ones you added by a domain, which Office Sentry looks up), and a customer with
+   the same name as a client added by a domain is left unticked with a note, in case it's the same one. You
+   can put the new clients in client groups as you add them.
+3. **Add the ticked customers.** They're added like a CSV import, with their tenant IDs, in the cloud you
+   signed in to. Then approve Office Sentry for each one: yourself where you can, as in *Through Partner Center
+   (GDAP)* above, or by sending the client's Global Administrator their link.
+
+What Office Sentry asks for and keeps:
+
+- One delegated, read-only permission, `DelegatedAdminRelationship.Read.All`, used once in your own tenant to
+  read `tenantRelationships/delegatedAdminRelationships` from Microsoft Graph. It isn't added to Office
+  Sentry's app, so no client is asked to approve anything new.
+- The access token is never stored, and no refresh token is asked for. The list it read (names, tenant IDs,
+  relationship status, end date and whether you can approve) is kept with your sign-in until you press
+  *Forget this list*, or for a day. *Read the list again* signs in again for a fresh one.
+- Nothing is read from, or changed in, any customer's tenant, and Office Sentry never calls Partner Center's
+  own API.
+
+If your Conditional Access blocks device sign-in, export the list instead: in Partner Center, *Customers →
+Export customers*, then *Import from CSV* with the file as it is. Office Sentry reads its *Company name* and
+*Microsoft ID* columns.
+<!-- /since -->
 
 ## 5. Connection health: the Manage page
 

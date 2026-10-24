@@ -1,0 +1,150 @@
+{#- Add clients from Partner Center (web/onboarding.partner_customers): one Microsoft sign-in in the MSP's own tenant
+    reads its GDAP customers (partner.py), then the admin ticks the ones to add. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf, ts %}
+{% from "_device_code.html" import device_code %}
+{% block title %}Add from Partner Center · Office Sentry{% endblock %}
+{% block content %}
+{% set status = sign_in.status if sign_in else none %}
+{% set active = status in ('waiting', 'working') %}
+{% set approvable = new|selectattr('can_approve')|list %}
+<div class="crumbs"><a href="{{ url_for('onboarding.index') }}">&larr; Onboarding</a></div>
+<div class="page-head"><div><h2 class="page-title">Add clients from Partner Center</h2>
+  <div class="sub">{% if status == 'done' %}{% if customers %}Your partner tenant has {{ customers|length|plural('GDAP customer') }}, {{ new|length }} not in Office Sentry yet. Tick the ones to add.{% else %}No GDAP customers were found.{% endif %}
+    {% else %}If you manage clients through Partner Center with GDAP, sign in once and pick them from your customer list instead of typing tenant IDs.{% endif %}</div></div></div>
+
+{% if status != 'done' %}
+<section class="card setup wizard" id="setup" aria-labelledby="setup-title">
+  <div class="card-head"><h2 id="setup-title">Read your Partner Center customers</h2>
+    {% if active %}<span class="pill accent">Waiting for sign-in</span>{% endif %}</div>
+  <ol class="setup-steps flush-steps">
+    <li class="current">
+      <div class="step-title">Sign in to Microsoft</div>
+      <div class="step-body">
+      {% if active %}
+        {{ device_code(sign_in, url_for('onboarding.partner_check'), url_for('onboarding.partner_cancel'), seconds_left,
+            "Sign in with your own partner account, in your MSP's tenant: someone who sees your GDAP relationships in Partner Center, such as an Admin agent. The first time, Microsoft may ask a Global Administrator of your tenant to approve this. Office Sentry uses the sign-in once, to read the list, and doesn't keep it.",
+            working='Signed in. Reading your customers…') }}
+      {% else %}
+        {% if status == 'failed' %}
+        <div class="callout bad" role="alert">{{ icon('alert') }}<div><strong>Your customers weren't read.</strong> {{ sign_in.error }}</div></div>
+        {% endif %}
+        Office Sentry shows you a code, and you sign in on Microsoft's page in another tab. Your password and the sign-in itself never pass through Office Sentry.
+        <form method="post" action="{{ url_for('onboarding.partner_start') }}" class="step-form setup-start">
+          {{ csrf() }}
+          <div class="form-actions"><button class="primary">{{ icon('shield') }} Sign in to Microsoft</button></div>
+          <details class="by-hand small">
+            <summary>More options</summary>
+            <div class="form-row">
+              <label>Microsoft cloud <select name="cloud">{% for key, label in cloud_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+                <span class="hint">Commercial unless your partner tenant is in US Government GCC High or DoD, or in China. The clients you add get the same cloud.</span></label>
+              <label>Your tenant <input name="tenant" placeholder="Any tenant" autocomplete="off" class="mono">
+                <span class="hint">Blank works for most people. If you sign in as a guest in your partner tenant, enter its domain or ID.</span></label>
+            </div>
+          </details>
+        </form>
+      {% endif %}
+      </div>
+    </li>
+    <li>
+      <div class="step-title">Tick the customers to add</div>
+      <div class="step-body">Office Sentry reads your GDAP relationships, read-only, and lists every customer with whether your roles let you approve Office Sentry for it. It reads nothing from any customer's tenant and keeps the list for a day at most.</div>
+    </li>
+    <li>
+      <div class="step-title">Approve Office Sentry for each one</div>
+      <div class="step-body">Where your GDAP roles include Privileged Role Administrator (or Global Administrator), you approve it yourself with your partner account. For the others, send the client's Global Administrator their link, as for any client.</div>
+    </li>
+  </ol>
+  {% if not active %}
+  <div class="card-foot">
+  <details class="by-hand other-ways">
+    <summary>Can't use this sign-in?</summary>
+    <div class="small">
+      <p>If your Conditional Access blocks device sign-in, export your customer list instead: in Partner Center, <em>Customers</em>, then <em>Export customers</em>. <a href="{{ url_for('onboarding.import_tenants') }}">Import the CSV</a> it downloads as it is: Office Sentry reads its <em>Company name</em> and <em>Microsoft ID</em> columns.</p>
+    </div>
+  </details>
+  </div>
+  {% endif %}
+</section>
+{% else %}
+
+{% if not connection or not connection.client_id %}
+<div class="callout warn" role="status">{{ icon('alert') }}<div class="grow">Set up the <a href="{{ url_for('admin.connections') }}">app connection</a>{% if not cloud.is_default %} for {{ cloud.label }}{% endif %} first: clients you add need it before anyone can approve Office Sentry for them. You can still add them now.</div></div>
+{% endif %}
+
+{% if new %}
+<form method="post" action="{{ url_for('onboarding.partner_add') }}" class="partner-add" id="partner-add">{{ csrf() }}
+<section class="card flush">
+  <div class="card-head"><h2>Not in Office Sentry yet</h2>
+    <span class="muted small">{% if approvable|length == new|length %}You can approve every one yourself{% else %}You can approve {{ approvable|length }} of {{ new|length }} yourself{% endif %}: your GDAP roles there include Privileged Role Administrator. The client's Global Administrator approves the rest.</span></div>
+  <div class="scroll-x">
+  <table class="stack-sm onboarding-table" id="partner-table" data-cap="0">
+    <thead><tr><th><input type="checkbox" data-check-all aria-label="Select every customer"{% if new|selectattr('usable')|list|length == new|length %} checked{% endif %}></th><th>Customer</th><th>GDAP relationship</th><th>Who approves</th></tr></thead>
+    <tbody>
+    {% for c in new %}
+    <tr>
+      <td><input type="checkbox" name="customer" value="{{ c.tenant_id }}" aria-label="Add {{ c.name }}"{% if c.usable and c.tenant_id not in similar %} checked{% endif %}></td>
+      <td data-label="Customer" class="who"><span class="strong">{{ c.name }}</span><span class="sub mono">{{ c.tenant_id }}</span>
+        {% if c.tenant_id in similar %}<span class="sub warn-text">A client named {{ similar[c.tenant_id] }} is already in Office Sentry, added by a domain. Leave this unticked if it's the same one.</span>{% endif %}</td>
+      <td data-label="GDAP relationship" class="wrap"><span class="pill {{ 'ok' if c.usable else 'info' }}">{{ c.status_words }}</span>
+        {% if c.usable and c.ends %}<span class="sub">Until {{ c.ends|day }}</span>{% elif not c.usable %}<span class="sub">No active relationship, so you can't approve for it through GDAP.</span>{% endif %}</td>
+      <td data-label="Who approves" class="wrap">{% if c.can_approve %}<span class="pill ok">{{ icon('check') }}You can</span>
+        {% else %}<span class="pill">The client</span>{% if c.usable %}<span class="sub">No Privileged Role Administrator in your GDAP roles here.</span>{% endif %}{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if groups %}
+  <div class="partner-groups">
+  <fieldset>
+    <legend>Put them in groups <span class="faint">(optional)</span></legend>
+    <div class="check-grid">
+    {% for gr in groups %}<label class="check"><input type="checkbox" name="groups" value="{{ gr.id }}"> {{ gr.name }}{% if gr.category %} <span class="faint small">{{ gr.category }}</span>{% endif %}</label>{% endfor %}
+    </div>
+  </fieldset>
+  </div>
+  {% endif %}
+  <div class="action-row">
+    <button class="primary">{{ icon('plus') }} Add the ticked customers</button>
+    <span class="muted small hint">They're added as {{ cloud.label }} clients{% if connection and connection.client_id %} using {{ connection.name }}{% endif %}. Everyone who sees every client sees them straight away; anyone else once you give them access.</span>
+  </div>
+</section>
+</form>
+{% elif customers %}
+<div class="card empty compact"><p>Every one of your GDAP customers is already in Office Sentry. <a href="{{ url_for('onboarding.index') }}">Back to Onboarding</a></p></div>
+{% else %}
+<div class="card empty">
+  <h3>No GDAP relationships found</h3>
+  <p>Microsoft found no GDAP relationships in the tenant you signed in to{% if sign_in.home_tenant %} (<span class="mono">{{ sign_in.home_tenant }}</span>){% endif %}. Sign in with an account in your partner tenant, or add clients <a href="{{ url_for('onboarding.import_tenants') }}">from a CSV</a> or <a href="{{ url_for('tenants.new_tenant') }}">one at a time</a>.</p>
+</div>
+{% endif %}
+
+{% if there %}
+<details class="card">
+  <summary><span class="strong">{{ there|length|plural('customer') }} already in Office Sentry</span></summary>
+  <ul class="plain-list">
+  {% for c in customers if c.tenant_id in there %}{% set id, name = there[c.tenant_id] %}
+    <li>{{ c.name }} <span class="muted small">{% if name %}as <a href="{{ url_for('onboarding.send', tenant_id=id) }}">{{ name }}</a>{% else %}added by someone else{% endif %}</span></li>
+  {% endfor %}
+  </ul>
+</details>
+{% endif %}
+
+<div class="form-actions">
+  <form method="post" action="{{ url_for('onboarding.partner_start') }}" class="inline">{{ csrf() }}<input type="hidden" name="cloud" value="{{ cloud.key }}"><input type="hidden" name="tenant" value="{{ sign_in.tenant if sign_in.tenant != 'organizations' else '' }}"><button class="ghost">{{ icon('refresh') }} Read the list again</button></form>
+  <form method="post" action="{{ url_for('onboarding.partner_cancel') }}" class="inline">{{ csrf() }}<button class="ghost">Forget this list</button></form>
+  <span class="muted small">Read {{ ts(sign_in.updated_at) }}. Office Sentry forgets it after a day.</span>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  var all = document.querySelector('[data-check-all]');
+  if (all) all.addEventListener('change', function () {
+    document.querySelectorAll('input[name="customer"]').forEach(function (box) { box.checked = all.checked; });
+  });
+})();
+</script>
+{% endblock %}
