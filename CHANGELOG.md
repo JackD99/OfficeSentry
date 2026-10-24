@@ -9,28 +9,9 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
-## [2.5.1] - 2026-10-17
+## [2.6.0] - Unreleased
 
-### Action required
-
-None. `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are the same as 2.5.0's.
-
-### New Microsoft permissions
-
-None.
-
-### Database upgrade
-
-No.
-
-### Fixed
-
-- Search and the jump box offer a domain only to people who open Email reports, since a domain opens the
-  Domains report; an account manager was offered domains that opened a "not allowed" page.
-- Today speaks only of what the person sees: a role without security findings no longer reads "no new critical
-  or high findings" or sees a 0 for them, its note on what's new and its empty list name only findings,
-  collections or due items it can see, a role that sees none of them reads "Nothing to show" instead of "All
-  clear", and the Today/Clients switch only shows when there are two pages to switch between.
+In progress. What changed is listed here when 2.6.0 is released.
 
 ## [2.5.0] - 2026-10-17
 
@@ -1873,7 +1854,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
-[2.5.1]: https://github.com/JackD99/OfficeSentry/compare/v2.5.0...v2.5.1
+[2.6.0]: https://github.com/JackD99/OfficeSentry/compare/v2.5.0...HEAD
 [2.5.0]: https://github.com/JackD99/OfficeSentry/compare/v2.4.1...v2.5.0
 [2.4.1]: https://github.com/JackD99/OfficeSentry/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/JackD99/OfficeSentry/compare/v2.3.1...v2.4.0
