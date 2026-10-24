@@ -1,0 +1,86 @@
+{#- One measure for every client, month by month (reports/over_time.py): the clients slipping first. Each value
+    is shaded by how good it is and always shows its number. On a phone the last three months and the change. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import downloads %}
+{% from "_across.html" import across_head with context %}
+{% set m = grid.measure %}
+{% block title %}Over time · Clients · Office Sentry{% endblock %}
+{% macro names(rows) -%}
+{% for r in rows[:3] %}{{ r.tenant.name }}{{ ', ' if not loop.last }}{% endfor %}{% if rows|length > 3 %} and {{ rows|length - 3 }} more{% endif %}
+{%- endmacro %}
+{% block content %}
+{{ across_head('over-time', main, count=grid.rows|length) }}
+
+{% if not grid.rows %}
+<div class="card empty">
+  <h3>No clients to show</h3>
+  <p>{% if can('clients.manage') %}Add a client to see it here.{% else %}You haven't been given access to any clients yet. Ask an admin to grant access.{% endif %}</p>
+</div>
+{% else %}
+{% set first = grid.months[0] %}
+{% set latest, moved = grid.now_and_change() %}
+<div class="tiles">
+  <div class="tile{% if grid.improved %} tone-ok{% endif %}"><div class="label">Improved</div><div class="value">{{ grid.improved|length }} of {{ grid.counted|length }}</div>
+    <div class="foot">better now than in {{ first.strftime('%B %Y') }}, or than in their first month here</div></div>
+  <div class="tile{% if grid.slipped %} tone-bad{% endif %}"><div class="label">Slipped</div><div class="value">{{ grid.slipped|length }}</div>
+    <div class="foot">{% if grid.slipped %}{{ names(grid.slipped) }}{% else %}no client is worse than it was{% endif %}</div></div>
+  <div class="tile"><div class="label">{{ 'On average' if grid.averages else 'In total' }}</div>
+    <div class="value">{{ m.figure(latest, unit=true) }}{% if moved is not none %} <span class="delta {{ 'worse' if m.worse(moved) else ('better' if m.better_by(moved) else 'flat') }}">{{ m.change_text(moved) }}</span>{% endif %}</div>
+    <div class="foot">{{ m.label }} now, across these clients{% if moved is not none %}, against the start of these months{% endif %}</div></div>
+</div>
+
+<nav class="subtabs" aria-label="Measure">
+  {% for o in offered %}<a href="{{ url_for('across.over_time_page', measure=o.key) }}"{% if o.key == m.key %} class="active" aria-current="page"{% endif %}>{{ o.label }}</a>{% endfor %}
+</nav>
+
+<div class="card flush">
+  <div class="card-head toolbar">
+    <div>
+      <h2>{{ m.label }}, by month</h2>
+      <p class="muted small">At each month's end; this month's is the latest. Shading: {{ m.legend() }}.</p>
+    </div>
+    <div class="toolbar-actions">
+      {% if grid.rows|length > 5 %}<input class="search sm" type="search" data-filter="over-time" placeholder="Filter clients…" aria-label="Filter clients">{% endif %}
+      {% set tip = m.label ~ ' by month for every client' %}
+      {{ downloads([('XLSX', url_for('across.over_time_download', ext='xlsx', measure=m.key), tip),
+                    ('CSV', url_for('across.over_time_download', ext='csv', measure=m.key), tip)]) }}
+    </div>
+  </div>
+  <div class="table-scroll{{ ' tall' if grid.rows|length > 12 }}">
+  <table class="stack-sm sortable heat-table" id="over-time">
+    <thead><tr>
+      <th aria-sort="none"><button type="button" class="sort">Client</button></th>
+      {% for d in grid.months %}{% set older = loop.revindex > 3 %}
+      <th class="num{{ ' hide-sm' if older }}" aria-sort="none" title="{{ d.strftime('%B %Y') }}{{ ' so far' if loop.last }}"><button type="button" class="sort">{{ d.strftime('%b') }}{% if loop.first or d.month == 1 %}<span class="faint"> {{ d.strftime('%y') }}</span>{% endif %}</button></th>
+      {% endfor %}
+      <th class="num" aria-sort="none" title="The latest value less the first in these months"><button type="button" class="sort">Change</button></th>
+    </tr></thead>
+    <tbody>
+    {% for row in grid.rows %}{% set t = row.tenant %}
+    <tr data-name="{{ t.name|lower }} {{ (t.tenant_ref or '')|lower }}">
+      <td class="tenant-col" data-sort="{{ t.name|lower }}"><a class="strong" href="{{ url_for('reports.tenant_findings', tenant_id=t.id) if m.report == 'findings' else url_for('reports.data_report', tenant_id=t.id, key=m.report) }}">{{ t.name }}</a>
+        {% if row.note %}<span class="sub muted">{{ row.note }}</span>{% endif %}</td>
+      {% for v in row.values %}{% set d = grid.months[loop.index0] %}
+      <td class="num{{ ' hide-sm' if loop.revindex > 3 }}" data-label="{{ d.strftime('%b %Y') }}" data-sort="{{ v if v is not none else '' }}">{% if v is none %}<span class="faint">–</span>{% else %}<span class="heat h{{ m.level(v) }}{{ ' now' if loop.last }}" title="{{ t.name }}, {{ d.strftime('%B %Y') }}{{ ' so far' if loop.last }}: {{ m.figure(v, unit=true) }}">{{ m.figure(v) }}</span>{% endif %}</td>
+      {% endfor %}
+      {% set c = row.change %}
+      <td class="num" data-label="Change" data-sort="{{ c if c is not none else '' }}">{% if c is none %}<span class="faint">–</span>{% else %}<span class="delta {{ 'worse' if m.worse(c) else ('better' if m.better_by(c) else 'flat') }}" title="{{ 'Worse' if m.worse(c) else ('Better' if m.better_by(c) else 'No change') }}">{{ m.change_text(c) }}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+    {% if grid.rows|length > 1 %}
+    <tfoot><tr class="total">
+      <td>{{ 'Average' if grid.averages else 'Total' }}</td>
+      {% for v in grid.totals() %}<td class="num{{ ' hide-sm' if loop.revindex > 3 }}" data-label="{{ grid.months[loop.index0].strftime('%b %Y') }}">{{ m.figure(v) }}</td>{% endfor %}
+      <td class="num" data-label="Change">{% if moved is not none %}<span class="delta {{ 'worse' if m.worse(moved) else ('better' if m.better_by(moved) else 'flat') }}">{{ m.change_text(moved) }}</span>{% endif %}</td>
+    </tr></tfoot>
+    {% endif %}
+  </table>
+  </div>
+</div>
+<p class="footnote">From what Office Sentry keeps for each client: {% if m.key == 'open_severe' %}its findings as they stood at each month's end, leaving out accepted risks{% else %}the figure from its last collection each month{% endif %}. A client has slipped when its latest value is worse than its first here.{% if grid.months|length > 3 %} On a phone the last three months show; the downloads have all {{ grid.months|length }}.{% endif %}</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

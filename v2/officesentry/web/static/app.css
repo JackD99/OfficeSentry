@@ -2027,3 +2027,13 @@ svg.spark .spark-dot { fill: var(--decor); }
   .entry { grid-template-columns: 1fr; gap: 2px; }
   .month-band, .entry, .entry-none, .measures li { padding-left: var(--space-4); padding-right: var(--space-4); }
 }
+/* Over time across clients (over_time.html): each month's value shaded by how good it is, from unshaded (good)
+   to the worst; the number always shows. The outlined one is this month's. */
+.heat-table th.num, .heat-table td.num { padding-left: var(--space-1); padding-right: var(--space-1); }
+.heat { display: inline-block; min-width: 2.5rem; padding: 2px var(--space-1-5); border-radius: var(--radius-xs); font-variant-numeric: tabular-nums; }
+.heat.h1 { background: var(--ok-soft); color: var(--ok); }
+.heat.h2 { background: var(--warn-soft); color: var(--warn); }
+.heat.h3 { background: var(--sev-high-soft); color: var(--sev-high); }
+.heat.h4 { background: var(--sev-critical-soft); color: var(--sev-critical); font-weight: 600; }
+.heat.now { box-shadow: inset 0 0 0 1.5px var(--text-2); }
+@media (max-width: 640px) { .heat-table .hide-sm { display: none; } } /* the last three months on a phone */

@@ -59,6 +59,16 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   in one grid, a square per check grouped by area, with a page per area that
   names each check and XLSX and CSV downloads; a failing or accepted square opens
   that client's findings.
+<!-- since 2.6.0 -->
+  **Over time** (`/across/over-time`) shows one measure for every client month
+  by month over the last 12 months: open critical and high findings, Secure
+  Score, users with MFA or unassigned paid licences. Each value is taken at the
+  month's end and shaded by how good it is, with the number always shown. The
+  clients that slipped come first, then the worst now, with how many improved
+  and slipped and the total or average across them. XLSX and CSV downloads have
+  every month; a phone shows the last three. It's built from the figures and
+  findings Office Sentry already keeps, so nothing new is read from Microsoft.
+<!-- /since -->
 - **What changed** (`/changes`, and each client's *Changes* tab): a standalone
   month-over-month report for the last 7, 30 or 90 days, or, on a client's
   *Changes* tab, between any two days the kept data reaches back to. It covers
