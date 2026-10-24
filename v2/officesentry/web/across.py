@@ -18,6 +18,7 @@ from ..reports import (
     branding,
     data_reports,
     month_changes,
+    our_work,
     over_time,
     rollups,
     tables,
@@ -74,6 +75,8 @@ def index():
         return redirect(url_for("across.checks"))
     if key == "over-time" and _measures():
         return redirect(url_for("across.over_time_page"))
+    if key == "our-work" and can(OUR_WORK_NEEDS):
+        return redirect(url_for("across.our_work_page"))
     if key in ("", "review") or key not in dict(_available()):
         return redirect(url_for("tenants.dashboard"))
     return redirect(url_for("across.rollup", key=key))
@@ -116,9 +119,9 @@ def _picker() -> dict:
     monthly review is the Clients page itself, open to every staff role; the insurance evidence and Checks
     need the security capability."""
     if not can("clients.compare"):
-        return {"main": [], "picker": False, "over_time": False}
+        return {"main": [], "picker": False, "over_time": False, "our_work": False}
     main = [(k, title) for k, title in rollups.available()[:2] if k == "review" or can(_rollup_capability(k))]
-    return {"main": main, "picker": True, "over_time": bool(_measures())}
+    return {"main": main, "picker": True, "over_time": bool(_measures()), "our_work": can(OUR_WORK_NEEDS)}
 
 
 def column_capability(rollup: rollups.Rollup, column: rollups.Column) -> str:
@@ -418,6 +421,73 @@ def over_time_download(ext: str):
         ),
     )
     return file_response(body, name, ext)
+
+
+# -- Our work this quarter ---------------------------------------------------------
+
+OUR_WORK_NEEDS = permissions.SUMMARY_CAPABILITY["findings"]  # it counts findings, so it lists clients they show on
+
+
+def _our_work() -> our_work.OurWork:
+    """The quarter ``?back=`` names (this one, or the one before) over the clients this person sees findings
+    on (the routes need ``OUR_WORK_NEEDS``), each figure only where they open its report."""
+    opens = {}
+
+    def sees(tenant_id: int, report: str) -> bool:
+        if tenant_id not in opens:
+            opens[tenant_id] = opens_on(tenant_id)
+        return opens[tenant_id](report)
+
+    back = request.args.get("back", type=int) or 0
+    return our_work.build(g.db, scoped_tenants(), back=back, sees=sees)
+
+
+def _our_work_name(work: our_work.OurWork) -> str:
+    return _across_name("our-work", f"{work.months[0].month:%Y-%m}", f"{work.months[-1].month:%Y-%m}")
+
+
+@bp.get("/across/our-work")
+@needs("clients.compare", OUR_WORK_NEEDS)
+@group_aware
+def our_work_page():
+    return render_template("our_work.html", work=_our_work(), **_picker())
+
+
+@bp.get("/across/our-work.xlsx")
+@needs("clients.compare", OUR_WORK_NEEDS, "export")
+@group_aware
+def our_work_download():
+    work = _our_work()
+    name = _our_work_name(work)
+    audit(g.db, g.user["username"], "rollup_downloaded", None, f"{name}.xlsx")
+    body = tables.to_xlsx(
+        work.to_tables(),
+        cover=_cover(
+            f"Our work, {work.label}",
+            scope().label,
+            f"What the team got done for its clients from {work.label}{' so far' if work.so_far else ''}: findings "
+            "fixed, risks accepted with the client, and how Secure Score, MFA and unused paid licences moved.",
+            facts=[
+                ("Findings fixed", work.fixed, ""),
+                ("Critical and high fixed", work.severe, ""),
+                ("Risks accepted", work.accepted, ""),
+                ("Clients worked on", len(work.worked), ""),
+            ],
+        ),
+    )
+    return file_response(body, name, "xlsx")
+
+
+@bp.get("/across/our-work.pdf")
+@needs("clients.compare", OUR_WORK_NEEDS, "export")
+@group_aware
+def our_work_pdf():
+    """The quarter as a branded PDF; ``?names=0`` leaves out client and team names, for a prospect."""
+    work = _our_work()
+    named = request.args.get("names") != "0"
+    name = _our_work_name(work) + ("" if named else "-without-names")
+    audit(g.db, g.user["username"], "rollup_downloaded", None, f"{name}.pdf")
+    return pdf_response("reports/our_work.html", name, work=work, named=named, prepared=datetime.now(UTC))
 
 
 @bp.get("/across/<key>.csv", defaults={"ext": "csv"})

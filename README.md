@@ -276,6 +276,13 @@ high findings, Secure Score, users with MFA or unassigned paid licences. Each va
 the clients that slipped come first.
 <!-- /since -->
 
+<!-- since 2.6.0 -->
+**Our work this quarter** shows what your team got done across its clients over the last three months: findings
+fixed (and how many were critical or high), risks accepted with the client, whose Secure Score went up and how many
+unused paid licences were cut, by client, by month, by check and by the person each finding was handed to. Take it
+to the management meeting as a branded PDF, or show a prospect the same PDF with client and team names left out.
+<!-- /since -->
+
 <table>
   <tr>
     <td width="50%"><img src="docs/screenshots/all-tenants.png" alt="The Clients page showing MFA coverage for every client"></td>

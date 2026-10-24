@@ -1,7 +1,7 @@
 {#- The top of the Clients page and of each report compared across clients (across.rollup, Every row,
     Checks): the heading and its actions, then the report picker and, for a detail report, the choice between
     one row per client and every row. key is the page's report key: 'review' (the Clients page itself),
-    'evidence', 'checks', 'over-time' or a detail report's. -#}
+    'evidence', 'checks', 'over-time', 'our-work' or a detail report's. -#}
 {% from "_macros.html" import icon %}
 {% from "_groups.html" import group_picker with context %}
 {% macro clients_head(count) -%}
@@ -46,11 +46,13 @@
 {% set tips = {'review': 'Findings, Secure Score, MFA, admins and licence waste for every client',
                'evidence': 'How far each client has the controls insurers and certifications ask about',
                'checks': "Every check's result for every client",
-               'over-time': 'Findings, Secure Score, MFA or unused licences month by month for every client, those slipping first'} %}
+               'over-time': 'Findings, Secure Score, MFA or unused licences month by month for every client, those slipping first',
+               'our-work': "What the team got done this quarter: findings fixed, risks accepted, and how each client's figures moved"} %}
 {% set summaries = [] %}
 {% for k, title in main %}{% set _ = summaries.append((k, title, url_for('tenants.dashboard') if k == 'review' else url_for('across.rollup', key=k), tips[k])) %}{% endfor %}
 {% if can('reports.security') %}{% set _ = summaries.append(('checks', 'Checks', url_for('across.checks'), tips['checks'])) %}{% endif %}
 {% if over_time %}{% set _ = summaries.append(('over-time', 'Over time', url_for('across.over_time_page'), tips['over-time'])) %}{% endif %}
+{% if our_work %}{% set _ = summaries.append(('our-work', 'Our work this quarter', url_for('across.our_work_page'), tips['our-work'])) %}{% endif %}
 {% set areas = [] %}
 {% set here = namespace(area='') %}
 {% for k, title, href, tip in summaries if k == key %}{% set here.area = 'Summaries' %}{% endfor %}
