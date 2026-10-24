@@ -59,18 +59,52 @@
       });
     });
   }
+  function dataRows(table) {
+    return Array.prototype.filter.call(table.querySelectorAll('tbody tr'), function (tr) {
+      return !tr.classList.contains('group-head') && !tr.classList.contains('row-note');
+    });
+  }
   function rowSearch(root) {
     root.querySelectorAll('input[data-filter]').forEach(function (input) {
       var table = document.getElementById(input.getAttribute('data-filter'));
       if (!table) return;
+      // While a search hides rows, the count beside the table's title says "3 of 40" (when that count is the
+      // table's rows, not its columns), and a search that hides them all says so under the table.
+      var head = input.closest('.card-head');
+      var badge = head && head.querySelector('h2 .count-badge');
+      var total = dataRows(table).length;
+      var said = badge ? badge.textContent : '';
+      if (badge && Number((said.match(/^\d+/) || [''])[0]) !== total) badge = null;
+      var none = document.createElement('p');
+      none.className = 'no-rows';
+      none.hidden = true;
+      var box = table.closest('.table-scroll, .scroll-x') || table;
+      box.parentNode.insertBefore(none, box.nextSibling);
+      function matches(tr, words) {
+        var name = tr.getAttribute('data-name') || '';
+        return words.every(function (w) { return name.indexOf(w) !== -1; });
+      }
       input.addEventListener('input', function () {
-        var q = input.value.trim().toLowerCase();
-        table.classList.toggle('searching', !!q);
-        table.querySelectorAll('tbody tr').forEach(function (tr) {
-          // A row's note line (tr.row-note) goes with the row above it.
-          if (tr.classList.contains('row-note')) { tr.hidden = !!(tr.previousElementSibling && tr.previousElementSibling.hidden); return; }
-          tr.hidden = q && (tr.getAttribute('data-name') || '').indexOf(q) === -1;
+        // Every word typed, in any order: "north admin" finds "Admin, Northwind".
+        var words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        var shown = 0;
+        table.classList.toggle('searching', words.length > 0);
+        Array.prototype.forEach.call(table.tBodies, function (body) {
+          // A group whose heading matches keeps all its rows; the heading shows while any of its rows do.
+          var heading = body.querySelector('tr.group-head');
+          var whole = !words.length || (heading && matches(heading, words));
+          Array.prototype.forEach.call(body.rows, function (tr) {
+            if (tr === heading) return;
+            // A row's note line (tr.row-note) goes with the row above it.
+            if (tr.classList.contains('row-note')) { tr.hidden = !!(tr.previousElementSibling && tr.previousElementSibling.hidden); return; }
+            tr.hidden = !whole && !matches(tr, words);
+            if (!tr.hidden) shown++;
+          });
+          if (heading) heading.hidden = !whole && !body.querySelector('tr:not(.group-head):not(.row-note):not([hidden])');
         });
+        if (badge) badge.textContent = words.length ? shown + ' of ' + total : said;
+        none.hidden = !words.length || shown > 0;
+        none.textContent = 'No rows match “' + input.value.trim() + '”.';
       });
     });
   }
@@ -182,6 +216,61 @@
     if (e.key !== 'Escape') return;
     document.querySelectorAll('details.menu[open]').forEach(function (d) { d.open = false; d.querySelector('summary').focus(); });
   });
+
+  /* Copying a table (<button data-copy-rows="table-id">, app.js does the copying): the rows a person sees, after
+   * the view's filters and a row search but including rows past "Show all" or in a folded group, under the
+   * table's headings. As a table for a ticket, an email or Teams, and tab-separated for a spreadsheet. A row's
+   * own buttons (the last column on Findings) and its note line stay behind; a long list in a cell is copied
+   * whole, one item after another. A grouped table (data-group-name, the column its groups come from) gives
+   * each row its group's heading as a first column, since the rows don't carry it, and a flag shown beside a
+   * row's first value becomes a last column, Flag. */
+  function cellText(cell) {
+    var copy = cell.cloneNode(true);
+    copy.querySelectorAll('.flag-pill, .sr-only, button, form').forEach(function (el) { el.remove(); });
+    var list = copy.querySelector('ul.more-list');
+    var text = list
+      ? Array.prototype.map.call(list.children, function (li) { return li.textContent.trim(); }).join(', ')
+      : copy.textContent;
+    return text.replace(/\s+/g, ' ').replace(/‑/g, '-').trim();  // headings keep "sign-in" whole with U+2011
+  }
+  window.officeSentryRows = function (id) {
+    var table = document.getElementById(id);
+    if (!table || !table.tHead) return null;
+    function kept(cells) {
+      return Array.prototype.filter.call(cells, function (c) { return !c.classList.contains('row-action'); });
+    }
+    var group = table.getAttribute('data-group-name');
+    var flags = !table.querySelector('th.flagcol') && table.querySelector('tbody .flag-pill');  // "Flag" beside the first value
+    var heads = kept(table.tHead.rows[0].cells).map(cellText);
+    var lines = dataRows(table).filter(function (tr) { return !tr.hidden; }).map(function (tr) {
+      var cells = kept(tr.cells).map(cellText);
+      var label = group && tr.parentNode.querySelector('.group-label');
+      var pill = flags && tr.querySelector('.flag-pill');
+      if (group) cells.unshift(label ? cellText(label) : '');
+      if (flags) cells.push(pill ? cellText(pill) : '');
+      return cells;
+    });
+    if (group) heads.unshift(group);
+    if (flags) heads.push('Flag');
+    if (!lines.length) return null;
+    var grid = document.createElement('table');
+    grid.setAttribute('border', '1');
+    grid.setAttribute('cellpadding', '4');
+    grid.style.borderCollapse = 'collapse';
+    [heads].concat(lines).forEach(function (line, i) {
+      var tr = grid.insertRow();
+      line.forEach(function (text) {
+        var cell = document.createElement(i ? 'td' : 'th');
+        cell.textContent = text;
+        tr.appendChild(cell);
+      });
+    });
+    return {
+      text: [heads].concat(lines).map(function (line) { return line.join('\t'); }).join('\n'),
+      html: grid.outerHTML,
+      rows: lines.length
+    };
+  };
 
   /* Long tables: the first rows of a stacked table, then a "Show all" button. */
   function rows(table) {

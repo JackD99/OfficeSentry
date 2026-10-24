@@ -1,0 +1,18 @@
+{#- Keyboard shortcuts (static/keys.js): "?" opens this list over any staff page. The "Go to" part is filled from
+    the menu's own links (data-go in base.html), so it lists only the entries this person has. -#}
+{% from "_macros.html" import icon %}
+<dialog id="keys" class="keys-box" aria-labelledby="keys-title">
+  <div class="keys-head">
+    <h2 id="keys-title">Keyboard shortcuts</h2>
+    <form method="dialog"><button class="keys-close" aria-label="Close">{{ icon('close') }}</button></form>
+  </div>
+  <dl class="keys-list">
+    <dt><kbd>/</kbd> <kbd>Ctrl</kbd><kbd>K</kbd></dt><dd>Jump to a client, report, person or setting</dd>
+    <dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>Next or previous row of a table</dd>
+    <dt><kbd>Enter</kbd> <kbd>o</kbd></dt><dd>Open the row</dd>
+    <dt><kbd>Esc</kbd></dt><dd>Close a menu, a finding or this list</dd>
+    <dt><kbd>?</kbd></dt><dd>Show or hide this list</dd>
+  </dl>
+  <h3>Go to</h3>
+  <dl class="keys-list" data-keys-go></dl>
+</dialog>

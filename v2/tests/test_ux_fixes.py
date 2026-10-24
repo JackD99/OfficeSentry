@@ -34,7 +34,7 @@ def test_settings_are_one_sidebar_entry_with_their_areas_as_tabs(client, db):
     home = client.get("/").get_data(as_text=True)
     sidebar = home[home.index('<aside class="sidebar"') : home.index("</aside>")]
     assert sidebar.count(">Settings</span></a>") == 1
-    assert '<a href="/admin/tenants">' in sidebar  # Settings opens Client settings
+    assert '<a href="/admin/tenants" data-go="s">' in sidebar  # Settings opens Client settings
     assert "Client settings" not in sidebar and "Activity log" not in sidebar
     assert 'class="settings-nav"' not in home  # only on settings pages
     for area, paths in SETTINGS_AREAS.items():

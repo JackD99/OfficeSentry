@@ -48,8 +48,9 @@
 {%- for prefix in unless if request.path == prefix or request.path.startswith(prefix ~ '/') %}{% set here.on = false %}{% endfor -%}
 {{ 'on' if here.on else '' }}
 {%- endmacro %}
-{% macro nav_link(endpoint, label, ico, under=(), unless=()) -%}
-<a href="{{ url_for(endpoint) }}"{% if on_path(endpoint, under, unless)|trim == 'on' %} class="active" aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span></a>
+{#- go: the letter that opens the entry after "g" (static/keys.js). -#}
+{% macro nav_link(endpoint, label, ico, under=(), unless=(), go='') -%}
+<a href="{{ url_for(endpoint) }}"{% if go %} data-go="{{ go }}"{% endif %}{% if on_path(endpoint, under, unless)|trim == 'on' %} class="active" aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span></a>
 {%- endmacro %}
 {% macro navigation() -%}
 <nav class="nav" aria-label="Main">
@@ -69,19 +70,19 @@
   <a class="nav-search-link" href="{{ url_for('search.index') }}">{{ icon('search') }}<span>Search all clients</span></a>
   {% endif %}
   <button type="button" class="nav-search-btn" data-jump-open hidden aria-keyshortcuts="/ Control+K Meta+K">{{ icon('search') }}<span>{{ 'Search all clients' if across else 'Search' }}</span><kbd aria-hidden="true">/</kbd></button>
-  {% if across %}{{ nav_link('home.index', 'Home', 'home', ('/today', '/clients')) }}{% endif %}
+  {% if across %}{{ nav_link('home.index', 'Home', 'home', ('/today', '/clients'), go='h') }}{% endif %}
   {#- Clients: the Clients page (/) and the report it swaps to for every client (/across), every client's pages,
       runs, schedules, alerts and search results. -#}
-  {{ nav_link('tenants.dashboard', 'Clients', 'tenants', ('/', '/across', '/tenants', '/runs', '/schedules', '/alerts', '/search')) }}
-  {{ nav_link('reports.overview', 'Reports', 'library', ('/reports', '/reporting/designs')) }}
-  {% if across and can('reports.changes') %}{{ nav_link('across.changes', 'What changed', 'clock', ('/changes',)) }}{% endif %}
-  {% if across and can('reports.tenant') %}{{ nav_link('upcoming.index', 'Coming up', 'calendar', ('/upcoming',)) }}{% endif %}
-  {% if can('emails.view') %}{{ nav_link('email.overview', 'Email reports', 'send', ('/emails',)) }}{% endif %}
-  {% if can('month_end.review') %}{{ nav_link('reporting.index', 'Month-end', 'check', ('/reporting',), unless=('/reporting/designs',)) }}{% endif %}
-  {% if across and can('projects.view') %}{{ nav_link('projects.index', 'Projects', 'projects', ('/projects',)) }}{% endif %}
+  {{ nav_link('tenants.dashboard', 'Clients', 'tenants', ('/', '/across', '/tenants', '/runs', '/schedules', '/alerts', '/search'), go='c') }}
+  {{ nav_link('reports.overview', 'Reports', 'library', ('/reports', '/reporting/designs'), go='r') }}
+  {% if across and can('reports.changes') %}{{ nav_link('across.changes', 'What changed', 'clock', ('/changes',), go='w') }}{% endif %}
+  {% if across and can('reports.tenant') %}{{ nav_link('upcoming.index', 'Coming up', 'calendar', ('/upcoming',), go='u') }}{% endif %}
+  {% if can('emails.view') %}{{ nav_link('email.overview', 'Email reports', 'send', ('/emails',), go='e') }}{% endif %}
+  {% if can('month_end.review') %}{{ nav_link('reporting.index', 'Month-end', 'check', ('/reporting',), unless=('/reporting/designs',), go='m') }}{% endif %}
+  {% if across and can('projects.view') %}{{ nav_link('projects.index', 'Projects', 'projects', ('/projects',), go='p') }}{% endif %}
   {% endif %}
   {% if SHOW_SETTINGS %}
-  <a href="{{ url_for(SETTINGS[0][0]) }}"{% if on_path(SETTINGS[0][0], ('/admin',))|trim == 'on' %} class="active" aria-current="page"{% endif %}>{{ icon('settings') }}<span>Settings</span></a>
+  <a href="{{ url_for(SETTINGS[0][0]) }}" data-go="s"{% if on_path(SETTINGS[0][0], ('/admin',))|trim == 'on' %} class="active" aria-current="page"{% endif %}>{{ icon('settings') }}<span>Settings</span></a>
   {% endif %}
 </nav>
 {%- endmacro %}
@@ -195,6 +196,8 @@
 {% if current_user and current_user.role != 'client' %}
 {% include "_jump.html" %}
 <script src="{{ url_for('static', filename='jump.js') }}" nonce="{{ csp_nonce }}"></script>
+{% include "_keys.html" %}
+<script src="{{ url_for('static', filename='keys.js') }}" nonce="{{ csp_nonce }}"></script>
 {% endif %}
 {% block scripts %}{% endblock %}
 </body>
