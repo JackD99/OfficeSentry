@@ -174,9 +174,11 @@ def test_one_sign_in_lists_every_gdap_customer_and_adds_the_ticked_ones(admin, d
         "/admin/onboarding/partner/add",
         data={"customer": [CONTOSO, ADATUM, ALPHA, "99999999-0000-4000-8000-000000000000"]},
     )
-    assert resp.status_code == 302 and resp.headers["Location"].endswith("/admin/onboarding?show=waiting")
     added = {r["tenant_ref"]: r for r in db.execute("SELECT * FROM tenants WHERE tenant_ref NOT LIKE '%.%'")}
     assert set(added) == {CONTOSO, ADATUM}  # Alpha was already there, the unknown one was never found
+    # Next, approving them: straight to the Approve page with the two just added.
+    ids = f"{added[CONTOSO]['id']},{added[ADATUM]['id']}"
+    assert resp.status_code == 302 and resp.headers["Location"].endswith(f"/admin/onboarding/approve?t={ids}")
     assert added[ADATUM]["name"] == "Adatum Corporation" and added[ADATUM]["cloud"] == "commercial"
     assert added[CONTOSO]["connection_id"] == connection_id and not added[CONTOSO]["consented_at"]
     assert onboarding.row_for(db, added[CONTOSO]["id"])["imported_by"] == "admin"
@@ -202,6 +204,18 @@ def test_groups_go_on_every_added_client(admin, db, connection_id):
     ids = [r["id"] for r in db.execute("SELECT id FROM tenants")]
     assert len(ids) == 2
     assert {r["tenant_id"] for r in db.execute("SELECT tenant_id FROM tenant_group_members")} == set(ids)
+
+
+@responses.activate
+def test_the_approve_page_only_offers_customers_your_gdap_roles_can_approve(admin, db, connection_id):
+    _relationships()
+    _sign_in(admin, db)
+    resp = admin.post("/admin/onboarding/partner/add", data={"customer": [CONTOSO, FABRIKAM]})
+    page = admin.get(resp.headers["Location"]).get_data(as_text=True)
+    assert "Next: Contoso Ltd" in page and "You can, through GDAP." in page
+    assert f"login.microsoftonline.com/{CONTOSO}/" in page  # Contoso: Privileged Role Administrator
+    assert f"login.microsoftonline.com/{FABRIKAM}/" not in page  # Fabrikam: Global Reader and User Administrator
+    assert "don't include Privileged Role Administrator" in page and "Send link" in page
 
 
 @responses.activate

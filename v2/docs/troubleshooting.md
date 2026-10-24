@@ -136,6 +136,12 @@ notes above apply to it too. Besides those:
   Privileged Role Administrator or Global Administrator, the only roles that can approve Office Sentry's
   read-only application permissions. Add the role to the relationship in Partner Center, or send the client's
   Global Administrator their link.
+- **The Approve page doesn't open the next client by itself**: it only does so after a client that worked, and
+  only while the page is open. After one that didn't, it says why and waits. If the countdown stops with
+  *Stopped*, someone pressed **Stop**; press **Approve for** *client* when you're ready.
+- **Approving sends you back saying the link has expired**: each link works once, for an hour, in the browser
+  that opened it, so one opened in another browser or left overnight records nothing. Reload the Approve page
+  for fresh links.
 <!-- /since -->
 
 ## Two app connections, one marked "Needs client ID"

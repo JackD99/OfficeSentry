@@ -1728,6 +1728,15 @@ button.layout-head { padding: 8px 10px; }
 .partner-groups fieldset { margin: 0; padding: 0; border: 0; }
 .partner-groups legend { font-weight: 600; padding: 0; }
 .partner-groups .check-grid { border-top: 0; padding-top: 0; }
+.callout.ok { background: var(--ok-soft); }
+.approve-next h3 { margin: 0; }
+.approve-next .approve-done { margin: 0 0 var(--space-2); color: var(--ok); }
+.approve-next .approve-done .icon { vertical-align: -3px; }
+.approve-next p { margin: var(--space-2) 0 0; }
+.approve-next .form-actions { margin-top: var(--space-3); }
+#approve-table tr.current, #approve-table tr.current td { background: var(--accent-soft); }
+@media (min-width: 641px) { #approve-table td:first-child { width: 30%; } }
+#approve-table td .sub { overflow-wrap: anywhere; }
 .import-notes { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-2); color: var(--text-2); }
 .import-notes li { display: flex; gap: var(--space-2); align-items: flex-start; }
 .import-notes .icon { flex: none; margin-top: 2px; color: var(--muted); }

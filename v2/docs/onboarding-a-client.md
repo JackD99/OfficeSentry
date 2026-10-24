@@ -136,6 +136,8 @@ account in the client's tenant:
    *Service management* links), they assign Global Reader to the app, as in
    [3. Assign Global Reader](#3-assign-global-reader-for-mailbox-data) below.
 
+To approve several clients one after another, see [Approving several clients yourself](#approving-several-clients-yourself) below. <!-- since 2.6.0 -->
+
 What Microsoft documents means for Office Sentry (its own words are quoted under this list):
 
 - **Cloud Application Administrator or Application Administrator isn't
@@ -231,7 +233,7 @@ can't provide. A large tenant can take a while. To collect again later, use
 *Settings → Client settings → Onboarding* (needs *Manage clients*) is for adding clients in
 bulk and following each one through consent.
 
-If you manage your clients through Partner Center with GDAP, you can pick them from your customer list instead: see [Adding clients from Partner Center](#adding-clients-from-partner-center-gdap) below. <!-- since 2.6.0 -->
+If you manage your clients through Partner Center with GDAP, you can pick them from your customer list instead, and approve the ones your roles allow yourself, one after another: see [Adding clients from Partner Center](#adding-clients-from-partner-center-gdap) and [Approving several clients yourself](#approving-several-clients-yourself) below. <!-- since 2.6.0 -->
 
 1. **Import from CSV.** One row per client with column names on the first
    row: `name` and `tenant` (the tenant ID or any domain the tenant uses), and
@@ -303,8 +305,8 @@ client*):
    the same name as a client added by a domain is left unticked with a note, in case it's the same one. You
    can put the new clients in client groups as you add them.
 3. **Add the ticked customers.** They're added like a CSV import, with their tenant IDs, in the cloud you
-   signed in to. Then approve Office Sentry for each one: yourself where you can, as in *Through Partner Center
-   (GDAP)* above, or by sending the client's Global Administrator their link.
+   signed in to. Office Sentry then opens the **Approve** page for them (below): you approve the ones your GDAP
+   roles allow one after another, and send the others' Global Administrators their links.
 
 What Office Sentry asks for and keeps:
 
@@ -320,6 +322,30 @@ What Office Sentry asks for and keeps:
 If your Conditional Access blocks device sign-in, export the list instead: in Partner Center, *Customers →
 Export customers*, then *Import from CSV* with the file as it is. Office Sentry reads its *Company name* and
 *Microsoft ID* columns.
+
+### Approving several clients yourself
+
+When you can approve Office Sentry for clients yourself, as a Global Administrator of each or because your GDAP
+roles there include Privileged Role Administrator, tick them in the Onboarding list and press **Approve them
+myself**. Adding customers from Partner Center opens the same page with the ones you just added. It lists up to 50
+clients and where each one has got:
+
+- **Approve for** *client* opens Microsoft's consent page for the next client, in the same tab. Sign in, accept,
+  and Microsoft sends you straight back. Office Sentry records the consent as in [2. Get admin
+  consent](#2-get-admin-consent), and after one that worked it opens the next client's page by itself five
+  seconds later, unless you press **Stop**. After one that didn't, it says why and waits for you. **Skip this
+  one** moves on without it, and each client also has its own **Approve** button.
+- A customer on your Partner Center list whose active GDAP roles don't include Privileged Role Administrator (or
+  Global Administrator) has no button, since Microsoft would refuse: **Send link** is for sending its Global
+  Administrator their link. For clients not on the list, Office Sentry can't tell, so it offers the button.
+- **Global Reader**: each approved client has a link to its own Microsoft Entra admin centre and the steps
+  (*Roles and admins → Global Reader → Add assignments*, then the app). Privileged Role Administrator can assign
+  it through GDAP too.
+- **Check again** signs in to each client: it confirms approvals given another way, and reads whether the app
+  now holds Global Reader.
+
+Each consent link works once, for an hour, in the browser that opened it, as on the client's own page. Reload
+the page for fresh links.
 <!-- /since -->
 
 ## 5. Connection health: the Manage page

@@ -37,7 +37,7 @@ from . import public_demo
 from .access import can, current, manages_groups, needs, tenant_or_404, visible_tenants
 from .branding import current_brand
 from .printing import pdf_response
-from .tenants import _cfg, cloud_mismatch
+from .tenants import _cfg, _consent_link, cloud_mismatch
 
 bp = Blueprint("onboarding", __name__, url_prefix="/admin/onboarding")
 
@@ -195,6 +195,12 @@ def bulk():
             else "Every client you ticked has already approved everything.",
             "success",
         )
+    elif action == "approve":
+        if len(tenants) > APPROVE_MAX:
+            flash(
+                f"You ticked {len(tenants)} clients. Here are the first {APPROVE_MAX}; tick the rest after.", "warning"
+            )
+        return redirect(url_for("onboarding.approve", t=",".join(str(t["id"]) for t in tenants[:APPROVE_MAX])))
     else:
         abort(400)
     return redirect(url_for("onboarding.index", show=request.form.get("show") or None))
@@ -439,15 +445,109 @@ def partner_add():
         for i, c in enumerate(picked, 1)
     ]
     ids = onboarding.create(g.db, onboarding.Parsed(rows=rows), g.user["username"], how="Partner Center")
-    if ids:
-        flash(
-            f"Added {len(ids)} {'client' if len(ids) == 1 else 'clients'} from Partner Center. Next: approve Office "
-            "Sentry for each one, below.",
-            "success",
-        )
-    else:
+    if not ids:
         flash("Every customer you ticked is already in Office Sentry.", "success")
-    return redirect(url_for("onboarding.index", show="waiting"))
+        return redirect(url_for("onboarding.index", show="waiting"))
+    flash(
+        f"Added {len(ids)} {'client' if len(ids) == 1 else 'clients'} from Partner Center. Next: approve Office "
+        "Sentry for each one.",
+        "success",
+    )
+    return redirect(url_for("onboarding.approve", t=",".join(map(str, ids[:APPROVE_MAX]))))
+
+
+# -- Approving one client after another --------------------------------------------------------
+
+APPROVE_MAX = 50  # clients on one Approve page: their ids ride in each consent link's signed state
+
+
+def _approve_ids(text: str) -> list[int]:
+    return list(dict.fromkeys(int(x) for x in (text or "").split(",") if x.strip().isdigit()))[:APPROVE_MAX]
+
+
+def _approving(ids: list[int]):
+    """The clients in ``ids`` the person sees, in that order, as tracker entries."""
+    seen = {t["id"]: t for t in visible_tenants(g.db, g.user)}
+    return onboarding.tracker(g.db, [seen[i] for i in ids if i in seen])
+
+
+@bp.get("/approve")
+@needs("clients.manage")
+def approve():
+    """Approve Office Sentry for several clients yourself, one after another: as each one's Global Administrator,
+    or with a partner account whose GDAP roles there include Privileged Role Administrator. Each consent link
+    names the clients on this page, so Microsoft's answer comes back here (``tenants._consent_return``) rather
+    than to the client's page, and after one that worked the page opens the next after a pause. Without ``t``,
+    it lists every client with something to approve."""
+    ids = _approve_ids(request.args.get("t", ""))
+    if ids:
+        entries = _approving(ids)
+        if not entries:
+            flash("Tick the clients to approve first.", "error")
+            return redirect(url_for("onboarding.index"))
+    else:
+        entries = [e for e in onboarding.tracker(g.db, visible_tenants(g.db, g.user)) if e.needs_link][:APPROVE_MAX]
+    run = [e.tenant["id"] for e in entries]
+    # Who can approve each one, where the person's Partner Center list (if they read it today) says.
+    sign_in = app_setup.current(g.db, g.user["id"], PARTNER)
+    gdap = {
+        c.tenant_id: c
+        for c in partner.load_found(sign_in["found"] if sign_in and sign_in["status"] == "done" else None)[0]
+    }
+    who = {e.tenant["id"]: gdap.get(e.tenant["tenant_ref"].lower()) for e in entries}
+    links = {
+        e.tenant["id"]: link
+        for e in entries
+        if e.needs_link
+        and not e.problem
+        and (who[e.tenant["id"]] is None or who[e.tenant["id"]].can_approve)
+        and (link := _consent_link(e.tenant, e.connection, run=run))
+    }
+    after = request.args.get("after", type=int)
+    start = run.index(after) + 1 if after in run else 0
+    later = [e for e in entries[start:] if e.tenant["id"] in links]
+    ready = later or [e for e in entries if e.tenant["id"] in links]
+    done = next((e for e in entries if e.tenant["id"] == after and e.tenant["consented_at"]), None)
+    return render_template(
+        "onboarding_approve.html",
+        entries=entries,
+        run=",".join(map(str, run)),
+        who=who,
+        links=links,
+        next=ready[0] if ready else None,
+        done=done if request.args.get("done") else None,
+        go_on=bool(request.args.get("done") and done and later),  # open the next one after a pause
+        cloud_of=clouds.of,
+    )
+
+
+@bp.post("/approve/check")
+@needs("clients.manage")
+def approve_check():
+    """Sign in to each client on the Approve page again: consent for the ones not approved yet, the app's
+    permissions and Global Reader role for the others."""
+    entries = _approving(_approve_ids(request.form.get("t", "")))
+    if not entries:
+        return redirect(url_for("onboarding.index"))
+    n = 0
+    for e in entries:
+        t = e.tenant
+        if not t["consented_at"]:
+            onboarding.queue_check(g.db, t["id"], priority=store.PRIORITY_WAITING, user=g.user["username"])
+        elif t["enabled"]:
+            store.enqueue_run(g.db, t["id"], "connection", requested_by=g.user["username"])
+        else:
+            continue
+        n += 1
+    if n:
+        audit(g.db, g.user["username"], "consent_check_requested", detail=f"{n} tenants")
+    flash(
+        f"Checking {n} {'client' if n == 1 else 'clients'} by signing in to each. Reload the page in a minute."
+        if n
+        else "Office Sentry doesn't sign in to paused clients. Resume them under Manage first.",
+        "success" if n else "error",
+    )
+    return redirect(url_for("onboarding.approve", t=",".join(str(e.tenant["id"]) for e in entries)))
 
 
 # -- One client: the link, the email and the pack ----------------------------------------------

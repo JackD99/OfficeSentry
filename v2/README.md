@@ -871,6 +871,10 @@ and follows it through consent, Global Reader and its first collection.
   lists every GDAP customer with whether your roles let you approve Office Sentry for it; tick the ones to add.
   Read-only, in your own tenant only, and nothing is kept but the list, for a day
   ([Adding clients from Partner Center](docs/onboarding-a-client.md#adding-clients-from-partner-center-gdap)).
+- **Approve them myself** (*Onboarding*): approve Office Sentry for the clients you can, as their Global
+  Administrator or through GDAP, one after another: each comes straight back from Microsoft's page and the next
+  one opens, with a link to each client's Entra admin centre for Global Reader
+  ([Approving several clients yourself](docs/onboarding-a-client.md#approving-several-clients-yourself)).
 <!-- /since -->
 - A client's **Settings → Manage** page (staff, not client accounts) shows its connection health:
   consent, sign-in, which of the app's permissions the tenant actually granted,

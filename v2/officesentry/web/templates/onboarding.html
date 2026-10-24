@@ -77,6 +77,7 @@
   </table>
   </div>
   <div class="action-row">
+    <button form="bulk" name="action" value="approve">{{ icon('shield') }} Approve them myself</button>
     <button form="bulk" name="action" value="sent">{{ icon('send') }} Mark as sent</button>
     <button form="bulk" name="action" value="check">{{ icon('refresh') }} Check consent now</button>
     <button form="bulk" name="action" value="unsent" class="ghost">Mark as not sent</button>
@@ -87,7 +88,7 @@
     <a href="{{ url_for('onboarding.index', show='all') }}">Show all clients</a></p></div>
   {% endif %}
 </section>
-<p class="footnote">Office Sentry confirms consent by signing in to each tenant, never on someone's word: within minutes of a client approving, then hourly for a month after you mark a link as sent. Global Reader, and whether each client's Microsoft 365 audit log is on, are checked with every collection. A Partner Center (GDAP) admin with the Privileged Role Administrator role can approve for a client too; see <em>Onboarding a client</em> in the docs.</p>
+<p class="footnote">Office Sentry confirms consent by signing in to each tenant, never on someone's word: within minutes of a client approving, then hourly for a month after you mark a link as sent. Global Reader, and whether each client's Microsoft 365 audit log is on, are checked with every collection. Where you can approve for a client yourself, as its Global Administrator or because your GDAP roles there include Privileged Role Administrator, tick it and choose <em>Approve them myself</em>.</p>
 {% else %}
 <div class="card empty">
   <h3>No clients yet</h3>

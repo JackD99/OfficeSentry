@@ -143,6 +143,7 @@ keys.
   domain only takes the tenant ID that comes back with the consent if
   Microsoft's public sign-in metadata gives the same ID for that domain; a
   client that already has its tenant ID never changes it on consent.
+  A link opened from the Approve page names the clients on it in the same signed state, so Microsoft's answer comes back to that page; only the client the nonce belongs to is recorded, and the clients it goes back to are checked against what the person may see, each time. <!-- since 2.6.0 -->
 
 ### The portal
 
