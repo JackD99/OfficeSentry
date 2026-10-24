@@ -1,0 +1,12 @@
+{#- The star on a detail report (web/favourites.py): puts the report in the person's favourites, first in the All
+    reports menu and on the Reports tab for every client, or takes it out. A toggle button, so a screen reader hears
+    whether it's on; the filled star says so too. -#}
+{% from "_macros.html" import icon, csrf %}
+{% macro star(key) -%}
+{% set on = is_favourite(key) %}
+<form method="post" action="{{ url_for('favourites.toggle', key=key) }}" class="inline">{{ csrf() }}
+  <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}">
+  <input type="hidden" name="on" value="{{ '0' if on else '1' }}">
+  <button class="sm fav{{ ' on' if on }}" aria-pressed="{{ 'true' if on else 'false' }}" title="{{ 'In your favourites: press to take it out' if on else 'Add to your favourites, first in All reports on every client' }}">{{ icon('star') }} Favourite</button>
+</form>
+{%- endmacro %}

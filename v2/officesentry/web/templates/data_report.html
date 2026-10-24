@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, ts, tenant_header, downloads, report_picker, csrf with context %}
 {% from "_report_table.html" import report_table, saved_views with context %}
+{% from "_favourite.html" import star with context %}
 {% block title %}{{ report.title }} · {{ tenant.name }}{% endblock %}
 {% block content %}
 {{ tenant_header(tenant, 'data') }}
@@ -22,6 +23,7 @@
   </div>
   {% if not report.unavailable %}
   <div class="toolbar-actions">
+    {{ star(report.key) }}
     {% if can('clients.compare') %}<a class="btn sm" href="{{ url_for('across.rollup', key=report.key) }}" title="Compare this report across every client">{{ icon('tenants') }} All clients</a>{% endif %}
     {{ saved_views(saved, view_query, report.key, tenant, base=base) }}
     {% set shown = [day_query, view_query]|select|join('&') %}{% set q = ('?' ~ shown) if shown else '' %}
