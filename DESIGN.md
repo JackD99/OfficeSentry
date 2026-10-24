@@ -140,11 +140,12 @@ Rules:
   answers the page's question first; it is not set larger. Inside a card, a few figures (`.mini-stats`) are
   one row split by lines, never boxes in a box.
 - **Cards** (`.card`): a white box with a border and a 15px title. A card that holds a table is `.flush`:
-  its title row, toolbar (search, filter, columns, download) and table run edge to edge.
+  its title row, toolbar (search, filter, columns, copy, download) and table run edge to edge.
 - **Tables**: headings small, grey and sentence case on a light band (`--surface-2`) with a
   `--border-strong` line under them; compact rows; tabular figures; the row under the pointer tints. A
   flagged row carries its severity tag beside its first value, and a thin band in the same colour down its
-  left edge so a long table can be scanned.
+  left edge so a long table can be scanned. The row the keyboard is on (`j` and `k`) is tinted
+  `--accent-soft` and edged in `--accent`.
 - **Tabs** (`.tabs`, and the settings tabs): the current tab is underlined in `--accent` and set at 600; a
   count sits in a small grey pill. A second row (`.tab-pages`) is a row of small outlined links, the current
   one tinted.

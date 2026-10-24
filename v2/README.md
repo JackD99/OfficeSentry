@@ -89,6 +89,11 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   report areas they open on that client, and findings only with findings.
 - **Downloads**: the reports above have CSV and XLSX. Values from clients can
   never become spreadsheet formulas.
+<!-- since 2.6.0 -->
+- **Copy**: a report table's *Copy* button puts the rows shown (after its
+  filters and search) on the clipboard with their headings, as a table to paste
+  into a ticket, an email or Teams, or into a spreadsheet.
+<!-- /since -->
 - **Activity history** (`/tenants/<id>/activity`, a client's *Changes →
   Activity history*, staff only): every sign-in and directory audit event
   Office Sentry has read, kept beyond the 30 days Microsoft keeps them
@@ -132,6 +137,12 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   ("north mfa pdf") for the report's file.
   Enter opens the highlighted row, and the last row searches everything for
   what you typed. While the box is empty it shows the places you opened last.
+<!-- since 2.6.0 -->
+- **Keyboard shortcuts** (staff): `?` on any page lists them. `j` and `k` move
+  down and up the rows of a table, Enter or `o` opens the row (a finding's
+  sheet on Findings), and `g` then a letter opens an entry of the menu (`g c`
+  Clients, `g r` Reports).
+<!-- /since -->
 - **Home pages** (staff): **Today** (`/today`, for technicians) is a ledger of
   what happened across your clients, one line per thing, worst first, each with
   the time it happened: critical and high findings first seen or back,

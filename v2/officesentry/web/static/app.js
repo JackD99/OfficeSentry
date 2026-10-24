@@ -250,7 +250,8 @@
 })();
 
 /* Copy buttons: data-copy="#id" copies that element's text (a textarea's value) to the clipboard and says so;
- * data-copy-text="..." copies the attribute's own text (a link). */
+ * data-copy-text="..." copies the attribute's own text (a link); data-copy-rows="table-id" copies the rows shown
+ * in that table, as a table and as tab-separated text (window.officeSentryRows, tables.js). */
 (function () {
   function fallback(text) {
     var box = document.createElement('textarea');
@@ -269,20 +270,33 @@
   // read from the page is ever parsed as HTML.
   var labels = new WeakMap();
   document.addEventListener('click', function (e) {
-    var button = e.target.closest && e.target.closest('[data-copy], [data-copy-text]');
+    var button = e.target.closest && e.target.closest('[data-copy], [data-copy-text], [data-copy-rows]');
     if (!button) return;
-    var text = button.getAttribute('data-copy-text');
-    if (text === null) {
+    var text = button.getAttribute('data-copy-text'), html = null, said = button.getAttribute('data-copied') || 'Copied';
+    if (button.hasAttribute('data-copy-rows')) {
+      var rows = window.officeSentryRows && window.officeSentryRows(button.getAttribute('data-copy-rows'));
+      if (!rows) return;
+      text = rows.text;
+      html = rows.html;
+      said = 'Copied ' + rows.rows + (rows.rows === 1 ? ' row' : ' rows');
+    } else if (text === null) {
       var source = document.querySelector(button.getAttribute('data-copy'));
       if (!source) return;
       text = source.value !== undefined ? source.value : source.textContent;
     }
-    var done = navigator.clipboard && window.isSecureContext ? navigator.clipboard.writeText(text) : fallback(text);
+    var clip = navigator.clipboard && window.isSecureContext ? navigator.clipboard : null;
+    var done = !clip ? fallback(text)
+      : html && clip.write && window.ClipboardItem
+        ? clip.write([new ClipboardItem({
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+          'text/html': new Blob([html], { type: 'text/html' })
+        })])
+        : clip.writeText(text);
     if (!labels.has(button)) labels.set(button, Array.prototype.slice.call(button.childNodes));
     var label = labels.get(button);
     done.then(function () {
       button.classList.add('copied');
-      button.textContent = button.getAttribute('data-copied') || 'Copied';
+      button.textContent = said;
     }, function () {
       button.textContent = 'Select and copy';
     }).then(function () {

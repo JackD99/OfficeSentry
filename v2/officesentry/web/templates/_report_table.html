@@ -91,7 +91,8 @@
 </details>
 {%- endmacro %}
 
-{# csv_href: this table's CSV download, already carrying the view. action: a heading for a last column
+{# Copy (app.js, tables.js) puts the rows shown on the clipboard, for a ticket or a spreadsheet.
+   csv_href: this table's CSV download, already carrying the view. action: a heading for a last column
    that the caller fills per row, called with the row's key (Section.keys), as in
    {% call(key) report_table(tv, href, action='Action') %}...{% endcall %}. A section with a group
    column draws its rows under collapsible headings (tv.groups) until the table is sorted. #}
@@ -109,6 +110,7 @@
       {% if tv.groups|length > 1 %}<button type="button" class="btn sm ghost" data-groups="tbl-{{ tv.slug }}" aria-expanded="true" title="Fold every {{ section.group|lower }} to its heading, or open them all">{{ icon('chevron') }} <span>Collapse all</span></button>{% endif %}
       {% if tv.filters %}{{ filter_menu(tv) }}{% endif %}
       {% if tv.columns|length > 2 and (tv.total > 1 or tv.hidden_count) %}{{ column_menu(tv) }}{% endif %}
+      {% if tv.rows %}<button type="button" class="btn sm ghost" data-copy-rows="tbl-{{ tv.slug }}" title="Copy the rows shown, to paste into a ticket, an email or a spreadsheet">{{ icon('copy') }} Copy</button>{% endif %}
       {% if csv_href %}<a class="btn sm ghost" href="{{ csv_href }}" title="Download {{ 'the rows and columns shown' if filtered or tv.chosen else 'this table' }} as CSV">{{ icon('download') }} CSV</a>{% endif %}
     </div>
   </div>
@@ -133,11 +135,11 @@
   {% set once = tv.repeated %}
   {% set width = tv.shown|length - notes|length + (1 if flagcol else 0) + (1 if acts else 0) %}
   <div class="table-scroll{{ ' tall' if tv.rows|length > 12 }}" data-key="{{ tv.slug }}">
-  <table class="stack-sm{{ ' grouped' if tv.groups }}" id="tbl-{{ tv.slug }}">
+  <table class="stack-sm{{ ' grouped' if tv.groups }}" id="tbl-{{ tv.slug }}"{% if tv.groups %} data-group-name="{{ section.group }}"{% endif %}>
     <thead><tr>
       {% if flagcol %}<th class="flagcol" aria-sort="{{ {'asc': 'ascending', 'desc': 'descending'}.get(tv.flag.sort, 'none') }}">{% if sortable %}<a class="sort" href="{{ tv.flag.sort_href }}" data-view title="Sort by {{ tv.flag.name|lower }}">{{ tv.flag.name }}</a>{% else %}{{ tv.flag.name }}{% endif %}{% if tv.flag.filtered %}<span class="filter-dot" title="Filtered"></span>{% endif %}</th>{% endif %}
       {% for c in tv.shown %}{% if loop.index0 not in notes %}<th class="{{ 'num' if c.kind == 'num' }}" aria-sort="{{ {'asc': 'ascending', 'desc': 'descending'}.get(c.sort, 'none') }}">{% if sortable %}<a class="sort" href="{{ c.sort_href }}" data-view>{{ c.heading }}</a>{% else %}{{ c.heading }}{% endif %}{% if c.filtered %}<span class="filter-dot" title="Filtered"></span>{% endif %}</th>{% endif %}{% endfor %}
-      {% if acts %}<th>{{ action }}</th>{% endif %}
+      {% if acts %}<th class="row-action">{{ action }}</th>{% endif %}
     </tr></thead>
     {#- A row's key (Section.keys), when the section carries them, is on the row for scripts that act on it. -#}
     {% macro row(cells, flag, key) -%}

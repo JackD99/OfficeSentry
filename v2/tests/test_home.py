@@ -269,7 +269,7 @@ def test_sidebar_home_link(client, db, two_tenants):
     make_user(db, "admin")
     login(client, "admin")
     page = client.get("/today").get_data(as_text=True)
-    assert '<a href="/home" class="active" aria-current="page">' in page
+    assert '<a href="/home" data-go="h" class="active" aria-current="page">' in page
     assert 'class="brand" href="/home"' in page
 
 
