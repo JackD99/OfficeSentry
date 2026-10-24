@@ -139,6 +139,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   discount. A client with a different reseller or a discount can have **its own
   margin**, which replaces yours on its licences. Priced reports tell the team
   where their prices came from; clients and downloads never see the margin.
+<!-- since 2.6.0 -->
 - **Import a price list** (*Settings → Licence prices → Import a price list*):
   paste or upload whatever your reseller exports, in any currency. The columns
   don't have to be in any order: the headings on the first row say which holds
@@ -147,6 +148,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   are divided by 12. You see every row, what it matched and what will change
   before anything is saved; rows that aren't licences Office Sentry reports on
   are left out.
+<!-- /since -->
 - **Findings** (`/tenants/<id>/findings`): every finding keeps first seen,
   resolved and reopened dates. Anyone who can accept risks (Second line, Team
   leader and Administrator by default) can accept one with a reason and an
