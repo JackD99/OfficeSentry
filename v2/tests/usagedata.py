@@ -1,6 +1,10 @@
 """Microsoft 365 usage report payloads, in the shape the beta JSON reports return (recorded from a real tenant)."""
 
+import json
+import re
 from datetime import UTC, datetime, timedelta
+
+import responses
 
 from officesentry.graph import GRAPH_ROOT
 
@@ -186,6 +190,56 @@ def copilot_trend(active_by_day, enabled=3):
     ]
 
 
+def mail_app_user(upn, **used):
+    """``used``: email apps report field -> the versions seen, e.g. outlookForWindows=["Outlook 2016"]."""
+    fields = ("mailForMac", "outlookForMac", "outlookForWindows", "outlookForMobile", "otherForMobile")
+    return {
+        "reportRefreshDate": REFRESHED,
+        "userPrincipalName": upn,
+        "displayName": upn.split("@")[0].title(),
+        "isDeleted": False,
+        "deletedDate": None,
+        "lastActivityDate": days_ago(1),
+        **{f: [] for f in (*fields, "outlookForWeb", "pop3App", "imap4App", "smtpApp")},
+        **used,
+        "reportPeriod": "30",
+    }
+
+
+MAIL_APPS = [
+    # A phone's own mail app over IMAP, and Outlook on the web.
+    mail_app_user(
+        "ann@x.com", outlookForWeb=["Undetermined"], otherForMobile=["Undetermined"], imap4App=["Undetermined"]
+    ),
+    # Microsoft lists everyone with a mailbox, so some used nothing.
+    mail_app_user("dan@x.com", lastActivityDate=None),
+    # Outlook 2016, out of support since October 2025.
+    mail_app_user("carol@x.com", outlookForWindows=["Outlook 2016"], outlookForWeb=["Undetermined"]),
+    # Microsoft 365's Outlook on Windows, a Mac Outlook Microsoft couldn't tell, and a scanner sending over SMTP.
+    mail_app_user(
+        "erin@x.com",
+        outlookForWindows=["Outlook M365"],
+        outlookForMac=["Undetermined"],
+        outlookForMobile=["Undetermined"],
+        smtpApp=["Undetermined"],
+    ),
+]
+
+
+def copilot_by_date(upn, actions, active=True):
+    """A row of Copilot's per-person report for one day (Microsoft's preview): ``actions`` that day."""
+    return {
+        "reportRefreshDate": REFRESHED,
+        "userPrincipalName": upn,
+        "displayName": upn.split("@")[0].title(),
+        "allAppsCopilotActionCount": actions,
+        "m365ChatQueriesSubmitted": 0,
+        "businessChatWebPromptsCount": 0,
+        "isActive": active,
+        "isActiveInWord": active,
+    }
+
+
 def mock_usage(
     rsps,
     *,
@@ -197,6 +251,10 @@ def mock_usage(
     copilot=None,
     trend=None,
     trend_status=200,
+    mail_apps=None,
+    mail_status=200,
+    by_date=None,
+    by_date_status=None,
 ):
     def get(path, value, code=200):
         body = {"value": value} if code == 200 else {"error": {"code": "Forbidden", "message": "Denied"}}
@@ -207,6 +265,7 @@ def mock_usage(
     get("getOffice365ActivationsUserDetail", ACTIVATIONS)
     get("getEmailActivityUserDetail(period='D30')", EMAIL)
     get("getTeamsUserActivityUserDetail(period='D30')", TEAMS)
+    get("getEmailAppUsageUserDetail(period='D30')", MAIL_APPS if mail_apps is None else mail_apps, mail_status)
     rsps.get(
         f"{GRAPH_ROOT}/v1.0/admin/reportSettings",
         json={"id": "reportSettings", "displayConcealedNames": concealed},
@@ -220,4 +279,21 @@ def mock_usage(
         f"{BETA}/copilot/reports/getMicrosoft365CopilotUserCountTrend(period='D90')",
         json={"value": trend or []} if trend_status == 200 else error,
         status=trend_status,
+    )
+    # One day of Copilot actions: ``by_date`` maps days before the refresh date (0 is the refresh date) to rows,
+    # ``by_date_status`` maps them to an HTTP status instead.
+    days = {days_ago(2 + back): rows for back, rows in (by_date or {}).items()}
+    codes = {days_ago(2 + back): code for back, code in (by_date_status or {}).items()}
+
+    def one_day(request):
+        day = re.search(r"date=(\d{4}-\d{2}-\d{2})", request.url).group(1)
+        if day in codes:
+            return codes[day], {}, json.dumps({"error": {"code": "BadRequest", "message": f"No data for {day}"}})
+        return 200, {}, json.dumps({"value": days.get(day, [])})
+
+    rsps.add_callback(
+        responses.GET,
+        re.compile(re.escape(f"{BETA}/copilot/reports/getMicrosoft365CopilotUsageUserDetailByDate(") + r".*"),
+        callback=one_day,
+        content_type="application/json",
     )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 
-from .. import alerts
+from .. import activity_alerts, alerts
 from ..db import audit, transaction
 from .access import needs
 
@@ -34,6 +34,8 @@ def settings():
         url_hint=alerts.masked_url(_vault(), s),
         formats=alerts.FORMATS,
         severities=alerts.ALERT_SEVERITIES,
+        activity=alerts.ACTIVITY_ALERTS,
+        chosen=alerts.activity_kinds(s),
         recent=recent,
         email_alerts=email_alerts,
     )
@@ -56,6 +58,7 @@ def save():
         "alerts.on_recovery": "1" if request.form.get("on_recovery") == "1" else "0",
         "alerts.on_reports": "1" if request.form.get("on_reports") == "1" else "0",
         "alerts.system": "1" if request.form.get("system") == "1" else "0",
+        "alerts.activity": ",".join(k for k in alerts.ACTIVITY_ALERTS if k in request.form.getlist("activity")),
     }
     url = request.form.get("url", "").strip()
     url_change = "kept"
@@ -97,6 +100,7 @@ def save():
             detail=f"enabled={values['alerts.enabled']} format={fmt} severity={severity} "
             f"failures={values['alerts.on_failures']} recovery={values['alerts.on_recovery']} "
             f"reports={values['alerts.on_reports']} system={values['alerts.system']} "
+            f"activity={values['alerts.activity'] or 'none'} "
             f"url={url_change} secret={signing_state}",
         )
     flash("Alert settings saved.", "success")
@@ -108,16 +112,19 @@ def save():
 def send_test():
     s = alerts.settings(g.db)
     base_url = current_app.extensions["officesentry.config"].base_url
-    sample = request.form.get("sample") == "report"
-    message = alerts.sample_report_message(base_url) if sample else alerts.test_message(base_url)
+    samples = {
+        "report": ("Sample report message", alerts.sample_report_message),
+        "activity": ("Sample change", activity_alerts.sample_message),
+    }
+    sample = request.form.get("sample")
+    what, build = samples.get(sample, ("Test alert", alerts.test_message))
     try:
-        alerts.send(g.db, _vault(), message, s)
+        alerts.send(g.db, _vault(), build(base_url), s)
     except alerts.AlertError as exc:
         audit(g.db, g.user["username"], "alert_test_failed", detail=str(exc)[:500])
         flash(f"Test failed: {exc}", "error")
     else:
-        audit(g.db, g.user["username"], "alert_test_sent", detail=s["alerts.format"] + (" report" if sample else ""))
-        flash(
-            f"{'Sample report message' if sample else 'Test alert'} sent to {alerts.masked_url(_vault(), s)}", "success"
-        )
+        detail = s["alerts.format"] + (f" {sample}" if sample in samples else "")
+        audit(g.db, g.user["username"], "alert_test_sent", detail=detail)
+        flash(f"{what} sent to {alerts.masked_url(_vault(), s)}", "success")
     return redirect(url_for("alerts.settings"))

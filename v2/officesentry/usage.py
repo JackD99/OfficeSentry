@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date
 
 from .licences import FREE_SKUS, SKU_NAMES
 from .snapshot import TenantSnapshot
@@ -41,6 +42,32 @@ APPS = (
     ("teams", "Teams"),
 )
 PLATFORMS = (("windows", "Windows"), ("mac", "Mac"), ("mobile", "Mobile"), ("web", "Web"))
+# (key, label) of the mail apps in Microsoft's email apps report. Each person's ``mailApps`` holds, per key, the
+# versions Microsoft saw ("Undetermined" when it can't tell), and nothing for an app they didn't use.
+MAIL_APPS = (
+    ("windows", "Outlook for Windows"),
+    ("mac", "Outlook for Mac"),
+    ("mobile", "Outlook mobile"),
+    ("web", "Outlook on the web"),
+    ("macMail", "Mail for Mac"),
+    ("otherMobile", "Other mobile mail apps"),
+    ("pop", "POP"),
+    ("imap", "IMAP"),
+    ("smtp", "SMTP"),
+)
+PROTOCOLS = ("pop", "imap", "smtp")
+# When each Outlook release for Windows and Mac leaves Microsoft's support (its lifecycle dates), by the year in
+# its name. Microsoft 365's Outlook ("Outlook M365") is kept up to date, so it has none.
+OUTLOOK_SUPPORT_ENDS = {
+    2007: date(2017, 10, 10),
+    2010: date(2020, 10, 13),
+    2013: date(2023, 4, 11),
+    2016: date(2025, 10, 14),
+    2019: date(2025, 10, 14),
+    2021: date(2026, 10, 13),
+    2024: date(2029, 10, 9),
+}
+_YEAR = re.compile(r"\b(20\d\d)\b")
 
 HASHED = re.compile(r"^[0-9A-Fa-f]{32}$")
 
@@ -189,6 +216,26 @@ def email_only(row: dict) -> bool:
         return False
     apps = row.get("apps") or {}
     return not any(apps.get(k) for k, _ in APPS if k != "outlook")
+
+
+def outlook_support_ends(version: str) -> date | None:
+    """When an Outlook version from the email apps report ("Outlook 2016") leaves support; None for Microsoft 365's
+    and for a version Microsoft couldn't tell."""
+    found = _YEAR.search(version or "")
+    return OUTLOOK_SUPPORT_ENDS.get(int(found.group(1))) if found else None
+
+
+def old_outlook(row: dict, today: date) -> list[str]:
+    """The Outlook versions someone used on Windows or a Mac that are out of support by ``today``."""
+    apps = row.get("mailApps") or {}
+    return sorted(
+        {
+            v
+            for key in ("windows", "mac")
+            for v in apps.get(key) or []
+            if (end := outlook_support_ends(v)) and end <= today
+        }
+    )
 
 
 def used_services(row: dict) -> list[str]:
@@ -355,6 +402,7 @@ COPILOT_APPS = (
 # Every Microsoft 365 Copilot licence carries this service plan, whatever it's called (the add-on, Copilot Business,
 # E7, a suite bundled with Copilot), so it tells a Copilot licence where part numbers keep changing.
 COPILOT_PLAN = "M365_COPILOT_APPS"
+COPILOT_WEEK = 7  # the days each person's Copilot actions are counted over, up to the report's refresh date
 
 
 def _plans(sku: dict) -> list[str]:

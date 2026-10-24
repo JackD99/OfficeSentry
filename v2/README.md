@@ -234,6 +234,18 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   "Signed webhooks"); only https URLs that
   resolve to public addresses are called (`OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS=1`
   allows internal ones).
+<!-- since 2.6.0 -->
+- **Activity alerts** (Settings → Alerts, "Changes in a client's tenant"): the
+  same webhook when someone makes a risky change in a client's tenant, read from
+  its directory audit log each time it's collected: someone given an admin role
+  ("Contoso: bob@contoso.com made Global Administrator", or made eligible for
+  one), a Conditional Access policy deleted, turned off or set to report-only,
+  security defaults turned off, and a sign-in method removed from an admin.
+  Each change is posted once, with who made it and when, and links to the
+  client's Admin activity report; tick the ones you want. A client's first
+  collection doesn't alert on what happened before it, and nothing new is
+  needed from the client.
+<!-- /since -->
 - **System status and system alerts** (Settings → System status): whether the
   worker runs, data is being collected, backups are recent and there's room on
   the disk, with what to do about anything that isn't. The team is emailed and
@@ -432,6 +444,16 @@ Each report is listed under its area in the report menu, in menu order.
 - *Mailbox size trend*: each mailbox's growth over one and three months
   from Office Sentry's own kept snapshots, the date each will fill at that
   rate, and the client's total month by month.
+<!-- since 2.6.0 -->
+- *Outlook and mail apps*: which Outlook release each person connects with
+  on Windows and Mac, flagged once Microsoft's support for it ends (Outlook
+  2016 and 2019 ended on 14 Oct 2025, and Outlook 2021 on 13 Oct 2026),
+  with whether their licence includes the desktop apps to move to Microsoft
+  365's Outlook; who uses POP, IMAP or SMTP apps (a phone's own mail app, a
+  scanner sending as someone); and every mail app each person used in the
+  last 30 days. From Microsoft's email apps usage report
+  (`Reports.Read.All`), so it needs no Entra ID P1.
+<!-- /since -->
 - *Mail flow by domain*: for each of the tenant's domains, how much mail
   came in, went out and passed between colleagues, and how much was
   delivered, sent to Junk, quarantined or failed, counted per day from the
@@ -566,6 +588,16 @@ Each report is listed under its area in the report menu, in menu order.
   in (signing people in, on its own, or called as an API), from Entra ID's
   app sign-in activity (needs Entra ID P1). Apps unused for 90 days that
   still hold application permissions or consent are flagged.
+<!-- since 2.6.0 -->
+- *AI agents*: the AI agents with their own identity in Entra ID
+  (Microsoft Entra Agent ID, from tools such as Copilot Studio): which app
+  made each and from which blueprint, whether it's switched on, what it can
+  reach on its own (application permissions) or for people (consent), and
+  any admin role it holds. Agents that can read mail or files, change the
+  directory or hold a powerful role, and agents Microsoft has switched off,
+  are flagged. Needs `AgentIdentity.Read.All`, added in 2.6; until a client
+  approves it the report says it's waiting.
+<!-- /since -->
 
 #### Tenant and licences
 
@@ -634,17 +666,19 @@ Each report is listed under its area in the report menu, in menu order.
 - *Microsoft 365 Copilot*: who uses the Copilot licences you pay for (share
   of people with Copilot who used it in the last 30 days, with a trend from
   Office Sentry's own history), in which apps (Copilot Chat, Teams, Outlook,
-  Word, Excel, PowerPoint, OneNote, Loop), and a chart of how many used it
-  each day over Microsoft's last 90 days. Unused Copilot licences (not used
-  in 30 days, never used, or on a blocked account; licences given in the
-  last 14 days aren't counted yet) with what each costs a month at your
-  prices, licences bought but not assigned, and the busiest people without
-  Copilot, by Teams meetings, messages and emails sent, to give an unused
-  licence or a trial to. A Copilot licence is told by its service plan, so
-  the add-on, Copilot Business and suites that include Copilot (E7) all
-  count; a suite's Copilot has no price of its own, so it isn't costed. From
-  Microsoft's Copilot usage reports (`Reports.Read.All`); not offered in GCC
-  High, DoD or 21Vianet.
+  Word, Excel, PowerPoint, OneNote, Loop), how much each person used it in
+  the last 7 days (the things Copilot did for them, and on how many days,
+  from Microsoft's daily Copilot report, a preview), and a chart of how many
+  used it each day over Microsoft's last 90 days. Unused Copilot licences
+  (not used in 30 days, never used, or on a blocked account; licences given
+  in the last 14 days aren't counted yet) with what each costs a month at
+  your prices, licences bought but not assigned, and the busiest people
+  without Copilot, by Teams meetings, messages and emails sent, to give an
+  unused licence or a trial to. A Copilot licence is told by its service
+  plan, so the add-on, Copilot Business and suites that include Copilot (E7)
+  all count; a suite's Copilot has no price of its own, so it isn't costed.
+  From Microsoft's Copilot usage reports (`Reports.Read.All`); not offered
+  in GCC High, DoD or 21Vianet.
 <!-- /since -->
 - *Tenant settings*: what users and guests can do without an admin
   (create tenants, register apps, join by verifying an email address,
@@ -657,10 +691,11 @@ Each report is listed under its area in the report menu, in menu order.
   first read the tenant): admin roles granted or removed (including PIM), Conditional
   Access policies added, changed or deleted, consents and app permissions,
   secrets and certificates added to apps, domain and federation changes,
-  admin password resets, deleted users and security info changed by admins.
-  Federation changes, new app credentials, role grants and Conditional Access
-  policies deleted or switched off are listed first, then every change and
-  who made them.
+  admin password resets, deleted users, security info changed by admins or
+  removed by its owner, and security defaults turned on or off. Federation
+  changes, new app credentials, role grants, Conditional Access policies
+  deleted or switched off and security defaults turned off are listed first,
+  then every change and who made them.
 - *Autodesk licences*, for clients given an [Autodesk team](docs/autodesk.md): every Autodesk subscription with its seats bought and given out, who holds each seat and when they last used it in the last 90 days, seats bought but not given to anyone, and seats still held by someone whose Microsoft 365 account is blocked or gone. From Autodesk's Business Success Plan Reporting API, read-only. <!-- since 2.6.0 -->
 - *Service health*: whether each Microsoft 365 service is working for the client, Microsoft's open outages and advisories and those resolved in the last 30 days, and the message centre's upcoming changes, those with a date to act by first (flagged when due within 30 days), then major changes.
 

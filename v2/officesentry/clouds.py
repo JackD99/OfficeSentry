@@ -77,6 +77,9 @@ class Cloud:
 
 _CHINA = "Microsoft 365 operated by 21Vianet"
 _DOD = "Microsoft 365 US Government DoD"
+# Entra Agent ID's permission (added in 2.6). Microsoft doesn't say whether the US Government clouds or 21Vianet offer
+# agent identities yet, so an app registered there asks for it only where Graph has it.
+AGENT_ID = "AgentIdentity.Read.All"
 
 CLOUDS: dict[str, Cloud] = {
     "commercial": Cloud(
@@ -102,6 +105,7 @@ CLOUDS: dict[str, Cloud] = {
             "usage.apps": "Microsoft doesn't offer the Microsoft 365 Apps usage report in GCC High.",
             "usage.copilot": "Microsoft doesn't offer the Copilot usage report in GCC High.",
         },
+        no_permissions=(AGENT_ID,),
     ),
     "dod": Cloud(
         "dod",
@@ -116,6 +120,7 @@ CLOUDS: dict[str, Cloud] = {
             "usage.apps": f"Microsoft doesn't offer the Microsoft 365 Apps usage report in {_DOD}.",
             "usage.copilot": f"Microsoft doesn't offer the Copilot usage report in {_DOD}.",
         },
+        no_permissions=(AGENT_ID,),
     ),
     "china": Cloud(
         "china",
@@ -134,7 +139,7 @@ CLOUDS: dict[str, Cloud] = {
             "add-on isn't available there.",
             "security_alerts": f"Microsoft doesn't offer Defender alerts and incidents through Graph in {_CHINA}.",
         },
-        no_permissions=("SecurityAlert.Read.All", "SecurityIncident.Read.All"),
+        no_permissions=("SecurityAlert.Read.All", "SecurityIncident.Read.All", AGENT_ID),
     ),
 }
 

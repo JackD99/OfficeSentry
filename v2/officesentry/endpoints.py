@@ -183,6 +183,15 @@ GRAPH: tuple[Endpoint, ...] = (
     Endpoint("/directory/administrativeUnits/{id}/members", V1, "Directory.Read.All", ("directory",), cost=3),
     Endpoint("/applications", V1, "Application.Read.All", ("directory",)),
     Endpoint("/servicePrincipals", V1, "Application.Read.All", ("directory",)),
+    # AI agents (permission added in 2.6; skipped while the client hasn't approved it). Before the entry below,
+    # which its path would match too.
+    Endpoint(
+        "/servicePrincipals/microsoft.graph.agentIdentity",
+        V1,
+        "AgentIdentity.Read.All",
+        ("directory",),
+        fallback="Shown as waiting until the client approves the permission (2.6)",
+    ),
     Endpoint("/servicePrincipals/{id}", V1, "Application.Read.All", ("directory",)),
     Endpoint("/servicePrincipals/{id}/appRoleAssignments", V1, "Application.Read.All", ("directory",)),
     Endpoint("/oauth2PermissionGrants", V1, "Directory.Read.All", ("directory",)),
@@ -304,6 +313,7 @@ GRAPH: tuple[Endpoint, ...] = (
             "getM365AppUserDetail(period={period})",
             "getOffice365ActivationsUserDetail",
             "getEmailActivityUserDetail(period={period})",
+            "getEmailAppUsageUserDetail(period={period})",
             "getTeamsUserActivityUserDetail(period={period})",
             "getTeamsTeamActivityDetail(period={period})",
             "getSharePointSiteUsageDetail(period={period})",
@@ -333,6 +343,15 @@ GRAPH: tuple[Endpoint, ...] = (
         ("usage_reports",),
         fallback="Only asked for when someone holds Copilot; the Copilot report leaves its daily chart out without it",
         beta="v1.0 returns CSV only; beta returns JSON",
+    ),
+    Endpoint(
+        "/copilot/reports/getMicrosoft365CopilotUsageUserDetailByDate(date={date})",
+        BETA,
+        "Reports.Read.All",
+        ("usage_reports",),
+        fallback="One call a day for the last 7 days, only when someone holds Copilot; the Copilot report says "
+        "actions aren't known without it",
+        beta="Microsoft offers it in beta only (a preview)",
     ),
     # Security and devices.
     Endpoint("/security/secureScores", V1, "SecurityEvents.Read.All", ("secure_score",)),

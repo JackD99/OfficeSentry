@@ -23,6 +23,7 @@ from ..usage import (
     COLLECTOR,
     COPILOT,
     COPILOT_APPS,
+    COPILOT_WEEK,
     PLATFORMS,
     SERVICES,
     blocked,
@@ -40,15 +41,32 @@ APP_USERS = f"/reports/getM365AppUserDetail(period='{PERIOD}')"
 ACTIVATIONS = "/reports/getOffice365ActivationsUserDetail"
 EMAIL = f"/reports/getEmailActivityUserDetail(period='{PERIOD}')"
 TEAMS = f"/reports/getTeamsUserActivityUserDetail(period='{PERIOD}')"
+# Which mail apps each person connected with, and the Outlook versions.
+MAIL_APPS = f"/reports/getEmailAppUsageUserDetail(period='{PERIOD}')"
 # Copilot's report doesn't accept D30; D90 still gives each person's last activity date.
 COPILOT_USAGE = "/copilot/reports/getMicrosoft365CopilotUsageUserDetail(period='D90')"
 # How many people with Copilot used it each day, per app, for Microsoft's last 90 days.
 COPILOT_TREND = "/copilot/reports/getMicrosoft365CopilotUserCountTrend(period='D90')"
+# Each person's Copilot actions on one day, for one of the eight days up to the report's refresh date. Read for
+# the ``COPILOT_WEEK`` days to the refresh date. It takes no OData parameters, so not even $format.
+COPILOT_BY_DATE = "/copilot/reports/getMicrosoft365CopilotUsageUserDetailByDate(date={date})"
 
 REPORT_SETTINGS = "ReportSettings.Read.All"  # added in 2.2: says outright whether names are concealed
 
 # Office365ActiveUserDetail field prefix per service key.
 FIELDS = {"exchange": "exchange", "teams": "teams", "onedrive": "oneDrive", "sharepoint": "sharePoint"}
+# EmailAppUsageUserDetail field per mail app key (``usage.MAIL_APPS``).
+MAIL_FIELDS = {
+    "windows": "outlookForWindows",
+    "mac": "outlookForMac",
+    "mobile": "outlookForMobile",
+    "web": "outlookForWeb",
+    "macMail": "mailForMac",
+    "otherMobile": "otherForMobile",
+    "pop": "pop3App",
+    "imap": "imap4App",
+    "smtp": "smtpApp",
+}
 
 
 def _int(value) -> int:
@@ -86,12 +104,15 @@ def _new_row(upn: str, report_date: str | None) -> dict:
         "activations": [],
         "email": None,
         "teamsCounts": None,
+        "mailApps": None,
         "copilotLastActive": None,
         "copilotActive": None,
         # Only people with a Copilot licence are in Copilot's report; for them, the last day they used it in
         # each app (``usage.COPILOT_APPS`` keys).
         "copilotLicensed": False,
         "copilotApps": None,
+        # Copilot actions and days used over the days ``usage_status.copilotWeek`` names (None: not read).
+        "copilotWeek": None,
     }
 
 
@@ -172,6 +193,23 @@ def merge_email(rows: dict[str, dict], items: list[dict]) -> None:
                 row["name"] = r.get("displayName")
 
 
+def _versions(value) -> list[str]:
+    """An email apps report cell: the versions seen ("Outlook 2016", or "Undetermined"), or none when unused."""
+    if isinstance(value, str):
+        value = value.split(";")
+    if not isinstance(value, list):
+        return []
+    return sorted({v.strip() for v in value if isinstance(v, str) and v.strip()})
+
+
+def merge_mail_apps(rows: dict[str, dict], items: list[dict]) -> None:
+    """Which mail apps each person connected with, from EmailAppUsageUserDetail."""
+    for r in items:
+        row = _row(rows, r)
+        if row is not None:
+            row["mailApps"] = {key: _versions(r.get(field)) for key, field in MAIL_FIELDS.items()}
+
+
 def merge_teams(rows: dict[str, dict], items: list[dict]) -> None:
     for r in items:
         if r.get("isExternal"):
@@ -215,6 +253,18 @@ def copilot_days(items: list[dict]) -> list[tuple[str, dict]]:
     return sorted(days.items())
 
 
+def merge_copilot_day(rows: dict[str, dict], items: list[dict]) -> None:
+    """Add one day of each Copilot holder's actions, and whether they used Copilot that day."""
+    for r in items:
+        row = _row(rows, r) if isinstance(r, dict) else None
+        if row is None or not row["copilotLicensed"]:
+            continue
+        week = row["copilotWeek"] or {"actions": 0, "days": 0}
+        week["actions"] += _int(r.get("allAppsCopilotActionCount"))
+        week["days"] += r.get("isActive") is True
+        row["copilotWeek"] = week
+
+
 def _has_copilot(rows: dict[str, dict]) -> bool:
     return any(part_for_product(p) == COPILOT for row in rows.values() for p in row["products"])
 
@@ -243,6 +293,7 @@ class Usage(Collector):
             ("activations", ACTIVATIONS, merge_activations),
             ("email", EMAIL, merge_email),
             ("teams", TEAMS, merge_teams),
+            ("mail_apps", MAIL_APPS, merge_mail_apps),
         ):
             if why := clouds.missing(cloud, f"usage.{name}"):
                 read[name] = False
@@ -254,7 +305,7 @@ class Usage(Collector):
             except GraphError as exc:
                 read[name] = False
                 ctx.warn(f"Usage report unavailable ({name}): {exc.message}")
-        copilot_date = None
+        copilot_date = week = None
         if why := clouds.missing(cloud, "usage.copilot"):
             read["copilot"] = False
             ctx.log(why)  # nobody there can hold Copilot, so it isn't worth a warning
@@ -264,6 +315,8 @@ class Usage(Collector):
                 read["copilot"] = True
                 if any(r["copilotLicensed"] for r in rows.values()):
                     read["copilot_trend"] = self._copilot_trend(ctx)
+                    week = self._copilot_week(ctx, rows, copilot_date)
+                    read["copilot_week"] = week is not None
             except GraphError as exc:
                 read["copilot"] = False
                 if _has_copilot(rows):  # only matters when someone holds Copilot
@@ -286,6 +339,8 @@ class Usage(Collector):
                         "concealSetting": setting,
                         "reportDate": report_date,
                         "copilotReportDate": copilot_date,
+                        # The days Copilot actions were read for (``copilotWeek`` on each row), or None.
+                        "copilotWeek": week,
                         "days": ACTIVE_DAYS,
                         "read": read,
                     },
@@ -307,6 +362,8 @@ class Usage(Collector):
             holders = [r for upn, r in rows.items() if r["copilotLicensed"] and upn not in disabled]
             ctx.metric("copilot.licensed", len(holders))
             ctx.metric("copilot.active", sum(bool(r["copilotActive"]) for r in holders))
+            if week:
+                ctx.metric("copilot.actions_7d", sum((r["copilotWeek"] or {}).get("actions", 0) for r in holders))
         if read["apps"]:
             ctx.metric(
                 "usage.desktop_apps",
@@ -326,6 +383,35 @@ class Usage(Collector):
             return False
         ctx.objects("copilot_day", days)
         return True
+
+    @staticmethod
+    def _copilot_week(ctx: RunContext, rows: dict[str, dict], refreshed: str | None) -> dict | None:
+        """Each Copilot holder's actions and days used over the ``COPILOT_WEEK`` days to the report's refresh
+        date, one call a day (Microsoft's preview report): the days read, or None when none could be. A day
+        Microsoft won't give is left out; any other error leaves the whole week out, so no total is short."""
+        end = parse_day(refreshed)
+        if end is None:
+            return None
+        read = []
+        for back in range(COPILOT_WEEK):
+            day = (end - timedelta(days=back)).isoformat()
+            try:
+                items = ctx.paged(ctx.graph.get_all(COPILOT_BY_DATE.format(date=day), version="beta"))
+            except GraphError as exc:
+                if exc.status in (400, 404):
+                    ctx.log(f"Copilot actions for {day} aren't offered: {exc.message}")
+                    continue
+                ctx.log(f"Copilot actions weren't readable: {exc.message}", "warning")
+                read = []
+                break
+            merge_copilot_day(rows, items)
+            read.append(day)
+        for r in rows.values():
+            if not read:
+                r["copilotWeek"] = None
+            elif r["copilotLicensed"] and r["copilotWeek"] is None:
+                r["copilotWeek"] = {"actions": 0, "days": 0}
+        return {"from": min(read), "to": max(read), "days": len(read)} if read else None
 
     @staticmethod
     def _conceal_setting(ctx: RunContext) -> bool | None:

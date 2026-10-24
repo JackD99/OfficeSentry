@@ -14,6 +14,7 @@ from officesentry.exchange import EXCHANGE_ROOT, ExchangeClient
 from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.worker import execute_run
 from tests import adminactivitydata as ad
+from tests import agentdata as agd
 from tests import devicedata as dd
 from tests import exchangedata as xd
 from tests import graphdata as gd
@@ -100,6 +101,10 @@ def _filter(request, field: str) -> str | None:
     return found.group(1) if found else None
 
 
+# One service principal by ID, but not a list cast to a kind of them (``mock_agents``), which would match too.
+NOT_A_CAST = r"/servicePrincipals/(?!microsoft\.graph\.)"
+
+
 def mock_our_app(rsps, *, found=True, missing=(), roles=None):
     """Office Sentry's own app in the tenant, for the connection collector: by default every permission is
     granted and it holds Global Reader. ``roles`` replaces its directory role assignments."""
@@ -119,14 +124,17 @@ def mock_our_app(rsps, *, found=True, missing=(), roles=None):
         content_type="application/json",
     )
 
-    def assignments(request):
+    def assignments(request):  # an (HTTP status, body) answer in place of the list fails that read
         sid = request.path_url.split("/")[3]
         ours = {gd.OUR_SP["id"]: gd.our_assignments(missing)}
-        return 200, {}, json.dumps({"value": {**gd.APP_ROLE_ASSIGNMENTS, **ours}.get(sid, [])})
+        found = {**gd.APP_ROLE_ASSIGNMENTS, **agd.ASSIGNMENTS, **ours}.get(sid, [])
+        if isinstance(found, tuple):
+            return found[0], {}, json.dumps(found[1])
+        return 200, {}, json.dumps({"value": found})
 
     rsps.add_callback(
         responses.GET,
-        re.compile(re.escape(V1) + r"/servicePrincipals/[^/?]+/appRoleAssignments"),
+        re.compile(re.escape(V1) + NOT_A_CAST + r"[^/?]+/appRoleAssignments"),
         callback=assignments,
         content_type="application/json",
     )
@@ -137,7 +145,7 @@ def mock_our_app(rsps, *, found=True, missing=(), roles=None):
 
     rsps.add_callback(
         responses.GET,
-        re.compile(re.escape(V1) + r"/servicePrincipals/[^/?]+(\?.*)?$"),
+        re.compile(re.escape(V1) + NOT_A_CAST + r"[^/?]+(\?.*)?$"),
         callback=resource,
         content_type="application/json",
     )
@@ -218,6 +226,7 @@ def mock_tenant(
     cross_tenant=None,
     partners=None,
     detected_apps=None,
+    agents_kw=None,
     **phase4,
 ):
     paged(rsps, f"{V1}/organization", [gd.ORGANIZATION])
@@ -335,6 +344,7 @@ def mock_tenant(
     mock_sharepoint(rsps, **(sharepoint_kw or {}))
     mock_usage(rsps, **(usage_kw or {}))
     mock_teams(rsps, **(teams_kw or {}))
+    mock_agents(rsps, **(agents_kw or {}))
 
 
 def mock_security(rsps, *, alerts=None, incidents=None, health=None, issues=None, messages=None, status=None) -> None:
@@ -352,6 +362,15 @@ def mock_security(rsps, *, alerts=None, incidents=None, health=None, issues=None
             rsps.get(url, status=status[url][0], json=status[url][1])
         else:
             paged(rsps, url, default if given is None else given)
+
+
+def mock_agents(rsps, *, agents=None, status=None) -> None:
+    """The AI agents with their own identity (``agentdata``); their permissions are answered by
+    ``mock_our_app``. ``status`` is an (HTTP status, body) answer instead, as before the client approves."""
+    if status:
+        rsps.get(agd.AGENTS_URL, status=status[0], json=status[1])
+    else:
+        paged(rsps, agd.AGENTS_URL, agd.AGENTS if agents is None else agents)
 
 
 def mock_intune(rsps, *, compliance=None, configurations=None, settings=None, ios=None, android=None, status=None):

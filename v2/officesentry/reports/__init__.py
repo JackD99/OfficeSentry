@@ -2,6 +2,7 @@
 
 from . import (  # noqa: F401
     admin_units,
+    agents,
     all_users,
     auth_methods,
     auto_replies,
@@ -20,6 +21,7 @@ from . import (  # noqa: F401
     intune_policies,
     licence_changes,
     licence_features,
+    mail_apps,
     mail_compliance,
     mail_flow,
     mail_protection,

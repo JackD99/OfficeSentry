@@ -712,6 +712,10 @@ CLIENT_WORDS: dict[str, str] = {
     "SecurityIncident.Read.All": "Incidents in Microsoft Defender (related alerts grouped together) and their status.",
     "ServiceHealth.Read.All": "Microsoft 365 outages and advisories that affect you.",
     "ServiceMessage.Read.All": "Microsoft's message centre posts about upcoming changes to Microsoft 365.",
+    # Added in 2.6
+    "AgentIdentity.Read.All": "The AI agents that have their own identity in Entra ID (Entra Agent ID): their "
+    "names, whether they're switched on, which app made them and when. Never what they do or what anyone asks "
+    "them.",
 }
 NEVER_READS = (
     "Email, attachments, calendars or contacts.",

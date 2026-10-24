@@ -21,7 +21,7 @@ Checked in October 2026 from CIPP's documentation and FAQ. If something here is 
 | **Reaches clients through** | GDAP relationships in Partner Center | One read-only app that each client's admin approves from a link, or your technician approves through GDAP |
 | **History** | Not its focus | Each day for 30 days and each month for a year by default: what changed since last month on every report, and sign-ins and admin changes beyond Microsoft's 30 days |
 | **Reports for clients** | Reports you can brand | A branded monthly review you approve before it goes, Cyber Essentials, ISO 27001 and insurance evidence, quarterly reviews and project proposals, emailed on a schedule, and client users who sign in with their own Microsoft account |
-| **Alerts** | Audit log alerts within about 15 minutes and scheduled checks, to email, a webhook or your PSA | New findings, failed collections and its own problems, to email, Teams, Slack or a webhook |
+| **Alerts** | Audit log alerts within about 15 minutes and scheduled checks, to email, a webhook or your PSA | New findings, failed collections and its own problems, to email, Teams, Slack or a webhook; risky changes in a client's tenant (a new admin, Conditional Access or security defaults turned off) at the next collection, to Teams, Slack or a webhook |
 | **Your team** | Built-in roles and your own | Seven built-in roles and your own, each limited to the clients you grant |
 
 ## Why use both

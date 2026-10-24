@@ -77,6 +77,7 @@ _ACTIVITIES = {
             "Update authorization policy",
             "Authentication Methods Policy Update",
             "Update authentication methods policy",
+            "Update security defaults",
         ),
     },
     "ApplicationManagement": {
@@ -111,6 +112,7 @@ _ACTIVITIES = {
             "Admin updated security info",
             "Admin deleted security info",
             "Admin registered temporary access pass method for user",
+            "User deleted security info",
         ),
     },
 }
@@ -128,6 +130,7 @@ ACTIVITIES: dict[tuple[str, str], str] = {
 }
 
 CA_STATES = {"enabled": "On", "disabled": "Off", "enabledForReportingButNotEnforced": "Report-only"}
+SECURITY_DEFAULTS = "update security defaults"  # the activity, as _norm writes it
 KEY_TYPES = {"Password": "secret", "AsymmetricX509Cert": "certificate", "Symmetric": "symmetric key"}
 
 
@@ -185,7 +188,7 @@ def normalise(event: dict) -> dict:
         or next((t.get("displayName") for t in targets if t.get("type") == "Role" and t.get("displayName")), None)
     )
     labels = [t.get("userPrincipalName") or t.get("displayName") for t in targets if t.get("type") != "Role"]
-    detail, credential_added, ca_disabled = "", False, False
+    detail, credential_added, ca_disabled, defaults_off = "", False, False, None
 
     if kind.startswith("role_"):
         detail = role or ""
@@ -209,6 +212,8 @@ def normalise(event: dict) -> dict:
             detail = CA_STATES.get(after or before, after or before)
         if not any(labels):
             labels = [new.get("displayName") or old.get("displayName")]
+    elif kind == "auth_policy" and _norm(event.get("activityDisplayName")) == SECURITY_DEFAULTS:
+        detail, defaults_off = _defaults_detail(props)
 
     labels = [str(t) for t in labels if t]
     return {
@@ -227,7 +232,35 @@ def normalise(event: dict) -> dict:
         "detail": str(detail)[:300],
         "credential_added": credential_added,
         "ca_disabled": ca_disabled,
+        "defaults_off": defaults_off,
     }
+
+
+def _flag(value) -> bool | None:
+    """An on/off value as Microsoft writes it in an audit event (true, "True", [false], {"isEnabled": true})."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return {"true": True, "false": False}.get(value.strip().strip('"').lower())
+    if isinstance(value, list) and len(value) == 1:
+        return _flag(value[0])
+    if isinstance(value, dict):
+        return next((_flag(v) for k, v in value.items() if str(k).lower() == "isenabled"), None)
+    return None
+
+
+def _defaults_detail(props: dict) -> tuple[str, bool | None]:
+    """(what changed, whether security defaults were turned off) for an "Update security defaults" event:
+    True when they went off, False when they went or stayed on, None when the event doesn't say."""
+    before, after = next(
+        ((_flag(old), _flag(new)) for name, (old, new) in props.items() if "enabled" in name.lower()), (None, None)
+    )
+    words = {True: "On", False: "Off"}
+    if before is not None and after is not None and before != after:
+        detail = f"{words[before]} → {words[after]}"
+    else:
+        detail = words.get(after, "")
+    return detail, (None if after is None else (after is False and before is not False))
 
 
 def _consent_detail(props: dict) -> str:
@@ -272,6 +305,8 @@ def review(event: dict) -> tuple[str, str] | None:
         return "medium", "Conditional Access policy deleted"
     if kind == "ca" and event.get("ca_disabled"):
         return "medium", "Conditional Access policy no longer enforced"
+    if kind == "auth_policy" and event.get("defaults_off"):
+        return "medium", "Security defaults turned off"
     return None
 
 
