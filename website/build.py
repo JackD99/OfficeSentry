@@ -109,6 +109,12 @@ SECTIONS = [
                 "someone else's mailbox.",
             ),
             Doc(
+                "v2/docs/autodesk.md",
+                "autodesk",
+                blurb="Each client's Autodesk seats, who holds them and who hasn't used them, from Autodesk's "
+                "reporting API.",
+            ),
+            Doc(
                 "v2/docs/troubleshooting.md",
                 "troubleshooting",
                 blurb="The common setup and collection errors, and how to fix them.",

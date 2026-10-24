@@ -60,6 +60,7 @@ for one client or all of them.
   group licensing errors in plain words, and **Licence changes** shows who was given or lost a licence each
   month, and by whom.
 - The **Clients** page puts the waste for every client side by side, largest first, when you pick this report from its menu.
+- **Autodesk licences** does the same for Autodesk seats, for clients on Autodesk's Business Success Plan or Enterprise plan: seats bought but not given out, seats nobody has opened in 90 days, and seats held by people whose Microsoft 365 account is blocked or gone ([setting it up](../../../v2/docs/autodesk.md)). <!-- since 2.6.0 -->
 
 [Open Licence waste in the demo](https://demo.officesentry.co.uk/across/licences) ·
 [Example PDF](../../../examples/licence-right-sizing.pdf) ·

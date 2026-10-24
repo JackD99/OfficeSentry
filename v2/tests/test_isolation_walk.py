@@ -52,7 +52,7 @@ from officesentry.reports import data_reports, designs, evidence_answers, export
 from officesentry.reports.data_reports import REPORTS
 from officesentry.reports.evidence_answers import QUESTIONS
 from officesentry.web import saved_views
-from tests import auditdata
+from tests import auditdata, autodeskdata
 from tests import sharepoint_data as sd
 from tests import test_client_sign_in as csi
 from tests.conftest import login, make_user
@@ -96,6 +96,7 @@ OTHER_ARGS = {
     "scheme",
     "design_id",
     "role_id",
+    "sign_in_id",
 }
 # Who is signed in for the walk. Each sees only tenant A.
 ROLES = ["analyst", "client", "analyst-by-group", "client-with-group", "client-by-microsoft", "manager"]
@@ -119,9 +120,9 @@ B_WORDS = (
     b"bravo.pdf",
     b"Bravo view",
 )
-# The reports where B's mark shows (its people, groups, devices and distribution lists), for the walks that
-# open a report by key.
-MARKED_REPORTS = ("all-users", "groups", "devices", "distribution-lists")
+# The reports where B's mark shows (its people, groups, devices, distribution lists and Autodesk team), for the
+# walks that open a report by key.
+MARKED_REPORTS = ("all-users", "groups", "devices", "distribution-lists", "autodesk-licences")
 # What the walk of A's pages leaves out: signing out, static files and the health checks.
 NOT_OPENED = {"auth.logout", "static", "health", "health_ready"}
 # POST routes that reach Microsoft or a webhook, which the form walks leave alone (there's no network).
@@ -164,6 +165,8 @@ FORMS = {
     "onboarding.mark_sent": lambda ids: {"sent": "1"},
     "audit_addon.mark_sent": lambda ids: {"sent": "1"},
     "audit_addon.switch_off": lambda ids: {"delete": "1"},
+    "autodesk.add_team": lambda ids: {"team": ids["autodesk_team"]},
+    "autodesk.remove_team": lambda ids: {"team": ids["autodesk_team"]},
     "projects.set_status": lambda ids: {"status": next(iter(projects.STATUSES)), "note": "Agreed by phone"},
     "reporting.add_action": lambda ids: {"title": "Turn on MFA for everyone", "detail": "By the end of the month"},
     "reporting.add_note": lambda ids: {"rule_key": "admin_mfa", "body": "Spoke to the client", "visibility": "staff"},
@@ -196,6 +199,7 @@ SCHEDULE_FORM = {
 BUTTONS = {
     "audit_addon.check",
     "audit_addon.switch_on",
+    "autodesk.collect",
     "email.delete_alert",
     "email.delete_contact",
     "email.delete_schedule",
@@ -301,7 +305,9 @@ def world(app, db, vault, connection_id):
     auditdata.addon_on(db, vault, [alpha, bravo], started_at=auditdata.iso(now - timedelta(hours=3)))
     auditdata.collect(db, alpha, auditdata.sample(now), now)
     auditdata.collect(db, bravo, _marked(auditdata.sample(now), B_MARK), now)
-    ids = {**_objects(db, bravo, "Bravo"), "connection_id": connection_id}
+    # Autodesk, one sign-in seeing both clients' teams: B's team and its people named with B's mark.
+    autodeskdata.world(db, vault, alpha, bravo, B_MARK)
+    ids = {**_objects(db, bravo, "Bravo"), "connection_id": connection_id, "autodesk_team": autodeskdata.TEAM_B}
     ids["alpha"] = _objects(db, alpha, "Alpha")  # A's own, for walking the pages someone granted A may open
     ids["design_id"] = designs.create(db, "Walk design", "test", designs.STARTERS["executive"][2])
     ids["plan_id"] = _plan(db, "Bravo plan", bravo)
@@ -424,7 +430,8 @@ def _form(rule, ids: dict) -> dict:
 
 def test_the_walk_opens_real_pages(app, client, db, world):
     """Proof the walk isn't vacuous: with access to both tenants, B's URLs open, and B's pages carry its
-    mark where a leak would show it (people, groups, devices, distribution lists), while A's don't."""
+    mark where a leak would show it (people, groups, devices, distribution lists, its Autodesk team), while A's
+    don't."""
     alpha, bravo, ids = world
     make_user(db, "admin")
     login(client, "admin")
@@ -438,7 +445,7 @@ def test_the_walk_opens_real_pages(app, client, db, world):
         opened += 1
     assert opened >= 40
     pages = ("users", "data/all-users", "data/groups", "data/devices", "data/distribution-lists")
-    for page in (*pages, "data/files-and-mailboxes"):
+    for page in (*pages, "data/files-and-mailboxes", "data/autodesk-licences.csv", "autodesk"):
         assert B_MARK.encode() in client.get(f"/tenants/{bravo}/{page}").data, page  # or a leak couldn't be seen
         assert B_MARK.encode() not in client.get(f"/tenants/{alpha}/{page}").data, page
 

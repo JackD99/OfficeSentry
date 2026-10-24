@@ -105,7 +105,7 @@
 {% set TAB_OF = {
   'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports', 'designs': 'reports',
   'schedules': 'emails', 'projects': 'findings', 'grade': 'overview', 'collection': 'settings', 'manage': 'settings',
-  'client_sign_in': 'settings', 'audit_addon': 'settings',
+  'client_sign_in': 'settings', 'audit_addon': 'settings', 'autodesk': 'settings',
   'activity': 'changes', 'timeline': 'changes', 'mailboxes': 'users', 'group_pages': 'users', 'site_pages': 'users',
 } %}
 
@@ -185,6 +185,7 @@
   {% set _ = pages.append(('manage', 'Manage', url_for('tenant_admin.manage', tenant_id=tenant.id))) %}
   {% if can('users.manage') %}{% set _ = pages.append(('client_sign_in', 'Client sign-in', url_for('client_access.page', tenant_id=tenant.id))) %}{% endif %}
   {% if audit_addon_on() and can('clients.manage', tid) %}{% set _ = pages.append(('audit_addon', 'Audit log add-on', url_for('audit_addon.client', tenant_id=tenant.id))) %}{% endif %}
+  {% if autodesk_on() and can('clients.manage', tid) %}{% set _ = pages.append(('autodesk', 'Autodesk', url_for('autodesk.client', tenant_id=tenant.id))) %}{% endif %}
 {% endif %}
 {% if pages|length < 2 %}{% set pages = [] %}{% endif %}
 {% if pages %}

@@ -21,7 +21,8 @@
 {% set SETTINGS_GROUPS = [
   ('Clients', [('tenant_admin.clients', 'Client settings', ['onboarding.index', 'onboarding.import_tenants', 'onboarding.send'], ''),
                ('groups.index', 'Client groups', ['groups.edit'], 'clients.manage'),
-               ('admin.connections', 'App connection', ['audit_addon.settings'], 'settings.manage')]),
+               ('admin.connections', 'App connection', ['audit_addon.settings'], 'settings.manage'),
+               ('autodesk.settings', 'Autodesk', [], 'settings.manage')]),
   ('Reports and email', [('branding.settings', 'Branding', [], 'settings.manage'), ('reports.prices', 'Licence prices', [], 'settings.manage'),
                          ('email.settings', 'Email delivery', [], 'settings.manage'), ('alerts.settings', 'Alerts', [], 'settings.manage')]),
   ('Team', [('admin.users', 'Users', ['admin.edit_user', 'roles.index', 'roles.edit'], 'users.manage'),

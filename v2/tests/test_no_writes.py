@@ -40,6 +40,9 @@ ALLOWED = {
     "client is deleted or Microsoft says part of its feed is off. Never from a collection, and nothing in the "
     "client's tenant changes",
     "alerts.py": "posts alerts to the MSP's own Teams, Slack or webhook URL, never to Microsoft",
+    "autodesk/api.py": "Autodesk's Reporting API: the app's token request, and asking Autodesk to prepare one "
+    "Autodesk team's report files (POST exports, always naming that team), which are then downloaded. Neither "
+    "changes anything in the client's Autodesk account, and Autodesk has no API that could",
     "sso.py": "sign-in with Microsoft for staff and clients' people: the OpenID Connect token request, creating "
     "the sign-in app in the MSP's own tenant from the setup wizard, and letting that same app accept other "
     "organisations' accounts for client sign-in (its supported account types, in the MSP's tenant only)",
