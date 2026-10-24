@@ -313,6 +313,7 @@ GRAPH: tuple[Endpoint, ...] = (
             "getM365AppUserDetail(period={period})",
             "getOffice365ActivationsUserDetail",
             "getEmailActivityUserDetail(period={period})",
+            "getEmailAppUsageUserDetail(period={period})",
             "getTeamsUserActivityUserDetail(period={period})",
             "getTeamsTeamActivityDetail(period={period})",
             "getSharePointSiteUsageDetail(period={period})",

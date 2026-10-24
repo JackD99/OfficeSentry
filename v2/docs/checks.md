@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-71 checks, 44 data sources (collectors) and 56 detail reports.
+71 checks, 44 data sources (collectors) and 57 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -241,6 +241,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `licence-features` | Licence features | What the client's licences cover (Entra ID P1 and P2, Intune, Defender for Office 365, Exchange Online, SharePoint), which licences provide each feature, how many people hold one, and the reports and checks each feature unlocks. | `tenant_profile`, `users` |
 | `licence-rightsizing` | Licence right-sizing | People who could move to a cheaper licence, and services people are licensed for but don't use. | `admin_roles`, `devices`, `m365_usage`, `mailbox_usage`, `tenant_profile`, `users` |
 | `licences` | Licence waste | Paid licences nobody uses, in money, and the accounts holding them. | `mailbox_usage`, `mailboxes`, `tenant_profile`, `users` |
+| `mail-apps` | Outlook and mail apps | Which Outlook versions people connect with, who is on one Microsoft no longer supports, and who uses POP, IMAP or SMTP apps. | `m365_usage` |
 | `mail-flow` | Mail flow by domain | How much mail each domain sends and receives, how much was delivered, sent to Junk, quarantined or failed, and who gets the most spam and phishing. | `mail_flow` |
 | `mail-protection` | Mail rules and protection | Mail flow rules and what each does, connectors, and the anti-spam, anti-phishing and anti-malware policies (Safe Links and Safe Attachments too) with whom each applies to. | `mail_protection`, `mailboxes` |
 | `mailbox-holds` | Mailbox holds and archiving | Which mailboxes are on litigation hold or have an archive, leavers' mailboxes that aren't held, and large mailboxes that need an archive. | `mailbox_usage`, `mailboxes`, `users` |

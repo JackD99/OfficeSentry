@@ -186,6 +186,42 @@ def copilot_trend(active_by_day, enabled=3):
     ]
 
 
+def mail_app_user(upn, **used):
+    """``used``: email apps report field -> the versions seen, e.g. outlookForWindows=["Outlook 2016"]."""
+    fields = ("mailForMac", "outlookForMac", "outlookForWindows", "outlookForMobile", "otherForMobile")
+    return {
+        "reportRefreshDate": REFRESHED,
+        "userPrincipalName": upn,
+        "displayName": upn.split("@")[0].title(),
+        "isDeleted": False,
+        "deletedDate": None,
+        "lastActivityDate": days_ago(1),
+        **{f: [] for f in (*fields, "outlookForWeb", "pop3App", "imap4App", "smtpApp")},
+        **used,
+        "reportPeriod": "30",
+    }
+
+
+MAIL_APPS = [
+    # A phone's own mail app over IMAP, and Outlook on the web.
+    mail_app_user(
+        "ann@x.com", outlookForWeb=["Undetermined"], otherForMobile=["Undetermined"], imap4App=["Undetermined"]
+    ),
+    # Microsoft lists everyone with a mailbox, so some used nothing.
+    mail_app_user("dan@x.com", lastActivityDate=None),
+    # Outlook 2016, out of support since October 2025.
+    mail_app_user("carol@x.com", outlookForWindows=["Outlook 2016"], outlookForWeb=["Undetermined"]),
+    # Microsoft 365's Outlook on Windows, a Mac Outlook Microsoft couldn't tell, and a scanner sending over SMTP.
+    mail_app_user(
+        "erin@x.com",
+        outlookForWindows=["Outlook M365"],
+        outlookForMac=["Undetermined"],
+        outlookForMobile=["Undetermined"],
+        smtpApp=["Undetermined"],
+    ),
+]
+
+
 def mock_usage(
     rsps,
     *,
@@ -197,6 +233,8 @@ def mock_usage(
     copilot=None,
     trend=None,
     trend_status=200,
+    mail_apps=None,
+    mail_status=200,
 ):
     def get(path, value, code=200):
         body = {"value": value} if code == 200 else {"error": {"code": "Forbidden", "message": "Denied"}}
@@ -207,6 +245,7 @@ def mock_usage(
     get("getOffice365ActivationsUserDetail", ACTIVATIONS)
     get("getEmailActivityUserDetail(period='D30')", EMAIL)
     get("getTeamsUserActivityUserDetail(period='D30')", TEAMS)
+    get("getEmailAppUsageUserDetail(period='D30')", MAIL_APPS if mail_apps is None else mail_apps, mail_status)
     rsps.get(
         f"{GRAPH_ROOT}/v1.0/admin/reportSettings",
         json={"id": "reportSettings", "displayConcealedNames": concealed},
