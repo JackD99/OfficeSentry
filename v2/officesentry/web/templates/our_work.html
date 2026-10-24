@@ -86,11 +86,11 @@
 <div class="grid-2">
 <section class="card">
   <h2>By month</h2>
-  <table class="compact">
+  <table class="stack-sm">
     <thead><tr><th>Month</th><th class="num">Fixed</th><th class="num">Critical and high</th><th class="num">Risks accepted</th></tr></thead>
     <tbody>
     {% for m in work.months %}
-    <tr><td>{{ m.month.strftime('%B %Y') }}{% if loop.last and work.so_far %} <span class="faint">so far</span>{% endif %}</td><td class="num">{{ m.fixed }}</td><td class="num">{{ m.severe }}</td><td class="num">{{ m.accepted }}</td></tr>
+    <tr><td>{{ m.month.strftime('%B %Y') }}{% if loop.last and work.so_far %} <span class="faint">so far</span>{% endif %}</td><td class="num" data-label="Fixed">{{ m.fixed }}</td><td class="num" data-label="Critical and high">{{ m.severe }}</td><td class="num" data-label="Risks accepted">{{ m.accepted }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -99,10 +99,10 @@
   <h2>Who fixed it</h2>
   {% if work.people %}
   <p class="muted small">Findings fixed while they were handed to someone on the team.</p>
-  <table class="compact">
+  <table class="stack-sm">
     <thead><tr><th>Person</th><th class="num">Fixed</th><th class="num">Critical and high</th><th class="num">Clients</th></tr></thead>
     <tbody>
-    {% for p in work.people %}<tr><td>{{ p.name }}</td><td class="num">{{ p.fixed }}</td><td class="num">{{ p.severe }}</td><td class="num">{{ p.clients|length }}</td></tr>{% endfor %}
+    {% for p in work.people %}<tr><td>{{ p.name }}</td><td class="num" data-label="Fixed">{{ p.fixed }}</td><td class="num" data-label="Critical and high">{{ p.severe }}</td><td class="num" data-label="Clients">{{ p.clients|length }}</td></tr>{% endfor %}
     </tbody>
   </table>
   {% else %}
@@ -114,10 +114,10 @@
 <section class="card">
   <h2>What was fixed</h2>
   {% if work.checks %}
-  <table class="compact">
+  <table class="stack-sm">
     <thead><tr><th>Check</th><th>Severity</th><th class="num">Fixed</th><th class="num">Clients</th></tr></thead>
     <tbody>
-    {% for k in work.checks[:15] %}<tr><td>{{ k.title }}</td><td><span class="sev-legend"><span><i class="sw sev-{{ k.severity }}"></i>{{ k.severity|capitalize }}</span></span></td><td class="num">{{ k.fixed }}</td><td class="num">{{ k.clients|length }}</td></tr>{% endfor %}
+    {% for k in work.checks[:15] %}<tr><td>{{ k.title }}</td><td data-label="Severity"><span class="sev-legend"><span><i class="sw sev-{{ k.severity }}"></i>{{ k.severity|capitalize }}</span></span></td><td class="num" data-label="Fixed">{{ k.fixed }}</td><td class="num" data-label="Clients">{{ k.clients|length }}</td></tr>{% endfor %}
     </tbody>
   </table>
   {% if work.checks|length > 15 %}<p class="muted small">And {{ work.checks|length - 15 }} more checks in the XLSX.</p>{% endif %}
