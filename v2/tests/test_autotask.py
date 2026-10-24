@@ -278,17 +278,8 @@ def test_a_failing_collection_makes_one_ticket_and_its_recovery_a_note(db, vault
     ticket = created(responses, 0)
     assert ticket["title"] == "Alpha Ltd: Users collection failed" and ticket["priority"] == 2  # medium
 
-    # Failing again the next night isn't a new failure; a ticket for the same problem stays one either way.
-    message = alerts.Message(
-        "collection.failed",
-        "Alpha Ltd: Users collection failed",
-        "Again",
-        "x",
-        {"id": alpha, "name": "Alpha Ltd"},
-        severity="medium",
-        key=f"collection:{alpha}:users",
-    )
-    assert alerts.deliver(db, alerting, message) is None
+    # Failing again the next night isn't a new failure, so it isn't alerted.
+    assert alerts.after_run(db, alerting, add_run(db, alpha, "failed", error="Graph said no"), "failed") is None
     assert len([c for c in responses.calls if c.request.method == "POST"]) == 1
 
     fixed = add_run(db, alpha, "succeeded")
@@ -304,6 +295,21 @@ def test_a_failing_collection_makes_one_ticket_and_its_recovery_a_note(db, vault
     again = add_run(db, alpha, "failed", error="Graph said no")
     assert alerts.after_run(db, alerting, again, "failed") is True
     assert len(tickets(db)) == 2
+
+
+@responses.activate
+def test_a_collection_that_recovered_without_an_alert_gets_a_new_ticket_next_time(db, vault, alerting, two_tenants):
+    alpha, _ = two_tenants
+    connect(db, vault)
+    alerts.save_settings(db, {"alerts.on_failures": "1", "alerts.on_recovery": "0"})
+    accepts_tickets()
+    add_run(db, alpha, "succeeded")
+    assert alerts.after_run(db, alerting, add_run(db, alpha, "failed", error="x"), "failed") is True
+    assert alerts.after_run(db, alerting, add_run(db, alpha, "succeeded"), "succeeded") is None  # not alerted
+    assert alerts.after_run(db, alerting, add_run(db, alpha, "failed", error="x"), "failed") is True
+    first, second = tickets(db)
+    assert first["resolved_at"] is not None and second["resolved_at"] is None
+    assert not [c for c in responses.calls if c.request.url == NOTES]
 
 
 @responses.activate
@@ -537,3 +543,12 @@ def test_the_support_package_hides_a_clients_company_name(db, two_tenants):
     alpha, _ = two_tenants
     autotask.set_company(db, alpha, {"company_id": 174, "name": "Alpha Limited (Leeds)"}, "admin")
     assert support.names_to_hide(db)["Alpha Limited (Leeds)"] == f"[client {alpha}]"
+
+
+def test_the_alerts_page_points_to_autotask(client, db, vault):
+    make_user(db, "admin")
+    login(client, "admin")
+    page = client.get("/admin/alerts").get_data(as_text=True)
+    assert '<a href="/admin/autotask">Autotask PSA</a>.</p>' in page
+    connect(db, vault)
+    assert "Autotask PSA</a>. Tickets are on." in client.get("/admin/alerts").get_data(as_text=True)

@@ -35,7 +35,7 @@
     {% for v in severities %}<option value="{{ v }}" {% if s['autotask.min_severity'] == v %}selected{% endif %}>{{ v|capitalize }}{{ ' only' if v == 'critical' else ' or worse' }}</option>{% endfor %}
   </select>
     <span class="hint">All of a client's new findings from one collection go in one ticket. Accepted risks are left out.</span></label>
-  <p class="footnote">A failing collection or a problem with Office Sentry makes one ticket, however long it lasts. When it clears, Office Sentry adds a note to the ticket and leaves closing it to you.</p>
+  <p class="footnote">A failing collection or a problem with Office Sentry makes one ticket, however long it lasts. When it clears, Office Sentry adds a note to the ticket and leaves closing it to you (for a collection, when <em>A failing collection works again</em> is ticked under <a href="{{ url_for('alerts.settings') }}">Alerts</a>).</p>
 
   <h2>New tickets</h2>
   {% if choices %}

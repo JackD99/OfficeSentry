@@ -20,8 +20,9 @@ alert on *Settings › Alerts*: each alert goes to every place that's set up.
   ticket for findings or changes takes the worst of them; a failing collection is medium; problems with Office
   Sentry are high (an expired certificate critical).
 - **One ticket per problem.** A collection that keeps failing, or a problem with Office Sentry that lasts for days,
-  makes one ticket, not one a day. When it clears (the collection works again, the problem is fixed) Office Sentry
-  adds a note to the ticket saying so and leaves closing it to you. If it comes back after that, it's a new ticket.
+  makes one ticket, not one a day. When it clears Office Sentry adds a note to the ticket saying so and leaves
+  closing it to you: when the problem is fixed, or the collection works again (if *A failing collection works
+  again* is ticked under *Settings › Alerts*). If it comes back after that, it's a new ticket.
 - **Tried again if Autotask doesn't answer.** A ticket Autotask didn't take because it was down, slow or over its
   request limit is sent again after 5 minutes, 30 minutes, 2 hours and 8 hours. One Autotask refused (a field
   your ticket category requires, say) isn't: the error shows on the settings page, with *Try again* once you've

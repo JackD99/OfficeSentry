@@ -13,8 +13,9 @@ Sentry's own problems (and, if chosen, for clients without a company): the alert
 the link back to the portal, with the priority chosen for the alert's worst severity. While a ticket made for an
 alert's key is open here, the same alert doesn't make another one (system alerts repeat daily while a problem
 lasts); the alert that clears it (``Message.resolves``) adds a note to that ticket and closes it here, never in
-Autotask. A ticket Autotask didn't answer, or refused for a reason that can pass (``AutotaskError.retry``), is
-tried again by the worker (``retry_due``, ``RETRY_AFTER``).
+Autotask. A collection failure is the exception: it's only alerted when a collection that worked fails, so it
+always makes a ticket. A ticket Autotask didn't answer, or refused for a reason that can pass
+(``AutotaskError.retry``), is tried again by the worker (``retry_due``, ``RETRY_AFTER``).
 
 Every request goes to Autotask's own hosts (``*.autotask.net``), and the only writes are new tickets and their
 notes, in the MSP's own Autotask. Nothing here reads or writes a client's Microsoft 365 tenant
@@ -641,7 +642,14 @@ def _send(conn, alerting: alerts.Alerting, message: alerts.Message, alert_settin
         return False
     if message.resolves:
         return resolve(conn, alerting.vault, s, message)
-    if message.key and _open_ticket(conn, message.key) is not None:
+    if message.event == "collection.failed" and message.key:
+        # Only sent when a collection fails after working, so it's always a new failure: the last one recovered,
+        # maybe without saying so (the recovery alert is optional under Settings, Alerts).
+        conn.execute(
+            "UPDATE autotask_tickets SET resolved_at = ?, retry_at = NULL WHERE alert_key = ? AND resolved_at IS NULL",
+            (utcnow(), message.key),
+        )
+    elif message.key and _open_ticket(conn, message.key) is not None:
         return False  # the same problem as an open ticket: a daily reminder, the next warning
     if company_for(conn, s, message.tenant) is None:
         return False
