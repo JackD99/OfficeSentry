@@ -411,9 +411,9 @@ def test_worker_down_alerts_once_reminds_daily_and_says_when_it_is_back(cfg, db,
     assert system_alerts.states(db) == {}
     rows = db.execute("SELECT detail FROM audit_log WHERE action = 'system_alert' ORDER BY id").fetchall()
     assert [r[0] for r in rows] == [
-        "Worker stopped, start: email sent; webhook sent",
-        "Worker stopped, reminder: email sent; webhook sent",
-        "Worker stopped, resolved: email sent; webhook sent",
+        "Worker stopped, start: email sent; alert posted",
+        "Worker stopped, reminder: email sent; alert posted",
+        "Worker stopped, resolved: email sent; alert posted",
     ]
 
 
@@ -497,9 +497,9 @@ def test_an_alert_nobody_received_is_sent_again(cfg, db, vault, channels, monkey
     assert system_alerts.states(db)["disk"]["sent_at"] == _iso(later)
     rows = [r[0] for r in db.execute("SELECT detail FROM audit_log WHERE action = 'system_alert' ORDER BY id")]
     assert rows[0].startswith("Disk over 85% full, start: email failed") and rows[0].endswith(
-        "webhook failed; trying again in 15 minutes"
+        "alert not posted; trying again in 15 minutes"
     )
-    assert rows[1] == "Disk over 85% full, start: email sent; webhook sent"
+    assert rows[1] == "Disk over 85% full, start: email sent; alert posted"
 
 
 def test_one_channel_taking_the_alert_is_enough(cfg, db, vault, channels, monkeypatch):

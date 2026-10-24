@@ -187,10 +187,10 @@ def test_all_clients_picks_reports_from_the_all_reports_menu(client, db, vault, 
     login(client, "admin")
     page = client.get("/").get_data(as_text=True)
     picker = _picker(page)
-    hrefs = re.findall(r'href="(/|/across/[^"]+)"', picker)  # the summaries, Checks and every report
-    assert hrefs[:3] == ["/", "/across/evidence", "/across/checks"]
-    assert set(hrefs[3:]) == {f"/across/{key}" for key in data_reports.REPORTS}
-    assert len(hrefs) == len(data_reports.REPORTS) + 3
+    hrefs = re.findall(r'href="(/|/across/[^"]+)"', picker)  # the summaries, Checks, Over time and every report
+    assert hrefs[:4] == ["/", "/across/evidence", "/across/checks", "/across/over-time"]
+    assert set(hrefs[4:]) == {f"/across/{key}" for key in data_reports.REPORTS}
+    assert len(hrefs) == len(data_reports.REPORTS) + 4
     assert re.findall(r'aria-current="page">([^<]+)<', picker) == ["Monthly review"]
     assert '<span class="report-area">Summaries</span>' in picker and 'data-report-search="report-list"' in picker
     assert '<option value="checks"' in page and '<optgroup label="Identity and access">' in page
