@@ -42,7 +42,7 @@
       <ul class="list">
         {% for a in page.attention %}
         <li>
-          <span class="sevtext {{ a.severity }} sevcol">{{ a.severity }}</span>
+          <span class="sevtext {{ a.severity }} sevcol">{{ a.severity|capitalize }}</span>
           <div class="grow">{{ a.text }}</div>
           {% if a.part %}<a class="small nowrap" href="#part-{{ a.part }}">Details</a>{% endif %}
         </li>
@@ -59,7 +59,7 @@
       {% if page.findings %}
       <ul class="list compact">
         {% for f in page.findings %}
-        <li><span class="sevtext {{ f.severity }} sevcol">{{ f.severity }}</span>
+        <li><span class="sevtext {{ f.severity }} sevcol">{{ f.severity|capitalize }}</span>
           <div class="grow"><div class="title">{{ f.title }}</div><div class="desc">{{ f.detail }} · since {{ f.first_seen|day }}</div></div></li>
         {% endfor %}
       </ul>
