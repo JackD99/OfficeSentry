@@ -783,6 +783,17 @@ and subtitle take `{client}`, `{month}`, `{quarter}`, `{msp}` and `{date}`, and 
 Anyone who can *Design custom reports* makes and edits them; removing
 one also needs *Settings*, since it comes out of any plan or schedule that sent it.
 
+<!-- since 2.6.0 -->
+The **Client documentation** starting point documents how a client's Microsoft 365 is set up rather than how
+it's doing: a **Documentation section** block per topic (domains and DNS, admins, Conditional Access, sign-in
+methods and passwords, tenant settings, trusted organisations and locations, mail rules and protection, shared
+mailboxes, distribution lists, licences, what the licences cover, apps, Intune policies, devices, Teams and
+groups, SharePoint sites). Each shows the tables of the detail report that describe the setup, without its
+"needs attention" lists, severity flags or "what to check" columns, up to 50 rows a table; there's no verdict on
+the cover, and a long contents list goes in two columns. Sent monthly by a plan or an email schedule, every copy
+is kept in the client's Report history, so the newest is always current.
+<!-- /since -->
+
 Setup notes written for your team (a detail report saying Microsoft is hiding people's names, and how to
 sign in as a Global Admin to show them) stay out of the client's copy unless the report's **Include setup
 notes in the client's copy** is ticked; the portal and the previews show them, marked "Only your team sees
