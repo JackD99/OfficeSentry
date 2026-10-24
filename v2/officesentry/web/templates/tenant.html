@@ -65,7 +65,7 @@
     <ul class="list">
       {% for r in attention[:6] %}
       <li>
-        <span class="sevtext {{ r.severity }} sevcol">{{ r.severity }}</span>
+        <span class="sevtext {{ r.severity }} sevcol">{{ r.severity|capitalize }}</span>
         <div class="grow">
           <div class="title">{{ r.summary|trim('.') }}</div>
           <div class="desc">{{ r.action }}.</div>

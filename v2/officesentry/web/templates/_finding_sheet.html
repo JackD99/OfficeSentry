@@ -10,7 +10,7 @@
 <aside class="sheet card flush" id="finding-sheet" aria-labelledby="sheet-title" data-finding="{{ finding.id }}">
   <div class="sheet-head">
     <div class="sheet-top">
-      <span class="sevtext {{ s.severity }}">{{ s.severity }}</span>
+      <span class="sevtext {{ s.severity }}">{{ s.severity|capitalize }}</span>
       <span class="muted small">{{ s.category }}{% if s.status == 'resolved' %} · resolved {{ finding.resolved_at|day }}{% elif s.status == 'accepted' %} · accepted risk{% elif s.days_open %} · open {{ s.days_open|plural('day') }}{% else %} · new today{% endif %}</span>
       <a class="sheet-close" href="{{ back }}#t-{{ 'resolved-findings' if s.status == 'resolved' else ('accepted-risks' if s.status == 'accepted' else 'open-findings') }}" title="Close"><span class="lg">{{ icon('close') }}<span class="sr-only">Close the finding</span></span><span class="sm">{{ icon('undo') }} Back to findings</span></a>
     </div>
@@ -92,7 +92,7 @@
     {% if s.summary %}<p class="small{{ ' mt' if s.evidence }}"><strong>The check today:</strong> {{ s.summary|trim('.') }}.</p>{% endif %}
     {% if s.attention %}
     <p class="muted small mt m0">Also on this account</p>
-    <ul class="sheet-list">{% for a in s.attention %}<li><span class="sevtext {{ a.severity }}">{{ a.severity }}</span> <span>{{ a.text }}</span></li>{% endfor %}</ul>
+    <ul class="sheet-list">{% for a in s.attention %}<li><span class="sevtext {{ a.severity }}">{{ a.severity|capitalize }}</span> <span>{{ a.text }}</span></li>{% endfor %}</ul>
     {% endif %}
     {% if s.sources %}
     <p class="muted small mt m0">Read from {% for name, at in s.sources %}{{ name }}{{ ', ' if not loop.last }}{% endfor %}{% if s.collected_at %}, collected {{ s.collected_at|ago }}{% endif %}.</p>

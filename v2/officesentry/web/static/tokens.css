@@ -18,22 +18,18 @@
    - Paper and ink are plain greys; colour is kept for links and buttons (the accent), status and severity.
    - Brand colours (--brand, --brand-ink, ...) are the MSP's and come from /brand.css, not from here. */
 
-/* Source Sans 3 for everything people read and use; Source Serif 4 (its Subhead size) for page and card
-   titles and headline figures. Adobe's own WOFF2 files, unchanged (SIL Open Font License, beside them). */
+/* Source Sans 3 for everything: titles, figures, tables, labels, buttons. Adobe's own WOFF2 files,
+   unchanged (SIL Open Font License, beside them). */
 @font-face { font-family: "Source Sans 3"; font-weight: 400; font-style: normal; font-display: swap; src: url("fonts/SourceSans3-Regular.woff2") format("woff2"); }
 @font-face { font-family: "Source Sans 3"; font-weight: 500; font-style: normal; font-display: swap; src: url("fonts/SourceSans3-Medium.woff2") format("woff2"); }
 @font-face { font-family: "Source Sans 3"; font-weight: 600; font-style: normal; font-display: swap; src: url("fonts/SourceSans3-Semibold.woff2") format("woff2"); }
 @font-face { font-family: "Source Sans 3"; font-weight: 700; font-style: normal; font-display: swap; src: url("fonts/SourceSans3-Bold.woff2") format("woff2"); }
-@font-face { font-family: "Source Serif 4"; font-weight: 400; font-style: normal; font-display: swap; src: url("fonts/SourceSerif4Subhead-Regular.woff2") format("woff2"); }
-@font-face { font-family: "Source Serif 4"; font-weight: 600; font-style: normal; font-display: swap; src: url("fonts/SourceSerif4Subhead-Semibold.woff2") format("woff2"); }
-@font-face { font-family: "Source Serif 4"; font-weight: 700; font-style: normal; font-display: swap; src: url("fonts/SourceSerif4Subhead-Bold.woff2") format("woff2"); }
 
 :root {
   /* Surfaces and text: plain paper and ink */
   --bg: #f4f4f2; --surface: #ffffff; --surface-2: #f9f9f8; --sunken: #ececea;
   --text: #1c1e20; --text-2: #34383b; --muted: #5a5f64; --faint: #5d6267; --decor: #a5a8ab;
   --border: #e0e1df; --border-strong: #c8cac7;
-  --rule: #1c1e20; /* the ink rule: under table headings, the current tab, and closing headline figures */
   /* Accent (links, primary buttons, focus): a blue-black ink */
   --accent: #2b4a6b; --accent-hover: #203853; --accent-soft: #e8edf3; --accent-text: #ffffff;
   /* Status */
@@ -56,21 +52,19 @@
   --sidebar-strong: #1c1e20; --sidebar-line: #d3d5d2; --sidebar-marker: #2b4a6b;
   --logo-from: #2b4a6b; --logo-to: #2b4a6b; --logo-text: #ffffff; /* the mark: a white shield on its tile */
 
-  /* Type: bundled, so PDFs match the page. The body is 15px (--fs-base); nothing is smaller than 12px. */
+  /* Type: bundled, so PDFs match the page. The portal's body is 14px (--fs-base); nothing is under 12px. */
   --font: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --serif: "Source Serif 4", Georgia, "Times New Roman", serif; /* titles and headline figures */
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --fs-2xs: .75rem;    /* 12px: the smallest text, tiny labels */
-  --fs-xs: .8125rem;   /* 13px: table headings, pills, footnotes */
-  --fs-sm: .875rem;    /* 14px: secondary text */
-  --fs-base: .9375rem; /* 15px: body text, form labels */
-  --fs-md: 1rem;       /* 16px */
-  --fs-lg: 1.125rem;   /* 18px: card headings */
-  --fs-xl: 1.375rem;   /* 22px: page titles on phones */
-  --fs-2xl: 1.75rem;   /* 28px: page titles */
-  --fs-figure: 1.875rem; /* 30px: headline figures */
-  --fs-3xl: 2rem;      /* 32px */
-  --fs-lead: 2.375rem; /* 38px: the lead figure of a statement line */
+  --fs-2xs: .75rem;    /* 12px: the smallest text: pills, tags, the menu's version line */
+  --fs-xs: .8125rem;   /* 13px: small notes */
+  --fs-sm: .8125rem;   /* 13px: secondary text, column headings, labels */
+  --fs-base: .875rem;  /* 14px: body text, table cells, form fields */
+  --fs-md: .9375rem;   /* 15px: card and section titles */
+  --fs-lg: 1.125rem;   /* 18px: a page's own title under tabs */
+  --fs-xl: 1.25rem;    /* 20px: page titles on phones */
+  --fs-2xl: 1.375rem;  /* 22px: page titles */
+  --fs-figure: 1.5rem; /* 24px: headline figures */
+  --fs-3xl: 2rem;      /* 32px: client reports' cover figures (report.css uses 2xs, xs, lg and 3xl) */
 
   /* Spacing: a 4px grid (--space-N is N x 4px), with half steps for tight controls. */
   --space-0-5: 2px; --space-1: 4px; --space-1-5: 6px; --space-2: 8px; --space-2-5: 10px; --space-3: 12px;
@@ -95,7 +89,7 @@
   :root:not([data-theme="light"]) {
     --bg: #111214; --surface: #17191b; --surface-2: #1b1d20; --sunken: #0d0e10;
     --text: #e8e9ea; --text-2: #cdd0d2; --muted: #9ea2a6; --faint: #909498; --decor: #474b4f;
-    --border: #282b2e; --border-strong: #373b3f; --rule: #cdd0d2;
+    --border: #282b2e; --border-strong: #373b3f;
     --accent: #9fb8d4; --accent-hover: #bccde1; --accent-soft: #1b2430; --accent-text: #111214;
     --ok: #4ade80; --ok-soft: #0f2a1b; --warn: #fbbf24; --warn-soft: #2c2110;
     --bad: #f87171; --bad-soft: #2d1416; --info: #94a3b8; --info-soft: #1a2433;
@@ -119,7 +113,7 @@
 :root[data-theme="dark"] {
   --bg: #111214; --surface: #17191b; --surface-2: #1b1d20; --sunken: #0d0e10;
   --text: #e8e9ea; --text-2: #cdd0d2; --muted: #9ea2a6; --faint: #909498; --decor: #474b4f;
-  --border: #282b2e; --border-strong: #373b3f; --rule: #cdd0d2;
+  --border: #282b2e; --border-strong: #373b3f;
   --accent: #9fb8d4; --accent-hover: #bccde1; --accent-soft: #1b2430; --accent-text: #111214;
   --ok: #4ade80; --ok-soft: #0f2a1b; --warn: #fbbf24; --warn-soft: #2c2110;
   --bad: #f87171; --bad-soft: #2d1416; --info: #94a3b8; --info-soft: #1a2433;

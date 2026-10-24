@@ -142,8 +142,8 @@
     {#- A row's key (Section.keys), when the section carries them, is on the row for scripts that act on it. -#}
     {% macro row(cells, flag, key) -%}
     <tr{% if flag %} class="flag-{{ flag }}"{% endif %}{% if key is not none %} data-key="{{ key }}"{% endif %} data-name="{{ cells|join(' ')|lower }}{{ (' ' ~ flag) if flag }}">
-      {% if flagcol %}<td class="flagcol">{% if flag %}<span class="sevtext {{ flag }}">{{ flag }}</span>{% endif %}</td>{% endif %}
-      {% for v in cells %}{% if loop.index0 not in notes %}{% set c = tv.shown[loop.index0] %}<td class="{{ 'nowrap' if c.kind == 'date' else 'wrap' }} w-{{ c.width }}{{ ' num' if c.kind == 'num' }}{{ ' short' if (v|string)|length <= 32 }}"{% if not loop.first %} data-label="{{ c.name }}"{% endif %}>{{ cell(v) }}{% if loop.first and flag and not flagcol %} <span class="flag-pill {{ flag }}">{{ flag }}</span>{% endif %}</td>{% endif %}{% endfor %}
+      {% if flagcol %}<td class="flagcol">{% if flag %}<span class="sevtext {{ flag }}">{{ flag|capitalize }}</span>{% endif %}</td>{% endif %}
+      {% for v in cells %}{% if loop.index0 not in notes %}{% set c = tv.shown[loop.index0] %}<td class="{{ 'nowrap' if c.kind == 'date' else 'wrap' }} w-{{ c.width }}{{ ' num' if c.kind == 'num' }}{{ ' short' if (v|string)|length <= 32 }}"{% if not loop.first %} data-label="{{ c.name }}"{% endif %}>{{ cell(v) }}{% if loop.first and flag and not flagcol %} <span class="flag-pill {{ flag }}">{{ flag|capitalize }}</span>{% endif %}</td>{% endif %}{% endfor %}
       {% if acts %}<td class="row-action" data-label="{{ action }}">{{ act(key) }}</td>{% endif %}
     </tr>
     {%- set said = [] %}{% for i in notes if i not in once and (cells[i]|string) not in ('', 'Nothing', 'None', '-', '–', '—') %}{% set _ = said.append(i) %}{% endfor %}
@@ -156,7 +156,7 @@
     <tbody class="group" id="{{ gr.anchor }}">
       <tr class="group-head" data-name="{{ gr.words|lower }}"><th colspan="{{ width }}" scope="rowgroup">
         <button type="button" class="group-toggle" aria-expanded="true" data-group="{{ gr.anchor }}">{{ icon('chevron') }}<span class="group-label">{{ gr.label }}</span>
-          <span class="group-meta">{% if gr.flag %}<span class="sevtext {{ gr.flag }}">{{ gr.flag }}</span>{% endif %}<span class="count-badge">{{ gr.rows|length }}</span></span></button>
+          <span class="group-meta">{% if gr.flag %}<span class="sevtext {{ gr.flag }}">{{ gr.flag|capitalize }}</span>{% endif %}<span class="count-badge">{{ gr.rows|length }}</span></span></button>
       </th></tr>
       {% for cells, flag, key in gr.rows %}{{ row(cells, flag, key) }}{% endfor %}
     </tbody>

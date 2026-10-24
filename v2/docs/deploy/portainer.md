@@ -35,7 +35,7 @@ console.
 Under **Environment variables**, switch to **Advanced mode** and paste, with your own values:
 
 ```text
-OFFICESENTRY_VERSION=2.5.1
+OFFICESENTRY_VERSION=2.5.0
 OFFICESENTRY_BASE_URL=https://sentry.yourmsp.com
 OFFICESENTRY_TIMEZONE=Europe/London
 ```
@@ -121,7 +121,7 @@ To restore one: **Stop** both containers, then on the Docker host
 
 ```bash
 docker run --rm -v officesentry_officesentry-data:/data -v officesentry_officesentry-keys:/keys \
-  -e OFFICESENTRY_SECRETS_FILE=/keys/secrets.json ghcr.io/jackd99/officesentry:2.5.1 \
+  -e OFFICESENTRY_SECRETS_FILE=/keys/secrets.json ghcr.io/jackd99/officesentry:2.5.0 \
   python -m officesentry restore /data/backups/<file>.db.gz
 ```
 
