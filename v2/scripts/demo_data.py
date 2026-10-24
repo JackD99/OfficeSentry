@@ -485,6 +485,28 @@ def staff(t: dict, rng: random.Random, now: datetime, mfa_share: float, joined_r
     return users, registration, active, apps
 
 
+def mail_apps(active: list[dict]) -> list[dict]:
+    """The mail apps each active person connects with, by index so no other figure moves: Microsoft 365's Outlook
+    for most on Business Premium, a few still on Outlook 2016 or 2019, phones and the web, one IMAP app and a
+    scanner sending over SMTP."""
+    out = []
+    for i, row in enumerate(active):
+        if row.get("exchangeLastActivityDate") is None:
+            continue
+        used = {"outlookForWeb": ["Undetermined"]} if i % 3 == 0 else {}
+        if "MICROSOFT 365 BUSINESS PREMIUM" in row["assignedProducts"]:
+            version = "Outlook 2016" if i % 10 == 4 else "Outlook 2019" if i % 17 == 8 else "Outlook M365"
+            used["outlookForMac" if i % 9 == 2 else "outlookForWindows"] = [version]
+        if i % 2 == 0:
+            used["outlookForMobile"] = ["Undetermined"]
+        if i % 23 == 11:
+            used |= {"otherForMobile": ["Undetermined"], "imap4App": ["Undetermined"]}
+        if i == 5:
+            used["smtpApp"] = ["Undetermined"]
+        out.append(usagedata.mail_app_user(row["userPrincipalName"], **(used or {"outlookForWeb": ["Undetermined"]})))
+    return out
+
+
 def skus(t: dict, assigned_bp: int, assigned_basic: int, assigned_p2: int = 0) -> list[dict]:
     bp = dict(fixture_users.SKUS[0], prepaidUnits={"enabled": assigned_bp + 3}, consumedUnits=assigned_bp)
     basic = {
@@ -2214,7 +2236,11 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> 
                 secure_scores=secure_scores(t["score"][0] - 4, t["score"][0], now)
                 if first
                 else secure_scores(t["score"][0] - 4, t["score"][1], now, 105),
-                usage_kw={"active": usagedata.ACTIVE_USERS + active, "apps": usagedata.APP_USERS + apps},
+                usage_kw={
+                    "active": usagedata.ACTIVE_USERS + active,
+                    "apps": usagedata.APP_USERS + apps,
+                    "mail_apps": usagedata.MAIL_APPS + mail_apps(active),
+                },
                 inbox_rules=rules,
                 auto_replies=replies(t, everyone, now, first),
                 **seed,

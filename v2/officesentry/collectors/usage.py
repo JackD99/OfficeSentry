@@ -40,6 +40,8 @@ APP_USERS = f"/reports/getM365AppUserDetail(period='{PERIOD}')"
 ACTIVATIONS = "/reports/getOffice365ActivationsUserDetail"
 EMAIL = f"/reports/getEmailActivityUserDetail(period='{PERIOD}')"
 TEAMS = f"/reports/getTeamsUserActivityUserDetail(period='{PERIOD}')"
+# Which mail apps each person connected with, and the Outlook versions.
+MAIL_APPS = f"/reports/getEmailAppUsageUserDetail(period='{PERIOD}')"
 # Copilot's report doesn't accept D30; D90 still gives each person's last activity date.
 COPILOT_USAGE = "/copilot/reports/getMicrosoft365CopilotUsageUserDetail(period='D90')"
 # How many people with Copilot used it each day, per app, for Microsoft's last 90 days.
@@ -49,6 +51,18 @@ REPORT_SETTINGS = "ReportSettings.Read.All"  # added in 2.2: says outright wheth
 
 # Office365ActiveUserDetail field prefix per service key.
 FIELDS = {"exchange": "exchange", "teams": "teams", "onedrive": "oneDrive", "sharepoint": "sharePoint"}
+# EmailAppUsageUserDetail field per mail app key (``usage.MAIL_APPS``).
+MAIL_FIELDS = {
+    "windows": "outlookForWindows",
+    "mac": "outlookForMac",
+    "mobile": "outlookForMobile",
+    "web": "outlookForWeb",
+    "macMail": "mailForMac",
+    "otherMobile": "otherForMobile",
+    "pop": "pop3App",
+    "imap": "imap4App",
+    "smtp": "smtpApp",
+}
 
 
 def _int(value) -> int:
@@ -86,6 +100,7 @@ def _new_row(upn: str, report_date: str | None) -> dict:
         "activations": [],
         "email": None,
         "teamsCounts": None,
+        "mailApps": None,
         "copilotLastActive": None,
         "copilotActive": None,
         # Only people with a Copilot licence are in Copilot's report; for them, the last day they used it in
@@ -172,6 +187,23 @@ def merge_email(rows: dict[str, dict], items: list[dict]) -> None:
                 row["name"] = r.get("displayName")
 
 
+def _versions(value) -> list[str]:
+    """An email apps report cell: the versions seen ("Outlook 2016", or "Undetermined"), or none when unused."""
+    if isinstance(value, str):
+        value = value.split(";")
+    if not isinstance(value, list):
+        return []
+    return sorted({v.strip() for v in value if isinstance(v, str) and v.strip()})
+
+
+def merge_mail_apps(rows: dict[str, dict], items: list[dict]) -> None:
+    """Which mail apps each person connected with, from EmailAppUsageUserDetail."""
+    for r in items:
+        row = _row(rows, r)
+        if row is not None:
+            row["mailApps"] = {key: _versions(r.get(field)) for key, field in MAIL_FIELDS.items()}
+
+
 def merge_teams(rows: dict[str, dict], items: list[dict]) -> None:
     for r in items:
         if r.get("isExternal"):
@@ -243,6 +275,7 @@ class Usage(Collector):
             ("activations", ACTIVATIONS, merge_activations),
             ("email", EMAIL, merge_email),
             ("teams", TEAMS, merge_teams),
+            ("mail_apps", MAIL_APPS, merge_mail_apps),
         ):
             if why := clouds.missing(cloud, f"usage.{name}"):
                 read[name] = False

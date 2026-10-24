@@ -103,6 +103,30 @@ STAND_INS: dict[str, dict] = {
             },
         ]
     },
+    # Outlook and mail apps (collectors/usage.py), in Microsoft's documented shape: the one person active in email
+    # (names hidden), on Outlook on the web.
+    "/beta/reports/getEmailAppUsageUserDetail(period='D30')": {
+        "value": [
+            {
+                "reportRefreshDate": "2026-10-10",
+                "userPrincipalName": "6328DB633735A291ADE27B6F5836BF45",
+                "displayName": "6328DB633735A291ADE27B6F5836BF45",
+                "isDeleted": False,
+                "deletedDate": None,
+                "lastActivityDate": "2026-10-09",
+                "mailForMac": [],
+                "outlookForMac": [],
+                "outlookForWindows": [],
+                "outlookForMobile": [],
+                "otherForMobile": [],
+                "outlookForWeb": ["Undetermined"],
+                "pop3App": [],
+                "imap4App": [],
+                "smtpApp": [],
+                "reportPeriod": "30",
+            }
+        ]
+    },
 }
 NEW_FIELDS: frozenset[str] = frozenset()
 
@@ -352,6 +376,10 @@ def test_usage_reports_on_real_data(db, live):
     assert not usage.unavailable and usage.sections[0].rows[0][:2] == ["Email", 1]
     office = next(s for s in usage.sections if s.title == "Office apps by platform")
     assert {r[0] for r in office.rows} == {"Excel", "PowerPoint"}
+    # Outlook and mail apps (a stand-in): names are hidden, so the one person shows as Microsoft's code.
+    mail = data_reports.build(db, live, "mail-apps", RECORDED)
+    assert not mail.unavailable and mail.notice
+    assert [r[4] for r in next(s for s in mail.sections if s.title == "Everyone's mail apps").rows] == ["Yes"]
 
 
 def test_sign_in_methods_on_real_data(db, live):

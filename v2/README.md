@@ -421,6 +421,16 @@ Each report is listed under its area in the report menu, in menu order.
 - *Mailbox size trend*: each mailbox's growth over one and three months
   from Office Sentry's own kept snapshots, the date each will fill at that
   rate, and the client's total month by month.
+<!-- since 2.6.0 -->
+- *Outlook and mail apps*: which Outlook release each person connects with
+  on Windows and Mac, flagged once Microsoft's support for it ends (Outlook
+  2016 and 2019 ended on 14 Oct 2025, and Outlook 2021 on 13 Oct 2026),
+  with whether their licence includes the desktop apps to move to Microsoft
+  365's Outlook; who uses POP, IMAP or SMTP apps (a phone's own mail app, a
+  scanner sending as someone); and every mail app each person used in the
+  last 30 days. From Microsoft's email apps usage report
+  (`Reports.Read.All`), so it needs no Entra ID P1.
+<!-- /since -->
 - *Mail flow by domain*: for each of the tenant's domains, how much mail
   came in, went out and passed between colleagues, and how much was
   delivered, sent to Junk, quarantined or failed, counted per day from the
