@@ -37,6 +37,13 @@
     <a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id, **{'from': day.changes_from.isoformat()}) }}">What changed since then</a></p></div></div>
 {% endif %}
 
+{#- A report whose data the client's licences don't include, unless the report already says so. The
+    reports themselves say which parts a licence leaves out (their notices and notes). -#}
+{% set needs = licence_gap(tenant, report.key)[0] %}
+{% if needs and not (report.unavailable and needs|first in report.unavailable) %}
+<div class="callout licence-gap">{{ icon('info') }}<div><strong>{{ tenant.name }}'s licences don't include {{ needs|join(' or ') }}</strong>, which this report's data needs, so Office Sentry can't collect it.
+  {% if can(report_capability('licence-features'), tenant.id) %}<a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key='licence-features') }}">What their licences cover</a>{% endif %}</div></div>
+{% endif %}
 {% if report.unavailable %}
 <div class="card empty"><h3>Not available</h3><p>{{ report.unavailable }}</p></div>
 {% else %}
@@ -87,6 +94,7 @@
 {% endif %}
 
 {% if report.footnote and not report.unavailable %}<p class="footnote">{{ report.footnote }}</p>{% endif %}
+{% if price_note and not report.unavailable %}<p class="footnote">{{ price_note }}{% if can('settings.manage') %} <a href="{{ url_for('reports.prices') }}">Licence prices</a>{% endif %}</p>{% endif %}
 <p class="footnote">Data from
 {% for title, finished in report.sources %}{{ title }} ({% if finished %}{{ ts(finished) }}{% else %}not collected yet{% endif %}){% if not loop.last %}, {% endif %}{% endfor %}.</p>
 </div>

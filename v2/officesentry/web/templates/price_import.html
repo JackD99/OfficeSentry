@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% block title %}Import a price list · Office Sentry{% endblock %}
+{% block content %}
+<div class="crumbs"><a href="{{ url_for('reports.prices') }}">&larr; Licence prices</a></div>
+<div class="page-head"><div><h2 class="page-title">Import your reseller's price list</h2>
+  <div class="sub">{% if parsed and not parsed.error %}Check what it found, then save. No price changes until you do.{% else %}What you pay for each licence, from the price list your reseller exports. You'll see what it found before anything changes.{% endif %}</div></div></div>
+
+{% if parsed and not parsed.error %}
+{% set changing = parsed.changing %}
+<div class="tiles">
+  <div class="tile{{ ' tone-ok' if changing }}"><div class="label">Prices to save</div><div class="value">{{ changing|length }}</div><div class="foot">{{ 'licence' if changing|length == 1 else 'licences' }}</div></div>
+  <div class="tile"><div class="label">Already right</div><div class="value">{{ parsed.matched|length - changing|length }}</div><div class="foot">matched, same price</div></div>
+  <div class="tile"><div class="label">Left out</div><div class="value">{{ parsed.unmatched|length }}</div><div class="foot">rows that aren't a licence, or have no price</div></div>
+</div>
+
+<div class="card import-summary">
+  <ul class="import-notes">
+    <li>{{ icon('columns') }}<span>Read <strong>{{ parsed.columns[0] }}</strong> as the licence and <strong>{{ parsed.columns[1] }}</strong> as the price.</span></li>
+    <li>{{ icon('price') }}<span>{% if parsed.yearly %}Taken as a <strong>year's</strong> price and divided by 12.{% else %}Taken as a <strong>month's</strong> price for one user.{% endif %}
+      {%- if parsed.currency and parsed.currency != currency %} The list looks like {{ parsed.currency }}, but your prices are in <strong>{{ currency }}</strong>: change the currency on the prices page first, or the figures will be wrong.{% endif %}</span></li>
+    <li>{{ icon('info') }}<span>These are what you pay. Your margin{% if book.margin %} ({{ '%g'|format(book.margin) }}%){% endif %} is added on top of them, so reports show what the client pays.</span></li>
+  </ul>
+  <div class="form-actions">
+    <form method="post" class="m0">{{ csrf() }}
+      <input type="hidden" name="text" value="{{ text }}">
+      <input type="hidden" name="asked" value="1"><input type="hidden" name="yearly" value="{{ '1' if parsed.yearly else '0' }}">
+      <button class="primary" name="confirm" value="1" {{ 'disabled' if not changing }}>{{ icon('check') }} Save {{ changing|length|plural('price') }}</button>
+    </form>
+    <form method="post" class="m0">{{ csrf() }}
+      <input type="hidden" name="text" value="{{ text }}">
+      <input type="hidden" name="asked" value="1"><input type="hidden" name="yearly" value="{{ '0' if parsed.yearly else '1' }}">
+      <button class="btn ghost">{{ 'These are monthly prices' if parsed.yearly else 'These are yearly prices' }}</button>
+    </form>
+    <a class="btn ghost" href="{{ url_for('reports.prices') }}">Start again</a>
+  </div>
+</div>
+
+<section class="card flush">
+  <div class="card-head"><h2>What's in the list</h2></div>
+  <div class="scroll-x">
+  <table class="stack-sm import-table">
+    <thead><tr><th class="num">Row</th><th>Licence</th><th>In your list</th><th class="num">Price now</th><th class="num">From your list</th><th>Result</th></tr></thead>
+    <tbody>
+    {% for r in parsed.rows %}
+    <tr>
+      <td class="num muted">{{ r.line }}</td>
+      <td data-label="Licence" class="strong">{{ r.name or '—' }}{% if r.part %}<span class="sub mono">{{ r.part }}</span>{% endif %}</td>
+      <td data-label="In your list" class="wrap">{{ r.text or '—' }}</td>
+      <td class="num" data-label="Price now">{{ r.was|money(currency, 2) if r.was is not none else '–' }}</td>
+      <td class="num" data-label="From your list">{{ r.price|money(currency, 2) if r.price is not none else '–' }}</td>
+      <td data-label="Result" class="wrap">{% if r.problem %}<span class="pill info">Left out</span><span class="sub">{{ r.problem }}</span>
+        {% elif r.changes %}<span class="pill ok">{{ icon('check') }}Save</span><span class="sub">matched by {{ r.how }}</span>
+        {% else %}<span class="pill">No change</span><span class="sub">matched by {{ r.how }}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% else %}
+{% if parsed and parsed.error %}<div class="callout bad" role="alert">{{ icon('alert') }}<div><strong>No prices were read.</strong> {{ parsed.error }}</div></div>{% endif %}
+<form method="post" enctype="multipart/form-data" class="card narrow-lg">{{ csrf() }}
+  <label>Price list file <input type="file" name="file" accept=".csv,.tsv,text/csv,text/plain"></label>
+  <label>Or paste the rows <textarea name="text" rows="8" class="mono" placeholder="Product,SKU,Unit price&#10;Microsoft 365 Business Premium,SPB,18.10&#10;Exchange Online (Plan 1),EXCHANGESTANDARD,3.30">{{ text }}</textarea></label>
+  <div class="form-actions"><button class="primary">Check the list</button>
+    <a class="btn ghost" href="{{ url_for('reports.prices') }}">Cancel</a></div>
+  <div class="footnote m0">
+    <p class="m0">Whatever your reseller exports: the columns don't have to be in any order, and the headings on the first row say which is which.</p>
+    <ul class="column-notes small">
+      <li>A column of <strong>product names</strong> or <strong>part numbers</strong> (Product, Description, SKU, Offer). Names are matched as written, with wording like "NCE" or "Annual commitment" ignored.</li>
+      <li>A column of <strong>prices</strong> (Price, Unit price, Cost). A "list price" column is only used when there's no column of what you pay.</li>
+      <li>Prices are what one user costs you for a month. If they're a year's, say so on the next page and they're divided by 12.</li>
+    </ul>
+    <p class="m0">Only licences Office Sentry reports on are read; everything else in the list is left out. Your margin is added on top of these, so clients still see what they pay.</p>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

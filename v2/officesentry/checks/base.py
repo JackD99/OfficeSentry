@@ -76,14 +76,17 @@ class Rule:
     category: str
     recommendation: str
     check: Callable[[TenantSnapshot, datetime], RuleResult | tuple]
+    # Licence capabilities (``capabilities.FLAGS``) without which this check can't run, so pages can say
+    # which licence a client is missing rather than only that the check is unavailable.
+    needs: tuple[str, ...] = ()
 
 
 RULES: list[Rule] = []
 
 
-def rule(key: str, title: str, category: str, recommendation: str):
+def rule(key: str, title: str, category: str, recommendation: str, *, needs: tuple[str, ...] = ()):
     def decorator(fn):
-        RULES.append(Rule(key, title, category, recommendation, fn))
+        RULES.append(Rule(key, title, category, recommendation, fn, needs))
         return fn
 
     return decorator

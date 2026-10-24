@@ -44,6 +44,8 @@ from . import (
 )
 from .auditlog import addon
 from .auditlog.feed import FeedClient, FeedError
+from .autodesk import setup as autodesk_setup
+from .autodesk.api import AutodeskClient, AutodeskError
 from .collectors import REGISTRY, RunContext
 from .collectors.base import NothingToRead
 from .config import Config
@@ -71,7 +73,7 @@ PASSING_STATUSES = {0, 429, 500, 502, 503, 504}
 def passing(exc: BaseException) -> bool:
     """Whether a run that failed with ``exc`` may work if tried again later, with nobody changing anything
     (``store.plan_retry``). A permission, a licence, a sign-in Microsoft refused or a bug needs someone first."""
-    if isinstance(exc, GraphError | ExchangeError | FeedError | SharePointError):
+    if isinstance(exc, GraphError | ExchangeError | FeedError | SharePointError | AutodeskError):
         return exc.status in PASSING_STATUSES
     if isinstance(exc, sqlite3.OperationalError):  # the database stayed locked past the busy timeout
         return any(word in str(exc) for word in ("locked", "busy"))
@@ -157,6 +159,15 @@ def default_feed_factory(vault: Vault):
     return factory
 
 
+def default_autodesk_factory(vault: Vault):
+    """An Autodesk client for one Autodesk sign-in, as the MSP's Autodesk app (``autodesk/setup.py``)."""
+
+    def factory(conn, sign_in) -> AutodeskClient:
+        return autodesk_setup.client_for(conn, vault, sign_in, session=_session())
+
+    return factory
+
+
 def execute_run(
     conn,
     run,
@@ -165,18 +176,20 @@ def execute_run(
     alerting: alerts.Alerting | None = None,
     client_id: str | None = None,
     feed_factory=None,
+    autodesk_factory=None,
 ) -> str:
     """Execute one claimed run. Returns the final status.
 
     ``client_id`` is the app the graph client signs in as, when that isn't the
     tenant's app connection (``live-test`` signs in with a separate test app).
-    ``feed_factory`` makes the audit log add-on's feed client (``default_feed_factory``).
+    ``feed_factory`` makes the audit log add-on's feed client (``default_feed_factory``), and
+    ``autodesk_factory`` an Autodesk sign-in's client (``default_autodesk_factory``).
 
     Findings are synced (and alerted on) once the tenant has nothing else queued
     or running, so a night's collection evaluates the checks once on complete
     data rather than after each of its runs.
     """
-    status = _collect(conn, run, graph_factory, exchange_factory, client_id, feed_factory)
+    status = _collect(conn, run, graph_factory, exchange_factory, client_id, feed_factory, autodesk_factory)
     tenant = store.get_tenant(conn, run["tenant_id"])
     if (
         tenant is not None
@@ -208,11 +221,15 @@ def _sync(conn, tenant, run_id: int, alerting: alerts.Alerting | None) -> None:
         store.log_event(conn, run_id, "error", "Updating findings failed:\n" + traceback.format_exc())
 
 
-def _collect(conn, run, graph_factory, exchange_factory, client_id: str | None, feed_factory=None) -> str:
+def _collect(
+    conn, run, graph_factory, exchange_factory, client_id: str | None, feed_factory=None, autodesk_factory=None
+) -> str:
     """Run the collector, then store how many requests it made to Microsoft (whatever the outcome)."""
     telemetry = ratelimit.Telemetry()
     try:
-        return _run_collector(conn, run, graph_factory, exchange_factory, client_id, telemetry, feed_factory)
+        return _run_collector(
+            conn, run, graph_factory, exchange_factory, client_id, telemetry, feed_factory, autodesk_factory
+        )
     finally:
         try:
             ratelimit.save(conn, run["id"], telemetry)
@@ -228,6 +245,7 @@ def _run_collector(
     client_id: str | None,
     telemetry: ratelimit.Telemetry,
     feed_factory=None,
+    autodesk_factory=None,
 ) -> str:
     run_id = run["id"]
     tenant = store.get_tenant(conn, run["tenant_id"])
@@ -265,6 +283,14 @@ def _run_collector(
                 return client
 
             ctx.feed_factory = feed
+        if autodesk_factory is not None:
+
+            def autodesk(sign_in) -> AutodeskClient:
+                client = autodesk_factory(conn, sign_in)
+                client.telemetry = telemetry
+                return client
+
+            ctx.autodesk_factory = autodesk
         if why := clouds.missing(clouds.of(tenant), collector_cls.key):
             ctx.warn(why)  # Microsoft doesn't offer it in this national cloud: partial, not failed
         else:
@@ -282,6 +308,8 @@ def _run_collector(
         FeedError,
         SharePointError,
         addon.AddonError,
+        AutodeskError,
+        autodesk_setup.SetupError,
     ) as exc:
         _rollback(conn)  # whatever the collector left half-written isn't wanted, and mustn't hold the next write
         store.log_event(conn, run_id, "error", str(exc))
@@ -616,13 +644,23 @@ def _rollback(conn) -> None:
             log.warning("Rollback after a failed housekeeping pass failed", exc_info=True)
 
 
-def _execute(conn, run, graph_factory, exchange_factory, alerting, liveness: Liveness, feed_factory=None) -> None:
+def _execute(
+    conn, run, graph_factory, exchange_factory, alerting, liveness: Liveness, feed_factory=None, autodesk_factory=None
+) -> None:
     # Every line logged until the run ends names it (logs.py), so an error can be matched to the run.
     with logs.context(run=run["id"], tenant=run["tenant_id"], collector=run["collector"]):
         log.info("Run started")
         liveness.start_run(run["id"])
         try:
-            status = execute_run(conn, run, graph_factory, exchange_factory, alerting, feed_factory=feed_factory)
+            status = execute_run(
+                conn,
+                run,
+                graph_factory,
+                exchange_factory,
+                alerting,
+                feed_factory=feed_factory,
+                autodesk_factory=autodesk_factory,
+            )
             alerts.after_run(conn, alerting, run["id"], status)
         finally:
             liveness.end_run()
@@ -646,6 +684,7 @@ def _collector_thread(
     alerting,
     liveness: Liveness | None = None,
     feed_factory=None,
+    autodesk_factory=None,
 ) -> threading.Thread:
     """Claim and execute queued runs until ``stop`` is set, then finish the current run."""
     liveness = liveness or Liveness()
@@ -659,7 +698,9 @@ def _collector_thread(
                     stop.wait(IDLE_WAIT)
                     continue
                 try:
-                    _execute(conn, run, graph_factory, exchange_factory, alerting, liveness, feed_factory)
+                    _execute(
+                        conn, run, graph_factory, exchange_factory, alerting, liveness, feed_factory, autodesk_factory
+                    )
                 except Exception:  # say, the database stayed locked: keep the thread alive
                     log.exception("Run %s could not be finished", run["id"])
                     _rollback(conn)
@@ -757,6 +798,7 @@ def run_worker(
     exchange_factory=None,
     stop: threading.Event | None = None,
     feed_factory=None,
+    autodesk_factory=None,
 ) -> None:
     conn = connect(cfg.db_path)
     migrate(conn)
@@ -764,6 +806,7 @@ def run_worker(
     graph_factory = graph_factory or default_graph_factory(vault)
     exchange_factory = exchange_factory or default_exchange_factory(vault)
     feed_factory = feed_factory or default_feed_factory(vault)
+    autodesk_factory = autodesk_factory or default_autodesk_factory(vault)
     from .web import create_app
 
     app = create_app(cfg)  # for rendering emailed reports and alert emails
@@ -779,7 +822,7 @@ def run_worker(
             _housekeeping(app, conn, vault, cfg)
             _daily(conn, cfg)
             while (run := _claim(conn)) is not None:
-                _execute(conn, run, graph_factory, exchange_factory, alerting, liveness, feed_factory)
+                _execute(conn, run, graph_factory, exchange_factory, alerting, liveness, feed_factory, autodesk_factory)
             tasks.drain(app, conn, vault, cfg)
         finally:
             conn.close()
@@ -798,7 +841,9 @@ def run_worker(
         schedule.next_fire(cfg.collect_cron, cfg.timezone, datetime.now(UTC)).isoformat(),
     )
     collectors = [
-        _collector_thread(cfg, n + 1, stop, graph_factory, exchange_factory, alerting, liveness, feed_factory)
+        _collector_thread(
+            cfg, n + 1, stop, graph_factory, exchange_factory, alerting, liveness, feed_factory, autodesk_factory
+        )
         for n in range(cfg.worker_concurrency)
     ]
     collectors += [_task_thread(app, vault, cfg, n + 1, stop, liveness) for n in range(TASK_THREADS)]

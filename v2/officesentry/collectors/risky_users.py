@@ -49,6 +49,7 @@ class RiskyUsers(Collector):
         f"the last {RESOLVED_DAYS} days (needs Entra ID P2)."
     )
     permissions = ("IdentityRiskyUser.Read.All",)
+    needs = ("entra_p2",)
 
     def collect(self, ctx: RunContext) -> None:
         since = (datetime.now(UTC) - timedelta(days=RESOLVED_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")

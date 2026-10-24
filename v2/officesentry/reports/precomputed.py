@@ -45,7 +45,7 @@ import logging
 import sqlite3
 from datetime import UTC, datetime
 
-from .. import tasks
+from .. import licences, tasks
 from ..codeversion import code_version as _code_version
 from ..db import utcnow
 
@@ -111,12 +111,12 @@ class Rows:
 
     def __init__(self, conn, kind: str, tenants, now: datetime, rebuild: bool = False):
         self.conn, self.kind, self.now = conn, kind, now
-        prices = conn.execute("SELECT COUNT(*), MAX(updated_at), TOTAL(monthly_price) FROM sku_prices").fetchone()
+        prices = licences.price_fingerprint(conn)
         apps = conn.execute("SELECT GROUP_CONCAT(client_id) FROM app_connections").fetchone()[0]
         settings = conn.execute(
             "SELECT key, value FROM settings WHERE key IN ('currency', 'live_test_client_id') ORDER BY key"
         ).fetchall()
-        self.shared = [_code_version(), now.date().isoformat(), list(prices), apps, [list(r) for r in settings]]
+        self.shared = [_code_version(), now.date().isoformat(), prices, apps, [list(r) for r in settings]]
         ids = [t["id"] for t in tenants]
         self.stored: dict[int, tuple[str, str]] = {}
         if ids and not rebuild:
@@ -129,6 +129,7 @@ class Rows:
 
     def fingerprint(self, tenant, since: datetime | None = None) -> str:
         parts = [*self.shared, tenant["capabilities"], tenant["cloud"], _last_run(self.conn, tenant["id"])]
+        parts.append(licences.own_margin(tenant))
         if since is not None:
             parts.append(_last_run(self.conn, tenant["id"], since.strftime(ISO)))
         if self.kind in FINDINGS_KINDS:

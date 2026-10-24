@@ -7,9 +7,10 @@ from datetime import UTC, date, datetime, timedelta
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
-from .. import delivery, findings, store, usage
+from .. import delivery, findings, licences, list_prices, price_list, store, usage
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
+from ..onboarding import decode
 from ..permissions import SUMMARY_CAPABILITY, area_capability
 from ..reports import (
     branding,
@@ -23,7 +24,9 @@ from ..reports import (
     tables,
     views,
 )
-from ..reports.monthly_review import SUMMARY_STEM, build, leave_out, setting
+from ..reports.monthly_review import SUMMARY_STEM, build, leave_out
+from ..snapshot import TenantSnapshot
+from ..text import plural
 from . import as_of
 from . import finding as finding_pages
 from .access import (
@@ -45,6 +48,7 @@ from .saved_views import page_url
 bp = Blueprint("reports", __name__)
 
 CURRENCIES = ("GBP", "USD", "EUR", "AUD", "CAD", "NZD")
+EXAMPLES = ("SPB", "O365_BUSINESS_PREMIUM", "SPE_E3")  # licences most MSPs sell, for the prices page's example
 
 
 def _filename(tenant, ext: str) -> str:
@@ -400,7 +404,17 @@ def data_report(tenant_id: int, key: str):
         day=day,
         base=path,
         day_query=f"on={day.on.isoformat()}" if day.on else "",
+        price_note=_price_note(t, key),
     )
+
+
+def _price_note(t, key: str) -> str:
+    """Where a report's licence prices came from, for the team: never a client, nor any download."""
+    if key not in licences.PRICED_REPORTS or not is_staff():
+        return ""
+    skus = TenantSnapshot(g.db, t).objects("tenant_profile", "subscribed_sku") or []
+    parts = [s.get("skuPartNumber") for s in skus if isinstance(s.get("skuPartNumber"), str)]
+    return licences.price_book(g.db, t).note(parts)
 
 
 def _viewed(report):
@@ -454,19 +468,61 @@ def _known_skus() -> list[tuple[str, str]]:
     return sorted(((p, sku_name(p)) for p in parts), key=lambda x: x[1].lower())
 
 
+def _set(key: str, value: str | None) -> None:
+    if value is None:
+        g.db.execute("DELETE FROM settings WHERE key = ?", (key,))
+    else:
+        g.db.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+
+
+def _save_margins(clients) -> None:
+    """The MSP's margin and each client's own (blank follows the MSP's), from the prices form."""
+    raw = request.form.get("margin", "").strip()
+    margin = licences.parse_margin(raw) if raw else 0.0
+    if margin is None:
+        flash(
+            f"Ignored the margin: enter a percentage from {licences.MARGIN_MIN:g} to {licences.MARGIN_MAX:g}.", "error"
+        )
+    elif margin != licences.msp_margin(g.db):
+        _set(licences.MARGIN_KEY, f"{margin:g}" if margin else None)
+        audit(g.db, g.user["username"], "price_margin_changed", detail=f"{margin:g}%")
+    new_client = request.form.get("new_client", "")
+    for t in clients:
+        raw = request.form.get(f"margin:{t['id']}")
+        if str(t["id"]) == new_client and request.form.get("new_margin", "").strip():
+            raw = request.form["new_margin"]
+        if raw is None:
+            continue  # not on the form
+        own = licences.parse_margin(raw) if raw.strip() else None
+        if raw.strip() and own is None:
+            flash(f"Ignored the margin for {t['name']}: enter a percentage, or leave it blank.", "error")
+            continue
+        if own != licences.own_margin(t):
+            g.db.execute("UPDATE tenants SET price_margin = ? WHERE id = ?", (own, t["id"]))
+            audit(
+                g.db,
+                g.user["username"],
+                "price_margin_changed",
+                t["id"],
+                "follows yours" if own is None else f"{own:g}%",
+            )
+
+
 @bp.route("/admin/prices", methods=["GET", "POST"])
 @needs("settings.manage")
 def prices():
+    clients = visible_tenants(g.db, g.user)
     if request.method == "POST":
         currency = request.form.get("currency", "GBP")
         if currency not in CURRENCIES:
             abort(400)
         with transaction(g.db):
-            g.db.execute(
-                "INSERT INTO settings (key, value) VALUES ('currency', ?)"
-                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (currency,),
-            )
+            _set("currency", currency)
+            _set(licences.LIST_KEY, None if request.form.get("use_list") else "off")
+            _save_margins(clients)
             for part, _ in _known_skus():
                 raw = request.form.get(f"price:{part}", "").strip()
                 if raw == "":
@@ -488,13 +544,64 @@ def prices():
             audit(g.db, g.user["username"], "prices_updated")
         flash("Prices saved.", "success")
         return redirect(url_for("reports.prices"))
-    current = {r["sku_part_number"]: r["monthly_price"] for r in g.db.execute("SELECT * FROM sku_prices")}
+    book = licences.price_book(g.db)
+    skus = _known_skus()
+    rows = [
+        {
+            "part": part,
+            "name": name,
+            "listed": list_prices.price(part, book.currency),
+            "yours": book.entered.get(part),
+            "used": book.get(part),
+        }
+        for part, name in skus
+    ]
     return render_template(
         "prices.html",
-        skus=_known_skus(),
-        current=current,
-        currency=setting(g.db, "currency", "GBP"),
+        rows=rows,
+        book=book,
+        currency=book.currency,
         currencies=CURRENCIES,
+        list_currency=list_prices.CURRENCY,
+        list_as_of=list_prices.AS_OF.isoformat(),
+        list_source=list_prices.SOURCE,
+        own=[t for t in clients if licences.own_margin(t) is not None],
+        others=[t for t in clients if licences.own_margin(t) is None],
+        margin_of=licences.own_margin,
+        example=min((r for r in rows if r["used"]), key=lambda r: (r["part"] not in EXAMPLES, r["name"]), default=None),
+    )
+
+
+@bp.route("/admin/prices/import", methods=["GET", "POST"])
+@needs("settings.manage")
+def import_prices():
+    """Your reseller's price list, read and shown before any price changes."""
+    if request.method == "GET":
+        return render_template("price_import.html", parsed=None, text="", currency=licences.currency(g.db))
+    upload = request.files.get("file")
+    if upload and upload.filename:
+        data = upload.read(price_list.MAX_BYTES + 1)
+        text = decode(data) if len(data) <= price_list.MAX_BYTES else " " * (price_list.MAX_BYTES + 1)
+    else:
+        text = request.form.get("text", "")
+    asked = request.form.get("asked") == "1"  # the page has shown whether these are monthly or yearly prices
+    parsed = price_list.parse(
+        g.db,
+        text,
+        yearly=(request.form.get("yearly") == "1") if asked else None,
+        known={part for part, _ in _known_skus()},
+    )
+    if request.form.get("confirm") == "1" and not parsed.error and parsed.changing:
+        with transaction(g.db):
+            saved = price_list.save(g.db, parsed, g.user["username"])
+        flash(f"Saved {plural(saved, 'price')} from your price list.", "success")
+        return redirect(url_for("reports.prices"))
+    return render_template(
+        "price_import.html",
+        parsed=parsed,
+        text="" if parsed.error else text,
+        currency=licences.currency(g.db),
+        book=licences.price_book(g.db),
     )
 
 

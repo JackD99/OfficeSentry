@@ -220,6 +220,8 @@ class MailProtection(Collector):
         "Reader)."
     )
     permissions = ("Exchange.ManageAsApp",)
+    needs = ("exchange",)
+    more_with = ("defender_o365_p1",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("exchange") is False:

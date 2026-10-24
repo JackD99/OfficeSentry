@@ -2,7 +2,8 @@
 
 Capabilities tell later collectors and reports what the tenant can provide,
 e.g. sign-in activity and Conditional Access need Entra ID P1. Reports show
-"not available on this tenant's licence" instead of failing.
+"not available on this tenant's licence" instead of failing; which licence
+provides what, and what each one unlocks, is in ``officesentry.capabilities``.
 
 ``subscribedSkus`` gives licence counts per product; ``/directory/subscriptions``
 gives each subscription behind them with its status, trial flag and the date it
@@ -11,11 +12,10 @@ next renews, lapses or is deleted.
 
 from __future__ import annotations
 
-import re
-
 from .. import store
+from ..capabilities import from_skus
 from ..graph import GraphError
-from ..licences import licence_summary, working_units
+from ..licences import licence_summary
 from .base import Collector, RunContext, register
 
 SUBSCRIPTION_FIELDS = (
@@ -28,50 +28,6 @@ SUBSCRIPTION_FIELDS = (
     "createdDateTime",
     "nextLifecycleDateTime",
 )
-
-# Service plan name -> capability flag.
-CAPABILITY_PLANS = {
-    "AAD_PREMIUM": "entra_p1",
-    "AAD_PREMIUM_P2": "entra_p2",
-    "INTUNE_A": "intune",
-    "ATP_ENTERPRISE": "defender_o365_p1",
-    "THREAT_INTELLIGENCE": "defender_o365_p2",
-}
-# Mailboxes and SharePoint come in families of plans named per edition and cloud: EXCHANGE_S_ENTERPRISE in
-# E3, _GOV in Office 365 G3 (GCC runs on the commercial cloud), the same name in A3 education, DESKLESS in F3
-# frontline, EXCHANGE_B_STANDARD in Business. The foundation, archive and add-on plans that ride along with
-# other products (Power BI, Project) give no mailbox, and Office for the web or extra storage no sites.
-CAPABILITY_FAMILIES = {
-    "exchange": (re.compile(r"EXCHANGE_[SBL]_"), re.compile(r"FOUNDATION|ARCHIVE|ADDON")),
-    "sharepoint": (re.compile(r"SHAREPOINT"), re.compile(r"WAC|STORAGE|PROJECT|ADDON")),
-}
-IMPLIED = {"entra_p2": "entra_p1", "defender_o365_p2": "defender_o365_p1"}
-
-
-def capability_of(plan_name: str) -> str | None:
-    if plan_name in CAPABILITY_PLANS:
-        return CAPABILITY_PLANS[plan_name]
-    for flag, (family, not_it) in CAPABILITY_FAMILIES.items():
-        if family.match(plan_name) and not not_it.search(plan_name):
-            return flag
-    return None
-
-
-def capabilities_from_skus(skus: list[dict]) -> dict:
-    caps = {flag: False for flag in (*CAPABILITY_PLANS.values(), *CAPABILITY_FAMILIES)}
-    for sku in skus:
-        if sku.get("capabilityStatus") not in ("Enabled", "Warning"):
-            continue
-        if working_units(sku) <= 0:  # a subscription in its grace period still gives its features
-            continue
-        for plan in sku.get("servicePlans", []):
-            flag = capability_of(plan.get("servicePlanName") or "")
-            if flag and plan.get("provisioningStatus") in ("Success", "PendingActivation", "PendingProvisioning"):
-                caps[flag] = True
-    for higher, lower in IMPLIED.items():
-        if caps.get(higher):
-            caps[lower] = True
-    return caps
 
 
 @register
@@ -93,7 +49,7 @@ class TenantProfile(Collector):
         skus = ctx.paged(ctx.graph.get_all("/subscribedSkus"))
         ctx.objects("subscribed_sku", [(s["skuId"], s) for s in skus])
 
-        caps = capabilities_from_skus(skus)
+        caps = from_skus(skus)
         ctx.objects("capabilities", [("capabilities", caps)])
         ctx.capabilities.update(caps)
         store.set_capabilities(ctx.conn, ctx.tenant["id"], caps)

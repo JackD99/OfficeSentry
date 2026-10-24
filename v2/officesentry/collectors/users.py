@@ -85,6 +85,7 @@ class Users(Collector):
         "and last sign-in (sign-in needs Entra ID P1)."
     )
     permissions = ("User.Read.All", "AuditLog.Read.All")
+    more_with = ("entra_p1",)
 
     def collect(self, ctx: RunContext) -> None:
         want_activity = ctx.capabilities.get("entra_p1") is not False

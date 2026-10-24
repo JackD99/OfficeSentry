@@ -56,6 +56,7 @@ class MailboxUsage(Collector):
     title = "Mailbox size"
     description = "Size and item count of every mailbox, against its quota (needs Global Reader)."
     permissions = ("Exchange.ManageAsApp",)
+    needs = ("exchange",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("exchange") is False:
@@ -126,6 +127,7 @@ class LegacySignIns(Collector):
         "days (needs Entra ID P1)."
     )
     permissions = ("AuditLog.Read.All",)
+    needs = ("entra_p1",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("entra_p1") is False:

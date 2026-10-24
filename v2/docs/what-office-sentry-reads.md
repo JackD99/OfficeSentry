@@ -244,6 +244,33 @@ this page changes.
 It's removed the same way as the main app (see *How to remove access*,
 step 2), by deleting "Office Sentry audit log add-on" instead.
 
+<!-- since 2.6.0 -->
+## Your Autodesk licences, if your MSP reads them
+
+If your business uses Autodesk products on Autodesk's Business Success Plan or
+Enterprise plan, your MSP may also read who holds your Autodesk seats. It
+doesn't touch your Microsoft 365, and nothing else on this page changes.
+
+- **How**: someone who is an admin of your Autodesk team (often your MSP's
+  technician, added as a secondary admin) makes a personal access token in
+  Autodesk Account for your MSP's Office Sentry app. Autodesk's reporting API
+  then answers for your team.
+- **What it reads**: your Autodesk subscriptions (products, seats bought and
+  assigned, dates) and who holds each seat (their name and email address), when
+  it was assigned and when they last used the product in the last 90 days.
+  Seats are matched to your Microsoft 365 accounts by email address, to find
+  seats still held by people who have left.
+- **What it never reads**: designs, drawings, files or projects. It can't
+  assign or remove a seat or change a user: Autodesk has no API for that.
+- **One request that isn't a read**: asking Autodesk to prepare your team's
+  report files, which Office Sentry then downloads. It changes nothing in your
+  Autodesk account.
+
+To stop it, the person who made the token deletes it in Autodesk Account
+(*Profile*, *Security*, *Personal access tokens*), or you remove them as an
+admin of your Autodesk team.
+<!-- /since -->
+
 ## Where the information is kept
 
 Office Sentry runs on hosting your MSP chooses, so some of the details below

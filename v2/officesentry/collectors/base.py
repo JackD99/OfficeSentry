@@ -13,6 +13,7 @@ from typing import ClassVar
 
 from .. import store
 from ..auditlog.feed import FeedClient
+from ..autodesk.api import AutodeskClient
 from ..db import transaction
 from ..exchange import ExchangeClient
 from ..graph import GraphClient
@@ -57,6 +58,7 @@ class RunContext:
     _exchange: ExchangeClient | None = None
     feed_factory: Callable[[], FeedClient] | None = None
     _feed: FeedClient | None = None
+    autodesk_factory: Callable[[object], AutodeskClient] | None = None
 
     @property
     def exchange(self) -> ExchangeClient:
@@ -76,6 +78,12 @@ class RunContext:
                 raise RuntimeError("no audit feed client configured for this run")
             self._feed = self.feed_factory()
         return self._feed
+
+    def autodesk(self, sign_in) -> AutodeskClient:
+        """An Autodesk client for one Autodesk sign-in (``autodesk/setup.py``). Only the Autodesk collector uses it."""
+        if self.autodesk_factory is None:
+            raise RuntimeError("no Autodesk client configured for this run")
+        return self.autodesk_factory(sign_in)
 
     def log(self, message: str, level: str = "info") -> None:
         store.log_event(self.conn, self.run_id, level, message)
@@ -123,6 +131,11 @@ class Collector:
     nightly: ClassVar[bool] = True
     # Graph application permissions this collector needs (documentation + UI).
     permissions: ClassVar[tuple[str, ...]] = ()
+    # Licence capabilities (``capabilities.FLAGS``) this collector can't read anything without, and those
+    # that only fill in part of what it reads. Reports and pages say which licence a client is missing from
+    # these (``capabilities.report_needs``), so a collector that skips an area on a capability declares it.
+    needs: ClassVar[tuple[str, ...]] = ()
+    more_with: ClassVar[tuple[str, ...]] = ()
     # An add-on's data source (the audit log add-on's): collected only for the clients ``applies`` names, and
     # never by "collect everything", a client's first collection or the freshness checks.
     addon: ClassVar[bool] = False
