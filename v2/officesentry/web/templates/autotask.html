@@ -16,7 +16,7 @@
 <form method="post" action="{{ url_for('autotask.save') }}" class="card">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <h2>Connection</h2>
-  <p class="muted small">In Autotask, add an API user (<em>Admin › Resources (Users) › New API User</em>) with the API User security level, and pick <em>Custom (Internal Integration)</em> as its integration vendor to get a tracking identifier. Office Sentry only reads companies and the ticket fields' choices, and creates tickets and notes.</p>
+  <p class="muted small">In Autotask, add an API user (<em>Admin › Account Settings &amp; Users › Resources/Users › New API User</em>) with the API User (system) security level, and choose <em>Custom (Internal Integration)</em> for its tracking identifier. Office Sentry only reads companies and the ticket fields' choices, and creates tickets and notes.</p>
   <label>API user's user name <input name="username" value="{{ s['autotask.username'] }}" autocomplete="off" maxlength="200" placeholder="officesentry@yourmsp.example"></label>
   <label>Secret <input type="password" name="secret" autocomplete="new-password" maxlength="500" placeholder="{{ 'Saved, leave blank to keep' if s['autotask.secret_enc'] else '' }}"></label>
   <label>Tracking identifier <input type="password" name="code" autocomplete="new-password" maxlength="500" placeholder="{{ 'Saved, leave blank to keep' if s['autotask.code_enc'] else '' }}">
@@ -40,9 +40,9 @@
   <h2>New tickets</h2>
   {% if choices %}
   {{ field_select('status', 'status', 'Status', optional=false) }}
-  <div class="form-row">
-  {% for sev in priority_severities %}{{ field_select('priority_' ~ sev, 'priority', sev|capitalize ~ ' priority', optional=false) }}{% endfor %}
-  </div>
+  {% for pair in priority_severities|batch(2) %}<div class="form-row">
+  {% for sev in pair %}{{ field_select('priority_' ~ sev, 'priority', sev|capitalize ~ ' priority', optional=false) }}{% endfor %}
+  </div>{% endfor %}
   <p class="footnote">The priority follows the worst finding or change in the alert. A failing collection is medium; problems with Office Sentry are high.</p>
   {{ field_select('queue', 'queueID', 'Queue') }}
   <div class="form-row">
@@ -105,7 +105,7 @@
   {% elif not tenants %}
   <p class="muted small">No clients yet.</p>
   {% else %}
-  <p class="muted small">Type or pick each client's company. Names that match a single company are filled in for you and marked <span class="pill info">Suggested</span>; save to keep them. Clear a box to remove the company. {% if unmapped %}{{ unmapped }} client{{ 's' if unmapped != 1 }} without a company{{ ' file their tickets in your own company.' if s['autotask.unmapped'] != 'skip' else ' get no tickets.' }}{% endif %}</p>
+  <p class="muted small">Type or pick each client's company. Names that match a single company are filled in for you and marked <span class="pill info">Suggested</span>; save to keep them. Clear a box to remove the company. {% if unmapped %}{% set one = unmapped == 1 %}{{ unmapped }} client{{ '' if one else 's' }} without a company {% if s['autotask.unmapped'] != 'skip' %}{{ 'files its' if one else 'file their' }} tickets in your own company.{% else %}{{ 'gets' if one else 'get' }} no tickets.{% endif %}{% endif %}</p>
   <datalist id="autotask-companies">{% for c in companies %}<option value="{{ listed_name(c.name, c.company_id) }}">{% endfor %}</datalist>
   <table class="stack-sm">
     <thead><tr><th>Client</th><th>Autotask company</th></tr></thead>

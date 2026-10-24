@@ -291,6 +291,13 @@ turned off, security defaults turned off, or a sign-in method removed from an ad
 with who made it and when.
 <!-- /since -->
 
+<!-- since 2.6.0 -->
+With **Autotask PSA** connected, the alerts you choose become tickets in your Autotask, in the client's company:
+new findings, risky changes, a collection that starts failing and Office Sentry's own problems. One ticket per
+problem, with the priority set by its severity and a note added when it clears.
+[Connecting Autotask](v2/docs/autotask.md)
+<!-- /since -->
+
 <table>
   <tr>
     <td width="50%"><img src="docs/screenshots/emailed-reports.png" alt="A client's emailed reports"></td>
@@ -525,6 +532,7 @@ from there.
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
 - [Getting help](v2/docs/getting-help.md): where to look first, the support package and what it leaves out
+- [Autotask PSA](v2/docs/autotask.md): tickets in your Autotask for the alerts you choose <!-- since 2.6.0 -->
 - [Securing the portal](v2/docs/securing-the-portal.md): hardening defaults, what you have to do, reverse proxies
 - [How it compares](website/pages/compare/reporting-tools.md): Office Sentry next to Microsoft's admin centres,
   PowerShell, CIPP and AdminDroid

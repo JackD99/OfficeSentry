@@ -529,3 +529,11 @@ def test_a_test_ticket_and_trying_a_failed_one_again(client, db, vault, two_tena
     assert "Ticket T20261024.0001 created." in html
     assert db.execute("SELECT ticket_id FROM autotask_tickets WHERE id = ?", (failed,)).fetchone()[0] == 9001
     assert client.post("/admin/autotask/tickets/99999/retry").status_code == 404
+
+
+def test_the_support_package_hides_a_clients_company_name(db, two_tenants):
+    from officesentry import support
+
+    alpha, _ = two_tenants
+    autotask.set_company(db, alpha, {"company_id": 174, "name": "Alpha Limited (Leeds)"}, "admin")
+    assert support.names_to_hide(db)["Alpha Limited (Leeds)"] == f"[client {alpha}]"
