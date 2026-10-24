@@ -153,6 +153,15 @@ look first at the top. It keeps two years by default, where Microsoft's own sear
 in a file or an email. Every client, with the add-on or not, is also checked for an audit log that's switched off.
 [Setting up the add-on](v2/docs/audit-log-addon.md)
 
+<!-- since 2.6.0 -->
+### Autodesk seats beside Microsoft 365 licences
+
+For clients on Autodesk's Business Success Plan or Enterprise plan, **Autodesk licences** shows every Autodesk
+subscription, who holds each seat and when they last used it, seats bought but not given to anyone, and seats still
+held by people whose Microsoft 365 account is blocked or gone. Read-only, through Autodesk's own reporting API, with
+each Autodesk team given to one client. [Setting up Autodesk](v2/docs/autodesk.md)
+<!-- /since -->
+
 ### Detail reports you can filter, save and export
 
 53 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
@@ -195,6 +204,11 @@ licence changes month by month, tenant settings, Microsoft 365 usage, Secure Sco
 [technical reference](v2/README.md#reports) describes them by area, and the
 [catalogue](v2/docs/checks.md#detail-reports) lists every one with the data it reads. The **Reports** page finds any
 of them by name or by the job you're doing ("Offboarding check", "Insurance renewal", "Storage cleanup").
+
+<!-- since 2.6.0 -->
+New in 2.6: **Microsoft 365 Copilot** shows who uses the Copilot licences you pay for and in which apps, the unused
+ones and what they cost a month, and the busiest people without Copilot to give one to.
+<!-- /since -->
 
 New in 2.4: **Security alerts**, Microsoft Defender's open incidents and alerts with who is dealing with each, and **Service health**, Microsoft's outages and the message centre's changes with a date to act by. The Devices report adds which computers back up their local admin password with Windows LAPS. **Installed apps** lists every app Intune has found on managed devices, remote access tools first, and **Trusted organisations and locations** shows whose MFA the tenant accepts and the named locations Conditional Access trusts.
 

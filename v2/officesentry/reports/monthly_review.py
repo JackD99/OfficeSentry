@@ -17,7 +17,14 @@ from ..collectors import REGISTRY, core
 from ..db import try_write, utcnow
 from ..devices import parse_day
 from ..findings import finding_key, lifecycle_map, resolved_since
-from ..licences import LicenceSummary, licence_summary, load_prices, shared_needing_licence
+from ..licences import (
+    LicenceSummary,
+    licence_summary,
+    load_prices,
+    own_margin,
+    price_fingerprint,
+    shared_needing_licence,
+)
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .charts import line_chart, month_columns
@@ -298,7 +305,9 @@ def build(conn, tenant, now: datetime | None = None, since: datetime | None = No
     skus = snap.objects("tenant_profile", "subscribed_sku") or []
     users = snap.objects("users", "user")
     subscriptions = snap.objects("tenant_profile", "company_subscription")
-    licences = licence_summary(skus, users, load_prices(conn), now, subscriptions, shared_needing_licence(snap))
+    licences = licence_summary(
+        skus, users, load_prices(conn, snap.tenant), now, subscriptions, shared_needing_licence(snap)
+    )
 
     stale = by_key["stale_users"]
     kpis = [
@@ -469,7 +478,7 @@ def _fingerprint(conn, tenant, now: datetime) -> str:
         " MAX(accepted_at), MAX(accepted_until) FROM findings WHERE tenant_id = ?",
         (tenant["id"],),
     ).fetchone()
-    prices = conn.execute("SELECT COUNT(*), MAX(updated_at), TOTAL(monthly_price) FROM sku_prices").fetchone()
+    prices = [*price_fingerprint(conn), own_margin(tenant)]
     apps = conn.execute("SELECT GROUP_CONCAT(client_id) FROM app_connections").fetchone()[0]
     return json.dumps(
         [
@@ -478,7 +487,7 @@ def _fingerprint(conn, tenant, now: datetime) -> str:
             list(run or ()),
             tenant["capabilities"],
             list(findings),
-            list(prices),
+            prices,
             setting(conn, "currency", "GBP"),
             apps,
         ]

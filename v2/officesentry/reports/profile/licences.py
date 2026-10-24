@@ -12,7 +12,7 @@ from .base import INACTIVE_DAYS, Part, Person, _currency, part
 def _licences(p: Person) -> tuple[list[tuple[str, str, float | None]], dict]:
     """(sku ID, name, monthly price) for each licence held, and the tenant's SKUs by ID."""
     skus = {s["skuId"]: s for s in p.snap.objects("tenant_profile", "subscribed_sku") or [] if s.get("skuId")}
-    prices = load_prices(p.snap.conn)
+    prices = load_prices(p.snap.conn, p.snap.tenant)
     out = []
     for sid in dict.fromkeys(p.user.get("skuIds") or []):
         part_number = (skus.get(sid) or {}).get("skuPartNumber")

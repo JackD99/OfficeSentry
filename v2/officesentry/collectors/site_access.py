@@ -207,6 +207,7 @@ class SiteAccess(Collector):
         "what the default library grants, and sites open to everyone. Needs the Sites.Read.All permission."
     )
     permissions = ("Sites.Read.All",)
+    needs = ("sharepoint",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("sharepoint") is False:

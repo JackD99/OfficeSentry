@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-71 checks, 43 data sources (collectors) and 53 detail reports.
+71 checks, 43 data sources (collectors) and 55 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -219,6 +219,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `auth-methods` | Passwords and sign-in methods | How people sign in and how strong that is: methods by strength, admins without phishing-resistant MFA, the methods policy, and password age and expiry. | `admin_roles`, `auth_methods_policy`, `conditional_access`, `directory_sync`, `mfa_registration`, `users` |
 | `auto-replies` | Automatic replies | Mailboxes answering mail with an out-of-office reply, who outside hears it, and replies that have been on so long they look forgotten. | `auto_replies`, `users` |
 | `conditional-access` | Conditional Access coverage | Every policy in plain words, and which accounts each one actually covers. | `admin_roles`, `conditional_access`, `users` |
+| `copilot` | Microsoft 365 Copilot | Who uses the Copilot licences you pay for and in which apps, which licences go unused and what they cost, and who could use Copilot next. | `m365_usage`, `tenant_profile`, `users` |
 | `deleted-items` | Deleted users and groups | Users, teams and Microsoft 365 groups in the recycle bin, with the licences they held and the days left to restore each before Microsoft deletes it for good after 30 days. | `deleted_items`, `tenant_profile` |
 | `devices` | Devices | Intune compliance, encryption and Windows support, BitLocker recovery keys saved in Entra ID, and every Entra ID device record. | `devices` |
 | `distribution-lists` | Distribution lists | Every distribution list with its members and owners, who can mail it, and empty, ownerless or unused lists. | `distribution_lists`, `mailboxes`, `users` |
@@ -235,6 +236,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `intune-policies` | Intune policies | Which platforms have a compliance policy, what each compliance policy requires, configuration profiles and Windows update rings, endpoint security policies and app protection for phones, with whom each applies to. | `devices`, `group_nesting`, `groups`, `intune_policies` |
 | `legacy-auth` | Legacy sign-ins | Sign-ins with SMTP AUTH, IMAP, POP and other protocols that can't do MFA, and which mailboxes still allow them. | `legacy_signins`, `mailboxes` |
 | `licence-changes` | Licence changes | Who was given or lost a licence and when, who made the change, and licences bought and assigned month by month, from Office Sentry's own history. | `tenant_profile`, `users` |
+| `licence-features` | Licence features | What the client's licences cover (Entra ID P1 and P2, Intune, Defender for Office 365, Exchange Online, SharePoint), which licences provide each feature, how many people hold one, and the reports and checks each feature unlocks. | `tenant_profile`, `users` |
 | `licence-rightsizing` | Licence right-sizing | People who could move to a cheaper licence, and services people are licensed for but don't use. | `admin_roles`, `devices`, `m365_usage`, `mailbox_usage`, `tenant_profile`, `users` |
 | `licences` | Licence waste | Paid licences nobody uses, in money, and the accounts holding them. | `mailbox_usage`, `mailboxes`, `tenant_profile`, `users` |
 | `mail-flow` | Mail flow by domain | How much mail each domain sends and receives, how much was delivered, sent to Junk, quarantined or failed, and who gets the most spam and phishing. | `mail_flow` |

@@ -9,6 +9,8 @@
 * A client user who sees only the stress client, so the client's own pages get the same data.
 * The audit log add-on switched on for the stress client, with three days of its file and mailbox records
   (``audit_addon()``), so the add-on's pages and report are checked too.
+* An Autodesk team with a long name, read through a sign-in with a long label, its seats held by the stress
+  client's long sign-in addresses (``autodesk()``), so the Autodesk pages and report are checked too.
 
 Empty states come from the demo's client still being onboarded (no data yet) and from ``empty_site()``: a new
 install with an admin and nothing else.
@@ -253,6 +255,51 @@ def audit_addon(db, vault, tenant: int) -> None:
             batches[kind].append((at + timedelta(minutes=20), rows))
     status, _ = auditdata.collect(db, tenant, batches, now)
     assert status == "succeeded", f"the stress client's audit records weren't collected ({status})"
+
+
+def autodesk(db, vault, tenant: int) -> None:
+    """Give ``tenant`` an Autodesk team with a long name, read through a second sign-in with a long label: its
+    people's long sign-in addresses holding products with Autodesk's longest names, so the Autodesk pages and
+    report are checked too."""
+    from officesentry import store
+    from officesentry.snapshot import TenantSnapshot
+    from tests import autodeskdata
+
+    team = "88812345"
+    users = TenantSnapshot(db, store.get_tenant(db, tenant)).objects("users", "user") or []
+    people = sorted(u["userPrincipalName"] for u in users if u["_id"] in ("u1", "u2") or u["_id"].startswith("d"))
+    products = (
+        "Architecture Engineering & Construction Collection IC Commercial New Single-user ELD Annual Subscription",
+        "AutoCAD - including specialized toolsets AD Commercial New Single-user ELD 3-Year Subscription",
+    )
+    day = lambda n: (datetime.now(UTC) - timedelta(days=n)).date().isoformat()  # noqa: E731
+    subscriptions = ["Subscription ID,Product,Seats,Status,Start date,End date,Term"]
+    users_file = ["Email,First name,Last name,Product,Subscription ID,Assigned date,Status"]
+    usage = ["Email,Full name,Product,Assigned date,Last accessed,Days used"]
+    for n, product in enumerate(products):
+        sub = f"7099000{n}"
+        holders = people[n * 6 : n * 6 + 8]
+        subscriptions.append(f'{sub},"{product}",{len(holders) + 3},Active,{day(200)},{day(-165)},Annual')
+        for i, upn in enumerate(holders):
+            users_file.append(f'{upn},Konstantinos-Alexander,Featherstonehaugh,"{product}",{sub},{day(300)},Active')
+            usage.append(
+                f'{upn},Konstantinos-Alexander Featherstonehaugh,"{product}",{day(300)},{day(i * 30)},{40 - i}'
+            )
+    files = {
+        "SUBSCRIPTIONS": autodeskdata.csv_file(*subscriptions),
+        "USERS": autodeskdata.csv_file(*users_file),
+        "USAGE_REPORT": autodeskdata.csv_file(*usage),
+    }
+    autodeskdata.set_up(
+        db,
+        vault,
+        [autodeskdata.context(team, f"{NAME} Design and Engineering")],
+        user="demo",
+        label="Alexandra Konstantinopoulou-Whitfield, Harbour IT service desk (secondary admin on every client)",
+    )
+    autodeskdata.give(db, tenant, team, user="demo")
+    status, _ = autodeskdata.collect(db, vault, tenant, autodeskdata.Autodesk({team: files}))
+    assert status == "succeeded", f"the stress client's Autodesk licences weren't read ({status})"
 
 
 def _domain() -> str:

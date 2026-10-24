@@ -40,6 +40,7 @@ def _device_label(d: dict) -> str:
     "Open each non-compliant device in Intune (Devices > Monitor > Noncompliant devices) to see which "
     "setting fails, fix it or retire the device, and block non-compliant devices with a Conditional "
     "Access policy that requires a compliant device.",
+    needs=("intune",),
 )
 def device_compliance(snap: TenantSnapshot, now: datetime):
     managed, reason = _managed_devices(snap)
@@ -74,6 +75,7 @@ def device_compliance(snap: TenantSnapshot, now: datetime):
     "Devices",
     "Turn on BitLocker (Windows) and FileVault (macOS) with an Intune disk encryption policy, with recovery "
     "keys escrowed to Entra ID, so a lost or stolen laptop doesn't expose the organisation's data.",
+    needs=("intune",),
 )
 def device_encryption(snap: TenantSnapshot, now: datetime):
     managed, reason = _managed_devices(snap)
@@ -101,6 +103,7 @@ def device_encryption(snap: TenantSnapshot, now: datetime):
     "Upgrade computers on Windows 10 or an old Windows 11 release to the current Windows 11 release "
     "(Intune: Windows feature updates policy). Replace hardware that can't run Windows 11, or buy "
     "Extended Security Updates as a stopgap.",
+    needs=("intune",),
 )
 def supported_windows(snap: TenantSnapshot, now: datetime):
     managed, _ = _managed_devices(snap)
@@ -150,6 +153,7 @@ def supported_windows(snap: TenantSnapshot, now: datetime):
     "Devices",
     "Enrol Entra-joined and hybrid-joined computers in Intune (automatic enrolment under Devices > "
     "Enrollment > Windows) so compliance, encryption and updates can be enforced on them.",
+    needs=("intune",),
 )
 def intune_enrolled(snap: TenantSnapshot, now: datetime):
     status = devices.objects(snap, "intune_status")
@@ -191,6 +195,7 @@ def intune_enrolled(snap: TenantSnapshot, now: datetime):
     "Devices",
     "Find out whether each device is lost, replaced or broken. Retire devices that are gone; for "
     "devices still in use, restart the Intune Management Extension or re-enrol.",
+    needs=("intune",),
 )
 def device_checkin(snap: TenantSnapshot, now: datetime):
     managed, reason = _managed_devices(snap)
@@ -220,6 +225,7 @@ def device_checkin(snap: TenantSnapshot, now: datetime):
     "Disable, then after 30 days delete, device records that haven't signed in for 90 days (Entra admin "
     "center > Devices > All devices, filter by activity). Old records can still hold BitLocker keys and "
     "count toward device limits.",
+    needs=("intune",),
 )
 def stale_devices(snap: TenantSnapshot, now: datetime):
     entra = devices.objects(snap, "entra_device")
@@ -259,6 +265,7 @@ HYBRID_NO_KEY = "Encrypted, no recovery key in Entra ID: check it's saved in on-
     "saved in Entra ID before BitLocker turns on, and on computers already encrypted run "
     "BackupToAAD-BitLockerKeyProtector (or re-run the policy). Without the key, a computer that asks for it after a "
     "firmware or hardware change can't be unlocked, and its data is lost.",
+    needs=("intune",),
 )
 def bitlocker_keys(snap: TenantSnapshot, now: datetime):
     entra = devices.objects(snap, "entra_device")
@@ -327,6 +334,7 @@ def bitlocker_keys(snap: TenantSnapshot, now: datetime):
     "then in Intune (Endpoint security > Account protection) create a Local admin password solution policy that "
     "backs the password up to Entra ID and assign it to every Windows computer. Each computer then gets its own "
     "local admin password, changed regularly, so one leaked password doesn't open every computer.",
+    needs=("intune",),
 )
 def laps_backups(snap: TenantSnapshot, now: datetime):
     entra = devices.objects(snap, "entra_device")
@@ -366,6 +374,7 @@ def laps_backups(snap: TenantSnapshot, now: datetime):
     "devices, requiring at least encryption, a screen lock and a minimum OS version, and set devices with no "
     "policy to show as not compliant (Compliance settings). Until then those devices count as compliant, so "
     "Conditional Access that requires a compliant device lets them through.",
+    needs=("intune",),
 )
 def intune_compliance_coverage(snap: TenantSnapshot, now: datetime):
     status = intune.status(snap)

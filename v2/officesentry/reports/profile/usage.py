@@ -74,7 +74,7 @@ def usage_part(p: Person) -> Part | None:
     sku_parts = {sid: s.get("skuPartNumber") or "" for sid, s in skus.items()}
     held = usage.paid_parts(row, p.user, sku_parts).parts
     box = {s.get("mailboxId"): s for s in p.snap.objects("mailbox_usage", "mailbox_size") or []}.get(p.id)
-    prices = load_prices(p.snap.conn)
+    prices = load_prices(p.snap.conn, p.snap.tenant)
     currency = _currency(p.snap)
     suggestions = usage.rightsize(row, held, box) if p.enabled else []
     if suggestions:

@@ -91,6 +91,7 @@ class MobileDevices(Collector):
     title = "Mobile devices"
     description = "Phones and tablets that sync mail, and when each last synced (needs Global Reader)."
     permissions = ("Exchange.ManageAsApp",)
+    needs = ("exchange",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("exchange") is False:

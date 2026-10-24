@@ -139,8 +139,35 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   *Account* page or with *Make this my home page*; *Home* in the menu and the logo
   open it, and signing in lands there. Until the first collection has run,
   admins see the **Get started** checklist there instead.
-- **Licence prices** (*Settings → Licence prices*): enter monthly prices per SKU
-  to cost waste and right-sizing savings.
+<!-- since 2.6.0 -->
+- **Handed to you**: the lines handed to you sit together at the top of Today,
+  above the ledger, with who handed each one on, and still count in the opening
+  sentence. A client's Findings tab has a *Handed to me* view of the open
+  findings handed to you there, which keeps the sheet, filters and downloads,
+  and every finding row tells staff who holds it. Client accounts never see who
+  holds what.
+<!-- /since -->
+- **Licence prices** (*Settings → Licence prices*): what a client pays for each
+  licence a month, used to cost licence waste, right-sizing savings, renewals
+  and the Accounts page. A licence's price is your own price for it when you've
+  entered one, else Microsoft's list price, plus your margin. Microsoft's US
+  list prices are built in and dated (`officesentry/list_prices.py`, updated in
+  a release when Microsoft changes them); they apply when the currency is USD,
+  and can be turned off. **Your margin** is one percentage covering what your
+  reseller adds and what you add, applied to every price, negative for a
+  discount. A client with a different reseller or a discount can have **its own
+  margin**, which replaces yours on its licences. Priced reports tell the team
+  where their prices came from; clients and downloads never see the margin.
+<!-- since 2.6.0 -->
+- **Import a price list** (*Settings → Licence prices → Import a price list*):
+  paste or upload whatever your reseller exports, in any currency. The columns
+  don't have to be in any order: the headings on the first row say which holds
+  the licence (a product name or a part number, matched through wording like
+  "NCE" or "Annual commitment") and which holds the price, and a year's prices
+  are divided by 12. You see every row, what it matched and what will change
+  before anything is saved; rows that aren't licences Office Sentry reports on
+  are left out.
+<!-- /since -->
 - **Findings** (`/tenants/<id>/findings`): every finding keeps first seen,
   resolved and reopened dates. Anyone who can accept risks (Second line, Team
   leader and Administrator by default) can accept one with a reason and an
@@ -558,6 +585,21 @@ Each report is listed under its area in the report menu, in menu order.
   conflicting or missing base licences, usage location) in plain words with
   what to do; licensed accounts without a usage location; licences assigned
   both directly and by a group; and the groups that hand licences out.
+<!-- since 2.6.0 -->
+- *Licence features*: what the client's licences actually cover. Each
+  feature Office Sentry reports on (Entra ID P1 and P2, Intune, Defender for
+  Office 365 P1 and P2, Exchange Online, SharePoint) with whether it's
+  covered, the licences that provide it, how many active accounts hold it,
+  and the reports and checks that have nothing to show without it; every
+  licence with the features inside it; and the reports and checks this
+  client's licences leave out, so nobody hunts for data that can't exist.
+  The client's report lists say so too: a report its licences leave out is
+  tagged *Needs Entra ID P2* (or whichever it is) on the Reports tab and in
+  the report menu, and its page says the licence is missing, with a link here.
+  Features come from the service plans inside the licences, the same reading
+  the collectors go by (`officesentry/capabilities.py`; collectors declare
+  what they need with `needs` and `more_with`, checks with `@rule(needs=...)`).
+<!-- /since -->
 - *Licence changes*: every paid licence given to or taken from an account,
   from Office Sentry's own kept collections (to the day for the last month,
   to the month before that), whether it came directly or from a group, and
@@ -588,6 +630,22 @@ Each report is listed under its area in the report menu, in menu order.
   was last active in each service, Office apps by platform (Windows, Mac,
   mobile, web), Office installs per person, and email and Teams activity
   counts. From Microsoft's usage reports (`Reports.Read.All`).
+<!-- since 2.6.0 -->
+- *Microsoft 365 Copilot*: who uses the Copilot licences you pay for (share
+  of people with Copilot who used it in the last 30 days, with a trend from
+  Office Sentry's own history), in which apps (Copilot Chat, Teams, Outlook,
+  Word, Excel, PowerPoint, OneNote, Loop), and a chart of how many used it
+  each day over Microsoft's last 90 days. Unused Copilot licences (not used
+  in 30 days, never used, or on a blocked account; licences given in the
+  last 14 days aren't counted yet) with what each costs a month at your
+  prices, licences bought but not assigned, and the busiest people without
+  Copilot, by Teams meetings, messages and emails sent, to give an unused
+  licence or a trial to. A Copilot licence is told by its service plan, so
+  the add-on, Copilot Business and suites that include Copilot (E7) all
+  count; a suite's Copilot has no price of its own, so it isn't costed. From
+  Microsoft's Copilot usage reports (`Reports.Read.All`); not offered in GCC
+  High, DoD or 21Vianet.
+<!-- /since -->
 - *Tenant settings*: what users and guests can do without an admin
   (create tenants, register apps, join by verifying an email address,
   sign up for trials, guest directory access) against the recommended
@@ -603,6 +661,7 @@ Each report is listed under its area in the report menu, in menu order.
   Federation changes, new app credentials, role grants and Conditional Access
   policies deleted or switched off are listed first, then every change and
   who made them.
+- *Autodesk licences*, for clients given an [Autodesk team](docs/autodesk.md): every Autodesk subscription with its seats bought and given out, who holds each seat and when they last used it in the last 90 days, seats bought but not given to anyone, and seats still held by someone whose Microsoft 365 account is blocked or gone. From Autodesk's Business Success Plan Reporting API, read-only. <!-- since 2.6.0 -->
 - *Service health*: whether each Microsoft 365 service is working for the client, Microsoft's open outages and advisories and those resolved in the last 30 days, and the message centre's upcoming changes, those with a date to act by first (flagged when due within 30 days), then major changes.
 
 ### Checks
@@ -724,6 +783,7 @@ work without it.
   by itself, what the person running it has to do, and reverse proxy setups
   for Caddy, nginx, Traefik and a CDN.
 - [The audit log add-on](docs/audit-log-addon.md): an optional second app that keeps who deleted, downloaded or shared files and who opened someone else's mailbox, for the clients who approve it.
+- [Autodesk licences](docs/autodesk.md): each client's Autodesk seats, who holds them and who hasn't used them, read with your own Autodesk app for the clients on Autodesk's Business Success Plan or Enterprise plan. <!-- since 2.6.0 -->
 
 ## Sign-in security
 

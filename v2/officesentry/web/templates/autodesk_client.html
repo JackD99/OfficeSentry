@@ -1,0 +1,68 @@
+{#- One client's Autodesk teams (web/autodesk.client): which teams are theirs, and when their licences were last read. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, csrf, tenant_header with context %}
+{% block title %}Autodesk · {{ tenant.name }}{% endblock %}
+{% block content %}
+{{ tenant_header(tenant, 'autodesk', title='Autodesk') }}
+{% set report_open = can(report_capability('autodesk-licences'), tenant.id) %}
+
+<div class="tiles">
+  <div class="tile"><div class="label">Autodesk teams</div>
+    <div class="value">{{ teams|length }}</div>
+    <div class="foot">{% if teams %}Read every night with the rest of {{ tenant.name|possessive }} data.{% else %}None yet, so nothing is read from Autodesk.{% endif %}</div></div>
+  <div class="tile"><div class="label">Last read</div>
+    <div class="value small-value">{% if last_run %}{{ ts(last_run.finished_at or last_run.created_at) }}{% else %}Not yet{% endif %}</div>
+    <div class="foot">{% if last_run and last_run.status == 'failed' %}Failed: {{ last_run.error }}{% elif last_run and last_run.status == 'partial' %}Partly read: see the run for what was missed.{% elif last_run %}{% if report_open %}<a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key='autodesk-licences') }}">Autodesk licences report</a>{% else %}Read in full.{% endif %}{% else %}Once a team is given, and every night after.{% endif %}</div></div>
+</div>
+
+<section class="card flush" id="teams">
+  <div class="card-head"><h2>{{ tenant.name|possessive }} Autodesk teams</h2>
+    {% if teams and can_collect and tenant.enabled and not tenant.archived_at %}
+    <form method="post" action="{{ url_for('autodesk.collect', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Read now</button></form>
+    {% endif %}</div>
+  {% if teams %}
+  <table class="stack-sm">
+    <thead><tr><th>Team</th><th>Read with</th><th></th></tr></thead>
+    <tbody>
+    {% for t in teams %}{% set s = seen.get(t.team_id) %}
+    <tr><td><span class="strong">{{ t.name }}</span>
+        {% if s and reporting not in s.benefits %}<span class="pill warn">No API reporting</span>{% endif %}
+        <span class="sub">Given {{ ts(t.added_at) }}{% if t.added_by %} by {{ t.added_by }}{% endif %}</span></td>
+      <td data-label="Read with">{% if t.sign_in %}{{ t.sign_in }}{% else %}<span class="pill bad">No sign-in</span> <span class="small">The sign-in that saw this team was removed. Add one that sees it on Settings, Autodesk.</span>{% endif %}
+        {% if s and reporting not in s.benefits %}<div class="small">Autodesk only answers for teams on the Business Success Plan or Enterprise plan, so nothing can be read for this one.</div>{% endif %}</td>
+      <td class="num">{% if picks %}<form method="post" action="{{ url_for('autodesk.remove_team', tenant_id=tenant.id) }}" class="inline" data-confirm="Stop reading {{ t.name }} for {{ tenant.name }}?">{{ csrf() }}<input type="hidden" name="team" value="{{ t.team_id }}"><button class="sm ghost">Remove</button></form>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="intro muted">{{ tenant.name }} has no Autodesk team yet.{% if not picks %} Someone who manages every client gives it one here, since the list of teams comes from every client's Autodesk accounts.{% endif %}</p>
+  {% endif %}
+</section>
+
+{% if picks and (free or not teams) %}
+<section class="card" id="give-team">
+  <div class="card-head"><h2>Give {{ tenant.name }} a team</h2></div>
+  {% if free %}
+  <form method="post" action="{{ url_for('autodesk.add_team', tenant_id=tenant.id) }}">
+    {{ csrf() }}
+    <div class="form-row">
+      <label class="grow-2">Autodesk team <select name="team" required>
+        <option value="">Choose a team…</option>
+        {% for f in free %}<option value="{{ f.id }}">{{ f.name }}{% if reporting not in f.benefits %} (no API reporting){% endif %} · {{ f.label }}</option>{% endfor %}
+      </select></label>
+      <button class="primary">{{ icon('plus') }} Give team</button>
+    </div>
+    <p class="footnote">The Autodesk teams your sign-ins administer that no client has yet, with the sign-in that sees each. A team is one client's only, and its licences are read straight away.</p>
+  </form>
+  {% else %}
+  <p class="small muted m0">Every team your Autodesk sign-ins administer already belongs to a client.{% if can('settings.manage') %} Add a sign-in that sees {{ tenant.name|possessive }} team on <a href="{{ url_for('autodesk.settings') }}#add-sign-in">Settings, Autodesk</a>.{% endif %}</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<details class="card part">
+  <summary class="card-head"><h2>What's read from Autodesk</h2></summary>
+  <p>For each team above, every night: its subscriptions (product, seats bought and given out, status and dates), who holds each seat, and when they last used it in the last 90 days. Nothing is changed in Autodesk, and nothing else about the team is read.</p>
+  <p>Each request names the team, so another client's team is never read for {{ tenant.name }}. The Autodesk licences report matches seats to {{ tenant.name|possessive }} Microsoft 365 people by email address.</p>
+</details>
+{% endblock %}

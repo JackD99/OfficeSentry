@@ -105,7 +105,7 @@
 {% set TAB_OF = {
   'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports', 'designs': 'reports',
   'schedules': 'emails', 'projects': 'findings', 'grade': 'overview', 'collection': 'settings', 'manage': 'settings',
-  'client_sign_in': 'settings', 'audit_addon': 'settings',
+  'client_sign_in': 'settings', 'audit_addon': 'settings', 'autodesk': 'settings',
   'activity': 'changes', 'timeline': 'changes', 'mailboxes': 'users', 'group_pages': 'users', 'site_pages': 'users',
 } %}
 
@@ -185,6 +185,7 @@
   {% set _ = pages.append(('manage', 'Manage', url_for('tenant_admin.manage', tenant_id=tenant.id))) %}
   {% if can('users.manage') %}{% set _ = pages.append(('client_sign_in', 'Client sign-in', url_for('client_access.page', tenant_id=tenant.id))) %}{% endif %}
   {% if audit_addon_on() and can('clients.manage', tid) %}{% set _ = pages.append(('audit_addon', 'Audit log add-on', url_for('audit_addon.client', tenant_id=tenant.id))) %}{% endif %}
+  {% if autodesk_on() and can('clients.manage', tid) %}{% set _ = pages.append(('autodesk', 'Autodesk', url_for('autodesk.client', tenant_id=tenant.id))) %}{% endif %}
 {% endif %}
 {% if pages|length < 2 %}{% set pages = [] %}{% endif %}
 {% if pages %}
@@ -253,7 +254,7 @@
         <div class="report-group">
           <p class="picker-label" id="picker-{{ area.key }}">{{ area.title }}</p>
           <ul aria-labelledby="picker-{{ area.key }}">
-            {% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ _picker_href(tenant, e, on) }}" title="{{ e.description }}"{% if e.key == current %} aria-current="page"{% endif %}>{{ e.title }}</a></li>
+            {% for e in entries %}{% set needs = licence_gap(tenant, e.key)[0] if e.kind == 'data' else [] %}<li data-name="{{ e.search }}"><a href="{{ _picker_href(tenant, e, on) }}" title="{{ e.description }}"{% if e.key == current %} aria-current="page"{% endif %}>{{ e.title }}{% if needs %} <span class="picker-sub">needs {{ needs|join(' and ') }}</span>{% endif %}</a></li>
             {% endfor %}
           </ul>
         </div>
@@ -345,7 +346,7 @@
     {% for area in areas[1:] %}{% set entries = [] %}{% for e in area.entries if e.kind == 'data' and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}
     <div class="report-group">
       <h3>{{ area.title }}</h3>
-      <ul>{% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=e.key) }}" title="{{ e.description }}">{{ e.title }}</a></li>{% endfor %}</ul>
+      <ul>{% for e in entries %}{% set needs = licence_gap(tenant, e.key)[0] %}<li data-name="{{ e.search }}"><a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=e.key) }}" title="{{ e.description }}">{{ e.title }}</a>{% if needs %} <span class="pill" title="{{ tenant.name }}'s licences don't include {{ needs|join(' or ') }}, so this report has nothing to show">Needs {{ needs|join(' and ') }}</span>{% endif %}</li>{% endfor %}</ul>
     </div>
     {% endif %}{% endfor %}
   </div>

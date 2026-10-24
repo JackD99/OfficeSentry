@@ -34,6 +34,7 @@ class AdminActivity(Collector):
         "P1, otherwise 7)."
     )
     permissions = ("AuditLog.Read.All",)
+    more_with = ("entra_p1",)
 
     def collect(self, ctx: RunContext) -> None:
         now = events.clock().replace(microsecond=0)

@@ -20,6 +20,7 @@ from .base import Finding, _unavailable, rule
     "out everywhere (revoke sessions), and check their MFA methods, inbox rules and app consents; then confirm "
     "the account compromised or dismiss the risk in Entra ID Protection. Add a Conditional Access policy that "
     "asks for a secure password change on high user risk. The Risky users report lists each account.",
+    needs=("entra_p2",),
 )
 def risky_users(snap: TenantSnapshot, now: datetime):
     if why := clouds.missing(clouds.of(snap.tenant), "risky_users"):

@@ -27,6 +27,7 @@ class TenantPolicies(Collector):
         "access settings, and SharePoint external sharing."
     )
     permissions = ("Policy.Read.All", "SharePointTenantSettings.Read.All")
+    more_with = ("sharepoint",)
 
     def collect(self, ctx: RunContext) -> None:
         auth = ctx.graph.get("/policies/authorizationPolicy")

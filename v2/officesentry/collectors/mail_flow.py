@@ -93,6 +93,7 @@ class MailFlow(Collector):
         "failed, and who gets the most spam and phishing (needs Global Reader)."
     )
     permissions = ("Exchange.ManageAsApp",)
+    needs = ("exchange",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("exchange") is False:
