@@ -2,7 +2,7 @@
 
 **Branded Microsoft 365 security and licensing reports for every client, without gathering anything by hand.**
 Office Sentry reads each client's Microsoft 365 every night, keeps the history, and turns it into the reports an MSP
-actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, 53 detail reports, a page for
+actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, 57 detail reports, a page for
 every person, mailbox, group and site, a view across all clients, and what changed since last month. It never changes
 anything in a client's tenant.
 
@@ -10,7 +10,7 @@ anything in a client's tenant.
 - **Self-hosted** on a small server of your own: Linux with Docker (2 CPUs and 4 GB of memory), or Windows. Your
   clients' data stays with you.
 - **One read-only app per client**, approved by the client's admin from a link you send, or by your technician
-  through GDAP. No agents, and no Partner Center needed.
+  through GDAP, picking clients from your Partner Center customer list. No agents, and Partner Center is optional.
 
 [![CI](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml/badge.svg)](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml)
 [![Release](https://img.shields.io/github/v/release/JackD99/OfficeSentry?label=release&color=2b4a6b)](https://github.com/JackD99/OfficeSentry/releases/latest)
@@ -40,13 +40,13 @@ review it and send it, or let it email itself.
 ### Instead of a paid tool?
 
 For reporting, it does the job paid tools are bought for: monthly client reviews, evidence for Cyber Essentials,
-ISO 27001, CIS and insurers, 53 detail reports and 71 checks across every client, with history. What it doesn't do,
+ISO 27001, CIS and insurers, 57 detail reports and 71 checks across every client, with history. What it doesn't do,
 plainly:
 
 - **It reports; it doesn't manage.** It never creates users, changes settings or fixes findings, so it sits beside
   CIPP or your RMM rather than replacing them.
-- **Nightly, not real time.** It collects every night, or when you ask, and alerts by email, Teams, Slack or a
-  webhook. There's no PSA integration.
+- **Nightly, not real time.** It collects every night, or when you ask, and alerts by email, Teams, Slack, a
+  webhook or a ticket in Autotask PSA (other PSAs through the webhook).
 - **You run it.** There's no hosted version, and support is the docs and GitHub Discussions.
 
 [How it compares](website/pages/compare/reporting-tools.md) with Microsoft's admin centres, PowerShell, CIPP and
@@ -94,13 +94,11 @@ executive summary, a full review, a licensing review or a **Quarterly review**: 
 and findings, what was fixed, the projects on the table and where each stands, licence spend and what's coming
 up in the next 90 days ([example PDF](examples/quarterly-review.pdf)).
 
-<!-- since 2.6.0 -->
 **Client documentation** is a custom report of its own: how the client's Microsoft 365 is set up today (domains
 and DNS, admins, Conditional Access in plain words, sign-in methods, tenant settings, mail rules and protection,
 licences and what they cover, apps, Intune and devices, Teams and SharePoint), one section per topic, without the
 to-do lists. Send it monthly with a plan or email schedule and the newest copy in the client's Report history is
 always the current one, instead of a document someone wrote once and nobody updated.
-<!-- /since -->
 
 ![The custom report editor with the Quarterly review: blocks, the layout, and a preview on a real client](docs/screenshots/design-editor.png)
 
@@ -163,13 +161,11 @@ in a file or an email. Every client, with the add-on or not, is also checked for
 
 ### Detail reports you can filter, save and export
 
-53 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
+57 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
 values (or by age, for dates), sorted and have columns hidden; the view can be saved and reused on any client, and
 the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline figure opens the rows behind it.
-<!-- since 2.6.0 -->
 Star the reports you use most and they list first on every client, and *Switch client* starts with the clients you
 opened last.
-<!-- /since -->
 
 <table>
   <tr>
@@ -198,7 +194,7 @@ opened last.
   </tr>
 </table>
 
-There are 53 in all: mailboxes, inbox rules, shared mailboxes, mailbox size and its trend, automatic replies, mobile
+There are 57 in all: mailboxes, inbox rules, shared mailboxes, mailbox size and its trend, automatic replies, mobile
 devices, distribution lists, mail flow per domain, legacy sign-ins, passwords and sign-in methods, admins and roles,
 administrative units, apps and consents, guests and sharing, groups and Teams, Teams channels with their guests and
 apps, empty, nested and expiring groups, who can reach each SharePoint site and its permission levels, who can open
@@ -208,12 +204,13 @@ licence changes month by month, tenant settings, Microsoft 365 usage, Secure Sco
 [catalogue](v2/docs/checks.md#detail-reports) lists every one with the data it reads. The **Reports** page finds any
 of them by name or by the job you're doing ("Offboarding check", "Insurance renewal", "Storage cleanup").
 
-<!-- since 2.6.0 -->
 New in 2.6: **Microsoft 365 Copilot** shows who uses the Copilot licences you pay for and in which apps, the unused
 ones and what they cost a month, and the busiest people without Copilot to give one to. **AI agents** lists the
 agents with their own identity in Entra ID, which app made each and what it can reach on its own, flagging those that
 can read mail or files or hold an admin role. It needs one new read-only permission, `AgentIdentity.Read.All`.
-<!-- /since -->
+**Outlook and mail apps** shows who is still on an Outlook Microsoft no longer supports and who sends or fetches
+mail with POP, IMAP or SMTP apps, and **Licence features** shows what a client's licences actually cover and which
+reports and checks they leave out.
 
 New in 2.4: **Security alerts**, Microsoft Defender's open incidents and alerts with who is dealing with each, and **Service health**, Microsoft's outages and the message centre's changes with a date to act by. The Devices report adds which computers back up their local admin password with Windows LAPS. **Installed apps** lists every app Intune has found on managed devices, remote access tools first, and **Trusted organisations and locations** shows whose MFA the tenant accepts and the named locations Conditional Access trusts.
 
@@ -270,18 +267,14 @@ report from its menu to compare it across every client (one row each, every figu
 lists month-over-month changes: new and fixed findings, admin, account, Conditional Access, forwarding, app, device
 and group changes, and a row-by-row comparison of every detail report.
 
-<!-- since 2.6.0 -->
 **Over time** puts one measure for every client side by side, month by month over the last year: open critical and
 high findings, Secure Score, users with MFA or unassigned paid licences. Each value is shaded by how good it is, and
 the clients that slipped come first.
-<!-- /since -->
 
-<!-- since 2.6.0 -->
 **Our work this quarter** shows what your team got done across its clients over the last three months: findings
 fixed (and how many were critical or high), risks accepted with the client, whose Secure Score went up and how many
 unused paid licences were cut, by client, by month, by check and by the person each finding was handed to. Take it
 to the management meeting as a branded PDF, or show a prospect the same PDF with client and team names left out.
-<!-- /since -->
 
 <table>
   <tr>
@@ -294,12 +287,10 @@ to the management meeting as a branded PDF, or show a prospect the same PDF with
   </tr>
 </table>
 
-<!-- since 2.6.0 -->
 The **Office board** puts every client on one dark screen for the office TV: a tile per client with its grade, open
 critical and high findings and Secure Score, the ones with something new, a failed collection or something due
 first, and the day's figures above them. It refreshes itself, and when the clients don't all fit, the quiet ones
 take turns.
-<!-- /since -->
 
 ### Emailed reports and alerts
 
@@ -310,7 +301,6 @@ emails when a scan finds something new and critical, and Teams, Slack or webhook
 report for Contoso is ready" with a link into the portal. Every send is
 logged, failures retry automatically, and you can preview at desktop and phone width.
 
-<!-- since 2.6.0 -->
 The same webhook can tell you when someone makes a risky change in a client's tenant, read from its directory audit
 log at each collection: "Contoso: bob@contoso.com made Global Administrator", a Conditional Access policy deleted or
 turned off, security defaults turned off, or a sign-in method removed from an admin. Each change is posted once,
@@ -318,14 +308,11 @@ with who made it and when.
 
 Today's ledger can also go to your team by email every weekday morning: what happened across your clients since
 the last one, worst first, for people who start the day in their inbox.
-<!-- /since -->
 
-<!-- since 2.6.0 -->
 With **Autotask PSA** connected, the alerts you choose become tickets in your Autotask, in the client's company:
 new findings, risky changes, a collection that starts failing and Office Sentry's own problems. One ticket per
 problem, with the priority set by its severity and a note added when it clears.
 [Connecting Autotask](v2/docs/autotask.md)
-<!-- /since -->
 
 <table>
   <tr>
@@ -561,7 +548,7 @@ from there.
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
 - [Getting help](v2/docs/getting-help.md): where to look first, the support package and what it leaves out
-- [Autotask PSA](v2/docs/autotask.md): tickets in your Autotask for the alerts you choose <!-- since 2.6.0 -->
+- [Autotask PSA](v2/docs/autotask.md): tickets in your Autotask for the alerts you choose
 - [Securing the portal](v2/docs/securing-the-portal.md): hardening defaults, what you have to do, reverse proxies
 - [How it compares](website/pages/compare/reporting-tools.md): Office Sentry next to Microsoft's admin centres,
   PowerShell, CIPP and AdminDroid

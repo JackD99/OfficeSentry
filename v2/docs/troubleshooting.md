@@ -119,7 +119,6 @@ To create the app by hand (for example because device sign-in is blocked by
 Conditional Access): **Settings → App connection → Other ways to create the
 app**, generate a certificate, then follow the steps shown there.
 
-<!-- since 2.6.0 -->
 ## Adding clients from Partner Center fails
 
 *Add from Partner Center* on Onboarding uses the same device sign-in as creating the app, in your own
@@ -142,7 +141,6 @@ notes above apply to it too. Besides those:
 - **Approving sends you back saying the link has expired**: each link works once, for an hour, in the browser
   that opened it, so one opened in another browser or left overnight records nothing. Reload the Approve page
   for fresh links.
-<!-- /since -->
 
 ## Two app connections, one marked "Needs client ID"
 

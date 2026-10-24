@@ -9,9 +9,189 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
-## [2.6.0] - Unreleased
+## [2.6.0] - 2026-10-24
 
-In progress. What changed is listed here when 2.6.0 is released.
+2.6.0 includes the fixes made after 2.5.0 (there was no separate 2.5.1 release).
+
+### Action required
+
+None. `docker-compose.yml`, the `Caddyfile` and `deploy/jobs.sh` are the same as 2.5.0's.
+
+### New Microsoft permissions
+
+- `AgentIdentity.Read.All` (application, read-only) for the new AI agents report: the AI agents with their own
+  identity in Entra ID, their names, whether they're switched on, and which app made them and when. Never what they
+  do or what anyone asks them. Each client approves it once from its *What's new* page; until then the AI agents
+  report says it's waiting for the client, and nothing else changes. In GCC High, DoD and 21Vianet, where Microsoft
+  doesn't say it's offered, setup doesn't stop without it and the report says it isn't offered there.
+- Adding clients from Partner Center signs in to your own tenant with the delegated, read-only
+  `DelegatedAdminRelationship.Read.All`, through Microsoft's own *Microsoft Graph Command Line Tools* app. Nothing
+  changes in your app registration, and nothing is asked of your clients.
+
+### Database upgrade
+
+Yes, applied on start as usual, after a copy of the database is made: migration 51 keeps the Partner Center
+customers you're picking from on your own sign-in for a day, migration 52 adds each client's own margin on licence
+prices (starting at 0%, so no price moves), migration 54 adds each person's favourite reports, migration 55 removes
+tables that only a database upgraded from an unreleased build can have (on any other database it changes nothing),
+and migration 56 adds the Autotask PSA tables: each client's Autotask company, your company list and a record of
+each ticket. There is no migration 50 or 53.
+
+### Added
+
+- **Autotask PSA** (*Settings → Autotask PSA*): a ticket in your Autotask for the alerts you choose (new findings
+  from a severity you pick, risky changes in a client's tenant, a collection that starts failing, problems with
+  Office Sentry itself), in the client's own Autotask company, with the priority following the severity and a
+  link back to the client. Connect an API user, pick the ticket's status, priorities and optionally its queue,
+  type, source and due time, and match each client to a company (exact name matches are suggested). A problem
+  that lasts makes one ticket, and a note is added when it clears. A ticket Autotask didn't take is tried again
+  for about 11 hours; *Recent tickets* shows each one with its number, and *Create a test ticket* checks your
+  choices. The API user's secret and tracking identifier are stored encrypted. The only things Office Sentry
+  writes are new tickets and notes in your own Autotask; nothing is written to a client's tenant.
+- **Activity alerts** (*Settings → Alerts*, "Changes in a client's tenant"): a Teams, Slack or webhook post when
+  someone makes a risky change in a client's tenant: someone given an admin role ("Contoso: bob@contoso.com made
+  Global Administrator", or made eligible for one), a Conditional Access policy deleted, turned off or set to
+  report-only, security defaults turned off, or a sign-in method removed from an admin. Read from the client's
+  directory audit log at each collection, so they arrive by the next morning with nightly collection. Each change
+  is posted once, with who made it and when, and links to the client's Admin activity report. All four are ticked
+  until you change them; a client's first collection never alerts on what happened before it. *Send a sample
+  change* shows what one looks like.
+- **Add clients from Partner Center** (*Onboarding → Add from Partner Center*): Microsoft partners with GDAP sign
+  in once in their own tenant and pick clients from their GDAP customer list instead of typing tenant IDs. Each
+  customer shows its relationship's status and end date and whether your GDAP roles let you approve Office Sentry
+  for it yourself (Privileged Role Administrator or Global Administrator). Customers already added, by tenant ID or
+  by domain, are listed apart, and new clients can go straight into client groups. No token is kept, and nothing is
+  read from any customer's tenant. Partner Center's *Export customers* CSV also imports as it is (its *Company
+  name* and *Microsoft ID* columns).
+- **Approve them myself** (*Onboarding*, for the clients you tick, and straight after adding from Partner Center):
+  approve Office Sentry for several clients one after another, as their Global Administrator or through GDAP.
+  Microsoft's consent page comes straight back to the list, and after each one that worked the next opens by
+  itself after five seconds unless you stop it. Customers whose GDAP roles can't approve are left for their
+  Global Administrator. Each approved client gets a link to its own Entra admin centre for the Global Reader
+  step, and **Check again** confirms approvals and Global Reader by signing in.
+- **Microsoft 365 Copilot** (Tenant and licences): who uses the Copilot licences a client pays for and in which
+  apps (Copilot Chat, Teams, Outlook, Word, Excel, PowerPoint, OneNote, Loop), the share of people with Copilot who
+  used it in the last 30 days with a trend, and a chart of how many used it each day over Microsoft's last 90
+  days. How much each person used Copilot in the last 7 days: how many things Copilot did for them in every app,
+  and on how many days (from Microsoft's daily Copilot report, a preview, so a day Microsoft doesn't give is left
+  out). Unused Copilot licences (not used in 30 days, never used, or on a blocked account) with what each costs a
+  month, licences bought but not assigned, and the busiest people without Copilot, to give an unused licence or a
+  trial to. Licences given in the last 14 days aren't counted as unused yet. Suites that include Copilot, such as
+  E7, count as Copilot but aren't costed on their own. Not offered in GCC High, DoD or 21Vianet.
+- **AI agents** (Devices and apps): the AI agents with their own identity in a client's Entra ID (Microsoft Entra
+  Agent ID), built with tools such as Copilot Studio or Azure AI Foundry. For each one: which app made it, its
+  blueprint, when it was made, whether it's on, off or switched off by Microsoft, the permissions it holds on its
+  own, its admin roles and who consented for it. Agents that can read mail or files or change the directory on
+  their own, hold a powerful admin role, or that Microsoft has switched off are flagged, and a second table lists
+  everything each agent can reach. It needs the one new permission above.
+- **Outlook and mail apps** (Email): which Outlook release each person connects with on Windows and Mac, with
+  anyone on a version Microsoft no longer supports flagged (Outlook 2016 and 2019 ended on 14 October 2025,
+  Outlook 2021 on 13 October 2026) and whether their licence already includes the desktop apps to move to
+  Microsoft 365's Outlook. Also who fetches or sends mail with POP, IMAP or SMTP apps, such as a phone's own mail
+  app or a scanner sending as someone, and every mail app each person used in the last 30 days. It comes from
+  Microsoft's email apps usage report, so unlike Legacy sign-ins it doesn't need Entra ID P1.
+- **Licence features** (Tenant and licences): what a client's licences actually cover. Each feature Office Sentry
+  reports on (Entra ID P1 and P2, Intune, Defender for Office 365 P1 and P2, Exchange Online, SharePoint) with
+  whether it's covered, the licences that provide it, how many active accounts hold it, and the reports and checks
+  that have nothing to show without it; every licence with the features inside it; and the reports and checks this
+  client's licences leave out. It has a rollup across clients and the usual downloads. A report a client's
+  licences leave out is tagged *Needs Entra ID P2* (or whichever it is) on the client's Reports tab and in the
+  report menu, and its page says the licence is missing, with a link to Licence features.
+- **Licence prices fill themselves in.** A licence's price is your own price for it when you've entered one, else
+  Microsoft's list price, plus your margin. Microsoft's US list prices are built in and dated (as of 1 July 2026,
+  updated in a release when Microsoft changes them); they apply when the currency is US dollars and a tick box
+  turns them off. Your margin is one percentage covering what your reseller adds and what you add, applied to every
+  price, negative for a discount. A client on a different reseller or a discount can have its own margin, which
+  replaces yours on its licences. *Settings → Licence prices* shows Microsoft's list price beside your own, the
+  price each report will use and why, and the clients with their own margin.
+- **Import your reseller's price list** (*Settings → Licence prices*), pasted or uploaded, in any currency. The
+  columns don't have to be in any order: the headings on the first row say which holds the licence (a product
+  name or a part number, matched through wording like "NCE" or "Annual commitment") and which holds the price, and
+  a year's prices are divided by 12. Every row is shown with what it matched and what will change before it's
+  saved. Licences, Licence right-sizing, Subscriptions, Licence changes and Microsoft 365 Copilot say where their
+  prices came from, for your team only: clients, PDFs and downloads never see the margin.
+- **Our work this quarter** on the Clients page: what the team got done across its clients over the three months
+  ending this one, or the three before. Findings fixed (and how many were critical or high), risks accepted with
+  the client, whose Secure Score went up and how many unused paid licences were cut, by client, by month, by check
+  and by the person each fixed finding was handed to. Download it as an XLSX, as a branded PDF for the management
+  meeting, or as a PDF without client or team names to show a prospect.
+- **Over time** (*Clients*, a new summary beside Checks): one measure for every client side by side, month by
+  month over the last year: open critical and high findings, Secure Score, users with MFA or unassigned paid
+  licences. Each value is taken at the month's end, shaded from unshaded (good) to red and always shows its
+  number. The clients that slipped come first, with how many improved and slipped and the total or average across
+  them. XLSX and CSV downloads have every month; a phone shows the last three. Built from what Office Sentry
+  already keeps, so it fills in straight away from past collections.
+- **Office board** (*Office board* on the Clients page, `/board`): every client on one dark, full-screen page for
+  the office TV, without the menu. Each client is a tile with its grade, open critical and high findings and
+  Secure Score, or a word when something needs someone: new critical or high findings in the last day, *Not read*
+  when its collection failed, *Out of date*, *No access yet* or what's due this week. Those come first, worst
+  first, under five figures for the day: new critical and high findings, clients read in the last 36 hours,
+  what's due this week, lines not handed to anyone and what was fixed this week. The page reloads itself every 5
+  minutes, and when there are more clients than fit the screen, the quiet ones take turns. It follows the client
+  group you pick, and shows each client only what the account signed in on the TV may see.
+- **Today's ledger by email**: a morning email for the MSP's own team, every weekday at the hour you choose, set
+  up from *Email reports* for every client or one group. It leads with Today's sentence ("2 things need someone
+  today: …"), three figures (new critical and high findings, collections failing, due this week), then up to 25
+  lines since the last email, worst first, and what was seen before and is still open. Monday's covers the
+  weekend. Snoozed lines are left out, and it never goes to a client contact.
+- **Handed to you**: the lines handed to you sit together at the top of Today, above the ledger, with who handed
+  each one on. A client's Findings tab has a *Handed to me* view of the open findings handed to you there, which
+  keeps the sheet, filters and downloads, and each finding row tells staff who holds it. Who holds what stays with
+  the team: never in a report, a download's columns or a client account's pages.
+- **Client documentation**: a new starting point for custom reports that documents how a client's Microsoft 365
+  is set up rather than how it's doing: domains and DNS, admins, Conditional Access, sign-in methods, tenant
+  settings, trusted organisations, mail rules, shared mailboxes, distribution lists, licences and what they cover,
+  apps, Intune, devices, Teams and SharePoint, one **Documentation section** block each, without the to-do lists.
+  Send it monthly and the newest copy in the client's Report history is always current.
+- **Favourite reports**: *Favourite* on a detail report puts it in your favourites, listed first in the "All
+  reports" menu and on the Reports tab of every client where you can open it, in the order you starred them (up
+  to 30). They're your own, not shared with the team.
+- **Recent clients** in *Switch client*: the client you're on and up to five you opened last come first, kept in
+  the browser for your account.
+- **Copy** on every report table and on Findings puts the rows shown on the clipboard as a table, to paste into a
+  ticket, an email or a spreadsheet. It copies what the search and filters leave, with the check first on grouped
+  tables.
+- **Keyboard shortcuts** for staff: `j` and `k` move through a table's rows, `Enter` opens one (Findings opens it
+  in the side sheet), `g` then a letter goes to a page in the menu (`g c` Clients, `g r` Reports, `g s` Settings),
+  and `?` lists them all.
+- The Admin activity report lists security defaults being turned on or off (marked for a second look when they're
+  turned off) and people removing their own sign-in methods.
+- Guests and sharing has a **From** column with the organisation each guest comes from, to filter on.
+- Distribution lists shows which lists are **hidden from the address list**.
+- Mailbox size trend has **Months until full**, the forecast as a number to sort and filter on, beside the
+  forecast date.
+
+### Changed
+
+- **The staff portal looks like a working admin console**: one sans-serif typeface throughout instead of serif
+  titles and figures, smaller page and card titles, headline figures in one compact bordered panel, denser tables
+  with plain grey column headings, severity as small tinted tags, and tighter tabs, buttons, forms, report library
+  and Today page. Colour themes, the report menu, navigation, and client reports, PDFs and emails are unchanged.
+- **Generic JSON alerts carry a severity and a key**: every alert says how bad it is (`severity`, `critical` to
+  `low`, or `info`) and carries a `key` that stays the same for the same problem (a collection that keeps failing,
+  a certificate, a system problem), with `resolves: true` on the message that says it's over, so a ticketing
+  system can update one ticket instead of opening another.
+- Licence waste, right-sizing savings, unused Copilot licences, renewals, the month-end review and the Accounts
+  page cost licences at each client's own margin, and follow a margin change rather than showing a figure from
+  before it.
+- A table's search shows how many rows match in the heading's count ("3 of 174"), keeps a group's heading while
+  any of its rows match, and says when nothing does.
+- The Onboarding list's footnote points GDAP admins to *Approve them myself* instead of the docs.
+- A PDF cover with more than 12 contents entries lists them in two columns, so they stay clear of the cover's foot.
+
+### Fixed
+
+- Search and the jump box offer a domain only to people who open Email reports, since a domain opens the Domains
+  report; an account manager was offered domains that opened a "not allowed" page.
+- Today speaks only of what the person sees: a role without security findings no longer reads "no new critical or
+  high findings" or sees a 0 for them, its note on what's new and its empty list name only findings, collections
+  or due items it can see, a role that sees none of them reads "Nothing to show" instead of "All clear", and the
+  Today/Clients switch only shows when there are two pages to switch between.
+
+### Security
+
+- Pillow 13.0.0 (from 12.3.0), Brotli 1.2.1, certifi 2026.10.23 and setuptools 84.2.1, past the advisories
+  published for the versions before them. Pillow is what draws the charts and images in PDF reports.
 
 ## [2.5.0] - 2026-10-17
 
@@ -1854,7 +2034,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
-[2.6.0]: https://github.com/JackD99/OfficeSentry/compare/v2.5.0...HEAD
+[2.6.0]: https://github.com/JackD99/OfficeSentry/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/JackD99/OfficeSentry/compare/v2.4.1...v2.5.0
 [2.4.1]: https://github.com/JackD99/OfficeSentry/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/JackD99/OfficeSentry/compare/v2.3.1...v2.4.0

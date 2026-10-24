@@ -324,78 +324,77 @@ GUIDES = "Guides"  # v2/docs/*.md not listed above
 # `icon` is one of the icons in templates/home.html. Drop the oldest list once a newer one is released.
 WHATS_NEW = [
     {
-        "version": "2.5.0",
-        "title": "Act on a finding, grade every client, and get anywhere in a few keystrokes",  # the band's heading
+        "version": "2.6.0",
+        "title": "Tickets in Autotask, clients from Partner Center, and four new reports",  # the band's heading
         # a sentence under it
-        "summary": "Every finding opens a sheet with its evidence, history and fix, every client gets a grade "
-        "from A to E with the rules published, and Today becomes one ledger of what changed overnight.",
-        "chip": "Findings, grades and Today",  # a few words for the link at the top of the page
+        "summary": "Alerts can open tickets in your Autotask, GDAP partners pick clients from their customer list, "
+        "risky changes in a client's tenant are posted by the next morning, and Copilot, AI agents, Outlook and "
+        "licence features each get a report.",
+        "chip": "Autotask, Partner Center and new reports",  # a few words for the link at the top of the page
         "items": [  # up to six {"icon", "title", "text", "href", "link"}: "link" names the page "href" opens
             {
                 "icon": "alert",
-                "title": "A sheet for every finding",
-                "text": "A finding opens beside the table with the evidence behind it, its history, where else the "
-                "same check fails, the fix as numbered steps and its project. Copy ready-made ticket text, email "
-                "the client's contact from your own mail app, keep a note or hand it to a colleague; notes never "
-                "reach the client.",
-                "href": "/docs/reference/#reports",
-                "link": "Reports",
+                "title": "Alerts become tickets in Autotask",
+                "text": "Pick the alerts that should make a ticket in your Autotask PSA, in the client's own "
+                "company, with the priority following the severity. A problem that lasts makes one ticket, a note "
+                "is added when it clears, and nothing is ever written to a client's tenant.",
+                "href": "/docs/autotask/",
+                "link": "Autotask PSA",
             },
             {
                 "icon": "shield",
-                "title": "A grade for every client",
-                "text": "One letter from A to E, worked out the same way for everyone: the worst of five parts, "
-                "each its worst open finding after accepted risks. Its page shows what moves each part, twelve "
-                "month-ends of history and how the client compares with others of its size, none of them named.",
-                "href": "/docs/client-grades/",
-                "link": "Client grades",
+                "title": "Know when someone makes a new admin",
+                "text": "A Teams, Slack or webhook post when someone in a client's tenant is made an admin, turns "
+                "off a Conditional Access policy or security defaults, or removes an admin's sign-in method, with "
+                "who did it and when.",
+                "href": "/docs/reference/#reports",
+                "link": "Alerts",
             },
             {
-                "icon": "history",
-                "title": "Today is a ledger of the night",
-                "text": "One list across every client, worst first, of what changed since yesterday, with what "
-                "the team fixed. Hand a line to a colleague or snooze it, and a line marks where you last looked.",
-                "href": "/docs/reference/#reports",
-                "link": "Home pages",
-            },
-            {
-                "icon": "review",
-                "title": "A client's year on one page",
-                "text": "Timeline, under a client's Changes tab, lays out the year month by month for a review "
-                "meeting: findings found and fixed, admin changes, reports sent, failed nights and the client's "
-                "own milestones, beside Secure Score, MFA and open findings at each month's end.",
-                "href": "/docs/reference/#reports",
-                "link": "Reports",
-            },
-            {
-                "icon": "search",
-                "title": "Get anywhere in a few keystrokes",
-                "text": 'Press / and type "north mfa" for MFA coverage at Northwind, add pdf for the file, or '
-                "type a page, a setting, a custom report or a person. Search all clients finds clients by name "
-                "or domain too, and only offers what you can open.",
-                "href": "/docs/reference/#reports",
-                "link": "Reports",
+                "icon": "sign-in",
+                "title": "Add clients from Partner Center",
+                "text": "GDAP partners sign in once and tick clients from their customer list instead of typing "
+                "tenant IDs, then approve Office Sentry for several clients one after another. Nothing is read "
+                "from a customer's tenant to list them.",
+                "href": "/docs/onboarding/#adding-clients-from-partner-center-gdap",
+                "link": "Onboarding a client",
             },
             {
                 "icon": "table",
-                "title": "One Clients page, and reports that behave the same way",
-                "text": "Clients and All clients are one page, worst first, with any report for every client a "
-                "menu away. Custom reports live under Reports and send from where you are, a client's Reports "
-                "tab opens on its catalogue, and every download is named, sorted and laid out the same way.",
-                "href": "/docs/reference/#managing-clients",
-                "link": "Managing clients",
+                "title": "Copilot, AI agents, Outlook and licence features",
+                "text": "Who uses the Copilot licences a client pays for and what the unused ones cost, the AI "
+                "agents with their own identity and what they can reach, who is on an unsupported Outlook or a "
+                "POP or IMAP app, and what a client's licences actually cover.",
+                "href": "/docs/reference/#detail-reports-by-area",
+                "link": "Detail reports",
+            },
+            {
+                "icon": "review",
+                "title": "What the team did, and how every client moves",
+                "text": "Our work this quarter counts findings fixed, risks accepted and licences cut across your "
+                "clients, as a branded PDF for the management meeting. Over time sets one measure for every "
+                "client side by side, month by month, those slipping first.",
+                "href": "/docs/reference/#reports",
+                "link": "Reports",
+            },
+            {
+                "icon": "device",
+                "title": "An office board, and Today by email",
+                "text": "Every client on one dark screen for the office TV, worst first, reloading itself. Today's "
+                "ledger comes to the team by email every weekday morning, and lines handed to you sit at the top.",
+                "href": "/docs/reference/#reports",
+                "link": "Home pages",
             },
         ],
         "also": [  # smaller changes, a few words each
-            "the menu lights the entry every page belongs to, and every browser tab ends with your name",
-            "every settings page opens with a Settings heading and says where a sub-page came from",
-            "the Flag or Severity column comes first in every CSV and workbook",
-            "cross-client PDFs carry your cover and footer, and tables start where they are",
-            "clearer wording and dates across the Email, Identity, Files and Devices reports",
-            "Devices lists each device's problems as short items you can filter on",
-            "SharePoint sites name each site instead of its whole address",
-            "a public demo that looks like a real tenant, with the audit log add-on switched on",
-            "a diagram of how data flows and how security is checked, in SECURITY.md",
+            "licence prices fill in from Microsoft's list prices plus your margin, and a client can have its own",
+            "import your reseller's price list, in any currency and column order",
+            "a denser, admin-console look for the staff portal",
+            "star your favourite reports, and Switch client starts with the clients you opened last",
+            "copy a table's rows to paste into a ticket, and keyboard shortcuts for staff",
+            "Client documentation: a custom report of how a client's Microsoft 365 is set up, always current",
+            "webhook alerts carry a severity and a key, so a ticketing system updates one ticket",
+            "a guest's organisation, hidden distribution lists and months until a mailbox is full",
         ],
     },
 ]

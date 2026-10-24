@@ -1,4 +1,3 @@
-<!-- since 2.6.0 -->
 # Autotask PSA
 
 For MSPs who run their service desk in Datto Autotask PSA: **a ticket in your Autotask for the Office Sentry
@@ -96,4 +95,3 @@ requests an hour for your whole database; Office Sentry makes a handful per aler
 | *Missing Required Field: dueDateTime* (or another field) | Your ticket category needs it: set *Due in*, or the queue, then *Try again* |
 | *Autotask's limit on requests was reached (HTTP 429)* | Another integration is using your database's hourly limit; the ticket is tried again later |
 | No ticket for a client | Check *Which alerts make a ticket* and the severity, that the alert is on under *Settings › Alerts*, and whether clients without a company get tickets |
-<!-- /since -->

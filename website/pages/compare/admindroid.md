@@ -16,7 +16,7 @@ of date, [tell us](https://github.com/JackD99/OfficeSentry/issues/new/choose) an
 | **Cost** | Free edition (around 140 Microsoft 365 reports and 10 dashboards); paid editions priced on request; a 15-day trial of everything | Free, every feature |
 | **Licence** | Commercial | Open source (AGPL-3.0) |
 | **Runs on** | A Windows server, with PostgreSQL | Two Docker containers on a Linux server, with SQLite, or Windows without Docker |
-| **Reports** | Over 3,500 in the paid editions, plus dashboards | 53 detail reports with filters, saved views and exports, 71 checks, and client reports and evidence for 11 schemes |
+| **Reports** | Over 3,500 in the paid editions, plus dashboards | 57 detail reports with filters, saved views and exports, 71 checks, and client reports and evidence for 11 schemes |
 | **Audit trail** | The unified audit log: file, sharing, mailbox and Teams activity, kept for up to 10 years, with alerts on events | Entra sign-ins and admin changes kept beyond Microsoft's 30 days; file, sharing and mailbox activity through the optional audit log add-on, kept 2 years by default |
 | **Changes tenants** | Yes: management actions, bulk changes and workflows | Never: read-only permissions only |
 | **Several clients** | Switch between tenants, group them, connect through GDAP | Every report across every client, worst first, and what changed this month across all of them |
