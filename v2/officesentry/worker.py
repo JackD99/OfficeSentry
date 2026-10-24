@@ -28,6 +28,7 @@ from functools import partial
 import requests
 
 from . import (
+    activity_alerts,
     alerts,
     app_setup,
     clouds,
@@ -662,6 +663,7 @@ def _execute(
                 autodesk_factory=autodesk_factory,
             )
             alerts.after_run(conn, alerting, run["id"], status)
+            activity_alerts.after_run(conn, alerting, run["id"], status)
         finally:
             liveness.end_run()
 

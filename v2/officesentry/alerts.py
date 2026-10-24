@@ -9,7 +9,9 @@ Sent by the worker when:
   * optionally, a collector that was failing works again;
   * optionally, a client's report was sent or published (``report_ready``): a link to the tenant's
     report history, never the files themselves, so only people signed in and granted the tenant can
-    open them.
+    open them;
+  * a risky change made in a client's tenant, such as someone made a Global Administrator, once each
+    (``activity_alerts.py``, the kinds in ``ACTIVITY_ALERTS`` the admin ticked).
 
 Nothing goes out about a client that is paused or archived, even one paused while its collection ran
 (``alerted_tenant`` reads the tenant again).
@@ -49,6 +51,13 @@ log = logging.getLogger(__name__)
 
 FORMATS = {"teams": "Microsoft Teams (Workflows)", "slack": "Slack", "generic": "Generic JSON webhook"}
 ALERT_SEVERITIES = ("critical", "high", "medium", "low")
+# Changes in a client's tenant that can be alerted on (activity_alerts.py), as the settings page offers them.
+ACTIVITY_ALERTS = {
+    "admin_role": "Someone is given an admin role",
+    "ca_off": "A Conditional Access policy is deleted, turned off or set to report-only",
+    "security_defaults_off": "Security defaults are turned off",
+    "admin_mfa_removed": "A sign-in method is removed from an admin",
+}
 DEFAULTS = {
     "alerts.enabled": "0",
     "alerts.format": "teams",
@@ -58,6 +67,8 @@ DEFAULTS = {
     "alerts.url_enc": "",
     "alerts.secret_enc": "",
     "alerts.on_reports": "0",
+    # Comma-separated ACTIVITY_ALERTS keys; empty sends none.
+    "alerts.activity": ",".join(ACTIVITY_ALERTS),
     # Problems with Office Sentry itself (system_alerts.py), by email to the team contacts and here.
     "alerts.system": "1",
 }
@@ -90,12 +101,13 @@ class Item:
     subject: str
     detail: str
     data: dict = field(default_factory=dict)
+    label: str = ""  # a change's kind ("Admin role"), shown in its severity's place
 
 
 @dataclass
 class Message:
     event: str  # findings.new | collection.failed | collection.recovered | report.ready | certificate.expiry
-    #             | system.* | test
+    #             | activity.changes | system.* | test
     title: str
     text: str
     link: str
@@ -103,6 +115,7 @@ class Message:
     items: list[Item] = field(default_factory=list)
     extra: dict = field(default_factory=dict)
     button: str = "Open in Office Sentry"
+    noun: str = "finding"  # what the items are: "finding", or "change" for activity alerts
 
 
 # -- Settings ----------------------------------------------------------------
@@ -122,6 +135,11 @@ def save_settings(conn, values: dict) -> None:
             "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, value),
         )
+
+
+def activity_kinds(s: dict) -> set[str]:
+    """The changes in a client's tenant the admin chose to be alerted about."""
+    return {k for k in (s.get("alerts.activity") or "").split(",") if k in ACTIVITY_ALERTS}
 
 
 def url_problem(url: str) -> str | None:
@@ -247,7 +265,7 @@ def _deliver(conn, alerting: Alerting, s: dict, message: Message, run_id: int | 
         log.exception("Sending an alert failed")
         outcome, ok = ("alert_failed", f"{what}: {type(exc).__name__}"), False
     else:
-        found = f", {plural(len(message.items), 'finding')}" if message.items else ""
+        found = f", {plural(len(message.items), message.noun)}" if message.items else ""
         outcome, ok = ("alert_sent", what + found), True
     try:
         audit(conn, None, outcome[0], tenant_id, outcome[1][:500])
@@ -504,12 +522,18 @@ def _more(message: Message, shown: int) -> str | None:
 
 
 def _line(i: Item) -> str:
+    if i.label:  # a change: what happened, then who made it and when
+        return _clean(i.subject, 200) + (f" ({_clean(i.detail, 200)})" if i.detail else "")
     # Check titles describe the passing state ("Every admin has MFA registered").
     return (
         f"{_clean(i.subject, 150)}"
         + (f": {_clean(i.detail, 200)}" if i.detail else "")
         + f" (check: {_clean(i.title, 120)})"
     )
+
+
+def _kind(i: Item) -> str:
+    return i.label or i.severity.capitalize()
 
 
 def build_payload(fmt: str, message: Message) -> dict:
@@ -526,7 +550,7 @@ def teams_payload(message: Message) -> dict:
         body.append(
             {
                 "type": "FactSet",
-                "facts": [{"title": i.severity.capitalize(), "value": _teams_text(_line(i))} for i in shown],
+                "facts": [{"title": _teams_text(_kind(i), 60), "value": _teams_text(_line(i))} for i in shown],
             }
         )
     if more := _more(message, len(shown)):
@@ -553,7 +577,7 @@ def slack_payload(message: Message) -> dict:
     ]
     shown = message.items[:MAX_ITEMS]
     if shown:
-        lines = [f"• *{i.severity.capitalize()}* {_slack_text(_line(i))}" for i in shown]
+        lines = [f"• *{_slack_text(_kind(i), 60)}* {_slack_text(_line(i))}" for i in shown]
         if more := _more(message, len(shown)):
             lines.append(f"_{more}_")
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)[:2900]}})
@@ -565,12 +589,21 @@ def slack_payload(message: Message) -> dict:
             ],
         }
     )
-    fallback = _slack_text(message.title) + (f": {plural(len(message.items), 'finding')}" if message.items else "")
+    fallback = _slack_text(message.title) + (f": {plural(len(message.items), message.noun)}" if message.items else "")
     return {"text": fallback, "blocks": blocks}
 
 
 def generic_payload(message: Message) -> dict:
     shown = message.items[:MAX_GENERIC_ITEMS]
+    if message.noun != "finding":  # activity alerts: "changes", each as activity_alerts.item describes it
+        key = message.noun + "s"
+        rows = [{"severity": i.severity, "text": i.subject, **i.data} for i in shown]
+    else:
+        key = "findings"
+        rows = [
+            {"severity": i.severity, "check_title": i.title, "subject": i.subject, "detail": i.detail, **i.data}
+            for i in shown
+        ]
     out = {
         "event": message.event,
         "title": message.title,
@@ -587,12 +620,9 @@ def generic_payload(message: Message) -> dict:
             if message.tenant
             else None
         ),
-        "findings": [
-            {"severity": i.severity, "check_title": i.title, "subject": i.subject, "detail": i.detail, **i.data}
-            for i in shown
-        ],
-        "findings_total": len(message.items),
-        "findings_more": max(0, len(message.items) - len(shown)),
+        key: rows,
+        f"{key}_total": len(message.items),
+        f"{key}_more": max(0, len(message.items) - len(shown)),
     }
     out.update(message.extra)
     return out
