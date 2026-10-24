@@ -285,6 +285,18 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   says it's over, so a ticketing system can update one ticket instead of
   opening another.
 <!-- /since -->
+<!-- since 2.6.0 -->
+- **Autotask PSA** (Settings → Autotask PSA, [setting it up](docs/autotask.md)):
+  a ticket in the MSP's own Autotask for the alerts chosen there (new findings
+  at or above their own severity, risky changes, a collection that starts
+  failing, problems with Office Sentry itself), with or without the webhook.
+  Each client is matched to an Autotask company (names that match one company
+  are suggested); a client without one files in the MSP's own company, or gets
+  none. The priority follows the alert's severity, a problem that lasts makes
+  one ticket and gets a note when it clears, and a ticket Autotask didn't take
+  is tried again for up to 11 hours. An API user's secret and tracking
+  identifier are stored encrypted; the only writes are new tickets and notes.
+<!-- /since -->
 - **System status and system alerts** (Settings → System status): whether the
   worker runs, data is being collected, backups are recent and there's room on
   the disk, with what to do about anything that isn't. The team is emailed and
@@ -877,6 +889,7 @@ work without it.
   by itself, what the person running it has to do, and reverse proxy setups
   for Caddy, nginx, Traefik and a CDN.
 - [The audit log add-on](docs/audit-log-addon.md): an optional second app that keeps who deleted, downloaded or shared files and who opened someone else's mailbox, for the clients who approve it.
+- [Autotask PSA](docs/autotask.md): a ticket in your Autotask, in the client's company, for the alerts you choose. <!-- since 2.6.0 -->
 
 ## Sign-in security
 
