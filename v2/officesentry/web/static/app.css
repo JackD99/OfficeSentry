@@ -2037,6 +2037,8 @@ svg.spark .spark-dot { fill: var(--decor); }
 .heat.h4 { background: var(--sev-critical-soft); color: var(--sev-critical); font-weight: 600; }
 .heat.now { box-shadow: inset 0 0 0 1.5px var(--text-2); }
 @media (max-width: 640px) { .heat-table .hide-sm { display: none; } } /* the last three months on a phone */
+/* Favourite reports (_favourite.html): the star fills in when the report is one of the person's favourites. */
+button.fav.on .icon { fill: var(--warn); stroke: var(--warn); }
 /* The office board (board.html): every client on a dark screen for the office TV. Its type grows with the screen,
    every stamp is the same height so board.js can count how many fit, and a client that can't be read is outlined. */
 html.board-page { font-size: clamp(16px, 1.2vw, 32px); }

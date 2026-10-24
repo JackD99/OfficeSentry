@@ -52,7 +52,9 @@
   </div>
   <dl class="cover-meta">{% block cover_meta %}{% endblock %}</dl>
   <div class="cover-status">{% block cover_status %}{% endblock %}</div>
-  {% if self.contents()|trim %}<nav class="toc" aria-label="Contents"><div class="col-title">In this report</div><ol>{% block contents %}{% endblock %}</ol></nav>{% endif %}
+  {#- A long contents list goes in two columns, so it stays clear of the cover's foot (report.css). -#}
+  {% set toc = self.contents()|trim %}
+  {% if toc %}<nav class="toc{{ ' long' if toc.count('<li') > 12 }}" aria-label="Contents"><div class="col-title">In this report</div><ol>{% block contents %}{% endblock %}</ol></nav>{% endif %}
   <div class="cover-foot">
     {% if brand.contact %}<div class="contact">{{ brand.display_name }} · {{ brand.contact }}</div>{% endif %}
     Confidential. This report describes security settings for {{ self.client() }}; share it only with people who need it.
