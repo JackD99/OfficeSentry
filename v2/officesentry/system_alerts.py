@@ -1,7 +1,8 @@
 """System alerts: tell the MSP's team when Office Sentry itself needs attention.
 
 Sent through the channels Office Sentry already uses: an email to the team contacts
-(when email delivery is set up) and the Teams, Slack or webhook alert (when it's on),
+(when email delivery is set up) and each alert destination set up (``alerts.deliver``: the Teams, Slack or
+webhook alert, when it's on),
 for these problems found by ``system_health``:
 
 * **worker**: the background worker has stopped (down for ``WORKER_GRACE``, so a restart
@@ -261,6 +262,8 @@ def _message(cfg, key: str, action: str, problem: Problem | None, state: dict | 
             f"Resolved: {(state or {}).get('title') or LABELS[key]}.{lasted}",
             link,
             extra={"system": {"problem": key, "state": "resolved"}},
+            key=f"system:{key}",
+            resolves=True,
         )
     title = ("Still not fixed: " if action == "reminder" else "") + problem.title
     return alerts.Message(
@@ -269,6 +272,8 @@ def _message(cfg, key: str, action: str, problem: Problem | None, state: dict | 
         f"{problem.text} {problem.fix}",
         link,
         extra={"system": {"problem": key, "state": action, **problem.data}},
+        severity="high",
+        key=f"system:{key}",
     )
 
 
@@ -308,7 +313,7 @@ def _email(app, conn, vault, cfg, key: str, action: str, problem: Problem | None
 def _send(
     app, conn, vault, cfg, key: str, action: str, problem: Problem | None, state: dict | None, now: datetime
 ) -> bool | None:
-    """Send one system alert by email and webhook. Never raises. Returns True when a channel took it, False
+    """Send one system alert by email and ``alerts.deliver``. Never raises. Returns True when a channel took it, False
     when every channel set up failed (or sending broke), and None when there was nothing to send it through."""
     try:
         s = alerts.settings(conn)
@@ -317,9 +322,9 @@ def _send(
         message = _message(cfg, key, action, problem, state, now)
         mailed = _email(app, conn, vault, cfg, key, action, problem, message)
         outcome, tried, took = [mailed], mailed != "email not set up", mailed == "email sent"
-        if s.get("alerts.enabled") == "1" and s.get("alerts.url_enc"):
-            hooked = alerts._deliver(conn, alerts.Alerting(cfg.base_url, vault, app), s, message)
-            outcome.append(f"webhook {'sent' if hooked else 'failed'}")
+        hooked = alerts.deliver(conn, alerts.Alerting(cfg.base_url, vault, app), message, s=s)
+        if hooked is not None:
+            outcome.append(f"alert {'posted' if hooked else 'not posted'}")
             tried, took = True, took or bool(hooked)
         if tried and not took:
             outcome.append(f"trying again in {duration(RETRY.total_seconds())}")
