@@ -414,6 +414,7 @@ Each report is listed under its area in the report menu, in menu order.
   check fails while any account is at risk, and the account's page flags it.
 - *Guests and sharing*: invitation, consent and SharePoint sharing settings,
   and every guest with invitation state and last sign-in.
+  Each guest's *From* names the organisation it comes from, to filter on. <!-- since 2.6.0 -->
 - *Deleted users and groups*: the Entra ID recycle bin. Every deleted user
   (member or guest, the licences it held) and deleted team or Microsoft 365
   group, when it was deleted and the days left before Microsoft removes it
@@ -443,6 +444,7 @@ Each report is listed under its area in the report menu, in menu order.
 - *Mailbox size trend*: each mailbox's growth over one and three months
   from Office Sentry's own kept snapshots, the date each will fill at that
   rate, and the client's total month by month.
+  *Months until full* gives the same forecast as a number to sort on. <!-- since 2.6.0 -->
 <!-- since 2.6.0 -->
 - *Outlook and mail apps*: which Outlook release each person connects with
   on Windows and Mac, flagged once Microsoft's support for it ends (Outlook
@@ -471,6 +473,7 @@ Each report is listed under its area in the report menu, in menu order.
   with empty, ownerless and unused lists flagged. How much mail each gets is
   counted from the message trace (`Get-MessageTraceV2`, read 10 days at a
   time from where the last run stopped) and kept per day for 90 days.
+  Lists hidden from the address list are marked. <!-- since 2.6.0 -->
 - *Mobile devices*: phones and tablets syncing mail (`Get-MobileDevice` and
   `Get-MobileDeviceStatistics`), with which app and when each last synced;
   leavers' devices still connected, ones waiting for approval and ones

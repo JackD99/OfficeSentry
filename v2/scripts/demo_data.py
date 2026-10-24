@@ -901,6 +901,7 @@ def mail_extras(t: dict, users: list[dict], now: datetime, rng: random.Random) -
                 "RecipientTypeDetails": "MailUniversalSecurityGroup" if security else "MailUniversalDistributionGroup",
                 "ManagedBy": [{"ann": "u1", "bob": "u2"}[owner]] if owner else [],
                 "RequireSenderAuthenticationEnabled": not outside,
+                "HiddenFromAddressListsEnabled": security,  # for alerts, not for people to pick from the address book
                 "IsDirSynced": False,
                 "WhenCreatedUTC": (now - timedelta(days=200 + 90 * n)).strftime("%Y-%m-%dT%H:%M:%SZ"),
             }
