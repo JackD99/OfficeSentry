@@ -128,6 +128,14 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   *Account* page or with *Make this my home page*; *Home* in the menu and the logo
   open it, and signing in lands there. Until the first collection has run,
   admins see the **Get started** checklist there instead.
+<!-- since 2.6.0 -->
+- **Handed to you**: the lines handed to you sit together at the top of Today,
+  above the ledger, with who handed each one on, and still count in the opening
+  sentence. A client's Findings tab has a *Handed to me* view of the open
+  findings handed to you there, which keeps the sheet, filters and downloads,
+  and every finding row tells staff who holds it. Client accounts never see who
+  holds what.
+<!-- /since -->
 - **Licence prices** (*Settings → Licence prices*): enter monthly prices per SKU
   to cost waste and right-sizing savings.
 - **Findings** (`/tenants/<id>/findings`): every finding keeps first seen,

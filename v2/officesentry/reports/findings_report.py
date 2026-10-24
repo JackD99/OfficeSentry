@@ -222,3 +222,20 @@ def build(conn, tenant, resolved: bool = False, now: datetime | None = None, com
         Tile(ACCEPTED, len(accepted), "left out of the totals"),
     ]
     return report
+
+
+def handed_to_you(report: DataReport, ids: set[int]) -> DataReport:
+    """The Findings page's Handed to me view: the open findings table cut to ``ids``, the findings handed to the
+    person looking. Who holds a finding is the team's own business, so it narrows the rows and never becomes a
+    column that a download or a client could see. The tiles count the whole client, so they're left out."""
+    section = report.sections[0]
+    keep = [i for i, key in enumerate(section.keys) if key in ids]
+    section.rows = [section.rows[i] for i in keep]
+    section.flags = [section.flags[i] for i in keep]
+    section.keys = [section.keys[i] for i in keep]
+    section.empty = (
+        "Nothing open here is handed to you. A finding someone hands you, from its sheet or from Today, shows here."
+    )
+    report.sections = [section]
+    report.tiles = []
+    return report
