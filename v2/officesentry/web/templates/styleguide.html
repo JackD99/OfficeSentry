@@ -1,7 +1,7 @@
 {#- The style guide (web/styleguide.py): every token in tokens.css and every shared component, with made-up
     data. Light or dark follows the system setting. Links in the examples go nowhere useful. -#}
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ICONS, ts, status, change_tag, sev_counts, sev_legend, tenant_header, downloads, report_picker with context %}
+{% from "_macros.html" import icon, ICONS, ts, status, change_tag, sev_counts, sev_legend, sev_split, tenant_header, downloads, report_picker with context %}
 {% from "_report_table.html" import report_table with context %}
 {% block title %}Style guide · Office Sentry{% endblock %}
 {% block content %}
@@ -113,6 +113,7 @@
     <dt><code>change_tag()</code></dt><dd class="sg-row">{% for k in ('added', 'removed', 'changed') %}{{ change_tag(k) }}{% endfor %}</dd>
     <dt><code>sev_counts()</code></dt><dd class="sg-row">{{ sev_counts({'critical': 1, 'high': 10, 'medium': 12, 'low': 3}) }}{{ sev_counts({'critical': 0, 'high': 2, 'medium': 0, 'low': 0}) }}</dd>
     <dt><code>sev_legend()</code></dt><dd>{{ sev_legend() }}</dd>
+    <dt><code>sev_split()</code></dt><dd>{{ sev_split({'critical': 1, 'high': 31, 'medium': 101, 'low': 41}) }}{{ sev_split({'critical': 0, 'high': 2, 'medium': 5, 'low': 0}) }}</dd>
     <dt>Severity text</dt><dd class="sg-row">{% for s in ('critical', 'high', 'medium', 'low') %}<span class="sevtext {{ s }}">{{ s|capitalize }}</span>{% endfor %}</dd>
     <dt>Check squares</dt><dd class="sg-row"><span class="chk pass" title="Pass"></span>{% for s in ('critical', 'high', 'medium', 'low') %}<span class="chk fail {{ s }}" title="Fail: {{ s }}"></span>{% endfor %}<span class="chk accepted" title="Accepted risk"></span><span class="chk unavailable" title="Not checked"></span></dd>
     {% from "_grade.html" import badge %}
