@@ -7,7 +7,7 @@ import re
 import pytest
 
 from officesentry.reports import data_reports, designs
-from tests import auditdata, autodeskdata
+from tests import auditdata
 from tests import sharepoint_data as sd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -104,8 +104,7 @@ def _picker(page: str) -> str:
 def test_report_picker_links_every_report(client, db, vault, seeded):
     """The Reports tab has one picker: the summaries and every detail report, the open one marked."""
     alpha = seeded
-    auditdata.everywhere(db, vault)  # the add-ons' reports too
-    autodeskdata.everywhere(db, vault)
+    auditdata.everywhere(db, vault)  # the add-on's report too
     make_user(db, "admin")
     login(client, "admin")
     for url, current in (
@@ -185,8 +184,7 @@ def test_reports_tab_opens_on_the_catalogue(client, db, vault, seeded):
     person's saved views, then every detail report by area, with one search box; the overview's Reports card
     is the same list. A key that isn't there shows it too."""
     alpha = seeded
-    auditdata.everywhere(db, vault)  # the add-ons' reports too
-    autodeskdata.everywhere(db, vault)
+    auditdata.everywhere(db, vault)  # the add-on's report too
     make_user(db, "admin")
     login(client, "admin")
     did = designs.create(db, "Board pack", "admin", designs.STARTERS["executive"][2], "For the board")

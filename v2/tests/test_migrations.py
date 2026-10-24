@@ -106,3 +106,47 @@ def test_restoring_the_pre_upgrade_copy_lets_older_code_start(env, monkeypatch, 
     with closing(connect(env.db_path)) as conn:
         assert migrate(conn) == old
         assert conn.execute("SELECT name FROM tenants").fetchone()[0] == "Old"
+
+
+def test_a_database_upgraded_while_autodesk_was_on_main_loses_its_tables_and_data(cfg, monkeypatch, request):
+    # Autodesk licences' migration (0053) reached main and was taken out before a release: 0055 removes what it
+    # and its data source left, and leaves everything else.
+    every = db_module.migration_files()
+    monkeypatch.setattr(db_module, "migration_files", lambda: [f for f in every if f[0] < 53])
+    conn = connect(cfg.db_path)
+    request.addfinalizer(conn.close)
+    migrate(conn)
+    conn.execute("CREATE TABLE autodesk_sign_ins (id INTEGER PRIMARY KEY, label TEXT, pat_enc TEXT)")
+    conn.execute("CREATE TABLE autodesk_teams (team_id TEXT PRIMARY KEY, tenant_id INTEGER REFERENCES tenants(id))")
+    conn.execute("PRAGMA user_version = 53")
+    tenant = conn.execute(
+        "INSERT INTO tenants (name, tenant_ref, created_at) VALUES ('Old', 'old.onmicrosoft.com', 'x')"
+    ).lastrowid
+    conn.execute("INSERT INTO autodesk_teams VALUES ('100200300', ?)", (tenant,))
+    conn.executemany(
+        "INSERT INTO settings (key, value) VALUES (?, ?)",
+        [("autodesk.client_id", "id"), ("autodesk.client_secret_enc", "x"), ("smtp.host", "mail.example")],
+    )
+    runs = {}
+    for collector, kind in (("autodesk", "autodesk_seat"), ("users", "user")):
+        runs[collector] = conn.execute(
+            "INSERT INTO runs (tenant_id, collector, status, trigger, created_at)"
+            " VALUES (?, ?, 'succeeded', 'schedule', 'x')",
+            (tenant, collector),
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO objects (run_id, kind, object_id, data) VALUES (?, ?, 'o1', '{}')", (runs[collector], kind)
+        )
+        conn.execute(
+            "INSERT INTO metrics (run_id, tenant_id, key, value, captured_at) VALUES (?, ?, ?, 1, 'x')",
+            (runs[collector], tenant, f"{collector}.count"),
+        )
+    monkeypatch.setattr(db_module, "migration_files", lambda: every)
+    assert migrate(conn) == every[-1][0]
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert not {t for t in tables if t.startswith("autodesk")}
+    settings = {r[0] for r in conn.execute("SELECT key FROM settings")}
+    assert "smtp.host" in settings and not {k for k in settings if k.startswith("autodesk.")}
+    assert [r[0] for r in conn.execute("SELECT collector FROM runs")] == ["users"]
+    assert [r[0] for r in conn.execute("SELECT kind FROM objects")] == ["user"]
+    assert [r[0] for r in conn.execute("SELECT key FROM metrics")] == ["users.count"]

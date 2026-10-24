@@ -19,7 +19,6 @@ the leaver checklist.
 from . import (  # noqa: F401
     admin_units,
     apps,
-    autodesk,
     devices,
     groups,
     leavers,
@@ -46,7 +45,6 @@ MODULES = (
     "history",
     "directory",
     "apps",
-    "autodesk",
     "devices",
     "groups",
     "leavers",

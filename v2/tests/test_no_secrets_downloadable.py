@@ -1,15 +1,15 @@
 """No secret or private key reaches a browser, whoever asks.
 
 One of every kind of secret Office Sentry holds is planted (each app connection's private key and the one
-waiting to replace it, the audit log add-on app's too, the mail app's key, client secret and SMTP password, the
-Microsoft sign-in app's keys, the alert webhook's address and signing secret, the Autodesk app's secret and its
-sign-in's personal access token, the monitoring token, a device code in flight, someone else's two-step secret,
-recovery codes, password hash and session, the session and encryption keys, and every encrypted value as stored;
-private keys as PEM text and as DER). Then every GET route in the URL map is opened, each download in every
-format, as an Administrator, an analyst, a client account and a client account signed in with its own Microsoft
-account, and every byte of every answer is searched: the page, its headers, each file inside a spreadsheet, Word
-file or zip, and the page a PDF is made from. So are the log files the crawl wrote. The support package has its
-own test of this (``test_support.py``).
+waiting to replace it, the audit log add-on app's too, the mail app's key, client secret and SMTP password,
+the Microsoft sign-in app's keys, the alert webhook's address and signing secret, the monitoring token, a
+device code in flight, someone else's two-step secret, recovery codes, password hash and session, the session
+and encryption keys, and every encrypted value as stored; private keys as PEM text and as DER). Then every GET
+route in the URL map is opened, each download in every format, as an Administrator, an analyst, a client
+account and a client account signed in with its own Microsoft account, and every byte of every answer is
+searched: the page, its
+headers, each file inside a spreadsheet, Word file or zip, and the page a PDF is made from. So are the log
+files the crawl wrote. The support package has its own test of this (``test_support.py``).
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ from flask import Response
 from officesentry import alerts, cert_lifecycle, logs, sso, store, system_health, totp
 from officesentry.certs import generate_certificate
 from officesentry.db import utcnow
-from tests import autodeskdata
 from tests.conftest import PASSWORD, PASSWORD_HASH, login, make_user
 from tests.test_isolation_walk import (  # noqa: F401  (fixtures)
     _a_urls,
@@ -111,8 +110,6 @@ def planted(app, db, vault, cfg, world):  # noqa: F811
         },
     )
     secrets |= {"webhook key": WEBHOOK_KEY, "signing secret": SIGNING_SECRET}
-    # The walk's world sets Autodesk up and reads both clients' teams with them.
-    secrets |= {"Autodesk app secret": autodeskdata.SECRET, "Autodesk personal access token": autodeskdata.PAT}
 
     secrets["monitoring token"] = system_health.new_token(db).removeprefix("osh_")
     secrets["monitoring token's hash"] = db.execute(
@@ -166,7 +163,6 @@ def planted(app, db, vault, cfg, world):  # noqa: F811
         ("users", "totp_secret_enc"),
         ("users", "totp_pending_enc"),
         ("setup_sign_ins", "device_code_enc"),
-        ("autodesk_sign_ins", "pat_enc"),
     ):
         for (value,) in db.execute(f"SELECT {column} FROM {table} WHERE {column} IS NOT NULL AND {column} != ''"):
             secrets[f"{table}.{column} as stored ({value[-8:]})"] = value[-40:]

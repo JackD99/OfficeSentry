@@ -44,7 +44,6 @@ from officesentry.reports import designs  # noqa: E402
 from tests import (  # noqa: E402
     adminactivitydata,
     auditdata,
-    autodeskdata,
     devicedata,
     graphdata,
     groupdata,
@@ -2471,7 +2470,6 @@ def populate(
     ids = [add_tenant(db, cid, t, now) for t in TENANTS]
     groups(db, ids)
     audit_log(db, vault, ids, now)
-    autodesk_licences(db, vault, ids, now)
     showcase = next((i for i, t in zip(ids, TENANTS, strict=False) if t["name"] == SHOWCASE), ids[0])
     evidence_answers(db, showcase)
     for part, price in PRICES.items():
@@ -2679,71 +2677,6 @@ def audit_log(db, vault, ids: list[int], now: datetime) -> None:
         status, _calls = auditdata.collect(db, tid, batches, now, tenant=f"{tid:08x}-0000-4000-8000-000000000000")
         if status != "succeeded":
             raise RuntimeError(f"The demo's audit log collection for {t['name']} ended {status}")
-
-
-# -- Autodesk licences ----------------------------------------------------------------------------------------------
-
-AUTODESK_TEAM = "61044820"  # made up, like Autodesk's team IDs
-# Each product: seats bought, the share of the client's people holding one, and days until it renews.
-AUTODESK_PRODUCTS = {
-    "AutoCAD": (10, (0, 7), 45),
-    "AutoCAD LT": (4, (7, 10), 20),
-    "Revit": (5, (2, 5), 210),
-    "Architecture Engineering & Construction Collection": (3, (10, 13), 300),
-}
-
-
-def autodesk_licences(db, vault, ids: list[int], now: datetime) -> None:
-    """Autodesk set up, Northwind Traders given its Autodesk team, and the team's seats read from a simulated
-    Autodesk reporting API, so the Autodesk licences report has something to show: seats bought and not given
-    out, a few nobody has opened for months, one held by a blocked account and one by someone who has left.
-    Demo data only: a real install starts with Autodesk off."""
-    from officesentry.snapshot import TenantSnapshot
-
-    t, north = TENANTS[0], ids[0]
-    users = TenantSnapshot(db, store.get_tenant(db, north)).objects("users", "user") or []
-    # Ann and the extra staff ("d000"...), not the shared mailboxes or the break-glass account; Robert's account
-    # (the fixture's "bob") is blocked.
-    people = [u for u in users if u["_id"] in ("u1", "u2") or u["_id"].startswith("d")]
-    named = {u["userPrincipalName"]: u.get("displayName") or "" for u in people}
-    members = sorted(u["userPrincipalName"] for u in people if u.get("accountEnabled"))
-    blocked = sorted(u["userPrincipalName"] for u in people if not u.get("accountEnabled"))
-    left = f"former.designer@{t['base']}.{t['tld']}"
-    named[left] = "Morgan Ellis"
-    rng = random.Random(t["name"] + "autodesk")  # noqa: S311 (demo data)
-    day = lambda n: (now - timedelta(days=n)).date().isoformat()  # noqa: E731
-
-    subscriptions = ["Subscription ID,Product,Seats,Status,Start date,End date,Term"]
-    users_file = ["Email,First name,Last name,Product,Subscription ID,Assigned date,Status"]
-    usage = ["Email,Full name,Product,Assigned date,Last accessed,Days used"]
-    for n, (product, (seats, (first, last), renews)) in enumerate(AUTODESK_PRODUCTS.items()):
-        sub = f"7{n + 1:02d}4410{n}"
-        subscriptions.append(f"{sub},{product},{seats},Active,{day(365 - renews)},{day(-renews)},Annual")
-        holders = members[first:last]
-        if product == "AutoCAD":
-            holders.append(left)  # left in the spring; nobody took the seat back
-        if product == "Revit" and blocked:
-            holders.append(blocked[0])  # blocked in Microsoft 365, still holding a seat
-        for i, upn in enumerate(holders):
-            given = rng.randint(40, 700)
-            idle = upn in (left, *blocked) or i % 4 == 3
-            last_used = rng.randint(100, 240) if idle else rng.choice([0, 0, 1, 1, 2, 3, 5, 8])
-            days_used = rng.randint(0, 3) if idle else rng.randint(25, 62)
-            first_name, _, last_name = named[upn].partition(" ")
-            users_file.append(f"{upn},{first_name},{last_name},{product},{sub},{day(given)},Active")
-            usage.append(f"{upn},{named[upn]},{product},{day(given)},{day(last_used)},{days_used}")
-    files = {
-        "SUBSCRIPTIONS": autodeskdata.csv_file(*subscriptions),
-        "USERS": autodeskdata.csv_file(*users_file),
-        "USAGE_REPORT": autodeskdata.csv_file(*usage),
-    }
-    autodeskdata.set_up(
-        db, vault, [autodeskdata.context(AUTODESK_TEAM, f"{t['name']} Design")], user="demo", label="Harbour IT"
-    )
-    autodeskdata.give(db, north, AUTODESK_TEAM, user="demo")
-    status, _calls = autodeskdata.collect(db, vault, north, autodeskdata.Autodesk({AUTODESK_TEAM: files}))
-    if status != "succeeded":
-        raise RuntimeError(f"The demo's Autodesk collection for {t['name']} ended {status}")
 
 
 def team(db, ids: list[int]) -> None:

@@ -69,8 +69,6 @@ VOLATILE: dict[str, tuple[str, ...]] = {
     "site": ("reportDate", "lastActivityDate", "storageUsed", "files", "activeFiles", "pageViews"),
     "mailbox_size": ("totalBytes", "itemCount", "deletedBytes"),
     "team": ("lastActivity", "activeUsers", "messages", "meetings"),
-    # Autodesk seats: when each was last used, and on how many of the last 90 days.
-    "autodesk_seat": ("lastUsed", "daysUsed", "lastSignIn"),
 }
 
 # A run still holds its snapshot: it stored nothing, or retention hasn't removed what it stored.

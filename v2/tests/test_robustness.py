@@ -47,7 +47,7 @@ from officesentry.db import connect, migrate
 from officesentry.reports import data_reports, evidence, monthly_review, scheme_export, schemes
 from officesentry.rules import RULES, SEVERITY_RANK, Finding, Rule, evaluate
 from officesentry.snapshot import TenantSnapshot
-from tests import auditdata, autodeskdata
+from tests import auditdata
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.stored import unpack
@@ -649,8 +649,7 @@ def test_report_survives_a_wrecked_tenant(wrecked_once, key):
 
 def test_monthly_review_and_evidence_survive_a_wrecked_tenant(db, vault, connection_id, client):
     tenant = wreck_tenant(db, connection_id)
-    auditdata.everywhere(db, vault)  # the add-ons' reports too
-    autodeskdata.everywhere(db, vault)
+    auditdata.everywhere(db, vault)  # the add-on's report too
     findings.sync(db, tenant)
     review = monthly_review.build(db, tenant)
     assert len(review.results) == len(RULES)
