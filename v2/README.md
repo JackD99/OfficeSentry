@@ -635,6 +635,7 @@ Each report is listed under its area in the report menu, in menu order.
   Federation changes, new app credentials, role grants and Conditional Access
   policies deleted or switched off are listed first, then every change and
   who made them.
+- *Autodesk licences*, for clients given an [Autodesk team](docs/autodesk.md): every Autodesk subscription with its seats bought and given out, who holds each seat and when they last used it in the last 90 days, seats bought but not given to anyone, and seats still held by someone whose Microsoft 365 account is blocked or gone. From Autodesk's Business Success Plan Reporting API, read-only. <!-- since 2.6.0 -->
 - *Service health*: whether each Microsoft 365 service is working for the client, Microsoft's open outages and advisories and those resolved in the last 30 days, and the message centre's upcoming changes, those with a date to act by first (flagged when due within 30 days), then major changes.
 
 ### Checks
@@ -756,6 +757,7 @@ work without it.
   by itself, what the person running it has to do, and reverse proxy setups
   for Caddy, nginx, Traefik and a CDN.
 - [The audit log add-on](docs/audit-log-addon.md): an optional second app that keeps who deleted, downloaded or shared files and who opened someone else's mailbox, for the clients who approve it.
+- [Autodesk licences](docs/autodesk.md): each client's Autodesk seats, who holds them and who hasn't used them, read with your own Autodesk app for the clients on Autodesk's Business Success Plan or Enterprise plan. <!-- since 2.6.0 -->
 
 ## Sign-in security
 

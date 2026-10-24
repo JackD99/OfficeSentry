@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from officesentry.reports import data_reports
 from officesentry.reports.rollups import Column, RollupRow
 from officesentry.web.filters import figure_columns
-from tests import auditdata
+from tests import auditdata, autodeskdata
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
@@ -50,7 +50,8 @@ def test_rollup_figures_line_up_with_numbers():
 
 def test_schedule_form_folds_detail_reports_by_group(client, db, vault, two_tenants):
     alpha, _ = two_tenants
-    auditdata.everywhere(db, vault)  # the add-on's report too
+    auditdata.everywhere(db, vault)  # the add-ons' reports too
+    autodeskdata.everywhere(db, vault)
     make_user(db, "admin")
     login(client, "admin")
     page = client.get(f"/tenants/{alpha}/schedules/new").get_data(as_text=True)
