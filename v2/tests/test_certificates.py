@@ -343,7 +343,7 @@ def test_a_warning_nobody_received_is_sent_again(cfg, db, vault, connection_id, 
         assert cert_lifecycle.warn(app, db, vault, cfg.base_url, now + cert_lifecycle.RETRY) == 1
     assert store.get_connection(db, connection_id)["expiry_warned"] == "30"
     details = [r[0] for r in db.execute("SELECT detail FROM audit_log WHERE action = 'certificate_expiry_warned'")]
-    assert details[0].endswith("webhook failed; trying again in 15 minutes") and details[1].endswith("webhook sent")
+    assert details[0].endswith("alert not posted; trying again in 15 minutes") and details[1].endswith("alert posted")
     assert not db.execute("SELECT 1 FROM settings WHERE key LIKE 'cert_warn_retry.%'").fetchone()
 
 

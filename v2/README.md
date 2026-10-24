@@ -245,6 +245,14 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   collection doesn't alert on what happened before it, and nothing new is
   needed from the client.
 <!-- /since -->
+<!-- since 2.6.0 -->
+- **Generic JSON alerts** also carry the alert's `severity` (`critical` to
+  `low`, or `info` for a report sent or something working again) and a `key`
+  that stays the same for the same problem (a collection that keeps failing, a
+  certificate, a system problem), with `resolves: true` on the message that
+  says it's over, so a ticketing system can update one ticket instead of
+  opening another.
+<!-- /since -->
 - **System status and system alerts** (Settings → System status): whether the
   worker runs, data is being collected, backups are recent and there's room on
   the disk, with what to do about anything that isn't. The team is emailed and
