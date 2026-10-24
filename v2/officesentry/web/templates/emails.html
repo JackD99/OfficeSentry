@@ -16,7 +16,7 @@
 
 <div class="tiles">
   {{ next_tile(upcoming, (tenants[upcoming.tenant_id].name if upcoming.tenant_id else upcoming.titles[0]) if upcoming else '') }}
-  <div class="tile"><div class="label">Scheduled emails</div><div class="value">{{ (schedules + digests + coming_up + view_emails)|selectattr('enabled')|list|length }}</div>
+  <div class="tile"><div class="label">Scheduled emails</div><div class="value">{{ (schedules + digests + coming_up + view_emails + ledgers)|selectattr('enabled')|list|length }}</div>
     <div class="foot">{{ schedules|map(attribute='tenant_id')|unique|list|length }} of {{ tenants|length }} clients covered</div></div>
   <div class="tile"><div class="label">Sent in the last 30 days</div><div class="value">{{ sent }}</div>
     <div class="foot">{{ tenant_alerts }} client alert{{ 's' if tenant_alerts != 1 }} on</div></div>
@@ -74,6 +74,17 @@
     {% else %}
     <p class="muted small">A weekly email for your team of what falls due in the next 90 days: renewals and trials, expiring app secrets and certificates, mailboxes filling up, DMARC still at p=none and accepted risks to review. <a href="{{ url_for('upcoming.index') }}">See it now</a>.</p>
     <a class="btn sm" href="{{ url_for('email.new_upcoming') }}">{{ icon('plus') }} Set up the weekly email</a>
+    {% endif %}
+  </section>
+
+  <section class="card" id="todays-ledger">
+    <div class="card-head"><h2>{{ icon('home') }} Today's ledger</h2></div>
+    {% if ledgers %}
+    <ul class="list sched-list compact-sched">{% for s in ledgers %}{{ schedule_item(s) }}{% endfor %}</ul>
+    <a class="btn sm" href="{{ url_for('email.new_ledger') }}">{{ icon('plus') }} Another one</a>
+    {% else %}
+    <p class="muted small">Every weekday morning, <a href="{{ url_for('home.today') }}">Today</a> in your team's inbox: what happened across your clients since the last email, worst first, with who each line is handed to. For people who start the day in their email.</p>
+    <a class="btn sm" href="{{ url_for('email.new_ledger') }}">{{ icon('plus') }} Set up the morning email</a>
     {% endif %}
   </section>
 

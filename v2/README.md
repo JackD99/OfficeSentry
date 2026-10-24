@@ -69,6 +69,17 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   every month; a phone shows the last three. It's built from the figures and
   findings Office Sentry already keeps, so nothing new is read from Microsoft.
 <!-- /since -->
+<!-- since 2.6.0 -->
+  **Our work this quarter** (`/across/our-work`, for people who see findings)
+  counts what the team got done over the three months ending this one, or the
+  three before: findings fixed (resolved in the quarter and not back since),
+  how many were critical or high, risks accepted, and Secure Score, users with
+  MFA and unused paid licences as the quarter began and as it ended. It's
+  broken down by client, month, check and the person each fixed finding was
+  handed to, with an XLSX of every table, a branded PDF for the management
+  meeting and a *PDF without names* (clients as Client 1, Client 2, and no team
+  names) to show a prospect. Built from what Office Sentry already keeps.
+<!-- /since -->
 - **What changed** (`/changes`, and each client's *Changes* tab): a standalone
   month-over-month report for the last 7, 30 or 90 days, or, on a client's
   *Changes* tab, between any two days the kept data reaches back to. It covers
@@ -145,6 +156,26 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   findings handed to you there, which keeps the sheet, filters and downloads,
   and every finding row tells staff who holds it. Client accounts never see who
   holds what.
+- **Today by email**: an admin can send Today's ledger to the team every weekday
+  morning (*Email reports → Today's ledger*), below.
+<!-- /since -->
+<!-- since 2.6.0 -->
+- **Office board** (`/board`, *Office board* on the Clients page): every client
+  on one dark, full-screen page for the office TV, without the menu. Each client
+  is a tile with its grade, open critical and high findings and Secure Score, or
+  a word when something needs someone: new critical or high findings in the last
+  day, *Not read* (outlined) when its collection failed, *Out of date*, *No
+  access yet* or what's due this week. Those come first, worst first. Above them
+  are five figures for the day: new critical and high findings, clients read in
+  the last 36 hours, what's due this week, lines not handed to anyone yet, and
+  critical and high findings fixed this week. The clock ticks and the page
+  reloads itself every 5 minutes. When there are more clients than fit the
+  screen, the ones that need someone stay and the rest take turns every 15
+  seconds. It needs the same access as Today and shows each client only what the
+  person signed in may see there; pick a client group first for a board of that
+  group. Sign the TV in with an account that holds only what the board should
+  show. Like any session it ends after `OFFICESENTRY_SESSION_HOURS` (8 unless
+  you set it), so the TV is signed in again each morning.
 <!-- /since -->
 - **Licence prices** (*Settings → Licence prices*): what a client pays for each
   licence a month, used to cost licence waste, right-sizing savings, renewals
@@ -212,6 +243,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   - A cross-client **digest** for your team, worst clients first.
   - A weekly **Coming up** email for your team, with the same list as the
     Coming up page above.
+  - **Today's ledger** for your team every weekday morning, at a time in its own timezone: what happened across every client (or one group) since the last email, worst first, with who each line is handed to, then what was seen before and is still open. Monday's covers the weekend, and snoozed lines are left out as on Today. <!-- since 2.6.0 -->
   - **Alert emails** when a scan finds something new and critical (or high), for
     one client or all of them. They come from the same alert event as the
     Teams/Slack alerts below. A client's first scan never emails.
@@ -441,6 +473,7 @@ Each report is listed under its area in the report menu, in menu order.
   check fails while any account is at risk, and the account's page flags it.
 - *Guests and sharing*: invitation, consent and SharePoint sharing settings,
   and every guest with invitation state and last sign-in.
+  Each guest's *From* names the organisation it comes from, to filter on. <!-- since 2.6.0 -->
 - *Deleted users and groups*: the Entra ID recycle bin. Every deleted user
   (member or guest, the licences it held) and deleted team or Microsoft 365
   group, when it was deleted and the days left before Microsoft removes it
@@ -470,6 +503,7 @@ Each report is listed under its area in the report menu, in menu order.
 - *Mailbox size trend*: each mailbox's growth over one and three months
   from Office Sentry's own kept snapshots, the date each will fill at that
   rate, and the client's total month by month.
+  *Months until full* gives the same forecast as a number to sort on. <!-- since 2.6.0 -->
 <!-- since 2.6.0 -->
 - *Outlook and mail apps*: which Outlook release each person connects with
   on Windows and Mac, flagged once Microsoft's support for it ends (Outlook
@@ -498,6 +532,7 @@ Each report is listed under its area in the report menu, in menu order.
   with empty, ownerless and unused lists flagged. How much mail each gets is
   counted from the message trace (`Get-MessageTraceV2`, read 10 days at a
   time from where the last run stopped) and kept per day for 90 days.
+  Lists hidden from the address list are marked. <!-- since 2.6.0 -->
 - *Mobile devices*: phones and tablets syncing mail (`Get-MobileDevice` and
   `Get-MobileDeviceStatistics`), with which app and when each last synced;
   leavers' devices still connected, ones waiting for approval and ones

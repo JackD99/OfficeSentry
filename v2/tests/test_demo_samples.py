@@ -93,11 +93,14 @@ def test_demo_reports_add_up(app, db, vault):
             assert f"{report.new_count} new item" in " ".join(summary.monthly(report).paragraphs)
 
         # Guests: the fixtures' guest keeps its account type when its name is changed, and every guest has an
-        # address, a name and an invitation date, as a real tenant's do.
+        # address, a name, the organisation it's from and an invitation date, as a real tenant's do.
         guests = data_reports.build(db, tenant, "guests")
         listed = next(s for s in guests.sections if s.title == "Guest accounts")
         assert listed.rows, tenant["name"]
-        assert all("@" in r[0] and "#EXT#" not in r[0] and r[1] and r[2] for r in listed.rows), listed.rows
+        assert all(
+            "@" in r[0] and "#EXT#" not in r[0] and r[1] and r[2] == r[0].rsplit("@", 1)[1] and r[3]
+            for r in listed.rows
+        ), listed.rows
         _identity_adds_up(db, tenant)
 
         # SharePoint storage: the parts make up what's used, and used plus free is the tenant's total.

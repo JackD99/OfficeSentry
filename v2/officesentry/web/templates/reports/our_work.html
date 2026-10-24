@@ -1,0 +1,100 @@
+{#- Our work this quarter (reports/our_work.py) as a branded PDF, for the management meeting. With named off
+    (?names=0, to show a prospect) clients are "Client 1", "Client 2"... in the order listed and the team isn't
+    named. The web page is our_work.html. -#}
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+{% set document = true %}
+{% set scope_label = group_scope.label if group_scope else 'All clients' %}
+{% macro client_name(c, i) -%}{{ c.tenant.name if named else 'Client ' ~ i }}{%- endmacro %}
+{% macro moved(m, figure) -%}
+{% if m is none or m.end is none %}<span class="muted">–</span>
+{%- else %}{% set c = m.change %}{{ '%g'|format(m.end|round|int) }}{{ figure.unit }}{% if c %} <span class="{{ 'better' if (c > 0) == (figure.better == 'up') else 'worse' }} small">{{ '%+g'|format(c|round|int) }}</span>{% endif %}
+{%- endif %}
+{%- endmacro %}
+
+{% block doc_title %}Our work, {{ work.label }}{% endblock %}
+{% block client %}{{ scope_label if named else 'Our clients' }}{% endblock %}
+{% block footer_note %}{{ brand.display_name }}{{ ': ' ~ scope_label if named else '' }}{% endblock %}
+{% block cover_subtitle %}<div class="client">What we got done{{ ' so far' if work.so_far }}</div>{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Date', prepared|day) }}
+  {{ ui.meta('Clients', work.clients|length) }}
+  {{ ui.meta('Quarter', work.label) }}
+{% endblock %}
+{% block contents %}
+  <li><a href="#summary">The quarter at a glance</a></li>
+  <li><a href="#fixed">What was fixed</a></li>
+  <li><a href="#clients">By client</a></li>
+  {% if named and work.people %}<li><a href="#people">Who fixed it</a></li>{% endif %}
+{% endblock %}
+
+{% block body %}
+<section class="doc-section" id="summary">
+<h2>The quarter at a glance</h2>
+<p class="lede">{% if work.worked %}From {{ work.label }}{{ ' so far' if work.so_far }}, {{ brand.display_name }} fixed {{ work.fixed|plural('security finding') }}{% if work.severe %}, {{ work.severe }} of them critical or high,{% endif %} across {% if work.worked|length == work.clients|length %}{{ {1: 'its one client', 2: 'both its clients'}.get(work.clients|length, 'all ' ~ work.clients|length ~ ' of its clients') }}{% else %}{{ work.worked|length }} of {{ work.clients|length|plural('client') }}{% endif %}{% if work.accepted %}, and agreed with clients to accept {{ work.accepted|plural('risk') }}{% endif %}.{% else %}Nothing was fixed or accepted from {{ work.label }}{{ ' so far' if work.so_far }}.{% endif %}</p>
+{% set up = work.improved('secure_score.pct') if work.figures|selectattr('key', 'equalto', 'secure_score.pct')|list else none %}
+{% set licences = work.figures|selectattr('key', 'equalto', 'licences.unassigned_paid')|list %}
+{% call ui.figures(2 + (1 if up is not none else 0) + (1 if licences else 0)) %}
+  {{ ui.figure('Findings fixed', work.fixed, work.severe ~ ' critical or high', 'ok' if work.fixed else none) }}
+  {{ ui.figure('Risks accepted', work.accepted, 'decided with the client') }}
+  {% if up is not none %}{{ ui.figure('Secure Score up', up|length, ('client' if up|length == 1 else 'clients') ~ ' higher than when the quarter began', 'ok' if up else none) }}{% endif %}
+  {% if licences %}{{ ui.figure('Unused licences cut', work.unused_removed, 'paid licences nobody had', 'ok' if work.unused_removed else none) }}{% endif %}
+{% endcall %}
+
+<h3>Month by month</h3>
+<div class="table-wrap"><table class="data">
+  <thead><tr><th>Month</th><th class="num">Findings fixed</th><th class="num">Critical and high</th><th class="num">Risks accepted</th></tr></thead>
+  <tbody>
+  {% for m in work.months %}<tr><td>{{ m.month.strftime('%B %Y') }}{{ ' (so far)' if loop.last and work.so_far }}</td><td class="num">{{ m.fixed }}</td><td class="num">{{ m.severe }}</td><td class="num">{{ m.accepted }}</td></tr>{% endfor %}
+  </tbody>
+  <tfoot><tr><td><strong>The quarter</strong></td><td class="num"><strong>{{ work.fixed }}</strong></td><td class="num"><strong>{{ work.severe }}</strong></td><td class="num"><strong>{{ work.accepted }}</strong></td></tr></tfoot>
+</table></div>
+</section>
+
+<section class="doc-section" id="fixed">
+<h2>What was fixed <span class="count">{{ work.checks|length }}</span></h2>
+{% if work.checks %}
+<p class="section-intro">Each check whose findings were fixed, most fixed first, with how many clients it was fixed for.</p>
+<div class="table-wrap"><table class="data">
+  <thead><tr><th>Check</th><th>Worst severity</th><th class="num">Fixed</th><th class="num">Clients</th></tr></thead>
+  <tbody>
+  {% for k in work.checks[:25] %}<tr><td>{{ k.title }}</td><td>{{ ui.sev(k.severity) }}</td><td class="num">{{ k.fixed }}</td><td class="num">{{ k.clients|length }}</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+{% if work.checks|length > 25 %}<p class="muted small">…and {{ work.checks|length - 25 }} more checks.</p>{% endif %}
+{% else %}<p class="empty-note">Nothing fixed {{ 'yet ' if work.so_far }}this quarter.</p>{% endif %}
+</section>
+
+<section class="doc-section" id="clients">
+<h2>By client <span class="count">{{ work.clients|length }}</span></h2>
+<p class="section-intro">Most fixed first. Each figure is where it ended the quarter, with how far it moved since the quarter began.</p>
+<div class="table-wrap"><table class="data">
+  <thead><tr><th>Client</th><th class="num">Fixed</th><th class="num">Critical and high</th><th class="num">Risks accepted</th>
+    {% for f in work.figures %}<th class="num">{{ f.label }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for c in work.clients %}
+  <tr><td><strong>{{ client_name(c, loop.index) }}</strong></td><td class="num">{{ c.fixed }}</td><td class="num">{{ c.severe }}</td><td class="num">{{ c.accepted }}</td>
+    {% for f in work.figures %}<td class="num">{{ moved(c.figures.get(f.key), f) }}</td>{% endfor %}</tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+</section>
+
+{% if named and work.people %}
+<section class="doc-section" id="people">
+<h2>Who fixed it</h2>
+<p class="section-intro">Findings fixed while they were handed to someone on the team.</p>
+<div class="table-wrap"><table class="data">
+  <thead><tr><th>Person</th><th class="num">Fixed</th><th class="num">Critical and high</th><th class="num">Clients</th></tr></thead>
+  <tbody>
+  {% for p in work.people %}<tr><td>{{ p.name }}</td><td class="num">{{ p.fixed }}</td><td class="num">{{ p.severe }}</td><td class="num">{{ p.clients|length }}</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+</section>
+{% endif %}
+
+<footer class="about keep">
+  <p>Prepared by {{ brand.display_name }} from what Office Sentry keeps for each client; nothing was read from or changed in Microsoft 365 for it. A finding counts as fixed in the month a collection no longer found it, and not at all if it has come back since. Figures are the last reading before the quarter began, or its first in the quarter, and the last in it.</p>
+</footer>
+{% endblock %}
