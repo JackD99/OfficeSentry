@@ -267,6 +267,12 @@ report from its menu to compare it across every client (one row each, every figu
 lists month-over-month changes: new and fixed findings, admin, account, Conditional Access, forwarding, app, device
 and group changes, and a row-by-row comparison of every detail report.
 
+<!-- since 2.6.0 -->
+**Over time** puts one measure for every client side by side, month by month over the last year: open critical and
+high findings, Secure Score, users with MFA or unassigned paid licences. Each value is shaded by how good it is, and
+the clients that slipped come first.
+<!-- /since -->
+
 <table>
   <tr>
     <td width="50%"><img src="docs/screenshots/all-tenants.png" alt="The Clients page showing MFA coverage for every client"></td>
