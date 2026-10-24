@@ -294,7 +294,7 @@ only an empty one, and are tested with simulated data only:
 - **BitLocker recovery keys**: the tenant hasn't approved
   BitLockerKey.ReadBasic.All yet, so the replay covers the waiting state.
 - **Windows LAPS, Defender alerts and service health**: recorded before the 2.4 permissions, so the replay covers the waiting state and the rest is simulated.
-- **AI agents**: recorded before the 2.6 permission (AgentIdentity.Read.All), so the replay covers the waiting state and the rest is simulated. <!-- since 2.6.0 -->
+- **AI agents**: recorded before the 2.6 permission (AgentIdentity.Read.All), so the replay covers the waiting state and the rest is simulated.
 - **Mail connectors and changed protection policies**: the tenant's mail flow
   rule and its default and preset protection policies are real, but it has no
   connectors, allowed or blocked senders, or policies of its own, so those are

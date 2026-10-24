@@ -49,7 +49,7 @@ them, and exports reports or emails them on a schedule.
 
 Open source (AGPL-3.0), read-only and built for MSPs: two Docker containers on a server you run (Linux, or
 Windows without Docker), with one read-only app that each client's admin approves from a link, or your
-technician approves through GDAP. It has 53 detail reports and 71 checks, and every report has a view across
+technician approves through GDAP. It has 57 detail reports and 71 checks, and every report has a view across
 all clients, worst first. History is kept (each day for 30 days and each month for a year by default, longer
 if you choose), so each report shows what changed since last month. Sign-ins and admin changes go back
 beyond Microsoft's 30 days. For clients it writes a branded monthly review, evidence for Cyber Essentials,
@@ -77,9 +77,9 @@ Being plain about it saves everyone time:
 - It doesn't read on-premises Active Directory. File, sharing and mailbox activity from the unified audit
   log comes from the optional [audit log add-on](../../../v2/docs/audit-log-addon.md), for clients who
   approve it.
-- It has 53 detail reports with filters, saved views and exports, not thousands of report variants.
-- It reports once a night (or when you ask), not in real time, and alerts by email, Teams, Slack or a
-  webhook rather than through a PSA.
+- It has 57 detail reports with filters, saved views and exports, not thousands of report variants.
+- It reports once a night (or when you ask), not in real time, and alerts by email, Teams, Slack, a
+  webhook or a ticket in Autotask PSA; other PSAs take alerts through the webhook.
 - You run it yourself, on a Linux server with Docker (or Windows without it). There's no hosted version, and
   support is the docs and GitHub Discussions.
 

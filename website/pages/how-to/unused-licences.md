@@ -56,11 +56,9 @@ for one client or all of them.
   with the monthly cost. The monthly review leads with that figure.
 - **Licence right-sizing** lists people who could move to a cheaper licence and the saving: nothing used in
   30 days, only email used, no desktop Office apps used, Copilot unused.
-<!-- since 2.6.0 -->
 - **Microsoft 365 Copilot** lists the Copilot licences nobody used in 30 days, with what each costs a month,
   the ones bought but not assigned, and the busiest people without Copilot, so an unused licence goes to
   someone who will use it.
-<!-- /since -->
 - **Licences and subscriptions** shows every subscription with its renewal date, trials about to end and
   group licensing errors in plain words, and **Licence changes** shows who was given or lost a licence each
   month, and by whom.

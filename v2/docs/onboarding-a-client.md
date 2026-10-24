@@ -136,7 +136,7 @@ account in the client's tenant:
    *Service management* links), they assign Global Reader to the app, as in
    [3. Assign Global Reader](#3-assign-global-reader-for-mailbox-data) below.
 
-To approve several clients one after another, see [Approving several clients yourself](#approving-several-clients-yourself) below. <!-- since 2.6.0 -->
+To approve several clients one after another, see [Approving several clients yourself](#approving-several-clients-yourself) below.
 
 What Microsoft documents means for Office Sentry (its own words are quoted under this list):
 
@@ -233,7 +233,7 @@ can't provide. A large tenant can take a while. To collect again later, use
 *Settings → Client settings → Onboarding* (needs *Manage clients*) is for adding clients in
 bulk and following each one through consent.
 
-If you manage your clients through Partner Center with GDAP, you can pick them from your customer list instead, and approve the ones your roles allow yourself, one after another: see [Adding clients from Partner Center](#adding-clients-from-partner-center-gdap) and [Approving several clients yourself](#approving-several-clients-yourself) below. <!-- since 2.6.0 -->
+If you manage your clients through Partner Center with GDAP, you can pick them from your customer list instead, and approve the ones your roles allow yourself, one after another: see [Adding clients from Partner Center](#adding-clients-from-partner-center-gdap) and [Approving several clients yourself](#approving-several-clients-yourself) below.
 
 1. **Import from CSV.** One row per client with column names on the first
    row: `name` and `tenant` (the tenant ID or any domain the tenant uses), and
@@ -285,7 +285,6 @@ Imported clients are ordinary clients: people whose role covers every client
 given access, one by one or through a group (someone given a group sees the
 imported clients in it).
 
-<!-- since 2.6.0 -->
 ### Adding clients from Partner Center (GDAP)
 
 If you're a Microsoft partner with GDAP relationships, Office Sentry can read your customer list so you don't
@@ -346,7 +345,6 @@ clients and where each one has got:
 
 Each consent link works once, for an hour, in the browser that opened it, as on the client's own page. Reload
 the page for fresh links.
-<!-- /since -->
 
 ## 5. Connection health: the Manage page
 

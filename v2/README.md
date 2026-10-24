@@ -59,7 +59,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   in one grid, a square per check grouped by area, with a page per area that
   names each check and XLSX and CSV downloads; a failing or accepted square opens
   that client's findings.
-<!-- since 2.6.0 -->
   **Over time** (`/across/over-time`) shows one measure for every client month
   by month over the last 12 months: open critical and high findings, Secure
   Score, users with MFA or unassigned paid licences. Each value is taken at the
@@ -68,8 +67,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   and slipped and the total or average across them. XLSX and CSV downloads have
   every month; a phone shows the last three. It's built from the figures and
   findings Office Sentry already keeps, so nothing new is read from Microsoft.
-<!-- /since -->
-<!-- since 2.6.0 -->
   **Our work this quarter** (`/across/our-work`, for people who see findings)
   counts what the team got done over the three months ending this one, or the
   three before: findings fixed (resolved in the quarter and not back since),
@@ -79,7 +76,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   handed to, with an XLSX of every table, a branded PDF for the management
   meeting and a *PDF without names* (clients as Client 1, Client 2, and no team
   names) to show a prospect. Built from what Office Sentry already keeps.
-<!-- /since -->
 - **What changed** (`/changes`, and each client's *Changes* tab): a standalone
   month-over-month report for the last 7, 30 or 90 days, or, on a client's
   *Changes* tab, between any two days the kept data reaches back to. It covers
@@ -89,11 +85,9 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   report areas they open on that client, and findings only with findings.
 - **Downloads**: the reports above have CSV and XLSX. Values from clients can
   never become spreadsheet formulas.
-<!-- since 2.6.0 -->
 - **Copy**: a report table's *Copy* button puts the rows shown (after its
   filters and search) on the clipboard with their headings, as a table to paste
   into a ticket, an email or Teams, or into a spreadsheet.
-<!-- /since -->
 - **Activity history** (`/tenants/<id>/activity`, a client's *Changes →
   Activity history*, staff only): every sign-in and directory audit event
   Office Sentry has read, kept beyond the 30 days Microsoft keeps them
@@ -137,12 +131,10 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   ("north mfa pdf") for the report's file.
   Enter opens the highlighted row, and the last row searches everything for
   what you typed. While the box is empty it shows the places you opened last.
-<!-- since 2.6.0 -->
 - **Keyboard shortcuts** (staff): `?` on any page lists them. `j` and `k` move
   down and up the rows of a table, Enter or `o` opens the row (a finding's
   sheet on Findings), and `g` then a letter opens an entry of the menu (`g c`
   Clients, `g r` Reports).
-<!-- /since -->
 - **Home pages** (staff): **Today** (`/today`, for technicians) is a ledger of
   what happened across your clients, one line per thing, worst first, each with
   the time it happened: critical and high findings first seen or back,
@@ -160,7 +152,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   *Account* page or with *Make this my home page*; *Home* in the menu and the logo
   open it, and signing in lands there. Until the first collection has run,
   admins see the **Get started** checklist there instead.
-<!-- since 2.6.0 -->
 - **Handed to you**: the lines handed to you sit together at the top of Today,
   above the ledger, with who handed each one on, and still count in the opening
   sentence. A client's Findings tab has a *Handed to me* view of the open
@@ -169,8 +160,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   holds what.
 - **Today by email**: an admin can send Today's ledger to the team every weekday
   morning (*Email reports → Today's ledger*), below.
-<!-- /since -->
-<!-- since 2.6.0 -->
 - **Office board** (`/board`, *Office board* on the Clients page): every client
   on one dark, full-screen page for the office TV, without the menu. Each client
   is a tile with its grade, open critical and high findings and Secure Score, or
@@ -187,7 +176,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   group. Sign the TV in with an account that holds only what the board should
   show. Like any session it ends after `OFFICESENTRY_SESSION_HOURS` (8 unless
   you set it), so the TV is signed in again each morning.
-<!-- /since -->
 - **Licence prices** (*Settings → Licence prices*): what a client pays for each
   licence a month, used to cost licence waste, right-sizing savings, renewals
   and the Accounts page. A licence's price is your own price for it when you've
@@ -199,7 +187,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   discount. A client with a different reseller or a discount can have **its own
   margin**, which replaces yours on its licences. Priced reports tell the team
   where their prices came from; clients and downloads never see the margin.
-<!-- since 2.6.0 -->
 - **Import a price list** (*Settings → Licence prices → Import a price list*):
   paste or upload whatever your reseller exports, in any currency. The columns
   don't have to be in any order: the headings on the first row say which holds
@@ -208,7 +195,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   are divided by 12. You see every row, what it matched and what will change
   before anything is saved; rows that aren't licences Office Sentry reports on
   are left out.
-<!-- /since -->
 - **Findings** (`/tenants/<id>/findings`): every finding keeps first seen,
   resolved and reopened dates. Anyone who can accept risks (Second line, Team
   leader and Administrator by default) can accept one with a reason and an
@@ -254,7 +240,7 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   - A cross-client **digest** for your team, worst clients first.
   - A weekly **Coming up** email for your team, with the same list as the
     Coming up page above.
-  - **Today's ledger** for your team every weekday morning, at a time in its own timezone: what happened across every client (or one group) since the last email, worst first, with who each line is handed to, then what was seen before and is still open. Monday's covers the weekend, and snoozed lines are left out as on Today. <!-- since 2.6.0 -->
+  - **Today's ledger** for your team every weekday morning, at a time in its own timezone: what happened across every client (or one group) since the last email, worst first, with who each line is handed to, then what was seen before and is still open. Monday's covers the weekend, and snoozed lines are left out as on Today.
   - **Alert emails** when a scan finds something new and critical (or high), for
     one client or all of them. They come from the same alert event as the
     Teams/Slack alerts below. A client's first scan never emails.
@@ -276,7 +262,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   "Signed webhooks"); only https URLs that
   resolve to public addresses are called (`OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS=1`
   allows internal ones).
-<!-- since 2.6.0 -->
 - **Activity alerts** (Settings → Alerts, "Changes in a client's tenant"): the
   same webhook when someone makes a risky change in a client's tenant, read from
   its directory audit log each time it's collected: someone given an admin role
@@ -287,16 +272,12 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   client's Admin activity report; tick the ones you want. A client's first
   collection doesn't alert on what happened before it, and nothing new is
   needed from the client.
-<!-- /since -->
-<!-- since 2.6.0 -->
 - **Generic JSON alerts** also carry the alert's `severity` (`critical` to
   `low`, or `info` for a report sent or something working again) and a `key`
   that stays the same for the same problem (a collection that keeps failing, a
   certificate, a system problem), with `resolves: true` on the message that
   says it's over, so a ticketing system can update one ticket instead of
   opening another.
-<!-- /since -->
-<!-- since 2.6.0 -->
 - **Autotask PSA** (Settings → Autotask PSA, [setting it up](docs/autotask.md)):
   a ticket in the MSP's own Autotask for the alerts chosen there (new findings
   at or above their own severity, risky changes, a collection that starts
@@ -307,7 +288,6 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   one ticket and gets a note when it clears, and a ticket Autotask didn't take
   is tried again for up to 11 hours. An API user's secret and tracking
   identifier are stored encrypted; the only writes are new tickets and notes.
-<!-- /since -->
 - **System status and system alerts** (Settings → System status): whether the
   worker runs, data is being collected, backups are recent and there's room on
   the disk, with what to do about anything that isn't. The team is emailed and
@@ -356,13 +336,11 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   *Show as it was on* (`?on=`) shows a report, its PDF and its XLSX as the
   client was at the end of any earlier day the kept data reaches back to (the
   daily history, 25 months by default), with a link to what changed since then.
-<!-- since 2.6.0 -->
 - **Favourite reports**: *Favourite* on a detail report puts it in your
   favourites, which list first in the "All reports" menu and on the Reports tab
   of every client you open that report on, in the order you starred them (up
   to 30). They're your own, not shared with the team; press it again to take
   the star off.
-<!-- /since -->
 - **Evidence and certifications** (`/tenants/<id>/evidence`): the client's
   schemes, each judged from the data. **Cyber Essentials** and **CE Plus**
   (`/tenants/<id>/evidence/cyber-essentials`, PDF, Word, text, XLSX, CSV)
@@ -484,7 +462,7 @@ Each report is listed under its area in the report menu, in menu order.
   check fails while any account is at risk, and the account's page flags it.
 - *Guests and sharing*: invitation, consent and SharePoint sharing settings,
   and every guest with invitation state and last sign-in.
-  Each guest's *From* names the organisation it comes from, to filter on. <!-- since 2.6.0 -->
+  Each guest's *From* names the organisation it comes from, to filter on.
 - *Deleted users and groups*: the Entra ID recycle bin. Every deleted user
   (member or guest, the licences it held) and deleted team or Microsoft 365
   group, when it was deleted and the days left before Microsoft removes it
@@ -514,8 +492,7 @@ Each report is listed under its area in the report menu, in menu order.
 - *Mailbox size trend*: each mailbox's growth over one and three months
   from Office Sentry's own kept snapshots, the date each will fill at that
   rate, and the client's total month by month.
-  *Months until full* gives the same forecast as a number to sort on. <!-- since 2.6.0 -->
-<!-- since 2.6.0 -->
+  *Months until full* gives the same forecast as a number to sort on.
 - *Outlook and mail apps*: which Outlook release each person connects with
   on Windows and Mac, flagged once Microsoft's support for it ends (Outlook
   2016 and 2019 ended on 14 Oct 2025, and Outlook 2021 on 13 Oct 2026),
@@ -524,7 +501,6 @@ Each report is listed under its area in the report menu, in menu order.
   scanner sending as someone); and every mail app each person used in the
   last 30 days. From Microsoft's email apps usage report
   (`Reports.Read.All`), so it needs no Entra ID P1.
-<!-- /since -->
 - *Mail flow by domain*: for each of the tenant's domains, how much mail
   came in, went out and passed between colleagues, and how much was
   delivered, sent to Junk, quarantined or failed, counted per day from the
@@ -543,7 +519,7 @@ Each report is listed under its area in the report menu, in menu order.
   with empty, ownerless and unused lists flagged. How much mail each gets is
   counted from the message trace (`Get-MessageTraceV2`, read 10 days at a
   time from where the last run stopped) and kept per day for 90 days.
-  Lists hidden from the address list are marked. <!-- since 2.6.0 -->
+  Lists hidden from the address list are marked.
 - *Mobile devices*: phones and tablets syncing mail (`Get-MobileDevice` and
   `Get-MobileDeviceStatistics`), with which app and when each last synced;
   leavers' devices still connected, ones waiting for approval and ones
@@ -660,7 +636,6 @@ Each report is listed under its area in the report menu, in menu order.
   in (signing people in, on its own, or called as an API), from Entra ID's
   app sign-in activity (needs Entra ID P1). Apps unused for 90 days that
   still hold application permissions or consent are flagged.
-<!-- since 2.6.0 -->
 - *AI agents*: the AI agents with their own identity in Entra ID
   (Microsoft Entra Agent ID, from tools such as Copilot Studio): which app
   made each and from which blueprint, whether it's switched on, what it can
@@ -669,7 +644,6 @@ Each report is listed under its area in the report menu, in menu order.
   directory or hold a powerful role, and agents Microsoft has switched off,
   are flagged. Needs `AgentIdentity.Read.All`, added in 2.6; until a client
   approves it the report says it's waiting.
-<!-- /since -->
 
 #### Tenant and licences
 
@@ -689,7 +663,6 @@ Each report is listed under its area in the report menu, in menu order.
   conflicting or missing base licences, usage location) in plain words with
   what to do; licensed accounts without a usage location; licences assigned
   both directly and by a group; and the groups that hand licences out.
-<!-- since 2.6.0 -->
 - *Licence features*: what the client's licences actually cover. Each
   feature Office Sentry reports on (Entra ID P1 and P2, Intune, Defender for
   Office 365 P1 and P2, Exchange Online, SharePoint) with whether it's
@@ -703,7 +676,6 @@ Each report is listed under its area in the report menu, in menu order.
   Features come from the service plans inside the licences, the same reading
   the collectors go by (`officesentry/capabilities.py`; collectors declare
   what they need with `needs` and `more_with`, checks with `@rule(needs=...)`).
-<!-- /since -->
 - *Licence changes*: every paid licence given to or taken from an account,
   from Office Sentry's own kept collections (to the day for the last month,
   to the month before that), whether it came directly or from a group, and
@@ -734,7 +706,6 @@ Each report is listed under its area in the report menu, in menu order.
   was last active in each service, Office apps by platform (Windows, Mac,
   mobile, web), Office installs per person, and email and Teams activity
   counts. From Microsoft's usage reports (`Reports.Read.All`).
-<!-- since 2.6.0 -->
 - *Microsoft 365 Copilot*: who uses the Copilot licences you pay for (share
   of people with Copilot who used it in the last 30 days, with a trend from
   Office Sentry's own history), in which apps (Copilot Chat, Teams, Outlook,
@@ -751,7 +722,6 @@ Each report is listed under its area in the report menu, in menu order.
   all count; a suite's Copilot has no price of its own, so it isn't costed.
   From Microsoft's Copilot usage reports (`Reports.Read.All`); not offered
   in GCC High, DoD or 21Vianet.
-<!-- /since -->
 - *Tenant settings*: what users and guests can do without an admin
   (create tenants, register apps, join by verifying an email address,
   sign up for trials, guest directory access) against the recommended
@@ -840,7 +810,6 @@ and subtitle take `{client}`, `{month}`, `{quarter}`, `{msp}` and `{date}`, and 
 Anyone who can *Design custom reports* makes and edits them; removing
 one also needs *Settings*, since it comes out of any plan or schedule that sent it.
 
-<!-- since 2.6.0 -->
 The **Client documentation** starting point documents how a client's Microsoft 365 is set up rather than how
 it's doing: a **Documentation section** block per topic (domains and DNS, admins, Conditional Access, sign-in
 methods and passwords, tenant settings, trusted organisations and locations, mail rules and protection, shared
@@ -849,7 +818,6 @@ groups, SharePoint sites). Each shows the tables of the detail report that descr
 "needs attention" lists, severity flags or "what to check" columns, up to 50 rows a table; there's no verdict on
 the cover, and a long contents list goes in two columns. Sent monthly by a plan or an email schedule, every copy
 is kept in the client's Report history, so the newest is always current.
-<!-- /since -->
 
 Setup notes written for your team (a detail report saying Microsoft is hiding people's names, and how to
 sign in as a Global Admin to show them) stay out of the client's copy unless the report's **Include setup
@@ -900,7 +868,7 @@ work without it.
   by itself, what the person running it has to do, and reverse proxy setups
   for Caddy, nginx, Traefik and a CDN.
 - [The audit log add-on](docs/audit-log-addon.md): an optional second app that keeps who deleted, downloaded or shared files and who opened someone else's mailbox, for the clients who approve it.
-- [Autotask PSA](docs/autotask.md): a ticket in your Autotask, in the client's company, for the alerts you choose. <!-- since 2.6.0 -->
+- [Autotask PSA](docs/autotask.md): a ticket in your Autotask, in the client's company, for the alerts you choose.
 
 ## Sign-in security
 
@@ -1040,11 +1008,9 @@ and follows it through consent, Global Reader and its first collection.
 
 - **Settings** in the menu opens *Client settings*. Every settings page opens with the Settings heading, its four areas as tabs and the open area's pages under them, then the page's own title: *Clients* (Client settings, Client groups, App connection), *Reports and email* (Branding, Licence prices, Email delivery, Alerts), *Team* (Users, Microsoft sign-in, Activity log) and *System* (System status, Data retention, Updates, Support). These docs name the page, as in *Settings → Email delivery*.
 - **Switch client**, beside a client's name (staff who see more than one client): opens the page you're on for another client you see, within the client group you picked, with a box to find one by name. From an account, mailbox, group or site it opens that client's list, and a report the other client doesn't have, or that you can't open there, opens its Reports tab.
-<!-- since 2.6.0 -->
 - **Recent clients**: *Switch client* lists the clients you opened last first, under *Recent*: the client
   you're on, then up to five more. They're kept in the browser for your account, so another computer starts
   its own list.
-<!-- /since -->
 - **Client settings** (*Settings → Client settings*, or *Connection health* on
   the Clients page) lists every client with its status (*Onboarding*,
   *Healthy*, *Needs attention*, *Paused*, *Archived*), consent, missing
@@ -1059,7 +1025,6 @@ and follows it through consent, Global Reader and its first collection.
   Global Reader missing, Connected), with its consent link, an email to send,
   a consent pack PDF and a CSV of every link for a mail merge
   ([Onboarding a client](docs/onboarding-a-client.md#onboarding-many-clients)).
-<!-- since 2.6.0 -->
 - **Add from Partner Center** (*Onboarding*): for Microsoft partners with GDAP, one sign-in in your own tenant
   lists every GDAP customer with whether your roles let you approve Office Sentry for it; tick the ones to add.
   Read-only, in your own tenant only, and nothing is kept but the list, for a day
@@ -1068,7 +1033,6 @@ and follows it through consent, Global Reader and its first collection.
   Administrator or through GDAP, one after another: each comes straight back from Microsoft's page and the next
   one opens, with a link to each client's Entra admin centre for Global Reader
   ([Approving several clients yourself](docs/onboarding-a-client.md#approving-several-clients-yourself)).
-<!-- /since -->
 - A client's **Settings → Manage** page (staff, not client accounts) shows its connection health:
   consent, sign-in, which of the app's permissions the tenant actually granted,
   whether the app holds Global Reader (or more than it needs), licences, last
