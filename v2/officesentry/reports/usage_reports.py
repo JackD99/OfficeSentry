@@ -279,7 +279,7 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
     # A mailbox is the account's by its directory id; its address needn't be the sign-in name.
     by_id = {b["mailboxId"]: b for b in boxes or [] if b.get("mailboxId")}
     by_mail = {(b.get("mailbox") or "").lower(): b for b in boxes or []}
-    prices = load_prices(snap.conn)
+    prices = load_prices(snap.conn, snap.tenant)
     currency = setting(snap.conn, "currency", "GBP")
     # People who rely on a security suite's Intune and Entra ID P1: a device Intune manages, or an admin role.
     managed = {

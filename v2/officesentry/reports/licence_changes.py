@@ -270,7 +270,7 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         report.unavailable = "Users and licences haven't been collected yet. Refresh Users on the client page."
         return
     conn = snap.conn
-    prices = load_prices(conn)
+    prices = load_prices(conn, snap.tenant)
     currency = setting(conn, "currency", "GBP")
 
     # Licences bought and assigned at each kept Tenant profile collection; the newest name for each SKU.

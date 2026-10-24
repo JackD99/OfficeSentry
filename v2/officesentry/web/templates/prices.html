@@ -2,30 +2,85 @@
 {% block title %}Licence prices · Office Sentry{% endblock %}
 {% block content %}
 <div class="page-head"><div><h2 class="page-title">Licence prices</h2>
-  <div class="sub">What you pay per licence per month. Used to put a cost on unused licences and on right-sizing savings in reports. Leave a price blank to show counts only.</div></div></div>
+  <div class="sub">What your clients pay for each licence per month. Licence waste, right-sizing savings and the Accounts page put money on licences with these, for each client at its margin.</div></div></div>
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="grid-main">
+    <section class="card">
+      <h2>How prices are worked out</h2>
+      <p class="muted small">A licence's price is your own price for it when you've entered one, else Microsoft's list price, plus your margin: what your reseller adds and what you add, in one percentage.</p>
+      <div class="form-row">
+        <label>Currency
+          <select name="currency">{% for c in currencies %}<option {% if c == currency %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+          <span class="hint">Every price here is in this currency.</span></label>
+        <label>Your margin (%)
+          <input name="margin" inputmode="decimal" placeholder="0" value="{{ '%g'|format(book.margin) if book.margin else '' }}">
+          <span class="hint">Added to every price. Negative for a discount.</span></label>
+      </div>
+      <label class="check"><input type="checkbox" name="use_list" value="1" {% if book.use_list %}checked{% endif %}> Use Microsoft's list price for licences you haven't priced</label>
+      <p class="footnote">{{ list_source }}, from {{ list_as_of|day }}, updated in an Office Sentry release when Microsoft changes them.
+        {% if currency != list_currency %}They're built in for US dollars only: with {{ currency }}, enter your own prices below (your reseller's price list has them).{% endif %}</p>
+    </section>
+    <section class="card">
+      <h2>In use now</h2>
+      {% set priced = rows|selectattr('used')|list %}
+      {% set listed = priced|selectattr('used.source', 'equalto', 'list')|list %}
+      <p class="m0">{{ priced|length }} of {{ rows|length }} licence{{ 's' if rows|length != 1 }} priced{% if priced %}:
+        {%- if priced|length - listed|length %} {{ priced|length - listed|length }} at your prices{% endif %}{% if listed and priced|length - listed|length %},{% endif %}
+        {%- if listed %} {{ listed|length }} at Microsoft's list price{% endif %}{% endif %}.</p>
+      {% if rows|length > priced|length %}<p class="muted small">The rest show as counts, not money.</p>{% endif %}
+      {% if example and book.margin %}
+      <p class="small">With your margin, <span class="strong">{{ example.name }}</span> is {{ example.used.base|money(currency, 2) }} {{ '+' if book.margin > 0 else '−' }} {{ '%g'|format(book.margin|abs) }}% = <span class="strong">{{ example.used.monthly|money(currency, 2) }}</span> a month.</p>
+      {% endif %}
+      {% if own %}<p class="muted small">{{ own|length }} client{{ 's have their' if own|length != 1 else ' has its' }} own margin, <a href="#client-margins">below</a>.</p>{% endif %}
+    </section>
+  </div>
+
   <div class="card flush">
-    <div class="card-head toolbar">
-      <h2>{{ skus|length }} licence{{ 's' if skus|length != 1 }} seen across your clients</h2>
-      <label class="inline-label">Currency
-        <select name="currency">{% for c in currencies %}<option {% if c == currency %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
-      </label>
-    </div>
-    {% if skus %}
-    <table>
-      <thead><tr><th>Licence</th><th class="num">Monthly price</th></tr></thead>
+    <div class="card-head"><h2>{{ rows|length }} licence{{ 's' if rows|length != 1 }} seen across your clients</h2></div>
+    {% if rows %}
+    <table class="stack-sm">
+      <thead><tr><th>Licence</th>{% if currency == list_currency %}<th class="num">Microsoft list price</th>{% endif %}<th class="num">Your price</th><th class="num">Price used</th></tr></thead>
       <tbody>
-      {% for part, name in skus %}
-      <tr><td><span class="strong">{{ name }}</span><span class="sub mono">{{ part }}</span></td>
-        <td class="num"><input class="price" name="price:{{ part }}" inputmode="decimal" placeholder="–" value="{{ '%.2f'|format(current[part]) if current.get(part) is not none else '' }}" aria-label="Monthly price for {{ name }}"></td></tr>
+      {% for r in rows %}
+      <tr><td><span class="strong">{{ r.name }}</span><span class="sub mono">{{ r.part }}</span></td>
+        {% if currency == list_currency %}<td class="num" data-label="Microsoft list price">{{ r.listed|money(currency, 2) if r.listed is not none else '–' }}</td>{% endif %}
+        <td class="num" data-label="Your price"><input class="price" name="price:{{ r.part }}" inputmode="decimal" placeholder="–" value="{{ '%.2f'|format(r.yours) if r.yours is not none else '' }}" aria-label="Your monthly price for {{ r.name }}"></td>
+        <td class="num" data-label="Price used">{% if r.used %}<span class="strong">{{ r.used.monthly|money(currency, 2) }}</span><span class="sub">{{ r.used.explained }}</span>{% else %}<span class="muted">Not priced</span>{% endif %}</td></tr>
       {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <div class="empty"><h3>No licences yet</h3><p>Licences appear here once a client has been collected.</p></div>
+    <div class="empty"><h2>No licences yet</h2><p>Licences appear here once a client has been collected.</p></div>
     {% endif %}
   </div>
-  {% if skus %}<div class="form-actions sticky-actions"><button class="primary">Save prices</button></div>{% endif %}
+
+  {% if own or others %}
+  <section class="card" id="client-margins">
+    <h2>Clients with their own margin</h2>
+    <p class="muted small">A client's own margin replaces yours ({{ '%g'|format(book.margin) }}%) on its licences, for a client on a discount or a different reseller. Clear it to go back to yours.</p>
+    {% if own %}
+    <table class="stack-sm">
+      <thead><tr><th>Client</th><th class="num">Margin (%)</th></tr></thead>
+      <tbody>
+      {% for t in own %}
+      <tr><td>{{ t.name }}</td>
+        <td class="num" data-label="Margin (%)"><input class="price" name="margin:{{ t.id }}" inputmode="decimal" placeholder="{{ '%g'|format(book.margin) }}" value="{{ '%g'|format(margin_of(t)) }}" aria-label="Margin for {{ t.name }}"></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="small">None yet: every client uses your margin.</p>
+    {% endif %}
+    {% if others %}
+    <div class="form-row">
+      <label>Give a client its own margin
+        <select name="new_client"><option value="">Choose a client…</option>{% for t in others %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select></label>
+      <label>Margin (%) <input name="new_margin" inputmode="decimal" placeholder="{{ '%g'|format(book.margin) }}"></label>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+  <div class="form-actions sticky-actions"><button class="primary">Save prices</button></div>
 </form>
 {% endblock %}

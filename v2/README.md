@@ -128,8 +128,17 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   *Account* page or with *Make this my home page*; *Home* in the menu and the logo
   open it, and signing in lands there. Until the first collection has run,
   admins see the **Get started** checklist there instead.
-- **Licence prices** (*Settings → Licence prices*): enter monthly prices per SKU
-  to cost waste and right-sizing savings.
+- **Licence prices** (*Settings → Licence prices*): what a client pays for each
+  licence a month, used to cost licence waste, right-sizing savings, renewals
+  and the Accounts page. A licence's price is your own price for it when you've
+  entered one, else Microsoft's list price, plus your margin. Microsoft's US
+  list prices are built in and dated (`officesentry/list_prices.py`, updated in
+  a release when Microsoft changes them); they apply when the currency is USD,
+  and can be turned off. **Your margin** is one percentage covering what your
+  reseller adds and what you add, applied to every price, negative for a
+  discount. A client with a different reseller or a discount can have **its own
+  margin**, which replaces yours on its licences. Priced reports tell the team
+  where their prices came from; clients and downloads never see the margin.
 - **Findings** (`/tenants/<id>/findings`): every finding keeps first seen,
   resolved and reopened dates. Anyone who can accept risks (Second line, Team
   leader and Administrator by default) can accept one with a reason and an

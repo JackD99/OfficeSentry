@@ -1,11 +1,13 @@
-"""Licence names, MSP-entered prices, and licence-waste calculation."""
+"""Licence names, prices (the MSP's, Microsoft's list prices and the margin), and licence-waste calculation."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
+from . import list_prices
 from .devices import parse_ts
+from .text import plural
 
 # Friendly names for common SKUs. Anything else shows its part number.
 SKU_NAMES = {
@@ -20,6 +22,8 @@ SKU_NAMES = {
     "SPE_E3": "Microsoft 365 E3",
     "SPE_E5": "Microsoft 365 E5",
     "SPE_F1": "Microsoft 365 F3",
+    "M365_F1": "Microsoft 365 F1",
+    "M365_F1_COMM": "Microsoft 365 F1",
     "DESKLESSPACK": "Office 365 F3",
     "EXCHANGESTANDARD": "Exchange Online (Plan 1)",
     "EXCHANGEENTERPRISE": "Exchange Online (Plan 2)",
@@ -72,11 +76,139 @@ def sku_name(part_number: str | None) -> str:
     return SKU_NAMES.get(part_number or "", part_number or "Unknown licence")
 
 
-def load_prices(conn) -> dict[str, float]:
-    return {
+# -- Prices -------------------------------------------------------------------------------------------
+#
+# What a client pays for a licence each month: the MSP's own price for it (``sku_prices``), else Microsoft's
+# list price where one is built in for the currency (``list_prices``), plus a margin in percent. The margin is
+# the MSP's (setting ``prices.margin``) unless the client has its own (``tenants.price_margin``); a negative
+# one is a discount. ``prices.list`` "off" leaves licences the MSP hasn't priced unpriced.
+
+# Reports that put money on licences, whose page says where the prices came from.
+PRICED_REPORTS = ("licences", "licence-rightsizing", "subscriptions", "licence-changes")
+MARGIN_KEY = "prices.margin"
+LIST_KEY = "prices.list"
+MARGIN_MIN, MARGIN_MAX = -90.0, 500.0
+
+
+@dataclass(frozen=True)
+class Price:
+    monthly: float  # what the client pays per licence per month, margin included
+    base: float  # before the margin
+    source: str  # "yours" (entered or imported) or "list" (Microsoft's list price)
+    margin: float  # percent added; negative for a discount
+
+    @property
+    def explained(self) -> str:
+        """Where the price came from, in words: "List price + 12%", "Your price"."""
+        base = "List price" if self.source == "list" else "Your price"
+        if not self.margin:
+            return base
+        sign = "+" if self.margin > 0 else "−"
+        return f"{base} {sign} {abs(self.margin):g}%"
+
+
+def _setting(conn, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def parse_margin(value) -> float | None:
+    """A margin as entered ("12", "-5", "12.5%"), or None when it's blank or out of range."""
+    try:
+        margin = round(float(str(value).strip().rstrip("%").strip()), 2)
+    except (TypeError, ValueError):
+        return None
+    return margin if MARGIN_MIN <= margin <= MARGIN_MAX else None
+
+
+def msp_margin(conn) -> float:
+    return parse_margin(_setting(conn, MARGIN_KEY)) or 0.0
+
+
+def own_margin(tenant) -> float | None:
+    """The client's own margin, when it has one; None follows the MSP's."""
+    try:
+        value = tenant["price_margin"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    return parse_margin(value) if value is not None else None
+
+
+def uses_list_prices(conn) -> bool:
+    return _setting(conn, LIST_KEY) != "off"
+
+
+def currency(conn) -> str:
+    return _setting(conn, "currency") or "GBP"
+
+
+@dataclass
+class PriceBook:
+    """Every licence price that applies to one client (or, without one, at the MSP's own margin)."""
+
+    entered: dict[str, float]
+    currency: str
+    margin: float
+    use_list: bool = True
+
+    def get(self, part: str | None) -> Price | None:
+        part = part or ""
+        if part in self.entered:
+            base, source = self.entered[part], "yours"
+        elif self.use_list and (listed := list_prices.price(part, self.currency)) is not None:
+            base, source = listed, "list"
+        else:
+            return None
+        return Price(round(base * (1 + self.margin / 100), 2), base, source, self.margin)
+
+    def monthly(self) -> dict[str, float]:
+        """Part number -> monthly price, for everything priced."""
+        parts = set(self.entered) | (set(list_prices.PRICES) if self.use_list else set())
+        return {p: price.monthly for p in parts if (price := self.get(p)) is not None}
+
+    def note(self, parts) -> str:
+        """Where the prices behind these licences came from, for the team (never a client): "Prices: Microsoft's
+        list price (1 Jul 2026) for 3 licences and your own for 1, plus a 12% margin." Empty when none is
+        priced."""
+        prices = [p for part in dict.fromkeys(parts) if (p := self.get(part)) is not None]
+        if not prices:
+            return ""
+        listed = sum(1 for p in prices if p.source == "list")
+        yours = len(prices) - listed
+        bits = []
+        if listed:
+            bits.append(f"{list_prices.label()} for {plural(listed, 'licence')}")
+        if yours:
+            bits.append(f"your own for {plural(yours, 'licence')}")
+        text = "Prices: " + " and ".join(bits)
+        if self.margin > 0:
+            text += f", plus a {self.margin:g}% margin"
+        elif self.margin < 0:
+            text += f", less a {-self.margin:g}% discount"
+        return text + "."
+
+
+def price_book(conn, tenant=None) -> PriceBook:
+    """The prices for one client (its own margin if it has one), or at the MSP's margin without one."""
+    entered = {
         r["sku_part_number"]: r["monthly_price"]
         for r in conn.execute("SELECT sku_part_number, monthly_price FROM sku_prices")
     }
+    margin = own_margin(tenant) if tenant is not None else None
+    if margin is None:
+        margin = msp_margin(conn)
+    return PriceBook(entered, currency(conn), margin, uses_list_prices(conn))
+
+
+def load_prices(conn, tenant=None) -> dict[str, float]:
+    """Part number -> what the client pays per licence per month (``price_book``)."""
+    return price_book(conn, tenant).monthly()
+
+
+def price_fingerprint(conn) -> list:
+    """What every client's prices are worked out from, for the cached rows that put money on licences."""
+    entered = conn.execute("SELECT COUNT(*), MAX(updated_at), TOTAL(monthly_price) FROM sku_prices").fetchone()
+    return [list(entered), msp_margin(conn), uses_list_prices(conn), list_prices.AS_OF.isoformat()]
 
 
 def last_sign_in(user: dict) -> datetime | None:

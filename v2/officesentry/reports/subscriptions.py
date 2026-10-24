@@ -101,7 +101,7 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     skus = [s for s in skus if isinstance(s.get("skuId"), str)]
     by_sku = {s["skuId"]: s for s in skus}
     names = {sid: sku_name(s.get("skuPartNumber")) for sid, s in by_sku.items()}
-    prices = load_prices(snap.conn)
+    prices = load_prices(snap.conn, snap.tenant)
     currency = setting(snap.conn, "currency", "GBP")
 
     status = (snap.objects("tenant_profile", "subscription_status") or [None])[0]
