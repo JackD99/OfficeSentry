@@ -32,6 +32,7 @@ from . import mail_protection  # noqa: F401  (its report tells outside addresses
 from . import app_sign_ins, group_nesting, user_details  # noqa: F401  (their reports join Apps, Groups and Users)
 from . import admin_units  # noqa: F401  (its report joins Admin roles, Users and Groups)
 from . import service_health  # noqa: F401
+from . import agents  # noqa: F401  (its report joins Apps and consents and Admin roles)
 from . import audit_activity  # noqa: F401  (the audit log add-on's; only for clients it's on for)
 from . import autodesk  # noqa: F401  (Autodesk licences; only for clients given an Autodesk team)
 from .base import REGISTRY, Collector, RunContext, core, for_tenant

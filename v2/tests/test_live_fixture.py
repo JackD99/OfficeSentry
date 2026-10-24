@@ -280,6 +280,8 @@ def test_detail_reports_and_exports(db, live, key):
         assert "Entra ID P2" in report.unavailable and not report.sections
     elif key == "site-permissions":  # nor the SharePoint permission
         assert report.unavailable.startswith("Waiting for the client to approve") and not report.sections
+    elif key == "agents":  # nor the 2.6 batch's
+        assert report.unavailable.startswith("Waiting for Live test to approve") and not report.sections
     elif key in data_reports.hidden(db, live):  # nor the audit log add-on
         assert report.unavailable and not report.sections
     else:
@@ -392,11 +394,10 @@ def test_connection_health_on_real_data(db, live):
     assert result["app_found"] and result["global_reader"] and not health.missing
     assert "Exchange.ManageAsAppV2" in result["other"]  # granted, but not one Office Sentry asks for
     # Recorded with the 2.2 batch approved except BitLocker and SharePoint's own permission, and before the 2.4
-    # batch: those wait for approval, which is a step to do, not a problem.
+    # and 2.6 batches: those wait for approval, which is a step to do, not a problem.
     assert set(health.waiting) <= set(permission_batch.BATCH_OF)
-    assert sorted(health.waiting) == sorted(
-        ["BitLockerKey.ReadBasic.All", "SharePoint Sites.Read.All", *permission_batch.CURRENT.permissions]
-    )
+    later = [p for b in permission_batch.BATCHES if b.release in ("2.4", "2.6") for p in b.permissions]
+    assert sorted(health.waiting) == sorted(["BitLockerKey.ReadBasic.All", "SharePoint Sites.Read.All", *later])
     assert health.check("permissions").state in ("ok", "todo")
     assert health.onboarded
     # The replay signs in without an app connection; that is all there is to fix.

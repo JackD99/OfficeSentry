@@ -73,6 +73,8 @@ GRAPH_PERMISSIONS: dict[str, str] = {
     "SecurityIncident.Read.All": "Microsoft Defender incidents",
     "ServiceHealth.Read.All": "Microsoft 365 service health: outages and advisories",
     "ServiceMessage.Read.All": "Microsoft 365 message centre: upcoming changes",
+    # Added in 2.6 (permission_batch.BATCHES)
+    "AgentIdentity.Read.All": "AI agents with their own identity in Entra ID (Entra Agent ID)",
 }
 
 # Exchange Online admin API (read-only cmdlets only; see exchange.py). Each

@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-71 checks, 43 data sources (collectors) and 55 detail reports.
+71 checks, 44 data sources (collectors) and 56 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -164,6 +164,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `admin_activity` | Admin activity | Admin role, Conditional Access, app credential, consent, domain and account changes from the directory audit log, kept in the activity history (Microsoft keeps 30 days with Entra ID P1, otherwise 7). | `AuditLog.Read.All` |
 | `admin_roles` | Admin roles | Who holds each directory role, active and PIM-eligible, including through groups and people who can activate membership of such a group (PIM for groups). | `RoleManagement.Read.Directory`, `PrivilegedEligibilitySchedule.Read.AzureADGroup` |
 | `admin_units` | Administrative units | Every administrative unit, whether it is assigned or dynamic and restricted, and the users, groups and devices in each. The admins scoped to each unit come from Admin roles. | `Directory.Read.All` |
+| `agents` | AI agents | The AI agents with their own identity in Entra ID (Microsoft Entra Agent ID), and the application permissions each was given. | `AgentIdentity.Read.All`, `Application.Read.All` |
 | `app_consents` | Apps and consents | Third-party apps, the permissions granted to them, and app secrets or certificates expiring. | `Application.Read.All`, `Directory.Read.All` |
 | `app_sign_ins` | App sign-ins | When each enterprise app last signed in, for a person or on its own (needs Entra ID P1). | `AuditLog.Read.All` |
 | `auth_methods_policy` | Sign-in methods policy | Which sign-in methods the tenant allows and for whom, the registration campaign and system-preferred MFA. | `Policy.Read.All`, `Directory.Read.All` |
@@ -214,6 +215,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `admin-activity` | Admin activity | Admin roles, Conditional Access, app credentials, consents, domains and account changes from the directory audit log, and who made them. | `admin_activity` |
 | `admin-units` | Administrative units | Every administrative unit with its members and the admins scoped to it, restricted units, and units with nobody in them or nobody administering them. | `admin_roles`, `admin_units`, `groups`, `users` |
 | `admins` | Admins and roles | Every admin role holder with MFA, PIM and sign-in status, and a break-glass check. | `admin_roles`, `conditional_access`, `mfa_registration`, `users` |
+| `agents` | AI agents | The AI agents with their own identity in Entra ID: which app made each, what it can reach on its own or for people, admin roles it holds, and agents Microsoft has switched off. | `admin_roles`, `agents`, `app_consents` |
 | `all-users` | All users | Every account with its department, job title, manager, licences and last sign-in, its managers and departments, and accounts reporting to a blocked manager. | `tenant_profile`, `user_details`, `users` |
 | `apps` | Apps and consents | Third-party apps with access to the tenant, and app credential expiry. | `app_consents` |
 | `auth-methods` | Passwords and sign-in methods | How people sign in and how strong that is: methods by strength, admins without phishing-resistant MFA, the methods policy, and password age and expiry. | `admin_roles`, `auth_methods_policy`, `conditional_access`, `directory_sync`, `mfa_registration`, `users` |
@@ -273,7 +275,8 @@ Every application permission the app requests (all read-only) and the collectors
 
 | Permission | API | Purpose | Used by |
 |---|---|---|---|
-| `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents`, `connection` |
+| `AgentIdentity.Read.All` | Microsoft Graph | AI agents with their own identity in Entra ID (Entra Agent ID) | `agents` |
+| `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `agents`, `app_consents`, `connection` |
 | `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `app_sign_ins`, `legacy_signins`, `mfa_registration`, `sign_ins`, `users` |
 | `BitLockerKey.ReadBasic.All` | Microsoft Graph | Whether a device's BitLocker recovery key is saved (never the key) | `devices` |
 | `Channel.ReadBasic.All` | Microsoft Graph | Teams channels: standard, private and shared | `teams` |

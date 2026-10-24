@@ -555,6 +555,16 @@ Each report is listed under its area in the report menu, in menu order.
   in (signing people in, on its own, or called as an API), from Entra ID's
   app sign-in activity (needs Entra ID P1). Apps unused for 90 days that
   still hold application permissions or consent are flagged.
+<!-- since 2.6.0 -->
+- *AI agents*: the AI agents with their own identity in Entra ID
+  (Microsoft Entra Agent ID, from tools such as Copilot Studio): which app
+  made each and from which blueprint, whether it's switched on, what it can
+  reach on its own (application permissions) or for people (consent), and
+  any admin role it holds. Agents that can read mail or files, change the
+  directory or hold a powerful role, and agents Microsoft has switched off,
+  are flagged. Needs `AgentIdentity.Read.All`, added in 2.6; until a client
+  approves it the report says it's waiting.
+<!-- /since -->
 
 #### Tenant and licences
 

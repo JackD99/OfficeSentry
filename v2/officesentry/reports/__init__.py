@@ -2,6 +2,7 @@
 
 from . import (  # noqa: F401
     admin_units,
+    agents,
     all_users,
     auth_methods,
     auto_replies,

@@ -60,6 +60,7 @@ BATCHES: tuple[Batch, ...] = (
             "ServiceMessage.Read.All",
         ),
     ),
+    Batch("2.6", "AI agent identities", ("AgentIdentity.Read.All",)),
 )
 CURRENT = BATCHES[-1]
 BATCH_OF: dict[str, Batch] = {p: b for b in BATCHES for p in b.permissions}
@@ -93,6 +94,8 @@ ADDS: dict[str, str] = {
     "a problem on Microsoft's side is known before anyone troubleshoots it.",
     "ServiceMessage.Read.All": "The same report lists Microsoft's upcoming changes, with the ones that need "
     "action by a date first.",
+    "AgentIdentity.Read.All": "An AI agents report: the agents with their own identity in Entra ID, who made "
+    "them and when, what they're allowed to read or change, and ones Microsoft has switched off.",
 }
 
 
