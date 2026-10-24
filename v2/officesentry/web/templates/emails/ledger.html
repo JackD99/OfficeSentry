@@ -1,0 +1,61 @@
+{#- Today's ledger for the team, every weekday morning (delivery.build_ledger_email): the answer first, three
+    figures, then one line per thing since the last email, worst first, and what was seen before and is still
+    open. Two columns per line (when, what), as Today draws it, so it reads on a phone. -#}
+{% extends "emails/_layout.html" %}
+{% from "emails/_parts.html" import button, heading, tiles with context %}
+{#- A line's key as Today colours it (home.LEVELS), on white. -#}
+{% set INK = {'critical': '#b42318', 'bad': '#b42318', 'high': '#b54708', 'now': '#b42318', 'warn': '#8a5a00', 'ok': '#027a48'} %}
+{% macro lines(items) -%}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  {% for e in items %}
+  <tr>
+    <td valign="top" width="64" style="padding:10px 10px 10px 0;border-top:1px solid #e0e1df;white-space:nowrap;font-size:13px;color:#5a5f64;" title="{{ e.stamp_full }}">{{ e.stamp }}</td>
+    <td valign="top" style="padding:10px 0;border-top:1px solid #e0e1df;">
+      <div style="font-size:12px;"><span style="font-weight:700;color:{{ INK.get(e.level, '#34383b') }};">{{ e.word }}</span> <span style="color:#5a5f64;">· {{ e.tenant.name }}</span></div>
+      <div style="font-weight:600;"><a href="{{ e.href }}" style="color:#1c1e20;text-decoration:none;">{{ e.text }}</a></div>
+      {% if e.detail %}<div style="font-size:13px;color:#5a5f64;">{{ e.detail }}</div>{% endif %}
+      {% if e.holder %}<div style="font-size:12px;color:#5a5f64;">Handed to {{ e.holder }}</div>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{%- endmacro %}
+{% block preheader %}{{ data.sentence() }}{% endblock %}
+{% block kicker %}Every weekday · since {{ data.since_label }}{% endblock %}
+{% block body %}
+<h1 style="margin:0 0 4px;font-size:22px;line-height:1.3;color:#1c1e20;">Today</h1>
+<div style="color:#5a5f64;margin-bottom:18px;">{{ label }} · {{ (group ~ ', ') if group }}{{ data.tenants|plural('client') }}</div>
+
+{% if message %}
+<div style="margin:0 0 20px;padding:12px 14px;background:#ececea;border-radius:6px;color:#34383b;white-space:pre-line;">{{ message }}</div>
+{% endif %}
+
+{% set needs = data.new|rejectattr('kind', 'equalto', 'fixed')|list %}
+<div style="margin:0 0 18px;padding:12px 14px;border-radius:6px;background:{{ '#fef2f2' if needs and needs[0].tone == 'bad' else ('#fff7ed' if needs else '#ecfdf3') }};color:#1c1e20;"><strong>{{ data.sentence() }}</strong></div>
+
+{% if data.tenants %}
+{{ tiles([
+  ('New critical and high', data.new_severe, 'findings since ' ~ data.since_label, '#b42318' if data.new_critical else ('#b54708' if data.new_severe else '#5a5f64')),
+  ('Collections failing', data.failing, (data.stale ~ ' more out of date') if data.stale else "clients that couldn't be read", '#b42318' if data.failing else '#5a5f64'),
+  ('Due this week', data.due, 'renewals, expiring secrets, full mailboxes', '#b54708' if data.due else '#5a5f64'),
+]) }}
+{% endif %}
+
+{% set new, seen = data.new, data.seen %}
+{% if new %}
+{{ heading('Since ' ~ data.since_label) }}
+{{ lines(new[:shown]) }}
+{% if new|length > shown %}<div style="font-size:13px;color:#5a5f64;margin-top:4px;">And {{ new|length - shown }} more on <a href="{{ today_url }}" style="color:#2b4a6b;">Today</a>.</div>{% endif %}
+{% elif data.tenants %}
+<p style="margin:20px 0 0;color:#5a5f64;">Nothing new since {{ data.since_label }}.</p>
+{% endif %}
+
+{% if seen %}
+{{ heading('Seen before ' ~ since ~ ', still open') }}
+{{ lines(seen[:shown_seen]) }}
+{% if seen|length > shown_seen %}<div style="font-size:13px;color:#5a5f64;margin-top:4px;">And {{ seen|length - shown_seen }} more on <a href="{{ today_url }}" style="color:#2b4a6b;">Today</a>.</div>{% endif %}
+{% endif %}
+
+<div style="margin-top:24px;">{{ button(today_url, 'Open Today') }}</div>
+{% endblock %}
+{% block footer %}Today's ledger from Office Sentry, every weekday morning, sent to {{ msp_name }}'s team only. Hand a line to a colleague or snooze it on Today; snoozed lines are left out here too.{% endblock %}

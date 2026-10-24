@@ -136,9 +136,10 @@ def _decorate(s) -> dict:
     d["titles"] = delivery.schedule_titles(s, g.db)
     d["upcoming"] = delivery.is_upcoming(s)
     d["views"] = delivery.is_views(s)
+    d["ledger"] = delivery.is_ledger(s)
     if d["kind"] == "digest" and not d["upcoming"]:
         group = tenant_groups.get(g.db, s["group_id"])
-        what = " + ".join(d["titles"]) if d["views"] else "Client digest"
+        what = " + ".join(d["titles"]) if d["views"] or d["ledger"] else "Client digest"
         d["titles"] = [f"{what} · {group['name']}" if group else f"{what} · every client"]
     d["due_now"] = d["next"] is not None and d["next"] <= datetime.now(UTC)
     return d
@@ -440,7 +441,7 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
     )
 
 
-def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: bool = False):
+def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: bool = False, ledger: bool = False):
     kind = existing["kind"] if existing else ("report" if tenant else "digest")
     tenant_id = tenant["id"] if tenant else None
     values = _form_values(kind, tenant_id)
@@ -452,6 +453,9 @@ def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: 
     views_email = saved_views or (existing is not None and delivery.is_views(existing))
     if views_email:
         values["reports"] = [delivery.VIEWS_KEY]  # a digest schedule that sends saved views across tenants
+    if ledger or (existing is not None and delivery.is_ledger(existing)):
+        values["reports"] = [delivery.LEDGER_KEY]  # Today's ledger, every weekday (delivery.cadence)
+        values["frequency"], values["include_xlsx"] = "weekly", 0
     sends_views = kind == "report" or views_email
     values["views"] = (
         _chosen_views(existing["id"] if existing else None, kind == "digest", tenant_id) if sends_views else []
@@ -477,8 +481,9 @@ def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: 
         tz = values["timezone"] or _cfg().timezone
         timing = ("frequency", "day_of_week", "day_of_month", "hour", "timezone")
         now = datetime.now(UTC)
+        frequency = delivery.WEEKDAYS if delivery.LEDGER_KEY in values["reports"] else values["frequency"]
         fresh_period = delivery.initial_period(
-            values["frequency"], values["day_of_week"], values["day_of_month"], values["hour"], tz, now
+            frequency, values["day_of_week"], values["day_of_month"], values["hour"], tz, now
         )
         cols = ("reports", "include_xlsx", "message", "enabled", "group_id", *timing)
         params = [
@@ -510,7 +515,15 @@ def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: 
         delivery.set_recipients(g.db, "schedule", schedule_id, ids)
         if sends_views:
             delivery.set_schedule_views(g.db, schedule_id, values["views"])
-        what = "coming up" if delivery.upcoming.KEY in values["reports"] else "saved views" if views_email else kind
+        what = (
+            "coming up"
+            if delivery.upcoming.KEY in values["reports"]
+            else "saved views"
+            if views_email
+            else "today's ledger"
+            if delivery.LEDGER_KEY in values["reports"]
+            else kind
+        )
         views_note = (
             f" with {plural(len(values['views']), 'saved view')}" if values["views"] and not views_email else ""
         )
@@ -575,6 +588,17 @@ def new_upcoming():
         return _save_schedule(None, coming_up=True)
     values = _blank("digest", [delivery.upcoming.KEY])
     values["frequency"] = "weekly"
+    return _render_form(None, values, {c["id"] for c in delivery.team_contacts(g.db)})
+
+
+@bp.route("/emails/today/new", methods=["GET", "POST"])
+@needs("settings.manage")
+def new_ledger():
+    """Today's ledger for the team every weekday morning (``delivery.build_ledger_email``)."""
+    if request.method == "POST":
+        return _save_schedule(None, ledger=True)
+    values = _blank("digest", [delivery.LEDGER_KEY])
+    values["frequency"], values["hour"], values["include_xlsx"] = "weekly", 7, 0
     return _render_form(None, values, {c["id"] for c in delivery.team_contacts(g.db)})
 
 
@@ -652,7 +676,7 @@ def toggle_schedule(schedule_id: int):
         if enabled:  # resuming never sends a period that was missed while paused
             tz = delivery.schedule_tz(s, _cfg().timezone)
             period = delivery.initial_period(
-                s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"], tz, datetime.now(UTC)
+                delivery.cadence(s), s["day_of_week"], s["day_of_month"], s["hour"], tz, datetime.now(UTC)
             )
             g.db.execute(
                 "UPDATE email_schedules SET enabled = 1, last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
@@ -959,6 +983,7 @@ def overview():
     )
     coming_up = [s for s in digests if s["upcoming"]]
     view_emails = [s for s in digests if s["views"]]
+    ledgers = [s for s in digests if s["ledger"]]
     scope = f"tenant_id IN ({marks})" + (" OR tenant_id IS NULL" if admin else "")
     deliveries = g.db.execute(f"SELECT * FROM email_deliveries WHERE {scope} ORDER BY id DESC LIMIT 30", ids).fetchall()
     since = _days_ago(30)
@@ -981,9 +1006,10 @@ def overview():
     return render_template(
         "emails.html",
         schedules=schedules,
-        digests=[s for s in digests if not s["upcoming"] and not s["views"]],
+        digests=[s for s in digests if not s["upcoming"] and not s["views"] and not s["ledger"]],
         coming_up=coming_up,
         view_emails=view_emails,
+        ledgers=ledgers,
         deliveries=deliveries,
         stale=_superseded(deliveries),
         tenants=tenants,
