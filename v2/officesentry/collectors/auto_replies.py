@@ -43,6 +43,7 @@ class AutoReplies(Collector):
     title = "Automatic replies"
     description = "Which mailboxes have an out-of-office reply on or scheduled, and who it goes to."
     permissions = ("MailboxSettings.Read",)
+    needs = ("exchange",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("exchange") is False:

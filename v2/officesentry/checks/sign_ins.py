@@ -19,6 +19,7 @@ from .base import Finding, _unavailable, rule
     "everywhere (revoke sessions), and check their MFA methods, inbox rules and app consents; then confirm the "
     "account compromised in Entra ID Protection. Add a Conditional Access policy that asks for MFA on medium "
     "and high sign-in risk. The Sign-in activity report lists every risky sign-in.",
+    needs=("entra_p1", "entra_p2"),
 )
 def risky_sign_ins(snap: TenantSnapshot, now: datetime):
     status = signins.status(snap)

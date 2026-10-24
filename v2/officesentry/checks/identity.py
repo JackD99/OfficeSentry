@@ -418,6 +418,7 @@ def users_mfa_registered(snap: TenantSnapshot, now: datetime):
     "Disable accounts that haven't signed in for 90 days, or were created over 30 days ago and never used "
     "(after checking with their manager), then remove their licences. Inactive accounts are a common foothold "
     "for attackers.",
+    needs=("entra_p1",),
 )
 def stale_users(snap: TenantSnapshot, now: datetime):
     users = snap.objects("users", "user")

@@ -12,7 +12,7 @@ from flask_wtf.csrf import CSRFError, CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.routing import IntegerConverter
 
-from .. import __version__, grades, logs, system_alerts, system_health, totp, worker
+from .. import __version__, capabilities, grades, logs, store, system_alerts, system_health, totp, worker
 from .. import sso as staff_sign_in
 from ..auditlog import addon as addon_switch
 from ..autodesk import setup as autodesk_setup
@@ -217,6 +217,13 @@ def create_app(cfg: Config | None = None) -> Flask:
     from .. import cert_lifecycle, clouds
     from ..reports import library
 
+    def _licence_gap(tenant, report: str):
+        try:
+            caps = store.tenant_capabilities(tenant)
+        except (KeyError, IndexError, TypeError, ValueError):  # a row without them, or not readable
+            caps = {}
+        return capabilities.gap(caps, report)
+
     # National clouds (clouds.py): the choices for tenant and app connection forms, and a label for any key;
     # every report under its area, for the Reports tab's picker (_macros.report_picker).
     app.jinja_env.globals.update(
@@ -245,6 +252,8 @@ def create_app(cfg: Config | None = None) -> Flask:
         autodesk_on=lambda: g.get("db") is not None and autodesk_setup.configured(g.db),
         # A client's grade as last stored (grades.py), for the badge in the client header: never built there.
         client_grade=lambda tenant_id: grades.stored_letter(g.db, tenant_id) if g.get("db") is not None else None,
+        # What a client's licences leave out of a report (capabilities.gap), for "Needs Intune" tags.
+        licence_gap=_licence_gap,
     )
 
     @app.context_processor

@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-71 checks, 43 data sources (collectors) and 54 detail reports.
+71 checks, 43 data sources (collectors) and 55 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -236,6 +236,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `intune-policies` | Intune policies | Which platforms have a compliance policy, what each compliance policy requires, configuration profiles and Windows update rings, endpoint security policies and app protection for phones, with whom each applies to. | `devices`, `group_nesting`, `groups`, `intune_policies` |
 | `legacy-auth` | Legacy sign-ins | Sign-ins with SMTP AUTH, IMAP, POP and other protocols that can't do MFA, and which mailboxes still allow them. | `legacy_signins`, `mailboxes` |
 | `licence-changes` | Licence changes | Who was given or lost a licence and when, who made the change, and licences bought and assigned month by month, from Office Sentry's own history. | `tenant_profile`, `users` |
+| `licence-features` | Licence features | What the client's licences cover (Entra ID P1 and P2, Intune, Defender for Office 365, Exchange Online, SharePoint), which licences provide each feature, how many people hold one, and the reports and checks each feature unlocks. | `tenant_profile`, `users` |
 | `licence-rightsizing` | Licence right-sizing | People who could move to a cheaper licence, and services people are licensed for but don't use. | `admin_roles`, `devices`, `m365_usage`, `mailbox_usage`, `tenant_profile`, `users` |
 | `licences` | Licence waste | Paid licences nobody uses, in money, and the accounts holding them. | `mailbox_usage`, `mailboxes`, `tenant_profile`, `users` |
 | `mail-flow` | Mail flow by domain | How much mail each domain sends and receives, how much was delivered, sent to Junk, quarantined or failed, and who gets the most spam and phishing. | `mail_flow` |

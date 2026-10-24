@@ -187,28 +187,28 @@ def test_unassigned_paid_licences_leave_out_free_allocations_and_trials(db, two_
     ],
 )
 def test_licence_capabilities_recognise_government_education_and_frontline_plans(plans, exchange, sharepoint):
-    from officesentry.collectors.tenant_profile import capabilities_from_skus
+    from officesentry.capabilities import from_skus
 
     sku = {
         "capabilityStatus": "Enabled",
         "prepaidUnits": {"enabled": 5},
         "servicePlans": [{"servicePlanName": p, "provisioningStatus": "Success"} for p in plans],
     }
-    caps = capabilities_from_skus([sku])
+    caps = from_skus([sku])
     assert (caps["exchange"], caps["sharepoint"]) == (exchange, sharepoint)
 
 
 def test_a_subscription_in_its_grace_period_keeps_its_features():
     """A lapsing Business Premium (licences moved to warning) still gives Intune and sign-in activity, so the
     reports that need them keep working until it's actually suspended."""
-    from officesentry.collectors.tenant_profile import capabilities_from_skus
+    from officesentry.capabilities import from_skus
 
     plans = [{"servicePlanName": p, "provisioningStatus": "Success"} for p in ("AAD_PREMIUM", "INTUNE_A")]
     lapsing = {"capabilityStatus": "Warning", "prepaidUnits": {"enabled": 0, "warning": 10}, "servicePlans": plans}
-    caps = capabilities_from_skus([lapsing])
+    caps = from_skus([lapsing])
     assert caps["entra_p1"] and caps["intune"]
     suspended = lapsing | {"capabilityStatus": "Suspended", "prepaidUnits": {"enabled": 0, "suspended": 10}}
-    assert not capabilities_from_skus([suspended])["intune"]
+    assert not from_skus([suspended])["intune"]
 
 
 @responses.activate

@@ -73,6 +73,7 @@ class AdminRoles(Collector):
         "activate membership of such a group (PIM for groups)."
     )
     permissions = ("RoleManagement.Read.Directory", PIM_GROUPS)
+    more_with = ("entra_p2",)
 
     def collect(self, ctx: RunContext) -> None:
         definitions = ctx.paged(
@@ -252,6 +253,7 @@ class ConditionalAccess(Collector):
     title = "Conditional Access"
     description = "Conditional Access policies, their named locations and the Security Defaults setting."
     permissions = ("Policy.Read.All",)
+    needs = ("entra_p1",)
 
     def collect(self, ctx: RunContext) -> None:
         defaults = ctx.graph.get("/policies/identitySecurityDefaultsEnforcementPolicy")
@@ -363,6 +365,7 @@ class MfaRegistration(Collector):
     title = "MFA registration"
     description = "Which users have registered a second factor."
     permissions = ("AuditLog.Read.All", "UserAuthenticationMethod.Read.All")
+    more_with = ("entra_p1",)
 
     def collect(self, ctx: RunContext) -> None:
         rows = None

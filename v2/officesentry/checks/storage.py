@@ -24,6 +24,7 @@ def _gb(value: float) -> str:
     "Turn on the online archive for each listed mailbox (Exchange admin center > Mailboxes > Manage mailbox "
     "archive) with a retention policy that moves old mail into it, or clear large old items. A mailbox at its "
     "quota can't send, and soon after can't receive.",
+    needs=("exchange",),
 )
 def mailbox_quota(snap: TenantSnapshot, now: datetime):
     status = snap.objects("mailboxes", "exchange_status")
@@ -69,6 +70,7 @@ def mailbox_quota(snap: TenantSnapshot, now: datetime):
     "Ask each listed person to clear or archive old files, or raise their OneDrive quota (SharePoint admin "
     "center > Settings > OneDrive Storage limit, up to 5 TB with a qualifying licence). A full OneDrive stops "
     "syncing and saving.",
+    needs=("sharepoint",),
 )
 def onedrive_quota(snap: TenantSnapshot, now: datetime):
     status = (snap.objects("sharepoint_usage", "usage_status") or [None])[0]

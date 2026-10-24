@@ -37,6 +37,7 @@ class DetectedApps(Collector):
     title = "Installed apps"
     description = "Every app and version Intune has found on managed devices, with how many devices have each."
     permissions = ("DeviceManagementManagedDevices.Read.All",)
+    needs = ("intune",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("intune") is False:

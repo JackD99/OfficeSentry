@@ -95,6 +95,7 @@ class DistributionLists(Collector):
     title = "Distribution lists"
     description = "Every distribution list, its owners and members, and how much mail it gets (needs Global Reader)."
     permissions = ("Exchange.ManageAsApp",)
+    needs = ("exchange",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("exchange") is False:

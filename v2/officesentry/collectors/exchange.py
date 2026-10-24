@@ -84,6 +84,7 @@ class Mailboxes(Collector):
     title = "Mailboxes"
     description = "Mailboxes, forwarding, delegated access and organisation mail settings (needs Global Reader)."
     permissions = ("Exchange.ManageAsApp",)
+    needs = ("exchange",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("exchange") is False:
