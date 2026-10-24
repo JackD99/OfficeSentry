@@ -555,6 +555,9 @@ Each report is listed under its area in the report menu, in menu order.
   and the reports and checks that have nothing to show without it; every
   licence with the features inside it; and the reports and checks this
   client's licences leave out, so nobody hunts for data that can't exist.
+  The client's report lists say so too: a report its licences leave out is
+  tagged *Needs Entra ID P2* (or whichever it is) on the Reports tab and in
+  the report menu, and its page says the licence is missing, with a link here.
   Features come from the service plans inside the licences, the same reading
   the collectors go by (`officesentry/capabilities.py`; collectors declare
   what they need with `needs` and `more_with`, checks with `@rule(needs=...)`).

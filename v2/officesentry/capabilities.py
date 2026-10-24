@@ -150,6 +150,13 @@ def missing(caps: dict | None, flags: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(f for f in flags if (caps or {}).get(f) is False)
 
 
+def gap(caps: dict | None, report: str) -> tuple[list[str], list[str]]:
+    """What this client's licences leave out of a report, as the labels pages show: (what it needs to show
+    anything, what part of it needs)."""
+    needs, more = report_needs(report)
+    return [label(f) for f in missing(caps, needs)], [label(f) for f in missing(caps, more)]
+
+
 def reports_needing(flag: str) -> list[str]:
     """The report keys this capability unlocks, hard needs first."""
     from .reports.registry import DECLARED

@@ -145,3 +145,37 @@ def test_a_missing_capability_is_only_one_thats_known_to_be_missing():
     assert capabilities.missing({"intune": False}, ("intune", "exchange")) == ("intune",)
     assert capabilities.missing(None, ("intune",)) == ()  # licences not read yet: say nothing
     assert capabilities.missing({}, ("intune",)) == ()
+
+
+# -- Saying so where people look ----------------------------------------------------------------
+
+
+def test_a_report_the_licences_block_says_so_and_links_to_what_they_cover(client, db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)  # Business Premium: Entra ID P1, not P2 or Defender for Office 365
+    make_user(db, "admin")
+    login(client, "admin")
+    assert "licence-gap" not in client.get(f"/tenants/{alpha}/data/mailboxes").get_data(as_text=True)
+    # A part a licence leaves out is the report's own to explain (Mail rules and protection says Safe Links
+    # need Defender for Office 365), so the page doesn't add a second note.
+    assert "licence-gap" not in client.get(f"/tenants/{alpha}/data/mail-protection").get_data(as_text=True)
+    # Risky users already says it needs Entra ID P2, so it isn't said twice.
+    assert "licence-gap" not in client.get(f"/tenants/{alpha}/data/risky-users").get_data(as_text=True)
+    store.set_capabilities(db, alpha, {**store.tenant_capabilities(store.get_tenant(db, alpha)), "intune": False})
+    devices = client.get(f"/tenants/{alpha}/data/devices").get_data(as_text=True)
+    assert "Alpha Ltd's licences don't include Intune</strong>, which this report's data needs" in devices
+    assert f"/tenants/{alpha}/data/licence-features" in devices
+
+
+def test_the_report_lists_tag_what_the_licences_block(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    seed_tenant(db, alpha)
+    make_user(db, "admin")
+    login(client, "admin")
+    tab = client.get(f"/tenants/{alpha}/data").get_data(as_text=True)
+    assert "Needs Entra ID P2</span>" in tab
+    assert "Needs Intune" not in tab and "Needs Exchange Online" not in tab
+    picker = client.get(f"/tenants/{alpha}/data/mailboxes").get_data(as_text=True)
+    assert "needs Entra ID P2</span>" in picker
+    # A client whose licences haven't been read yet is told nothing about them.
+    assert "Needs " not in client.get(f"/tenants/{bravo}/data").get_data(as_text=True).split("report-directory")[-1]

@@ -253,7 +253,7 @@
         <div class="report-group">
           <p class="picker-label" id="picker-{{ area.key }}">{{ area.title }}</p>
           <ul aria-labelledby="picker-{{ area.key }}">
-            {% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ _picker_href(tenant, e, on) }}" title="{{ e.description }}"{% if e.key == current %} aria-current="page"{% endif %}>{{ e.title }}</a></li>
+            {% for e in entries %}{% set needs = licence_gap(tenant, e.key)[0] if e.kind == 'data' else [] %}<li data-name="{{ e.search }}"><a href="{{ _picker_href(tenant, e, on) }}" title="{{ e.description }}"{% if e.key == current %} aria-current="page"{% endif %}>{{ e.title }}{% if needs %} <span class="picker-sub">needs {{ needs|join(' and ') }}</span>{% endif %}</a></li>
             {% endfor %}
           </ul>
         </div>
@@ -345,7 +345,7 @@
     {% for area in areas[1:] %}{% set entries = [] %}{% for e in area.entries if e.kind == 'data' and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}
     <div class="report-group">
       <h3>{{ area.title }}</h3>
-      <ul>{% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=e.key) }}" title="{{ e.description }}">{{ e.title }}</a></li>{% endfor %}</ul>
+      <ul>{% for e in entries %}{% set needs = licence_gap(tenant, e.key)[0] %}<li data-name="{{ e.search }}"><a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=e.key) }}" title="{{ e.description }}">{{ e.title }}</a>{% if needs %} <span class="pill" title="{{ tenant.name }}'s licences don't include {{ needs|join(' or ') }}, so this report has nothing to show">Needs {{ needs|join(' and ') }}</span>{% endif %}</li>{% endfor %}</ul>
     </div>
     {% endif %}{% endfor %}
   </div>
