@@ -15,7 +15,6 @@ from werkzeug.routing import IntegerConverter
 from .. import __version__, capabilities, grades, logs, store, system_alerts, system_health, totp, worker
 from .. import sso as staff_sign_in
 from ..auditlog import addon as addon_switch
-from ..autodesk import setup as autodesk_setup
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import audit_counted, connect, is_locked, migrate
@@ -66,9 +65,6 @@ from . import (
 )
 from . import (
     audit_addon as addon_pages,
-)
-from . import (
-    autodesk as autodesk_pages,
 )
 from . import (
     roles as role_pages,
@@ -252,8 +248,6 @@ def create_app(cfg: Config | None = None) -> Flask:
         # Whether the audit log add-on is switched on for this install (``auditlog/addon.py``): until it is,
         # nothing about it shows.
         audit_addon_on=lambda: g.get("db") is not None and addon_switch.enabled(g.db),
-        # Whether Autodesk's app is saved (``autodesk/setup.py``): until it is, no client page mentions Autodesk.
-        autodesk_on=lambda: g.get("db") is not None and autodesk_setup.configured(g.db),
         # A client's grade as last stored (grades.py), for the badge in the client header: never built there.
         client_grade=lambda tenant_id: grades.stored_letter(g.db, tenant_id) if g.get("db") is not None else None,
         # What a client's licences leave out of a report (capabilities.gap), for "Needs Intune" tags.
@@ -429,7 +423,6 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(tenant_admin.bp)
     app.register_blueprint(onboarding.bp)
     app.register_blueprint(addon_pages.bp)
-    app.register_blueprint(autodesk_pages.bp)
     app.register_blueprint(activity.bp)
     app.register_blueprint(search.bp)
     app.register_blueprint(jump.bp)

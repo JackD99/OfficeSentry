@@ -18,7 +18,7 @@ STATIC = Path(__file__).resolve().parents[1] / "officesentry" / "web" / "static"
 NOW = datetime.now(UTC)
 PERIOD = f"{NOW.year}-{NOW.month:02d}"
 SETTINGS_AREAS = {
-    "Clients": ("/admin/tenants", "/admin/groups", "/admin/connections", "/admin/autodesk"),
+    "Clients": ("/admin/tenants", "/admin/groups", "/admin/connections"),
     "Reports and email": ("/admin/branding", "/admin/prices", "/admin/email", "/admin/alerts"),
     "Team": ("/admin/users", "/admin/sign-in", "/admin/activity"),
     "System": ("/admin/status", "/admin/retention", "/admin/updates", "/admin/support"),

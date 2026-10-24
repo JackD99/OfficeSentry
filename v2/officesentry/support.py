@@ -179,11 +179,6 @@ def names_to_hide(conn, cfg: Config | None = None) -> dict[str, str]:
         names[row["tenant_ref"]] = f"[client {row['id']}]"
     for (username,) in conn.execute("SELECT username FROM users").fetchall():
         names[username] = "[user]"
-    # A client's Autodesk team is usually named after the client, and an Autodesk sign-in after its person.
-    for row in conn.execute("SELECT tenant_id, name FROM autodesk_teams WHERE name IS NOT NULL").fetchall():
-        names[row["name"]] = f"[client {row['tenant_id']}]"
-    for (label,) in conn.execute("SELECT label FROM autodesk_sign_ins").fetchall():
-        names[label] = "[user]"
     for key in ("brand_name", "brand_contact", "brand_support_name", "brand_support_email", "brand_support_phone"):
         row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
         if row and row[0]:

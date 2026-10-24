@@ -157,7 +157,6 @@ def sites(tmp_path_factory):
     try:
         added = stress.add(db, ids)
         stress.audit_addon(db, Vault(cfg.encryption_keys), added["tenant"])
-        stress.autodesk(db, Vault(cfg.encryption_keys), added["tenant"])
         staff_id = db.execute("SELECT id FROM users WHERE username = ?", (stress.STAFF_USER,)).fetchone()[0]
     finally:
         db.close()

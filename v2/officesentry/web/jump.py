@@ -215,7 +215,6 @@ PAGES: tuple[Page, ...] = (
     Page("groups.index", "Client groups", "tier region category", "Clients", manages_groups),
     Page("admin.connections", "App connection", "certificate consent entra app registration permissions", "Clients"),
     Page("audit_addon.settings", "Audit log add-on", "unified audit log feed activity", "Clients"),
-    Page("autodesk.settings", "Autodesk", "autocad revit seats licences subscriptions token", "Clients"),
     Page("branding.settings", "Branding", "logo colours msp name report footer support contact favicon", EMAIL),
     Page("reports.prices", "Licence prices", "cost money currency sku", EMAIL),
     Page("email.settings", "Email delivery", "smtp mail send graph sender from", EMAIL),
