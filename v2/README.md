@@ -592,6 +592,22 @@ Each report is listed under its area in the report menu, in menu order.
   was last active in each service, Office apps by platform (Windows, Mac,
   mobile, web), Office installs per person, and email and Teams activity
   counts. From Microsoft's usage reports (`Reports.Read.All`).
+<!-- since 2.6.0 -->
+- *Microsoft 365 Copilot*: who uses the Copilot licences you pay for (share
+  of people with Copilot who used it in the last 30 days, with a trend from
+  Office Sentry's own history), in which apps (Copilot Chat, Teams, Outlook,
+  Word, Excel, PowerPoint, OneNote, Loop), and a chart of how many used it
+  each day over Microsoft's last 90 days. Unused Copilot licences (not used
+  in 30 days, never used, or on a blocked account; licences given in the
+  last 14 days aren't counted yet) with what each costs a month at your
+  prices, licences bought but not assigned, and the busiest people without
+  Copilot, by Teams meetings, messages and emails sent, to give an unused
+  licence or a trial to. A Copilot licence is told by its service plan, so
+  the add-on, Copilot Business and suites that include Copilot (E7) all
+  count; a suite's Copilot has no price of its own, so it isn't costed. From
+  Microsoft's Copilot usage reports (`Reports.Read.All`); not offered in GCC
+  High, DoD or 21Vianet.
+<!-- /since -->
 - *Tenant settings*: what users and guests can do without an admin
   (create tenants, register apps, join by verifying an email address,
   sign up for trials, guest directory access) against the recommended
@@ -881,6 +897,16 @@ and follows it through consent, Global Reader and its first collection.
   Global Reader missing, Connected), with its consent link, an email to send,
   a consent pack PDF and a CSV of every link for a mail merge
   ([Onboarding a client](docs/onboarding-a-client.md#onboarding-many-clients)).
+<!-- since 2.6.0 -->
+- **Add from Partner Center** (*Onboarding*): for Microsoft partners with GDAP, one sign-in in your own tenant
+  lists every GDAP customer with whether your roles let you approve Office Sentry for it; tick the ones to add.
+  Read-only, in your own tenant only, and nothing is kept but the list, for a day
+  ([Adding clients from Partner Center](docs/onboarding-a-client.md#adding-clients-from-partner-center-gdap)).
+- **Approve them myself** (*Onboarding*): approve Office Sentry for the clients you can, as their Global
+  Administrator or through GDAP, one after another: each comes straight back from Microsoft's page and the next
+  one opens, with a link to each client's Entra admin centre for Global Reader
+  ([Approving several clients yourself](docs/onboarding-a-client.md#approving-several-clients-yourself)).
+<!-- /since -->
 - A client's **Settings → Manage** page (staff, not client accounts) shows its connection health:
   consent, sign-in, which of the app's permissions the tenant actually granted,
   whether the app holds Global Reader (or more than it needs), licences, last

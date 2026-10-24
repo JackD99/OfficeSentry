@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-71 checks, 43 data sources (collectors) and 54 detail reports.
+71 checks, 43 data sources (collectors) and 55 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -219,6 +219,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `auth-methods` | Passwords and sign-in methods | How people sign in and how strong that is: methods by strength, admins without phishing-resistant MFA, the methods policy, and password age and expiry. | `admin_roles`, `auth_methods_policy`, `conditional_access`, `directory_sync`, `mfa_registration`, `users` |
 | `auto-replies` | Automatic replies | Mailboxes answering mail with an out-of-office reply, who outside hears it, and replies that have been on so long they look forgotten. | `auto_replies`, `users` |
 | `conditional-access` | Conditional Access coverage | Every policy in plain words, and which accounts each one actually covers. | `admin_roles`, `conditional_access`, `users` |
+| `copilot` | Microsoft 365 Copilot | Who uses the Copilot licences you pay for and in which apps, which licences go unused and what they cost, and who could use Copilot next. | `m365_usage`, `tenant_profile`, `users` |
 | `deleted-items` | Deleted users and groups | Users, teams and Microsoft 365 groups in the recycle bin, with the licences they held and the days left to restore each before Microsoft deletes it for good after 30 days. | `deleted_items`, `tenant_profile` |
 | `devices` | Devices | Intune compliance, encryption and Windows support, BitLocker recovery keys saved in Entra ID, and every Entra ID device record. | `devices` |
 | `distribution-lists` | Distribution lists | Every distribution list with its members and owners, who can mail it, and empty, ownerless or unused lists. | `distribution_lists`, `mailboxes`, `users` |

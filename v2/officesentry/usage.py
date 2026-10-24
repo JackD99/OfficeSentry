@@ -336,3 +336,42 @@ def rightsize(
             )
         )
     return out
+
+
+# -- Copilot ----------------------------------------------------------------------------------
+
+# Microsoft 365 Copilot in each app: (key, label, the field prefix in Microsoft's per-person Copilot report, the
+# prefix in its daily counts), in the order pages show them.
+COPILOT_APPS = (
+    ("chat", "Copilot Chat", "copilotChat", "copilotChat"),
+    ("teams", "Teams", "microsoftTeamsCopilot", "microsoftTeams"),
+    ("outlook", "Outlook", "outlookCopilot", "outlook"),
+    ("word", "Word", "wordCopilot", "word"),
+    ("excel", "Excel", "excelCopilot", "excel"),
+    ("powerPoint", "PowerPoint", "powerPointCopilot", "powerPoint"),
+    ("oneNote", "OneNote", "oneNoteCopilot", "oneNote"),
+    ("loop", "Loop", "loopCopilot", "loop"),
+)
+# Every Microsoft 365 Copilot licence carries this service plan, whatever it's called (the add-on, Copilot Business,
+# E7, a suite bundled with Copilot), so it tells a Copilot licence where part numbers keep changing.
+COPILOT_PLAN = "M365_COPILOT_APPS"
+
+
+def _plans(sku: dict) -> list[str]:
+    plans = sku.get("servicePlans") if isinstance(sku.get("servicePlans"), list) else []
+    return [p.get("servicePlanName") or "" for p in plans if isinstance(p, dict)]
+
+
+def copilot_skus(skus: list[dict] | None) -> dict[str, dict]:
+    """The tenant's licences that include Microsoft 365 Copilot, by SKU ID."""
+    return {
+        s["skuId"]: s
+        for s in skus or []
+        if isinstance(s, dict) and isinstance(s.get("skuId"), str) and COPILOT_PLAN in _plans(s)
+    }
+
+
+def copilot_addon(sku: dict) -> bool:
+    """Copilot bought on its own, rather than as part of a suite with a mailbox (E7, a bundle): only an add-on's
+    price is what an unused Copilot licence costs."""
+    return not any(p.startswith("EXCHANGE_S_") for p in _plans(sku))
