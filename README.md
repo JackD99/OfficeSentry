@@ -287,6 +287,13 @@ emails when a scan finds something new and critical, and Teams, Slack or webhook
 report for Contoso is ready" with a link into the portal. Every send is
 logged, failures retry automatically, and you can preview at desktop and phone width.
 
+<!-- since 2.6.0 -->
+The same webhook can tell you when someone makes a risky change in a client's tenant, read from its directory audit
+log at each collection: "Contoso: bob@contoso.com made Global Administrator", a Conditional Access policy deleted or
+turned off, security defaults turned off, or a sign-in method removed from an admin. Each change is posted once,
+with who made it and when.
+<!-- /since -->
+
 <table>
   <tr>
     <td width="50%"><img src="docs/screenshots/emailed-reports.png" alt="A client's emailed reports"></td>

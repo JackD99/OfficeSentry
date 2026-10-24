@@ -2,7 +2,7 @@
 {% from "_macros.html" import icon %}
 {% block title %}Alerts · Office Sentry{% endblock %}
 {% block content %}
-<div class="page-head"><div><h2 class="page-title">Alerts</h2><div class="sub">Post to Microsoft Teams, Slack or any webhook when a client gets new findings, a collection starts failing or a client's report is ready.</div></div>
+<div class="page-head"><div><h2 class="page-title">Alerts</h2><div class="sub">Post to Microsoft Teams, Slack or any webhook when a client gets new findings, someone makes a risky change in a client's tenant, a collection starts failing or a client's report is ready.</div></div>
   {% if s['alerts.enabled'] == '1' %}<span class="pill ok">On</span>{% else %}<span class="pill warn">Off</span>{% endif %}</div>
 <div class="grid-main">
 <form method="post" action="{{ url_for('alerts.save') }}" class="card">
@@ -29,6 +29,10 @@
   <p class="footnote">Failures alert once when they start, not every night they continue.</p>
   <label class="check"><input type="checkbox" name="on_reports" value="1" {% if s['alerts.on_reports'] == '1' %}checked{% endif %}> A client's report is ready</label>
   <p class="footnote">“The October 2026 report for Contoso is ready”, when a report email goes out or a month-end report is published. It links to the client's report history and never carries the files, so only people signed in with access to that client can open them.</p>
+  <h2>Changes in a client's tenant</h2>
+  <p class="muted small">“Contoso: bob@contoso.com made Global Administrator”. Read from the client's directory audit log each time it's collected, so with nightly collection they arrive by the next morning. Each change is posted once, with who made it and when.</p>
+  {% for key, label in activity.items() %}<label class="check"><input type="checkbox" name="activity" value="{{ key }}" {% if key in chosen %}checked{% endif %}> {{ label }}</label>
+  {% endfor %}<p class="footnote">Admin roles are Global Administrator and the others that can change a client's security (Privileged Role, Security, Conditional Access, Exchange, SharePoint, User, Intune Administrator and more), given or made eligible; activating an eligible role isn't alerted. A sign-in method removed from an admin counts whether an admin or the person removed it. A client's first collection doesn't alert on what happened before it.</p>
   <h2>Problems with Office Sentry</h2>
   <label class="check"><input type="checkbox" name="system" value="1" {% if s['alerts.system'] == '1' %}checked{% endif %}> The worker stops, a backup fails, the disk is over 85% full or most clients fail to collect</label>
   <p class="footnote">These go to your team contacts by email and to the webhook above, once when a problem starts, daily while it lasts and once when it's fixed. See <a href="{{ url_for('system.status') }}">System status</a>.</p>
@@ -39,12 +43,13 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <h2>Send a test</h2>
   <p class="muted small">Save first, then check the webhook works.</p>
-  <div class="form-actions"><button {% if not url_hint %}disabled{% endif %}>Send test alert</button>
-    <button name="sample" value="report" {% if not url_hint %}disabled{% endif %}>Send a sample report</button></div>
+  <div class="form-actions wrap"><button {% if not url_hint %}disabled{% endif %}>Send test alert</button>
+    <button name="sample" value="report" {% if not url_hint %}disabled{% endif %}>Send a sample report</button>
+    <button name="sample" value="activity" {% if not url_hint %}disabled{% endif %}>Send a sample change</button></div>
 </form>
 <section class="card">
   <h2>{{ icon('mail') }} By email</h2>
-  <p class="muted small">The same new-finding alerts can go to people by email: for one client on its <em>Emailed reports</em> tab, or for every client under <a href="{{ url_for('email.overview') }}">Email reports</a>.{% if email_alerts %} {{ email_alerts }} email alert{{ 's' if email_alerts != 1 }} on.{% endif %}</p>
+  <p class="muted small">The same new-finding alerts can go to people by email: for one client on its <em>Emailed reports</em> tab, or for every client under <a href="{{ url_for('email.overview') }}">Email reports</a>.{% if email_alerts %} {{ email_alerts }} email alert{{ 's' if email_alerts != 1 }} on.{% endif %} Changes in a client's tenant go to the webhook only.</p>
 </section>
 <section class="card flush">
   <div class="card-head"><h2>Recent alerts</h2></div>
