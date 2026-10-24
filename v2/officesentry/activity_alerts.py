@@ -1,4 +1,4 @@
-"""Activity alerts: risky changes made in a client's tenant, posted to the alert webhook once each.
+"""Activity alerts: risky changes made in a client's tenant, posted once each (the webhook, ``alerts.deliver``).
 
 After each Admin activity run (``collectors/admin_activity.py``), the changes it holds that the client's previous
 readable run didn't are new: they happened since, or Microsoft logged them late. Those that match a kind the
@@ -155,6 +155,7 @@ def item(change: Change) -> alerts.Item:
             "detail": e.get("detail") or None,
         },
         label=LABELS[change.kind],
+        key=f"change:{e['_id']}" if e.get("_id") else "",
     )
 
 
@@ -186,7 +187,7 @@ def after_run(conn, alerting: alerts.Alerting | None, run_id: int, status: str) 
             return None
         s = alerts.settings(conn)
         kinds = alerts.activity_kinds(s)
-        if s["alerts.enabled"] != "1" or not s["alerts.url_enc"] or not kinds:
+        if not kinds or not alerts.wanted(conn, s):
             return None
         tenant = alerts.alerted_tenant(conn, run["tenant_id"])
         if tenant is None:
@@ -194,7 +195,7 @@ def after_run(conn, alerting: alerts.Alerting | None, run_id: int, status: str) 
         found = changes(conn, run, kinds)
         if not found:
             return None
-        return alerts._deliver(conn, alerting, s, message(alerting.base_url, tenant, found), run_id)
+        return alerts.deliver(conn, alerting, message(alerting.base_url, tenant, found), run_id, s)
     except Exception:
         log.exception("Preparing an activity alert failed")
         return False

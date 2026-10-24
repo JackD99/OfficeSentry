@@ -16,6 +16,11 @@ Sent by the worker when:
 Nothing goes out about a client that is paused or archived, even one paused while its collection ran
 (``alerted_tenant`` reads the tenant again).
 
+Every alert goes out through ``deliver``, to each destination that is set up: the webhook, and any other a
+module adds with ``register`` (a ticketing system, say). Each message says how bad it is (``severity``) and
+carries a ``key`` that stays the same for the same problem, so a destination can update one ticket instead of
+opening another; ``resolves`` marks the message that says it's over.
+
 Settings live in the ``settings`` table. The webhook URL (which usually carries
 its own access key) and the optional signing secret are encrypted with the
 Vault and never shown again after saving. Delivery never raises into the
@@ -32,6 +37,7 @@ import logging
 import os
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -51,6 +57,7 @@ log = logging.getLogger(__name__)
 
 FORMATS = {"teams": "Microsoft Teams (Workflows)", "slack": "Slack", "generic": "Generic JSON webhook"}
 ALERT_SEVERITIES = ("critical", "high", "medium", "low")
+INFO = "info"  # a message's severity when nothing is wrong: a report sent, a collection working again, a test
 # Changes in a client's tenant that can be alerted on (activity_alerts.py), as the settings page offers them.
 ACTIVITY_ALERTS = {
     "admin_role": "Someone is given an admin role",
@@ -102,6 +109,7 @@ class Item:
     detail: str
     data: dict = field(default_factory=dict)
     label: str = ""  # a change's kind ("Admin role"), shown in its severity's place
+    key: str = ""  # the same each time this item is sent: "finding:<id>", "change:<id>"
 
 
 @dataclass
@@ -116,6 +124,20 @@ class Message:
     extra: dict = field(default_factory=dict)
     button: str = "Open in Office Sentry"
     noun: str = "finding"  # what the items are: "finding", or "change" for activity alerts
+    severity: str = ""  # one of ALERT_SEVERITIES or INFO; left empty, the worst item's (INFO with none)
+    # The same each time it's about the same problem ("collection:12:users"); left empty, the event, the tenant
+    # and the items' keys (or the title, with no items).
+    key: str = ""
+    resolves: bool = False  # the problem with the same key is over: a collection working again, a system problem fixed
+
+    def __post_init__(self):
+        if not self.severity:
+            ranked = sorted((i.severity for i in self.items), key=lambda v: SEVERITY_RANK.get(v, len(SEVERITIES)))
+            self.severity = ranked[0] if ranked else INFO
+        if not self.key:
+            parts = sorted(i.key or f"{i.title}|{i.subject}" for i in self.items) or [self.title]
+            digest = hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
+            self.key = f"{self.event}:{self.tenant['id'] if self.tenant else '-'}:{digest}"
 
 
 # -- Settings ----------------------------------------------------------------
@@ -253,16 +275,79 @@ def send(conn, vault: Vault, message: Message, s: dict | None = None) -> None:
     post(url, build_payload(s.get("alerts.format", "teams"), message), secret)
 
 
-def _deliver(conn, alerting: Alerting, s: dict, message: Message, run_id: int | None = None) -> bool:
-    """Send and record the outcome. Never raises."""
-    tenant_id = message.tenant["id"] if message.tenant else None
-    what = f"{message.event} via {s.get('alerts.format')}"
+@dataclass(frozen=True)
+class Destination:
+    """Somewhere alerts are posted: the webhook (``WEBHOOK``), or another a module adds with ``register``."""
+
+    name: str  # in the audit log, "findings.new via <name>"
+    ready: Callable[[Any, dict], bool]  # (conn, settings(conn)): set up and turned on
+    # (conn, alerting, message, settings(conn)). Raises AlertError, whose text is safe to show, when it fails;
+    # returns False to leave this message out (nothing is recorded); anything else means it took it.
+    send: Callable[[Any, Alerting, Message, dict], bool | None]
+    # (conn, settings(conn)): the least severe new finding it posts. A findings.new message carries every one
+    # opened, and each destination gets only those at or above its own (``at_least``); None takes them all.
+    min_severity: Callable[[Any, dict], str | None] | None = None
+
+
+DESTINATIONS: list[Destination] = []
+
+
+def register(destination: Destination) -> None:
+    """Add a destination, or replace the one with the same name."""
+    DESTINATIONS[:] = [d for d in DESTINATIONS if d.name != destination.name] + [destination]
+
+
+def destinations(conn, s: dict | None = None) -> list[Destination]:
+    """The destinations set up and turned on now."""
+    s = s or settings(conn)
+    out = []
+    for d in DESTINATIONS:
+        try:
+            if d.ready(conn, s):
+                out.append(d)
+        except Exception:
+            log.exception("Checking the %s alert destination failed", d.name)
+    return out
+
+
+def wanted(conn, s: dict | None = None) -> bool:
+    """Whether an alert would go anywhere, so callers don't build one for nobody."""
+    return bool(destinations(conn, s))
+
+
+def deliver(
+    conn, alerting: Alerting, message: Message, run_id: int | None = None, s: dict | None = None
+) -> bool | None:
+    """Post one alert to every destination set up, recording each outcome in the audit log (and the run's log).
+    Every alert goes out through here. Never raises. Returns True when one took it, False when every one tried
+    failed, and None when none is set up or each left it out."""
     try:
-        send(conn, alerting.vault, message, s)
+        s = s or settings(conn)
+        ready = destinations(conn, s)
+    except Exception:
+        log.exception("Finding where to send an alert failed")
+        return False
+    took = None
+    for d in ready:
+        ok = _deliver_to(conn, alerting, s, message, d, run_id)
+        if ok is not None:
+            took = ok if took is None else took or ok
+    return took
+
+
+def _deliver_to(conn, alerting: Alerting, s: dict, message: Message, d: Destination, run_id: int | None) -> bool | None:
+    """Send to one destination and record the outcome. Never raises."""
+    tenant_id = message.tenant["id"] if message.tenant else None
+    via = s.get("alerts.format") if d is WEBHOOK else d.name
+    what = f"{message.event} via {via}"
+    try:
+        message = at_least(message, d.min_severity(conn, s) if d.min_severity else None)
+        if message is None or d.send(conn, alerting, message, s) is False:
+            return None
     except AlertError as exc:
         outcome, ok = ("alert_failed", f"{what}: {exc}"), False
     except Exception as exc:  # a bug here must never stop collections
-        log.exception("Sending an alert failed")
+        log.exception("Sending an alert to %s failed", d.name)
         outcome, ok = ("alert_failed", f"{what}: {type(exc).__name__}"), False
     else:
         found = f", {plural(len(message.items), message.noun)}" if message.items else ""
@@ -270,15 +355,25 @@ def _deliver(conn, alerting: Alerting, s: dict, message: Message, run_id: int | 
     try:
         audit(conn, None, outcome[0], tenant_id, outcome[1][:500])
         if run_id is not None:
+            sent = "Alert sent" if d is WEBHOOK else f"Alert sent via {d.name}"
             log_event(
-                conn,
-                run_id,
-                "info" if ok else "warning",
-                ("Alert sent" if ok else "Alert not sent: " + outcome[1])[:500],
+                conn, run_id, "info" if ok else "warning", (sent if ok else "Alert not sent: " + outcome[1])[:500]
             )
     except Exception:
         log.exception("Recording an alert outcome failed")
     return ok
+
+
+def _webhook_ready(conn, s: dict) -> bool:
+    return s.get("alerts.enabled") == "1" and bool(s.get("alerts.url_enc"))
+
+
+def _webhook_send(conn, alerting: Alerting, message: Message, s: dict) -> None:
+    send(conn, alerting.vault, message, s)
+
+
+WEBHOOK = Destination("webhook", _webhook_ready, _webhook_send, lambda conn, s: s.get("alerts.min_severity"))
+register(WEBHOOK)
 
 
 # -- Events ------------------------------------------------------------------
@@ -322,6 +417,7 @@ def opened_items(conn, tenant_id: int, finding_ids, min_severity: str) -> list[I
                     "first_seen": row["first_seen"],
                     "reopened": row["reopened_at"] is not None,
                 },
+                key=f"finding:{row['id']}",
             )
         )
     items.sort(key=lambda i: (SEVERITY_RANK.get(i.severity, 9), i.title.lower(), i.subject.lower()))
@@ -343,7 +439,7 @@ def after_sync(conn, alerting: Alerting | None, tenant, stats: dict, run_id: int
     tenant = alerted_tenant(conn, tenant["id"])  # the row the run started with may be out of date
     if tenant is None:
         return None
-    sent = _webhook_after_sync(conn, alerting, tenant, stats, run_id)
+    sent = _post_after_sync(conn, alerting, tenant, stats, run_id)
     if alerting.app is not None and stats.get("opened"):
         try:
             from . import delivery  # imports this module
@@ -354,28 +450,44 @@ def after_sync(conn, alerting: Alerting | None, tenant, stats: dict, run_id: int
     return sent
 
 
-def _webhook_after_sync(conn, alerting: Alerting, tenant, stats: dict, run_id: int | None) -> bool | None:
+def _post_after_sync(conn, alerting: Alerting, tenant, stats: dict, run_id: int | None) -> bool | None:
     try:
         s = settings(conn)
-        if s["alerts.enabled"] != "1" or not s["alerts.url_enc"]:
+        if not wanted(conn, s):
             return None
-        items = opened_items(conn, tenant["id"], stats.get("opened") or (), s["alerts.min_severity"])
+        # Every severity: each destination keeps those at or above its own (at_least).
+        items = opened_items(conn, tenant["id"], stats.get("opened") or (), SEVERITIES[-1])
         if not items:
             return None
-        n = len(items)
-        message = Message(
-            event="findings.new",
-            title=f"{tenant['name']}: {n} new finding{'s' if n != 1 else ''}",
-            text=f"Office Sentry found {n} new or returning issue{'s' if n != 1 else ''} "
-            f"rated {s['alerts.min_severity']} or worse.",
-            link=tenant_link(alerting.base_url, tenant),
-            tenant=dict(tenant),
-            items=items,
+        return deliver(
+            conn, alerting, findings_message(tenant_link(alerting.base_url, tenant), tenant, items), run_id, s
         )
-        return _deliver(conn, alerting, s, message, run_id)
     except Exception:
         log.exception("Preparing a findings alert failed")
         return False
+
+
+def findings_message(link: str, tenant, items: list[Item], min_severity: str | None = None) -> Message:
+    n = len(items)
+    rated = f" rated {min_severity} or worse" if min_severity and min_severity != SEVERITIES[-1] else ""
+    return Message(
+        event="findings.new",
+        title=f"{tenant['name']}: {n} new finding{'s' if n != 1 else ''}",
+        text=f"Office Sentry found {n} new or returning issue{'s' if n != 1 else ''}{rated}.",
+        link=link,
+        tenant=dict(tenant),
+        items=items,
+    )
+
+
+def at_least(message: Message, min_severity: str | None) -> Message | None:
+    """A findings.new message with only the findings at or above ``min_severity``, as one destination posts it,
+    or None when none are. Any other message, or no ``min_severity``, is returned as it is."""
+    if message.event != "findings.new" or not min_severity:
+        return message
+    limit = SEVERITY_RANK.get(min_severity, SEVERITY_RANK["high"])
+    kept = [i for i in message.items if SEVERITY_RANK.get(i.severity, len(SEVERITIES)) <= limit]
+    return findings_message(message.link, message.tenant, kept, min_severity) if kept else None
 
 
 def after_run(conn, alerting: Alerting | None, run_id: int, status: str) -> bool | None:
@@ -384,7 +496,7 @@ def after_run(conn, alerting: Alerting | None, run_id: int, status: str) -> bool
         if alerting is None:
             return None
         s = settings(conn)
-        if s["alerts.enabled"] != "1" or not s["alerts.url_enc"] or s["alerts.on_failures"] != "1":
+        if s["alerts.on_failures"] != "1" or not wanted(conn, s):
             return None
         run = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
         if run is None or (status == "failed" and run["retry_at"]):
@@ -407,6 +519,7 @@ def after_run(conn, alerting: Alerting | None, run_id: int, status: str) -> bool
         cls = REGISTRY.get(run["collector"])
         name = cls.title if cls else run["collector"]
         link = tenant_link(alerting.base_url, tenant)
+        key = f"collection:{tenant['id']}:{run['collector']}"  # the failure and the recovery share it
         if failed:
             error = (run["error"] or "no details").splitlines()[0][:300]
             message = Message(
@@ -416,6 +529,8 @@ def after_run(conn, alerting: Alerting | None, run_id: int, status: str) -> bool
                 link,
                 dict(tenant),
                 extra={"collector": run["collector"], "run_id": run_id, "error": error},
+                severity="medium",
+                key=key,
             )
         else:
             message = Message(
@@ -425,8 +540,10 @@ def after_run(conn, alerting: Alerting | None, run_id: int, status: str) -> bool
                 link,
                 dict(tenant),
                 extra={"collector": run["collector"], "run_id": run_id},
+                key=key,
+                resolves=True,
             )
-        return _deliver(conn, alerting, s, message, run_id)
+        return deliver(conn, alerting, message, run_id, s)
     except Exception:
         log.exception("Preparing a collection alert failed")
         return False
@@ -458,6 +575,7 @@ def report_ready_message(
         dict(tenant),
         extra={"period": period, "reports": list(titles), "emailed": emailed},
         button="Open the report history",
+        key=f"report.ready:{tenant['id']}:{period or '-'}",
     )
 
 
@@ -470,10 +588,10 @@ def report_ready(
         if alerting is None or tenant is None:
             return None
         s = settings(conn)
-        if s["alerts.enabled"] != "1" or not s["alerts.url_enc"] or s["alerts.on_reports"] != "1":
+        if s["alerts.on_reports"] != "1" or not wanted(conn, s):
             return None
-        return _deliver(
-            conn, alerting, s, report_ready_message(alerting.base_url, tenant, period, titles, emailed=emailed)
+        return deliver(
+            conn, alerting, report_ready_message(alerting.base_url, tenant, period, titles, emailed=emailed), s=s
         )
     except Exception:
         log.exception("Preparing a report-ready alert failed")
@@ -481,7 +599,9 @@ def report_ready(
 
 
 def test_message(base_url: str) -> Message:
-    return Message("test", "Office Sentry test alert", "Alerts from Office Sentry are working.", base_url.rstrip("/"))
+    return Message(
+        "test", "Office Sentry test alert", "Alerts from Office Sentry are working.", base_url.rstrip("/"), key="test"
+    )
 
 
 def sample_report_message(base_url: str) -> Message:
@@ -609,6 +729,9 @@ def generic_payload(message: Message) -> dict:
         "title": message.title,
         "text": message.text,
         "url": message.link,
+        "severity": message.severity,
+        "key": message.key,
+        "resolves": message.resolves,
         "sent_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "tenant": (
             {
