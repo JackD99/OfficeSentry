@@ -6,7 +6,7 @@
 {% from "_macros.html" import icon, csrf %}
 {% from "_report_table.html" import cell %}
 {% set s = sheet %}
-{% set back = url_for('reports.resolved_findings' if s.status == 'resolved' else 'reports.tenant_findings', tenant_id=tenant.id) ~ (('?' ~ view_query) if view_query is defined and view_query else '') %}
+{% set back = url_for('reports.resolved_findings' if s.status == 'resolved' else 'reports.tenant_findings', tenant_id=tenant.id) ~ (('?' ~ page_query) if page_query is defined and page_query else '') %}
 <aside class="sheet card flush" id="finding-sheet" aria-labelledby="sheet-title" data-finding="{{ finding.id }}">
   <div class="sheet-head">
     <div class="sheet-top">

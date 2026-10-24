@@ -356,6 +356,44 @@ def test_hand_a_finding_line_to_a_colleague(client, db, two_tenants):
     assert "Handed to you" in client.get("/today").get_data(as_text=True)
 
 
+def test_lines_handed_to_you_are_kept_together_at_the_top(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    _finding(db, alpha, "mfa_registration", "high")
+    _finding(db, bravo, "external_forwarding", "critical")
+    _failed_run(db, bravo)
+    make_user(db, "admin")
+    ana = make_user(db, "ana", role="analyst", tenants=[alpha, bravo])
+    found = [str(r["id"]) for r in db.execute("SELECT id FROM findings WHERE tenant_id = ?", (alpha,))]
+    login(client, "admin")
+    client.post(f"/tenants/{alpha}/today/hand", data={"key": "finding:mfa_registration", "finding": found, "to": ana})
+    client.post(f"/tenants/{bravo}/today/hand", data={"key": "collection", "to": str(ana)})
+    page = client.get("/today").get_data(as_text=True)
+    assert 'id="handed"' not in page and page.count("Handed to ana</div>") == 2  # nothing is handed to admin
+    data = home.today(db, db.execute("SELECT * FROM tenants").fetchall())
+    held = data.handed_to(ana)
+    assert {(e.kind, e.handed_by) for e in held} == {("finding", "admin"), ("collection", "admin")}
+    assert data.handed_to(None) == [] and len(data.entries) == 3 and data.new_severe == 2  # still counted
+    client.post("/logout")
+    login(client, "ana")
+    page = client.get("/today").get_data(as_text=True)
+    handed, ledger = page.split('id="handed"')[1].split('id="ledger"')
+    assert handed.count('class="ledger-line') == 2 and handed.count("Handed to you by admin") == 2
+    assert ledger.count('class="ledger-line') == 1 and 'data-kind="finding"' in ledger and "Handed" not in ledger
+    # Everything handed to them: no ledger below, only the group.
+    client.post(
+        f"/tenants/{bravo}/today/hand",
+        data={
+            "key": "finding:external_forwarding",
+            "to": str(ana),
+            "finding": [str(r["id"]) for r in db.execute("SELECT id FROM findings WHERE tenant_id = ?", (bravo,))],
+        },
+    )
+    page = client.get("/today").get_data(as_text=True)
+    assert 'id="handed"' in page and 'id="ledger"' not in page
+    # Taking a line yourself doesn't say you handed it to yourself.
+    assert "Handed to you by ana" not in page
+
+
 def test_snooze_a_failed_collection_and_bring_it_back(client, db, two_tenants):
     alpha, bravo = two_tenants
     _failed_run(db, bravo)
