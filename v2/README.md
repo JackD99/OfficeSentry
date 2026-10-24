@@ -69,6 +69,17 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   every month; a phone shows the last three. It's built from the figures and
   findings Office Sentry already keeps, so nothing new is read from Microsoft.
 <!-- /since -->
+<!-- since 2.6.0 -->
+  **Our work this quarter** (`/across/our-work`, for people who see findings)
+  counts what the team got done over the three months ending this one, or the
+  three before: findings fixed (resolved in the quarter and not back since),
+  how many were critical or high, risks accepted, and Secure Score, users with
+  MFA and unused paid licences as the quarter began and as it ended. It's
+  broken down by client, month, check and the person each fixed finding was
+  handed to, with an XLSX of every table, a branded PDF for the management
+  meeting and a *PDF without names* (clients as Client 1, Client 2, and no team
+  names) to show a prospect. Built from what Office Sentry already keeps.
+<!-- /since -->
 - **What changed** (`/changes`, and each client's *Changes* tab): a standalone
   month-over-month report for the last 7, 30 or 90 days, or, on a client's
   *Changes* tab, between any two days the kept data reaches back to. It covers

@@ -1,0 +1,132 @@
+{#- Our work this quarter (reports/our_work.py): what the team got done for its clients over three months, the
+    figures first, then by month, by client, what was fixed and who fixed it. The PDF is reports/our_work.html. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import downloads %}
+{% from "_across.html" import across_head with context %}
+{% block title %}Our work this quarter · Clients · Office Sentry{% endblock %}
+{% macro moved(m, figure) -%}
+{% if m is none or m.end is none %}<span class="faint">–</span>
+{%- else %}{% set c = m.change %}{{ '%g'|format(m.end|round|int) }}{{ figure.unit }}{% if c %} <span class="delta {{ 'better' if (c > 0) == (figure.better == 'up') else 'worse' }}" title="From {{ '%g'|format(m.start|round|int) }}{{ figure.unit }} as the quarter began">{{ '+' if c > 0 else '−' }}{{ '%g'|format(c|abs|round|int) }}</span>{% endif %}
+{%- endif %}
+{%- endmacro %}
+{% block content %}
+{{ across_head('our-work', main, count=work.clients|length) }}
+
+<nav class="subtabs" aria-label="Quarter">
+  {% for b, text in [(0, 'This quarter'), (1, 'The quarter before')] %}
+  <a href="{{ url_for('across.our_work_page', back=b or none) }}"{% if work.back == b %} class="active" aria-current="page"{% endif %}>{{ text }}</a>
+  {% endfor %}
+</nav>
+
+{% if not work.clients %}
+<div class="card empty">
+  <h3>No clients to show</h3>
+  <p>{% if can('clients.manage') %}Add a client to see it here.{% else %}You haven't been given access to any clients yet. Ask an admin to grant access.{% endif %}</p>
+</div>
+{% else %}
+<p class="intro-line">{{ work.label }}{{ ', so far' if work.so_far }}:
+{%- if work.worked %} {{ work.fixed|plural('finding') }} fixed{% if work.severe %}, {{ work.severe }} of them critical or high{% endif %}{% if work.accepted %}, and {{ work.accepted|plural('risk') }} accepted with the client{% endif %}, across {% if work.worked|length == work.clients|length %}{{ {1: 'the one client', 2: 'both clients'}.get(work.clients|length, 'all ' ~ work.clients|length ~ ' clients') }}{% else %}{{ work.worked|length }} of {{ work.clients|length|plural('client') }}{% endif %}.
+{%- else %} nothing fixed or accepted {{ 'yet ' if work.so_far }}across {{ work.clients|length|plural('client') }}.{% endif %}</p>
+
+<div class="tiles">
+  <div class="tile{% if work.fixed %} tone-ok{% endif %}"><div class="label">Findings fixed</div><div class="value">{{ work.fixed }}</div>
+    <div class="foot">{{ work.severe }} critical or high</div></div>
+  <div class="tile"><div class="label">Risks accepted</div><div class="value">{{ work.accepted }}</div>
+    <div class="foot">decided with the client, with a reason</div></div>
+  {% for f in work.figures if f.key == 'secure_score.pct' %}{% set up = work.improved(f.key) %}
+  <div class="tile{% if up %} tone-ok{% endif %}"><div class="label">Secure Score up</div><div class="value">{{ up|length }}</div>
+    <div class="foot">{{ 'client' if up|length == 1 else 'clients' }} higher than as the quarter began</div></div>
+  {% endfor %}
+  {% for f in work.figures if f.key == 'licences.unassigned_paid' %}
+  <div class="tile{% if work.unused_removed %} tone-ok{% endif %}"><div class="label">Unused licences cut</div><div class="value">{{ work.unused_removed }}</div>
+    <div class="foot">paid licences nobody had, fewer than as the quarter began</div></div>
+  {% endfor %}
+</div>
+
+<div class="card flush">
+  <div class="card-head toolbar">
+    <div>
+      <h2>By client</h2>
+      <p class="muted small">Most fixed first. Each figure is where it ended, against where it was as the quarter began.</p>
+    </div>
+    <div class="toolbar-actions">
+      {% if work.clients|length > 5 %}<input class="search sm" type="search" data-filter="our-work" placeholder="Filter clients…" aria-label="Filter clients">{% endif %}
+      {% set q = work.back or none %}
+      {{ downloads([('PDF', url_for('across.our_work_pdf', back=q), 'The quarter as a branded PDF, for the management meeting'),
+                    ('PDF without names', url_for('across.our_work_pdf', back=q, names=0), 'The same PDF with clients and team members left unnamed, to show a prospect'),
+                    ('XLSX', url_for('across.our_work_download', back=q), 'Every table, with the figures at the start and end of the quarter')]) }}
+    </div>
+  </div>
+  <div class="table-scroll{{ ' tall' if work.clients|length > 12 }}">
+  <table class="stack-sm sortable" id="our-work">
+    <thead><tr>
+      <th aria-sort="none"><button type="button" class="sort">Client</button></th>
+      <th class="num" aria-sort="none"><button type="button" class="sort">Fixed</button></th>
+      <th class="num" aria-sort="none" title="Critical and high findings fixed"><button type="button" class="sort">Critical and high</button></th>
+      <th class="num" aria-sort="none"><button type="button" class="sort">Risks accepted</button></th>
+      {% for f in work.figures %}<th class="num" aria-sort="none"><button type="button" class="sort">{{ f.label }}</button></th>{% endfor %}
+    </tr></thead>
+    <tbody>
+    {% for c in work.clients %}{% set t = c.tenant %}
+    <tr data-name="{{ t.name|lower }} {{ (t.tenant_ref or '')|lower }}">
+      <td class="tenant-col" data-sort="{{ t.name|lower }}"><a class="strong" href="{{ url_for('reports.tenant_findings', tenant_id=t.id) }}">{{ t.name }}</a></td>
+      <td class="num" data-label="Fixed" data-sort="{{ c.fixed }}">{{ c.fixed or '–' }}</td>
+      <td class="num" data-label="Critical and high" data-sort="{{ c.severe }}">{{ c.severe or '–' }}</td>
+      <td class="num" data-label="Risks accepted" data-sort="{{ c.accepted }}">{{ c.accepted or '–' }}</td>
+      {% for f in work.figures %}{% set m = c.figures.get(f.key) %}
+      <td class="num" data-label="{{ f.label }}" data-sort="{{ m.change if m and m.change is not none else '' }}">{{ moved(m, f) }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="grid-2">
+<section class="card">
+  <h2>By month</h2>
+  <table class="compact">
+    <thead><tr><th>Month</th><th class="num">Fixed</th><th class="num">Critical and high</th><th class="num">Risks accepted</th></tr></thead>
+    <tbody>
+    {% for m in work.months %}
+    <tr><td>{{ m.month.strftime('%B %Y') }}{% if loop.last and work.so_far %} <span class="faint">so far</span>{% endif %}</td><td class="num">{{ m.fixed }}</td><td class="num">{{ m.severe }}</td><td class="num">{{ m.accepted }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+<section class="card">
+  <h2>Who fixed it</h2>
+  {% if work.people %}
+  <p class="muted small">Findings fixed while they were handed to someone on the team.</p>
+  <table class="compact">
+    <thead><tr><th>Person</th><th class="num">Fixed</th><th class="num">Critical and high</th><th class="num">Clients</th></tr></thead>
+    <tbody>
+    {% for p in work.people %}<tr><td>{{ p.name }}</td><td class="num">{{ p.fixed }}</td><td class="num">{{ p.severe }}</td><td class="num">{{ p.clients|length }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Nothing fixed this quarter was handed to anyone. <strong>Hand to</strong> on a finding says who's on it, and it's counted here once it's fixed.</p>
+  {% endif %}
+</section>
+</div>
+
+<section class="card">
+  <h2>What was fixed</h2>
+  {% if work.checks %}
+  <table class="compact">
+    <thead><tr><th>Check</th><th>Severity</th><th class="num">Fixed</th><th class="num">Clients</th></tr></thead>
+    <tbody>
+    {% for k in work.checks[:15] %}<tr><td>{{ k.title }}</td><td><span class="sev-legend"><span><i class="sw sev-{{ k.severity }}"></i>{{ k.severity|capitalize }}</span></span></td><td class="num">{{ k.fixed }}</td><td class="num">{{ k.clients|length }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% if work.checks|length > 15 %}<p class="muted small">And {{ work.checks|length - 15 }} more checks in the XLSX.</p>{% endif %}
+  {% else %}<p class="muted">Nothing fixed {{ 'yet ' if work.so_far }}this quarter.</p>{% endif %}
+</section>
+
+<p class="footnote">From what Office Sentry keeps for each client; nothing is read from Microsoft for it. A finding counts as fixed in the month a collection no longer found it, and not at all if it has come back since. Figures are the last reading before the quarter began (or its first in the quarter) and the last in it.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}
