@@ -547,6 +547,7 @@ Each report is listed under its area in the report menu, in menu order.
   conflicting or missing base licences, usage location) in plain words with
   what to do; licensed accounts without a usage location; licences assigned
   both directly and by a group; and the groups that hand licences out.
+<!-- since 2.6.0 -->
 - *Licence features*: what the client's licences actually cover. Each
   feature Office Sentry reports on (Entra ID P1 and P2, Intune, Defender for
   Office 365 P1 and P2, Exchange Online, SharePoint) with whether it's
@@ -557,6 +558,7 @@ Each report is listed under its area in the report menu, in menu order.
   Features come from the service plans inside the licences, the same reading
   the collectors go by (`officesentry/capabilities.py`; collectors declare
   what they need with `needs` and `more_with`, checks with `@rule(needs=...)`).
+<!-- /since -->
 - *Licence changes*: every paid licence given to or taken from an account,
   from Office Sentry's own kept collections (to the day for the last month,
   to the month before that), whether it came directly or from a group, and
