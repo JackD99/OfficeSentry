@@ -183,6 +183,15 @@ GRAPH: tuple[Endpoint, ...] = (
     Endpoint("/directory/administrativeUnits/{id}/members", V1, "Directory.Read.All", ("directory",), cost=3),
     Endpoint("/applications", V1, "Application.Read.All", ("directory",)),
     Endpoint("/servicePrincipals", V1, "Application.Read.All", ("directory",)),
+    # AI agents (permission added in 2.6; skipped while the client hasn't approved it). Before the entry below,
+    # which its path would match too.
+    Endpoint(
+        "/servicePrincipals/microsoft.graph.agentIdentity",
+        V1,
+        "AgentIdentity.Read.All",
+        ("directory",),
+        fallback="Shown as waiting until the client approves the permission (2.6)",
+    ),
     Endpoint("/servicePrincipals/{id}", V1, "Application.Read.All", ("directory",)),
     Endpoint("/servicePrincipals/{id}/appRoleAssignments", V1, "Application.Read.All", ("directory",)),
     Endpoint("/oauth2PermissionGrants", V1, "Directory.Read.All", ("directory",)),

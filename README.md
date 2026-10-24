@@ -198,7 +198,9 @@ of them by name or by the job you're doing ("Offboarding check", "Insurance rene
 
 <!-- since 2.6.0 -->
 New in 2.6: **Microsoft 365 Copilot** shows who uses the Copilot licences you pay for and in which apps, the unused
-ones and what they cost a month, and the busiest people without Copilot to give one to.
+ones and what they cost a month, and the busiest people without Copilot to give one to. **AI agents** lists the
+agents with their own identity in Entra ID, which app made each and what it can reach on its own, flagging those that
+can read mail or files or hold an admin role. It needs one new read-only permission, `AgentIdentity.Read.All`.
 <!-- /since -->
 
 New in 2.4: **Security alerts**, Microsoft Defender's open incidents and alerts with who is dealing with each, and **Service health**, Microsoft's outages and the message centre's changes with a date to act by. The Devices report adds which computers back up their local admin password with Windows LAPS. **Installed apps** lists every app Intune has found on managed devices, remote access tools first, and **Trusted organisations and locations** shows whose MFA the tenant accepts and the named locations Conditional Access trusts.
