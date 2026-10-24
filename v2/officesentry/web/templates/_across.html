@@ -11,6 +11,7 @@
     <div class="sub">{% if group_scope and group_scope.group %}Latest results for the {{ count|plural('client') }} in {{ group_scope.group.name }}, worst first.{% else %}Latest results for every client you look after, worst first.{% endif %}{% if picker %} Pick a report to see it for every client.{% endif %}</div>
   </div>
   <div class="actions">{{ group_picker() }}
+    {% if can_open('board.index') %}<a class="btn" href="{{ url_for('board.index') }}" title="Every client on one dark screen for the office TV, worst first">{{ icon('grid') }} Office board</a>{% endif %}
     {% if can_open('tenant_admin.clients') %}<a class="btn" href="{{ url_for('tenant_admin.clients') }}" title="Connection, permissions and collection for every client">{{ icon('connection') }} Connection health</a>{% endif %}
     {% if can('clients.manage') %}<a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add client</a>{% endif %}</div>
 </div>

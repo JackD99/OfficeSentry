@@ -146,6 +146,24 @@ needing attention on its *Settings → Manage* page and in *Client settings*.
   and every finding row tells staff who holds it. Client accounts never see who
   holds what.
 <!-- /since -->
+<!-- since 2.6.0 -->
+- **Office board** (`/board`, *Office board* on the Clients page): every client
+  on one dark, full-screen page for the office TV, without the menu. Each client
+  is a tile with its grade, open critical and high findings and Secure Score, or
+  a word when something needs someone: new critical or high findings in the last
+  day, *Not read* (outlined) when its collection failed, *Out of date*, *No
+  access yet* or what's due this week. Those come first, worst first. Above them
+  are five figures for the day: new critical and high findings, clients read in
+  the last 36 hours, what's due this week, lines not handed to anyone yet, and
+  critical and high findings fixed this week. The clock ticks and the page
+  reloads itself every 5 minutes. When there are more clients than fit the
+  screen, the ones that need someone stay and the rest take turns every 15
+  seconds. It needs the same access as Today and shows each client only what the
+  person signed in may see there; pick a client group first for a board of that
+  group. Sign the TV in with an account that holds only what the board should
+  show. Like any session it ends after `OFFICESENTRY_SESSION_HOURS` (8 unless
+  you set it), so the TV is signed in again each morning.
+<!-- /since -->
 - **Licence prices** (*Settings → Licence prices*): what a client pays for each
   licence a month, used to cost licence waste, right-sizing savings, renewals
   and the Accounts page. A licence's price is your own price for it when you've

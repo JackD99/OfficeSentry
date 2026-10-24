@@ -287,6 +287,13 @@ the clients that slipped come first.
   </tr>
 </table>
 
+<!-- since 2.6.0 -->
+The **Office board** puts every client on one dark screen for the office TV: a tile per client with its grade, open
+critical and high findings and Secure Score, the ones with something new, a failed collection or something due
+first, and the day's figures above them. It refreshes itself, and when the clients don't all fit, the quiet ones
+take turns.
+<!-- /since -->
+
 ### Emailed reports and alerts
 
 Send any mix of reports weekly, monthly or quarterly at a time in the client's timezone: the client's people get
