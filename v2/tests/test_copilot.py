@@ -54,6 +54,12 @@ COPILOT = [
     ud.copilot_user("dan@x.com"),
 ]
 TREND = ud.copilot_trend([0, 1, 1, 2, 1])
+# Copilot actions by day, counted back from the report's refresh date: Ann used it on two of the last seven days.
+BY_DATE = {
+    0: [ud.copilot_by_date("ann@x.com", 6)],
+    2: [ud.copilot_by_date("ann@x.com", 4), ud.copilot_by_date("dan@x.com", 0, active=False)],
+    9: [ud.copilot_by_date("ann@x.com", 50)],  # before the week, so never asked for
+}
 
 
 def _seed(db, tenant_id, **usage_kw):
@@ -62,7 +68,7 @@ def _seed(db, tenant_id, **usage_kw):
         tenant_id,
         users=USERS,
         skus=[*SKUS, COPILOT_SKU],
-        usage_kw={"copilot": COPILOT, "trend": TREND, **usage_kw},
+        usage_kw={"copilot": COPILOT, "trend": TREND, "by_date": BY_DATE, **usage_kw},
     )
 
 
@@ -105,11 +111,70 @@ def test_collector_keeps_each_app_and_the_daily_counts(db, two_tenants):
     assert [v for _, v in snap.history("copilot.active")] == [1]
 
 
+def test_collector_counts_each_persons_actions_over_the_week(db, two_tenants):
+    alpha, _ = two_tenants
+    _seed(db, alpha)
+    snap = TenantSnapshot(db, store.get_tenant(db, alpha))
+    assert usage.person(snap, "ann@x.com")["copilotWeek"] == {"actions": 10, "days": 2}
+    assert usage.person(snap, "dan@x.com")["copilotWeek"] == {"actions": 0, "days": 0}
+    assert usage.person(snap, "erin@x.com")["copilotWeek"] is None  # no Copilot
+    week = usage.status(snap)["copilotWeek"]
+    assert week == {"from": ud.days_ago(8), "to": ud.REFRESHED, "days": 7}
+    assert [v for _, v in snap.history("copilot.actions_7d")] == [10]  # Bob, blocked, isn't counted
+    run = store.latest_run(db, alpha, "m365_usage")
+    calls = {
+        r["endpoint"]: r["calls"]
+        for r in db.execute("SELECT endpoint, calls FROM run_requests WHERE run_id = ?", (run["id"],))
+    }
+    assert calls["beta /copilot/reports/getMicrosoft365CopilotUsageUserDetailByDate(date={date})"] == 7
+
+
+def test_a_day_microsoft_wont_give_is_left_out_and_an_error_leaves_the_week_out(db, two_tenants):
+    alpha, bravo = two_tenants
+    _seed(db, alpha, by_date_status={6: 400})
+    week = usage.status(TenantSnapshot(db, store.get_tenant(db, alpha)))["copilotWeek"]
+    assert week["days"] == 6 and week["to"] == ud.REFRESHED
+    assert next(t for t in _report(db, alpha).tiles if t.label == "Copilot actions, last 7 days").value == 10
+
+    _seed(db, bravo, by_date_status={3: 500})
+    snap = TenantSnapshot(db, store.get_tenant(db, bravo))
+    assert usage.status(snap)["copilotWeek"] is None and usage.person(snap, "ann@x.com")["copilotWeek"] is None
+    assert snap.history("copilot.actions_7d") == []
+    report = _report(db, bravo)
+    assert report.parts == {"copilot": "read", "week": "failed"}
+    tile = next(t for t in report.tiles if t.label == "Copilot actions, last 7 days")
+    assert (tile.value, tile.foot) == ("Not known", "Microsoft's daily Copilot report couldn't be read")
+    people, _ = _rows(report, "People with Copilot")
+    assert people["ann@x.com"][3:5] == ["Not known", "Not known"]
+
+
+def test_usage_collected_before_the_daily_report_was_read(db, two_tenants, monkeypatch):
+    alpha, _ = two_tenants
+    _seed(db, alpha)
+    status = usage.status(TenantSnapshot(db, store.get_tenant(db, alpha)))
+    old = {k: v for k, v in status.items() if k != "copilotWeek"}
+    old["read"] = {k: v for k, v in status["read"].items() if k != "copilot_week"}
+    monkeypatch.setattr(usage, "status", lambda snap: old)
+    report = _report(db, alpha)
+    assert report.parts == {"copilot": "read"}
+    tile = next(t for t in report.tiles if t.label == "Copilot actions, last 7 days")
+    assert tile.value == "Not known" and tile.foot.startswith("Not collected yet")
+
+
 def test_daily_counts_are_only_asked_for_when_someone_holds_copilot(db, two_tenants):
     alpha, bravo = two_tenants
     seed_tenant(db, alpha, usage_kw={"trend_status": 500})
     status = usage.status(TenantSnapshot(db, store.get_tenant(db, alpha)))
     assert status["read"]["copilot"] is True and "copilot_trend" not in status["read"]
+    assert status["copilotWeek"] is None
+    run = store.latest_run(db, alpha, "m365_usage")
+    asked = {r["endpoint"] for r in db.execute("SELECT endpoint FROM run_requests WHERE run_id = ?", (run["id"],))}
+    assert not any("ByDate" in e for e in asked)
+    # Not asked isn't a failure: the report says nobody holds Copilot rather than that it couldn't be read.
+    report = _report(db, alpha)
+    assert report.parts == {"copilot": "read"}
+    tile = next(t for t in report.tiles if t.label == "Copilot actions, last 7 days")
+    assert (tile.value, tile.foot) == ("No one licensed", "In every app, the last 7 days")
     # With Copilot, a failure is noted and the report leaves the chart out.
     _seed(db, bravo, trend_status=500)
     status = usage.status(TenantSnapshot(db, store.get_tenant(db, bravo)))
@@ -122,11 +187,13 @@ def test_copilot_report(db, two_tenants):
     _seed(db, alpha)
     _price(db, "Microsoft_365_Copilot", 25.0)
     report = _report(db, alpha)
-    assert not report.unavailable and report.parts == {"copilot": "read"}
+    assert not report.unavailable and report.parts == {"copilot": "read", "week": "read"}
     tiles = {t.label: t for t in report.tiles}
     assert (tiles["Copilot licences"].value, tiles["Copilot licences"].foot) == (4, "5 bought, 1 not assigned")
     # Of the three in Copilot's report, Ann used it.
     assert (tiles["Using Copilot"].value, tiles["Using Copilot"].foot) == ("33%", "1 of 3 used it in the last 30 days")
+    actions = tiles["Copilot actions, last 7 days"]
+    assert actions.value == 10 and actions.foot.startswith("In every app, the 7 days to ")
     # Bob's and Dan's, and the one nobody has; Carol's is too new to count.
     assert tiles["Unused licences"].value == 3
     assert float(tiles["Unused cost / month"].value) == 75.0
@@ -138,6 +205,8 @@ def test_copilot_report(db, two_tenants):
     assert list(people) == ["ann@x.com", "bob@x.com", "carol@x.com", "dan@x.com"]
     assert people["ann@x.com"][2].parts == ("Teams", "Word")
     assert people["carol@x.com"][1] == "Not in Microsoft's report yet" and people["dan@x.com"][1] == "Never"
+    assert people["ann@x.com"][3:5] == [10, 2] and people["dan@x.com"][3:5] == [0, 0]
+    assert people["carol@x.com"][3:5] == ["Not known", "Not known"]  # not in Microsoft's report yet
     assert flags == {"ann@x.com": None, "bob@x.com": "medium", "carol@x.com": None, "dan@x.com": "medium"}
 
     unused, _ = _rows(report, "Unused Copilot licences")

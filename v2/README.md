@@ -643,17 +643,19 @@ Each report is listed under its area in the report menu, in menu order.
 - *Microsoft 365 Copilot*: who uses the Copilot licences you pay for (share
   of people with Copilot who used it in the last 30 days, with a trend from
   Office Sentry's own history), in which apps (Copilot Chat, Teams, Outlook,
-  Word, Excel, PowerPoint, OneNote, Loop), and a chart of how many used it
-  each day over Microsoft's last 90 days. Unused Copilot licences (not used
-  in 30 days, never used, or on a blocked account; licences given in the
-  last 14 days aren't counted yet) with what each costs a month at your
-  prices, licences bought but not assigned, and the busiest people without
-  Copilot, by Teams meetings, messages and emails sent, to give an unused
-  licence or a trial to. A Copilot licence is told by its service plan, so
-  the add-on, Copilot Business and suites that include Copilot (E7) all
-  count; a suite's Copilot has no price of its own, so it isn't costed. From
-  Microsoft's Copilot usage reports (`Reports.Read.All`); not offered in GCC
-  High, DoD or 21Vianet.
+  Word, Excel, PowerPoint, OneNote, Loop), how much each person used it in
+  the last 7 days (the things Copilot did for them, and on how many days,
+  from Microsoft's daily Copilot report, a preview), and a chart of how many
+  used it each day over Microsoft's last 90 days. Unused Copilot licences
+  (not used in 30 days, never used, or on a blocked account; licences given
+  in the last 14 days aren't counted yet) with what each costs a month at
+  your prices, licences bought but not assigned, and the busiest people
+  without Copilot, by Teams meetings, messages and emails sent, to give an
+  unused licence or a trial to. A Copilot licence is told by its service
+  plan, so the add-on, Copilot Business and suites that include Copilot (E7)
+  all count; a suite's Copilot has no price of its own, so it isn't costed.
+  From Microsoft's Copilot usage reports (`Reports.Read.All`); not offered
+  in GCC High, DoD or 21Vianet.
 <!-- /since -->
 - *Tenant settings*: what users and guests can do without an admin
   (create tenants, register apps, join by verifying an email address,

@@ -402,6 +402,7 @@ COPILOT_APPS = (
 # Every Microsoft 365 Copilot licence carries this service plan, whatever it's called (the add-on, Copilot Business,
 # E7, a suite bundled with Copilot), so it tells a Copilot licence where part numbers keep changing.
 COPILOT_PLAN = "M365_COPILOT_APPS"
+COPILOT_WEEK = 7  # the days each person's Copilot actions are counted over, up to the report's refresh date
 
 
 def _plans(sku: dict) -> list[str]:
