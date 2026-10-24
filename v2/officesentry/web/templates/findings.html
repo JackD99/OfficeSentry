@@ -9,15 +9,16 @@
 {{ tenant_header(tenant, 'findings') }}
 {% set staff = can('findings.manage', tenant.id) %}
 {% set page = 'reports.resolved_findings' if resolved else 'reports.tenant_findings' %}
-{% set q = ('?' ~ view_query) if view_query else '' %}
+{% set q = ('?' ~ page_query) if page_query else '' %}
 <div class="toolbar">
   <nav class="subtabs" aria-label="Finding status">
-    <a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}"{% if not resolved %} class="active" aria-current="page"{% endif %}>Open <span class="n">{{ counts.open }}</span></a>
+    <a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}"{% if not resolved and not handed %} class="active" aria-current="page"{% endif %}>Open <span class="n">{{ counts.open }}</span></a>
+    {% if counts.mine or handed %}<a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id, mine=1) }}"{% if handed %} class="active" aria-current="page"{% endif %} title="The open findings someone handed to you">Handed to me <span class="n">{{ counts.mine }}</span></a>{% endif %}
     <a href="{{ url_for('reports.resolved_findings', tenant_id=tenant.id) }}"{% if resolved %} class="active" aria-current="page"{% endif %}>Resolved <span class="n">{{ counts.resolved }}</span></a>
   </nav>
   <div class="toolbar-actions">
     {% if can('projects.view', tenant.id) and not resolved %}<a class="small" href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}">Recommended projects</a>{% endif %}
-    {{ saved_views(saved, view_query, report.key, tenant, 'e.g. Critical and high', base=url_for(page, tenant_id=tenant.id)) }}
+    {{ saved_views(saved, view_query, report.key, tenant, 'e.g. Critical and high', base=url_for(page, tenant_id=tenant.id, mine=1 if handed else none)) }}
     {{ downloads([('PDF', url_for('reports.findings_download', tenant_id=tenant.id, ext='pdf', resolved=resolved) ~ q, 'The rows and columns shown, as a PDF' if q else 'Every table, as a PDF'),
                   ('XLSX', url_for('reports.findings_download', tenant_id=tenant.id, ext='xlsx', resolved=resolved) ~ q, 'The rows and columns shown, one sheet per table' if q else 'Every table, one sheet each')]) }}
   </div>
@@ -45,7 +46,7 @@
   <p>{{ tv.section.empty }}</p>
 </section>
 {% else %}
-{% set csv = url_for('reports.findings_download', tenant_id=tenant.id, ext='csv', resolved=resolved, section=loop.index) ~ ('&' ~ view_query if view_query) %}
+{% set csv = url_for('reports.findings_download', tenant_id=tenant.id, ext='csv', resolved=resolved, section=loop.index) ~ ('&' ~ page_query if page_query) %}
 {% call(key) report_table(tv, csv, action='Details') %}
   <a class="sheet-link" href="{{ url_for('reports.finding', tenant_id=tenant.id, finding_id=key) }}{{ q }}" data-finding="{{ key }}"{% if key == open_id %} aria-current="true"{% endif %} title="Evidence, history and the fix">{{ icon('chevron') }} Open</a>
   {% if tv.section.title == 'Accepted risks' and staff %}
@@ -53,6 +54,7 @@
   {% elif lapsed.get(key) %}{% set was = lapsed[key] %}
   <span class="sub">Accepted by {{ was.accepted_by }} until {{ was.accepted_until|day }}, now due for review</span>
   {% endif %}
+  {% if held.get(key) and not handed %}<span class="sub">{{ icon('person') }} Handed to {{ held[key] }}</span>{% endif %}
 {% endcall %}
 {% endif %}
 {% endfor %}
