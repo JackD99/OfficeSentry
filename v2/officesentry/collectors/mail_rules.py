@@ -58,6 +58,7 @@ class InboxRules(Collector):
     title = "Inbox rules"
     description = "Every mailbox's inbox rules, to spot forwarding and rules that hide mail."
     permissions = ("MailboxSettings.Read",)
+    needs = ("exchange",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("exchange") is False:

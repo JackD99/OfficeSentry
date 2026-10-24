@@ -17,6 +17,7 @@ from . import (  # noqa: F401
     installed_apps,
     intune_policies,
     licence_changes,
+    licence_features,
     mail_compliance,
     mail_flow,
     mail_protection,

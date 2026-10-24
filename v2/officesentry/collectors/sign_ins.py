@@ -366,6 +366,8 @@ class SignIns(Collector):
         "app and failure reason (needs Entra ID P1; sign-in risk needs P2)."
     )
     permissions = ("AuditLog.Read.All",)
+    needs = ("entra_p1",)
+    more_with = ("entra_p2",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("entra_p1") is False:

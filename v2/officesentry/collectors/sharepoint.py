@@ -116,6 +116,7 @@ class SharePointUsage(Collector):
         "Every site and OneDrive with storage, activity and sharing link counts, from Microsoft's usage reports."
     )
     permissions = ("Reports.Read.All",)
+    needs = ("sharepoint",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("sharepoint") is False:
@@ -462,6 +463,7 @@ class SharedFiles(Collector):
         "people outside it, or given its own permissions. Needs the Sites.Read.All permission."
     )
     permissions = ("Sites.Read.All",)
+    needs = ("sharepoint",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("sharepoint") is False:

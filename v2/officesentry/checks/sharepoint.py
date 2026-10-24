@@ -27,6 +27,7 @@ def _where(item: dict) -> str:
     "Sharing",
     "Remove anyone links that are no longer needed, and set the rest to view-only with an expiry date. "
     "The Shared files report lists each one.",
+    needs=("sharepoint",),
 )
 def anyone_links(snap: TenantSnapshot, now: datetime):
     status = (snap.objects("shared_files", "scan_status") or [None])[0]
@@ -76,6 +77,7 @@ def anyone_links(snap: TenantSnapshot, now: datetime):
     "Storage",
     "Free up space before the tenant runs out, when people can no longer save files. The SharePoint storage "
     "report shows where the space goes and what to clear first; otherwise buy Office 365 Extra File Storage.",
+    needs=("sharepoint",),
 )
 def sharepoint_storage_space(snap: TenantSnapshot, now: datetime):
     used, quota = tenant_storage(snap)
@@ -111,6 +113,7 @@ def sharepoint_storage_space(snap: TenantSnapshot, now: datetime):
     "Give each site a second owner (in the Microsoft 365 group, in the site's owners group, or as a site "
     "administrator) so access requests and content questions have someone to go to when one person leaves. "
     "The Site access report lists each site's owners.",
+    needs=("sharepoint",),
 )
 def site_owners(snap: TenantSnapshot, now: datetime):
     status = (snap.objects("site_access", "access_status") or [None])[0]
@@ -170,6 +173,7 @@ def site_owners(snap: TenantSnapshot, now: datetime):
     "Take guests out of each site's owners group and away from Full Control; give them Edit or Read through the "
     "site's members or visitors group instead. Full Control lets someone outside the organisation change who "
     "can open the site and delete anything on it. The Site permissions report lists them.",
+    needs=("sharepoint",),
 )
 def site_guest_full_control(snap: TenantSnapshot, now: datetime):
     status = (snap.objects("site_permissions", "permissions_status") or [None])[0]
@@ -228,6 +232,7 @@ def site_guest_full_control(snap: TenantSnapshot, now: datetime):
     "Change sharing with people outside the organisation to view-only unless they need to edit, and "
     "remove sharing that's no longer needed. The File and folder permissions report lists each person "
     "outside and what they can edit.",
+    needs=("sharepoint",),
 )
 def outside_edit_access(snap: TenantSnapshot, now: datetime):
     status = (snap.objects("shared_files", "scan_status") or [None])[0]

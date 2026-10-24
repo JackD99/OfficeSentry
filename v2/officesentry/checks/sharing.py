@@ -30,6 +30,7 @@ INVITE_LEVELS = {
     "Sharing",
     'Change SharePoint external sharing to "New and existing guests" so every external person signs in. '
     "Where Anyone links are needed, set them to expire and to view-only.",
+    needs=("sharepoint",),
 )
 def sharepoint_sharing(snap: TenantSnapshot, now: datetime):
     rows = snap.objects("tenant_policies", "sharepoint_settings")

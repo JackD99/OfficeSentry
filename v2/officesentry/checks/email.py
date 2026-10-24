@@ -25,6 +25,7 @@ def _exchange_missing(snap: TenantSnapshot):
     "Email",
     "Remove forwarding to outside addresses unless there's a documented business reason. "
     "Forwarding is the most common way attackers keep reading a mailbox after a password reset.",
+    needs=("exchange",),
 )
 def external_forwarding(snap: TenantSnapshot, now: datetime):
     if missing := _exchange_missing(snap):
@@ -88,6 +89,7 @@ def external_forwarding(snap: TenantSnapshot, now: datetime):
     "Email",
     "Check each rule with the mailbox owner. Rules that delete or bury messages about payments or "
     "security alerts are a sign of a compromised account: reset the password, revoke sessions and review sign-ins.",
+    needs=("exchange",),
 )
 def suspicious_inbox_rules(snap: TenantSnapshot, now: datetime):
     if missing := _exchange_missing(snap):
@@ -122,6 +124,7 @@ def suspicious_inbox_rules(snap: TenantSnapshot, now: datetime):
     "Email",
     "Set the outbound spam filter policy's automatic forwarding to Off (or Automatic, which Microsoft treats "
     "as Off), and allow forwarding only for named mailboxes with a separate policy.",
+    needs=("exchange",),
 )
 def auto_forward_policy(snap: TenantSnapshot, now: datetime):
     if missing := _exchange_missing(snap):
@@ -166,6 +169,7 @@ def auto_forward_policy(snap: TenantSnapshot, now: datetime):
     "Email",
     "Block sign-in for each shared mailbox's account (it doesn't need a password). An enabled shared "
     "mailbox account usually has no MFA and nobody watching it.",
+    needs=("exchange",),
 )
 def shared_mailbox_signin(snap: TenantSnapshot, now: datetime):
     if missing := _exchange_missing(snap):
@@ -210,6 +214,7 @@ def _mail_setting(snap: TenantSnapshot, key: str):
     "Turn on the audit log in Microsoft Purview (Audit, then Start recording user and admin activity). Without "
     "it there's no record of who deleted, downloaded or shared files, who opened someone else's mailbox or who "
     "created an inbox rule, and Microsoft can take up to a day to start recording.",
+    needs=("exchange",),
 )
 def audit_log(snap: TenantSnapshot, now: datetime):
     if missing := _exchange_missing(snap):
@@ -237,6 +242,7 @@ def audit_log(snap: TenantSnapshot, now: datetime):
     "Email",
     "Turn mailbox auditing back on for the organisation (Set-OrganizationConfig -AuditDisabled $false). "
     "Without it there's no record of who read or deleted mail during an incident.",
+    needs=("exchange",),
 )
 def mailbox_auditing(snap: TenantSnapshot, now: datetime):
     if missing := _exchange_missing(snap):
@@ -257,6 +263,7 @@ def mailbox_auditing(snap: TenantSnapshot, now: datetime):
     "Email",
     "Turn off SMTP AUTH for the organisation and enable it only on the mailboxes of devices or apps that "
     "still need it, such as scanners. It accepts passwords without MFA.",
+    needs=("exchange",),
 )
 def smtp_auth(snap: TenantSnapshot, now: datetime):
     if missing := _exchange_missing(snap):
@@ -305,6 +312,7 @@ def _protection_missing(snap: TenantSnapshot, part: str):
     "by their address, domain or a header, which anyone can fake. For mail arriving through another filtering "
     "service use enhanced filtering on its inbound connector instead, and for a partner limit the rule to the "
     "addresses of their sending servers.",
+    needs=("exchange",),
 )
 def mail_rule_spam_bypass(snap: TenantSnapshot, now: datetime):
     if missing := _protection_missing(snap, "rules"):
@@ -334,6 +342,7 @@ def mail_rule_spam_bypass(snap: TenantSnapshot, now: datetime):
     "Check each rule that redirects mail or sends copies to an outside address, and remove it "
     "unless there's a documented reason (a journaling or archiving service). Attackers with admin access add "
     "these rules to read a whole organisation's mail.",
+    needs=("exchange",),
 )
 def mail_rule_external_copy(snap: TenantSnapshot, now: datetime):
     if missing := _protection_missing(snap, "rules"):
@@ -369,6 +378,7 @@ def mail_rule_external_copy(snap: TenantSnapshot, now: datetime):
     "Remove the allowed sender domains from the anti-spam policies: anyone can send mail claiming to be from a "
     "domain, so it skips spam and spoofing checks. Where a partner's mail is wrongly caught, report it to "
     "Microsoft or add an allow entry for their spoofed sender in the Tenant Allow/Block List instead.",
+    needs=("exchange",),
 )
 def spam_allowed_domains(snap: TenantSnapshot, now: datetime):
     if missing := _protection_missing(snap, "anti_spam"):
@@ -401,6 +411,7 @@ def spam_allowed_domains(snap: TenantSnapshot, now: datetime):
     "Email",
     "Turn spoof intelligence and “Honour DMARC policy” back on in the anti-phishing policies (both are on "
     "by default). Without them, mail pretending to be from other organisations' domains is delivered.",
+    needs=("exchange",),
 )
 def spoof_protection(snap: TenantSnapshot, now: datetime):
     if missing := _protection_missing(snap, "anti_phish"):
@@ -441,6 +452,7 @@ def spoof_protection(snap: TenantSnapshot, now: datetime):
     "Email",
     "Turn on the common attachments filter in the anti-malware policies (it's on by default), so program files, "
     "disk images and scripts (.exe, .iso, .js and the like) are quarantined rather than delivered.",
+    needs=("exchange",),
 )
 def malware_file_filter(snap: TenantSnapshot, now: datetime):
     if missing := _protection_missing(snap, "anti_malware"):

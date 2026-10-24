@@ -123,6 +123,11 @@ class Collector:
     nightly: ClassVar[bool] = True
     # Graph application permissions this collector needs (documentation + UI).
     permissions: ClassVar[tuple[str, ...]] = ()
+    # Licence capabilities (``capabilities.FLAGS``) this collector can't read anything without, and those
+    # that only fill in part of what it reads. Reports and pages say which licence a client is missing from
+    # these (``capabilities.report_needs``), so a collector that skips an area on a capability declares it.
+    needs: ClassVar[tuple[str, ...]] = ()
+    more_with: ClassVar[tuple[str, ...]] = ()
     # An add-on's data source (the audit log add-on's): collected only for the clients ``applies`` names, and
     # never by "collect everything", a client's first collection or the freshness checks.
     addon: ClassVar[bool] = False

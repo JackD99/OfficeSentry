@@ -136,6 +136,7 @@ def guest_owners(snap: TenantSnapshot, now: datetime):
     "Limit who can create teams and Microsoft 365 groups to a security group of people who will look after them "
     "(the Group.Unified directory setting, changed with Microsoft Graph PowerShell; needs Entra ID P1). "
     "Otherwise anyone can create a team, add guests to it and leave it behind.",
+    needs=("entra_p1",),
 )
 def group_creation(snap: TenantSnapshot, now: datetime):
     settings, reason = _group_object(snap, "group_settings", "Group settings")
@@ -167,6 +168,7 @@ def group_creation(snap: TenantSnapshot, now: datetime):
     "Set a Microsoft 365 group expiration policy for all groups (Entra admin center > Groups > Expiration), for "
     "example 365 days. Groups in use renew automatically, owners are asked to renew the rest, and an expired "
     "group can be restored for 30 days. Needs Entra ID P1.",
+    needs=("entra_p1",),
 )
 def group_expiration(snap: TenantSnapshot, now: datetime):
     policy, reason = _group_object(snap, "expiration_policy", "The group expiration policy")

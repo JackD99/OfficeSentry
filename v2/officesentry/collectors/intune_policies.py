@@ -241,6 +241,7 @@ class IntunePolicies(Collector):
         "(needs Intune)."
     )
     permissions = (CONFIG, APPS)
+    needs = ("intune",)
 
     def collect(self, ctx: RunContext) -> None:
         waiting = awaiting(ctx, *dict.fromkeys(PARTS.values()))

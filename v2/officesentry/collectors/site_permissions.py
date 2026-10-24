@@ -147,6 +147,7 @@ class SitePermissions(Collector):
         "and subsites with permissions of their own. Needs Sites.Read.All on SharePoint (not Graph)."
     )
     permissions = (label(SHAREPOINT_APP_ID, "Sites.Read.All"),)
+    needs = ("sharepoint",)
 
     def collect(self, ctx: RunContext) -> None:
         if ctx.capabilities.get("sharepoint") is False:

@@ -62,6 +62,7 @@ class Devices(Collector):
         "devices (needs Intune)."
     )
     permissions = ("Directory.Read.All", "DeviceManagementManagedDevices.Read.All", BITLOCKER, LAPS)
+    needs = ("intune",)
 
     def collect(self, ctx: RunContext) -> None:
         now = datetime.now(UTC)
