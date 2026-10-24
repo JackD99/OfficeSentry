@@ -218,11 +218,13 @@ def _nonce_hash(nonce: str) -> str:
     return hashlib.sha256(nonce.encode()).hexdigest()
 
 
-def _consent_link(t, connection):
+def _consent_link(t, connection, run: list[int] | None = None):
     """A Microsoft admin-consent link for this tenant, or None if this user can't use one.
 
     Its signed state carries a random nonce. The callback accepts that nonce once,
     within the hour, from this admin's signed-in browser (see ``consent_requests``).
+    With ``run`` (the clients on Onboarding's Approve page, ``onboarding.approve``), the
+    state names them too, and the callback goes back to that page rather than the client's.
     """
     if not can("clients.manage") or not connection or not connection["client_id"] or g.get("session_row") is None:
         return None
@@ -243,7 +245,10 @@ def _consent_link(t, connection):
             _iso(now + CONSENT_LINK_LIFETIME),
         ),
     )
-    state = _consent_serializer().dumps({"t": t["id"], "n": nonce})
+    data = {"t": t["id"], "n": nonce}
+    if run:
+        data["r"] = [int(i) for i in run]
+    state = _consent_serializer().dumps(data)
     return admin_consent_url(
         connection["client_id"],
         t["tenant_ref"],
@@ -443,6 +448,16 @@ def _consent_return():
     if not isinstance(data, dict) or not isinstance(data.get("t"), int):
         abort(400)
     t = tenant_or_404(data["t"])
+    run = data.get("r") if isinstance(data.get("r"), list) and all(type(i) is int for i in data["r"]) else None
+
+    def back(done: bool = False):
+        """The client's page, or the Approve page the link was opened from, which goes on from this client."""
+        if run:
+            return redirect(
+                url_for("onboarding.approve", t=",".join(map(str, run)), after=t["id"], done=1 if done else None)
+            )
+        return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
+
     if not _use_consent_nonce(t["id"], data.get("n")):
         audit(
             g.db,
@@ -456,7 +471,7 @@ def _consent_return():
             "Nothing was recorded. Open a new consent link from this page.",
             "error",
         )
-        return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
+        return back()
     if request.args.get("error"):
         from ..connection_check import explain
 
@@ -466,7 +481,7 @@ def _consent_return():
             f"Consent was not granted. {problem}" if problem else "Consent was not granted: " + description[:300],
             "error",
         )
-        return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
+        return back()
     if request.args.get("admin_consent", "").lower() != "true":
         abort(400)
 
@@ -491,7 +506,7 @@ def _consent_return():
         if refused:
             audit(g.db, g.user["username"], "consent_refused", t["id"], f"returned {returned}")
             flash(refused, "error")
-            return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
+            return back()
     with transaction(g.db):
         if swap_to:  # replace the domain with the stable tenant GUID Microsoft confirmed for it
             g.db.execute("UPDATE tenants SET tenant_ref = ? WHERE id = ?", (swap_to, t["id"]))
@@ -515,7 +530,7 @@ def _consent_return():
         flash("Consent recorded. A first collection has been queued.", "success")
     else:
         flash("Consent recorded. Collection is paused for this client; resume it under Manage.", "success")
-    return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
+    return back(done=True)
 
 
 @bp.get("/runs/<int:run_id>")
