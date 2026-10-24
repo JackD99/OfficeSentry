@@ -1,0 +1,90 @@
+{#- Approve Office Sentry for several clients yourself, one after another (web/onboarding.approve). Each consent link
+    comes back here; after one that worked, the next opens after a pause the admin can stop. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% block title %}Approve clients · Office Sentry{% endblock %}
+{% block content %}
+{% set approved = entries|rejectattr('needs_link')|list %}
+<div class="crumbs"><a href="{{ url_for('onboarding.index') }}">&larr; Onboarding</a></div>
+<div class="page-head"><div><h2 class="page-title">Approve Office Sentry yourself</h2>
+  <div class="sub">{% if entries %}{{ approved|length }} of {{ entries|length|plural('client') }} approved. {% endif %}On Microsoft's page, sign in as each client's Global Administrator, or with your partner account where your GDAP roles include Privileged Role Administrator.</div></div></div>
+
+{% if not entries %}
+<div class="card empty compact"><p>Every client has approved Office Sentry. <a href="{{ url_for('onboarding.index') }}">Back to Onboarding</a></p></div>
+{% else %}
+{% if next %}{% set name = next.tenant.name %}
+<section class="card approve-next" aria-labelledby="next-title">
+  {% if done %}<p class="approve-done">{{ icon('check') }} Approved for <strong>{{ done.tenant.name }}</strong>.</p>{% endif %}
+  <h3 id="next-title">Next: {{ name }} <span class="mono muted small">{{ next.tenant.tenant_ref }}</span></h3>
+  {% if go_on %}
+  <p data-go-on="{{ links[next.tenant.id] }}">Opening Microsoft's page for {{ name }} in <span data-count>5</span> seconds.</p>
+  <p data-stopped hidden>Stopped. Approve {{ name }} when you're ready.</p>
+  {% endif %}
+  <div class="form-actions">
+    <a class="btn primary" href="{{ links[next.tenant.id] }}">{{ icon('shield') }} Approve for {{ name }}</a>
+    {% if go_on %}<button type="button" data-stop>Stop</button>{% endif %}
+    {% if links|length > 1 %}<a class="btn ghost" href="{{ url_for('onboarding.approve', t=run, after=next.tenant.id) }}">Skip this one</a>{% endif %}
+  </div>
+  {% if not go_on %}<p class="muted small">Microsoft's page opens in this tab and comes straight back here. After each client that works, the next one opens by itself after five seconds, unless you stop it.</p>{% endif %}
+</section>
+{% elif approved|length == entries|length %}
+<div class="callout ok" role="status">{{ icon('check') }}<div>{% if done %}Approved for <strong>{{ done.tenant.name }}</strong>. {% endif %}Every client here has approved Office Sentry. Global Reader, below, is the last step, for mailbox reports.</div></div>
+{% else %}
+<div class="callout" role="status">{{ icon('info') }}<div>{% if done %}Approved for <strong>{{ done.tenant.name }}</strong>. {% endif %}Nothing left that you can approve here. The others are for each client's Global Administrator: send them their link from <a href="{{ url_for('onboarding.index') }}">Onboarding</a>.</div></div>
+{% endif %}
+
+<section class="card flush">
+  <div class="scroll-x">
+  <table class="stack-sm" id="approve-table">
+    <thead><tr><th>Client</th><th>Consent</th><th>Global Reader</th><th><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+    {% for e in entries %}{% set t = e.tenant %}{% set c = who[t.id] %}{% set link = links.get(t.id) %}{% set is_next = next and next.tenant.id == t.id %}
+    <tr{% if is_next %} class="current"{% endif %}>
+      <td data-label="Client"><a class="strong" href="{{ url_for('onboarding.send', tenant_id=t.id) }}">{{ t.name }}</a><span class="sub">{{ t.tenant_ref }}</span></td>
+      <td data-label="Consent" class="wrap">{% if not e.needs_link %}<span class="pill ok">{{ icon('check') }}Approved</span>
+        {% else %}<span class="pill {{ e.state.tone }}">{{ 'Not approved' if e.state.key == 'not_sent' else e.state.label }}</span>
+          {% if e.problem %}<span class="sub bad-text">{{ e.problem }}</span>
+          {% elif c and not c.can_approve %}<span class="sub">Your GDAP roles here don't include Privileged Role Administrator, so the client's Global Administrator approves it.</span>
+          {% elif c %}<span class="sub">You can, through GDAP.</span>{% endif %}
+        {% endif %}</td>
+      <td data-label="Global Reader" class="wrap">{% if not t.consented_at %}<span class="faint">After approval</span>
+        {% elif e.state.key in ('consented', 'global_reader') %}<span class="pill {{ 'warn' if e.state.key == 'global_reader' else 'info' }}">{{ 'Missing' if e.state.key == 'global_reader' else 'Not checked yet' }}</span>
+          <span class="sub"><a href="{{ cloud_of(t).admin_centre }}/{{ t.tenant_ref }}" target="_blank" rel="noopener">{{ icon('external') }}Open its Entra admin centre</a>, then <em>Roles and admins</em> → <em>Global Reader</em> → <em>Add assignments</em> → {{ e.app }}.</span>
+        {% else %}<span class="pill ok">{{ icon('check') }}Assigned</span>{% endif %}</td>
+      <td class="num">{% if link %}<a class="btn sm{{ ' primary' if is_next else '' }}" href="{{ link }}">Approve</a>
+        {% elif e.needs_link %}<a class="btn sm ghost" href="{{ url_for('onboarding.send', tenant_id=t.id) }}">Send link</a>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="action-row">
+    <form method="post" action="{{ url_for('onboarding.approve_check') }}" class="inline">{{ csrf() }}<input type="hidden" name="t" value="{{ run }}">
+      <button>{{ icon('refresh') }} Check again</button></form>
+    <span class="muted small hint">Signs in to each client: confirms approvals given another way, and whether the app has Global Reader.</span>
+  </div>
+</section>
+<p class="footnote">Approving lets the app read what Office Sentry reports on, and nothing else; it can't change anything. Global Reader lets it read mailbox settings for the mailbox reports, and it's read-only too. Each link works once, for an hour, in this browser.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  var box = document.querySelector('[data-go-on]');
+  if (!box) return;
+  var left = 5, count = box.querySelector('[data-count]'), stop = document.querySelector('[data-stop]');
+  var timer = setInterval(function () {
+    left -= 1;
+    if (left > 0) { count.textContent = left; return; }
+    clearInterval(timer);
+    window.location.href = box.dataset.goOn;
+  }, 1000);
+  stop.addEventListener('click', function () {
+    clearInterval(timer);
+    box.hidden = true;
+    stop.hidden = true;
+    document.querySelector('[data-stopped]').hidden = false;
+  });
+})();
+</script>
+{% endblock %}

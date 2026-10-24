@@ -868,6 +868,16 @@ and follows it through consent, Global Reader and its first collection.
   Global Reader missing, Connected), with its consent link, an email to send,
   a consent pack PDF and a CSV of every link for a mail merge
   ([Onboarding a client](docs/onboarding-a-client.md#onboarding-many-clients)).
+<!-- since 2.6.0 -->
+- **Add from Partner Center** (*Onboarding*): for Microsoft partners with GDAP, one sign-in in your own tenant
+  lists every GDAP customer with whether your roles let you approve Office Sentry for it; tick the ones to add.
+  Read-only, in your own tenant only, and nothing is kept but the list, for a day
+  ([Adding clients from Partner Center](docs/onboarding-a-client.md#adding-clients-from-partner-center-gdap)).
+- **Approve them myself** (*Onboarding*): approve Office Sentry for the clients you can, as their Global
+  Administrator or through GDAP, one after another: each comes straight back from Microsoft's page and the next
+  one opens, with a link to each client's Entra admin centre for Global Reader
+  ([Approving several clients yourself](docs/onboarding-a-client.md#approving-several-clients-yourself)).
+<!-- /since -->
 - A client's **Settings → Manage** page (staff, not client accounts) shows its connection health:
   consent, sign-in, which of the app's permissions the tenant actually granted,
   whether the app holds Global Reader (or more than it needs), licences, last

@@ -65,6 +65,8 @@ COLUMNS: dict[str, tuple[str, ...]] = {
     "tenant": (
         "tenant",
         "tenant id",
+        "microsoft id",  # Partner Center's "Export customers"
+        "primary domain name",
         "tenantid",
         "tenant domain",
         "tenant id or domain",
@@ -295,8 +297,9 @@ def connection_for(connections, cloud: str):
     return (ready or same or [None])[0]
 
 
-def create(conn, parsed: Parsed, user: str) -> list[int]:
-    """Add every importable row as a tenant, in one transaction. Returns the new tenant ids."""
+def create(conn, parsed: Parsed, user: str, how: str = "CSV import") -> list[int]:
+    """Add every importable row as a tenant, in one transaction. Returns the new tenant ids. ``how`` names where
+    the rows came from in the activity log (a CSV, or Partner Center for ``partner.py``'s customers)."""
     connections = store.list_connections(conn)
     now = utcnow()
     ids = []
@@ -306,7 +309,7 @@ def create(conn, parsed: Parsed, user: str) -> list[int]:
             if name.lower() not in group_ids:
                 values, _ = tenant_groups.clean(name, "", "")
                 group_ids[name.lower()] = tenant_groups.create(conn, values, user)
-                audit(conn, user, "group_created", detail=f"{values['name']} (CSV import)")
+                audit(conn, user, "group_created", detail=f"{values['name']} ({how})")
         for row in parsed.new:
             if conn.execute("SELECT 1 FROM tenants WHERE tenant_ref = ?", (row.tenant_ref,)).fetchone():
                 continue  # added since the preview
@@ -330,7 +333,7 @@ def create(conn, parsed: Parsed, user: str) -> list[int]:
                 user,
                 "tenant_created",
                 tenant_id,
-                row.tenant_ref + ("" if row.cloud == clouds.DEFAULT else f" ({row.cloud})") + " (CSV import)",
+                row.tenant_ref + ("" if row.cloud == clouds.DEFAULT else f" ({row.cloud})") + f" ({how})",
             )
             ids.append(tenant_id)
         audit(conn, user, "tenants_imported", detail=f"{len(ids)} added, {len(parsed.skipped)} already there")
