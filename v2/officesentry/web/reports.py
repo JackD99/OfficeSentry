@@ -514,9 +514,14 @@ def _findings_page(t, resolved: bool, open_finding=None):
     unresolved = [f for f in rows if not f["resolved_at"]]
     current = [f for f in unresolved if not findings_report.is_accepted(f, report.generated_at)]
     lapsed = {f["id"]: f for f in current if f["accepted_at"]}  # past their review date, back among the open ones
-    counts = {"open": len(current), "resolved": len(rows) - len(unresolved)}
+    mine = _handed_to_me(current)
+    counts = {"open": len(current), "resolved": len(rows) - len(unresolved), "mine": len(mine)}
+    handed = not resolved and _mine_view()
+    if handed:
+        findings_report.handed_to_you(report, mine)
     # The table's links carry the view on the page they're on: the tab, or the sheet page, so the sheet stays
-    # open while someone filters or sorts beside it.
+    # open while someone filters or sorts beside it. Handed to me rides along beside the view.
+    path = request.path + ("?mine=1" if handed else "")
     extra = {"first_review_day": finding_pages.first_review_day()}
     if open_finding is not None:
         extra.update(finding_pages.sheet_for(t, open_finding))
@@ -525,15 +530,41 @@ def _findings_page(t, resolved: bool, open_finding=None):
         tenant=t,
         report=report,
         resolved=resolved,
+        handed=handed,
         view_query=view.query(),
-        tables=views.table_views(report, view, request.path),
+        page_query="&".join(q for q in ("mine=1" if handed else "", view.query()) if q),
+        tables=views.table_views(report, view, path),
         saved=saved,
         lapsed=lapsed,
-        links=views.headline_links(report, request.path),
+        held=_held(unresolved) if is_staff() else {},
+        links=views.headline_links(report, path),
         counts=counts,
         open_id=open_finding["id"] if open_finding is not None else None,
         **extra,
     )
+
+
+def _mine_view() -> bool:
+    """Whether the Findings page asks for the findings handed to the person looking (Handed to me)."""
+    return request.args.get("mine") == "1" and is_staff()
+
+
+def _handed_to_me(current) -> set[int]:
+    """The ids of the open findings in ``current`` handed to the person looking. Only staff accounts are ever
+    handed one."""
+    return {f["id"] for f in current if f["handed_to"] and f["handed_to"] == g.user["id"]}
+
+
+def _held(unresolved) -> dict[int, str]:
+    """Who on the team holds each finding, by finding id: "you", or their username. For staff only: none of
+    it reaches a client's pages."""
+    ids = {f["handed_to"] for f in unresolved if f["handed_to"]}
+    if not ids:
+        return {}
+    marks = ",".join("?" * len(ids))
+    rows = g.db.execute(f"SELECT id, username FROM users WHERE id IN ({marks})", tuple(ids)).fetchall()
+    names = {r["id"]: r["username"] for r in rows} | {g.user["id"]: "you"}
+    return {f["id"]: names[f["handed_to"]] for f in unresolved if f["handed_to"] in names}
 
 
 @bp.get("/tenants/<int:tenant_id>/findings")
@@ -570,7 +601,14 @@ def findings_download(tenant_id: int, ext: str, resolved: bool):
     t = tenant_or_404(tenant_id)
     if ext not in ("pdf", "xlsx", "csv"):
         abort(404)
-    report = views.apply(findings_report.build(g.db, t, resolved=resolved), views.View.parse(request.args))
+    report = findings_report.build(g.db, t, resolved=resolved)
+    if not resolved and _mine_view():
+        open_rows = g.db.execute(
+            "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL", (t["id"],)
+        ).fetchall()
+        current = [f for f in open_rows if not findings_report.is_accepted(f, report.generated_at)]
+        findings_report.handed_to_you(report, _handed_to_me(current))
+    report = views.apply(report, views.View.parse(request.args))
     name = tables.filename(report.key, t["name"])
     if ext == "csv":
         index = request.args.get("section", 1, type=int)
