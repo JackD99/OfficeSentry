@@ -133,7 +133,7 @@
       {% else %}
       <p class="muted small m0">No changes spotted{% if profile.history_since %} since {{ profile.history_since|day }}{% endif %}.</p>
       {% endif %}
-      <p class="footnote">Found by comparing collections{% if profile.history_since %} since {{ profile.history_since|day }}{% endif %}. The date is when Office Sentry first saw the change.</p>
+      <p class="footnote">{% if profile.history_since %}Since {{ profile.history_since|day }}. {% endif %}Dated by the collection that first saw each change.</p>
     </section>
 </div>
 

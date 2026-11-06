@@ -151,7 +151,7 @@
   </table>
   </div>
 </div>
-<p class="footnote">{% if review %}The small figure after a value (such as +2) is its change over the last 4 weeks: green is better, red is worse; the line under a figure is its last 90 days. Licence waste counts licences that are unassigned or held by disabled or inactive users, priced under <em>Licence prices</em>.{% else %}{{ rollup.footnote }}{% endif %} Select a column heading to sort, or a figure to open the rows behind it.{% if rollup.tenant_link == 'data' and picker %} To filter or download the rows themselves from every client, use <a href="{{ url_for('across.rows_index', key=rollup.key) }}">Every row</a>.{% endif %}</p>
+<p class="footnote">{% if review %}+2 is the change in 4 weeks (green is better, red is worse); the line is the last 90 days. Licence waste: licences unassigned or held by disabled or inactive users, at your <em>Licence prices</em>.{% else %}{{ rollup.footnote }}{% endif %}{% if rollup.tenant_link == 'data' and picker %} Every client's rows, to filter or download: <a href="{{ url_for('across.rows_index', key=rollup.key) }}">Every row</a>.{% endif %}</p>
 {% endif %}
 {% endblock %}
 {% block scripts %}

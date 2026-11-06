@@ -5,7 +5,7 @@
 {% block title %}Projects · Office Sentry{% endblock %}
 {% block content %}
 <div class="page-head"><div><h1>Recommended projects</h1>
-  <div class="sub">Work each client's Microsoft 365 data shows they need, from the latest collection: half a day or more each. Smaller jobs and repairs are quick fixes on each client's page. A project drops off once the client is fixed.</div></div></div>
+  <div class="sub">Work each client needs, half a day or more each, from the latest collection. Smaller jobs are quick fixes on each client's page.</div></div></div>
 
 {% if not data.rows %}
 <div class="card empty">
@@ -34,7 +34,7 @@
 <div class="card flush">
   <div class="card-head toolbar">
     <div><h2>{{ 'Declined' if declined else 'Open' }} <span class="count-badge">{{ items|length }}</span></h2>
-      <p class="muted small">{% if declined %}Projects a client turned down. Set one back to Suggested to bring it back.{% else %}Worst problems first. Open a client to see the findings behind each project and download a proposal.{% endif %}</p></div>
+      <p class="muted small">{% if declined %}Projects a client turned down.{% else %}Worst problems first.{% endif %}</p></div>
     <div class="toolbar-actions">
       <a class="small" href="{{ url_for('projects.index', project=project or None, view=None if declined else 'declined') }}">{{ 'Show open' if declined else 'Show declined (' ~ data.count(project, 'declined') ~ ')' }}</a>
       {% if items|length > 8 %}<input class="search sm" type="search" data-filter="projects-table" placeholder="Filter…" aria-label="Filter by client or project">{% endif %}

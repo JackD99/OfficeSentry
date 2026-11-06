@@ -12,7 +12,7 @@
 <div class="toolbar report-title">
   <div>
     <h2 class="section-title">{{ report.title }}</h2>
-    <p class="muted small m0">Every row from every client, with the client first. Filter, sort and hide columns as on a client's own report; downloads keep the view.</p>
+    <p class="muted small m0">Every row from every client, from each one's latest collection.</p>
   </div>
   {% if tv %}
   <div class="toolbar-actions">
@@ -53,7 +53,6 @@
 {{ report_table(tv) }}
 {% endif %}
 {% endif %}
-<p class="footnote">Built from each client's latest collection with the same report as the client's own page. Select a client's name to open its report.</p>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>

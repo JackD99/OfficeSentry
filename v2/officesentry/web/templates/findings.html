@@ -23,7 +23,7 @@
                   ('XLSX', url_for('reports.findings_download', tenant_id=tenant.id, ext='xlsx', resolved=resolved) ~ q, 'The rows and columns shown, one sheet per table' if q else 'Every table, one sheet each')]) }}
   </div>
 </div>
-<p class="muted small intro-line">{{ report.description }} Open a row for its evidence, history and fix{% if staff and not resolved %}, to accept the risk or to hand it to someone{% endif %}.</p>
+<p class="muted small intro-line">{{ report.description }}</p>
 
 {% if report.tiles %}
 <div class="tiles">
@@ -62,7 +62,7 @@
 {% if open_id %}{% include "_finding_sheet.html" %}{% endif %}
 </div>
 
-<p class="footnote">{% if report.sources[0][1] %}Latest collection {{ report.sources[0][1]|when }}. {% endif %}Severity, check and first-seen filters, sorting and hidden columns stay in the address, so a saved view or a download shows the same rows.</p>
+{% if report.sources[0][1] %}<p class="footnote">Latest collection {{ report.sources[0][1]|when }}.</p>{% endif %}
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
