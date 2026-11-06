@@ -119,6 +119,21 @@ def _row(db, table, row_id):
     return db.execute(f"SELECT * FROM {table} WHERE id = ?", (row_id,)).fetchone()
 
 
+class _October(datetime):
+    """A clock that reads 2 October 2026, for code that reads the time itself."""
+
+    @classmethod
+    def now(cls, tz=None):
+        return datetime(2026, 10, 2, 12, 0, tzinfo=tz)
+
+
+@pytest.fixture
+def october(monkeypatch):
+    """delivery's clock stopped in October 2026, for tests that send October's email and then do something that
+    reads the time (Retry, resuming a client), so the schedule hasn't moved on to a later month."""
+    monkeypatch.setattr(delivery, "datetime", _October)
+
+
 # -- Settings and transports -------------------------------------------------------------
 
 
@@ -591,6 +606,8 @@ def test_send_now_delivers_bundle_with_hidden_copy(client, db, two_tenants):
 def test_tick_sends_once_per_period(app, db, two_tenants, vault, cfg):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
+    # seed_tenant collects at today's time: date it the start of October, before the sends below.
+    db.execute("UPDATE runs SET created_at = '2026-10-01T00:00:00Z', finished_at = '2026-10-01T00:00:00Z'")
     _smtp_ready(db)
     sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "", "a@x.com")], day_of_month=1, hour=0)
     now = datetime(2026, 10, 2, 9, 0, tzinfo=UTC)
@@ -606,7 +623,7 @@ def test_tick_sends_once_per_period(app, db, two_tenants, vault, cfg):
     assert len(sends()) == 2
 
 
-def test_failed_sends_retry_with_backoff_then_give_up(app, db, two_tenants, vault, cfg):
+def test_failed_sends_retry_with_backoff_then_give_up(app, db, two_tenants, vault, cfg, october):
     alpha, _ = two_tenants
     _smtp_ready(db)
     sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "", "a@x.com")], hour=0)
