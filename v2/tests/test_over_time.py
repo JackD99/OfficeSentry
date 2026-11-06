@@ -141,7 +141,8 @@ def test_downloads_match_the_page(client, db, three):
     csv = client.get("/across/over-time.csv?measure=secure_score.pct")
     assert csv.status_code == 200 and "all-clients-over-time-secure-score" in csv.headers["Content-Disposition"]
     lines = csv.get_data(as_text=True).lstrip("﻿").splitlines()
-    assert lines[0].startswith("Client,Tenant ID,") and lines[0].endswith("Oct 2026 (%),Change,Note")
+    this_month = datetime.now(UTC).strftime("%b %Y")  # the page runs to the month it's opened in
+    assert lines[0].startswith("Client,Tenant ID,") and lines[0].endswith(f"{this_month} (%),Change,Note")
     assert lines[1].startswith("Bravo,")
     book = load_workbook(BytesIO(client.get("/across/over-time.xlsx?measure=secure_score.pct").data))
     assert len(book.sheetnames) == 2

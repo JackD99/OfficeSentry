@@ -174,6 +174,18 @@ tr.flag-medium td:first-child { box-shadow: inset 3px 0 0 var(--sev-medium); }
 .sev-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); align-items: center; margin: var(--space-0-5) 0 0; font-size: var(--fs-xs); color: var(--muted); }
 .sev-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .sev-legend .sw { width: 9px; height: 9px; border-radius: var(--radius-xs); display: inline-block; }
+/* How open findings split by severity (sev_split): a thin bar of each level's share, split by hairlines of the
+   card's own colour, and its counts in words under it. The colours are the count squares' (.sev), so the bar
+   reads like the Clients page. */
+.sev-split { margin: 0 0 var(--space-2); }
+.sev-split-bar { display: block; height: 10px; border-radius: var(--radius-sm); }
+.sev-split-bar rect { stroke: var(--surface); stroke-width: 2px; }
+.sev-split-bar .critical { fill: var(--sev-critical); } .sev-split-bar .high { fill: var(--sev-high); }
+.sev-split-bar .medium { fill: var(--sev-medium); } .sev-split-bar .low { fill: var(--sev-low); }
+.sev-split-key { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin: var(--space-2) 0 0; color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.sev-split-key span { display: inline-flex; align-items: center; gap: 6px; }
+.sev-split-key .sw { display: inline-block; width: 9px; height: 9px; border-radius: var(--radius-xs); }
+.sev-split-key .zero { color: var(--muted); }
 /* A client's grade (grades.py, _grade.html): a bold letter in a tinted square, in the severity colour of what holds
    it there (A and B are fine, C medium, D high, E critical). The letter is always there, so colour is never the only
    signal; a client without a grade gets a dashed square. .sm sits beside the client's name, .xs in table rows. */

@@ -153,6 +153,10 @@ Rules:
   word (Critical, High, Medium, Low) in the level's text colour. Counts by severity (`.sev`) are solid
   squares holding the number, in a fixed order: critical, high, medium, low. Status words in the same shape
   (Failed, Due today, Fixed) take the status colours.
+- **Small charts**: only where a shape says more than the figure alone. A headline figure with 90 days of
+  history carries a sparkline beside it (a muted line, the latest point in the accent; never coloured good
+  or bad). How a client's findings split by severity is one thin bar in the count squares' colours, with
+  the counts in words under it (`sev_split()`). No pies, no gauges, nothing drawn for decoration.
 - **Grades**: a bold letter in a tinted square in the colour of what holds it there (A and B green, C
   medium, D high, E critical); a client without one gets a dashed square.
 - **Pills and tags**: each has one job and one look. Counts are plain tabular figures beside their label;

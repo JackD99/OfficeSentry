@@ -102,6 +102,23 @@
 <p class="sev-legend">{{ lead }}:{% for s in ('critical', 'high', 'medium', 'low') %} <span><i class="sw sev-{{ s }}"></i>{{ s|capitalize }}</span>{% endfor %}</p>
 {%- endmacro %}
 
+{#- How a client's open findings split by severity: one thin bar, each level's share in its colour, and the counts
+    in words under it, so the colour is never the only signal. Nothing when there are none. counts: {level: n}.
+    Drawn in SVG with widths as attributes, since the pages allow no inline styles. A level with any findings
+    keeps a sliver (2%) however few it has, taken from the end of the bar; the lines between the parts are their
+    edges in the card's colour, which also hide in the card above and below the 8px bar. -#}
+{% macro sev_split(counts, levels=('critical', 'high', 'medium', 'low')) -%}
+{%- set ns = namespace(total=0, x=0) %}{% for s in levels %}{% set ns.total = ns.total + (counts.get(s) or 0) %}{% endfor %}
+{%- if ns.total %}
+<div class="sev-split">
+  <svg class="sev-split-bar" width="100%" height="10" aria-hidden="true" focusable="false">
+    {%- for s in levels if counts.get(s) %}{% set w = [100 * counts[s] / ns.total, 2]|max %}<rect class="{{ s }}" x="{{ '%.2f'|format(ns.x) }}%" y="0" width="{{ '%.2f'|format(w) }}%" height="10"/>{% set ns.x = ns.x + w %}{% endfor -%}
+  </svg>
+  <p class="sev-split-key">{% for s in levels %}<span{% if not counts.get(s) %} class="zero"{% endif %}><i class="sw sev-{{ s }}"></i>{{ counts.get(s) or 0 }} {{ s }}</span>{% endfor %}</p>
+</div>
+{%- endif %}
+{%- endmacro %}
+
 {# Tab that each tenant page key highlights. Keys not listed are tabs themselves. #}
 {% set TAB_OF = {
   'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports', 'designs': 'reports',

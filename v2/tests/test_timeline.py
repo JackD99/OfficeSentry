@@ -335,6 +335,12 @@ def test_the_period_and_the_filter(db, alpha, monkeypatch):
 
 
 def test_quiet_months_are_named_not_listed(db, alpha):
+    # A first look 100 days ago, so the month after it ends before the seeded admin activity (the last 12 days)
+    # on any day of the month.
+    db.execute("UPDATE findings SET first_seen = ? WHERE tenant_id = ?", (ago(100), alpha))
+    db.execute("UPDATE runs SET created_at = ?, finished_at = ? WHERE tenant_id = ?", (ago(100), ago(100), alpha))
+    db.execute("UPDATE metrics SET captured_at = ? WHERE tenant_id = ?", (ago(100), alpha))
+    db.execute("UPDATE tenants SET created_at = ?, consented_at = ? WHERE id = ?", (ago(101), ago(101), alpha))
     tl = timeline.build(db, tenant(db, alpha), now=NOW)
     listed = {m.start for m in tl.months}
     assert not (listed & set(tl.quiet)) and all(m >= tl.kept_since for m in tl.quiet)

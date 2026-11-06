@@ -13,6 +13,7 @@ from tests.test_email import (  # noqa: F401 (autouse fixture)
     _schedule,
     _smtp_ready,
     fake_smtp,
+    october,
     sends,
 )
 from tests.test_month_end import _admin, _plan, work
@@ -117,7 +118,7 @@ def _plan_save(client, plan_id, tenants, **extra):
     return client.post(f"/reporting/plans/{plan_id}", data=data)
 
 
-def test_nothing_is_emailed_to_a_paused_client(client, app, db, two_tenants, vault, cfg):
+def test_nothing_is_emailed_to_a_paused_client(client, app, db, two_tenants, vault, cfg, october):  # noqa: F811
     alpha, bravo = two_tenants
     _admin(client, db)
     _smtp_ready(db)

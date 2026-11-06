@@ -10,6 +10,7 @@ from tests.test_email import (  # noqa: F401 (autouse fixture)
     _schedule,
     _smtp_ready,
     fake_smtp,
+    october,
     sends,
 )
 from tests.test_month_end import _admin, _plan, work
@@ -41,7 +42,7 @@ def test_a_month_the_timer_sent_while_someone_reviewed_it_isnt_approved_again(cl
     assert len(sends()) == 1
 
 
-def test_retry_after_the_period_went_out_doesnt_send_it_again(client, app, db, two_tenants, vault, cfg):
+def test_retry_after_the_period_went_out_doesnt_send_it_again(client, app, db, two_tenants, vault, cfg, october):  # noqa: F811
     alpha, _ = two_tenants
     _admin(client, db)
     _smtp_ready(db)

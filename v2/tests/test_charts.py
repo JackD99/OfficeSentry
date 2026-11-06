@@ -278,6 +278,29 @@ def test_dashboard_shows_the_lines(client, db, two_tenants):
     assert "the line under a figure is its last 90 days" in page
 
 
+def test_a_clients_overview_draws_its_figures_lines_and_how_its_findings_split(client, db, two_tenants):
+    alpha, _ = two_tenants
+    for days, value in ((60, 30), (30, 35), (10, 38)):
+        _metric(db, alpha, "secure_score.pct", value, datetime.now(UTC) - timedelta(days=days))
+    seed_tenant(db, alpha)
+    make_user(db, "admin")
+    login(client, "admin")
+    page = client.get(f"/tenants/{alpha}").get_data(as_text=True)
+    tiles = page[page.index('<div class="tiles">') : page.index('<div class="grid-2">')]
+    score = tiles[tiles.index(">Secure Score<") :]
+    score = score[: score.index("</a>")]
+    assert 'class="value has-spark"' in score and '<svg class="spark' in score
+    assert "Secure Score since" in score  # the line says its range
+    # Every level with findings has its part of the bar, and the counts are there in words too.
+    bar = page[page.index('<div class="sev-split">') :]
+    bar = bar[: bar.index("</div>")]
+    key = re.findall(r"</i>(\d+) (critical|high|medium|low)</span>", bar)
+    assert [level for _, level in key] == ["critical", "high", "medium", "low"]
+    assert {level for n, level in key if int(n)} == set(re.findall(r'<rect class="(\w+)"', bar))
+    widths = [float(w) for w in re.findall(r'<rect [^>]*width="([\d.]+)%"', bar)]
+    assert widths and all(w >= 2 for w in widths) and 99 <= sum(widths) <= 104
+
+
 def test_month_columns_draws_two_columns_a_month_with_counts_and_no_data_tracks():
     from datetime import date
 
